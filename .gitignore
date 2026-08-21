@@ -1,0 +1,11 @@
+/game/.godot/
+/game/android/
+/original/
+__pycache__/
+*.pyc
+.venv/
+*.tmp
+*.log
+/export/
+/build/
+.DS_Store

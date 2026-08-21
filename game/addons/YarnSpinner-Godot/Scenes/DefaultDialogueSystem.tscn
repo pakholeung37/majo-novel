@@ -1,0 +1,248 @@
+[gd_scene format=3 uid="uid://bv42g323prh5f"]
+
+[ext_resource type="Script" uid="uid://c5gxawri864uf" path="res://addons/YarnSpinner-Godot/Runtime/LineProviders/TextLineProvider.cs" id="1"]
+[ext_resource type="Script" uid="uid://b8nsxur6opm4k" path="res://addons/YarnSpinner-Godot/Runtime/Async/LinePresenter.cs" id="2_3323r"]
+[ext_resource type="Script" uid="uid://cm822dsbyq7mj" path="res://addons/YarnSpinner-Godot/Runtime/Async/LinePresenterButtonHandler.cs" id="3_ib3ck"]
+[ext_resource type="Script" uid="uid://ba6k2ox6e4qg" path="res://addons/YarnSpinner-Godot/Runtime/Async/OptionsPresenter.cs" id="3_waeux"]
+[ext_resource type="Script" uid="uid://b1o5xpu22evvx" path="res://addons/YarnSpinner-Godot/Runtime/InMemoryVariableStorage.cs" id="4"]
+[ext_resource type="PackedScene" uid="uid://b56ngcrq31nc5" path="res://addons/YarnSpinner-Godot/Scenes/OptionItem.tscn" id="4_xnawv"]
+[ext_resource type="Script" uid="uid://budnld4qd513n" path="res://addons/YarnSpinner-Godot/Runtime/DialogueRunner.cs" id="5"]
+
+[node name="YarnSpinnerCanvasLayer" type="CanvasLayer" unique_id=350562131]
+
+[node name="DialogueRunner" type="Control" parent="." unique_id=1412460189 node_paths=PackedStringArray("variableStorage", "lineProvider", "dialoguePresenters")]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("5")
+variableStorage = NodePath("../InMemoryVariableStorage")
+lineProvider = NodePath("../TextLineProvider")
+dialoguePresenters = [NodePath("../LinePresenter"), NodePath("../OptionsPresenter")]
+
+[node name="VariableDebugText" type="RichTextLabel" parent="." unique_id=567482221]
+
+[node name="LinePresenter" type="Control" parent="." unique_id=216920850 node_paths=PackedStringArray("dialogueRunner", "presenterControl", "lineText", "characterNameText", "characterNameContainer", "eventHandlers")]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("2_3323r")
+dialogueRunner = NodePath("../DialogueRunner")
+presenterControl = NodePath("PresenterControl")
+lineText = NodePath("PresenterControl/LineText")
+characterNameText = NodePath("PresenterControl/CharacterNameText")
+characterNameContainer = NodePath("PresenterControl/CharacterNameText")
+useFadeEffect = false
+fadeUpDuration = 0.1
+lettersPerSecond = 32
+wordsPerSecond = 2
+typewriterStyle = 1
+ConvertHTMLToBBCode = true
+eventHandlers = [NodePath("LinePresenterButtonHandler")]
+
+[node name="PresenterControl" type="Control" parent="LinePresenter" unique_id=280640872]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="LineText" type="RichTextLabel" parent="LinePresenter/PresenterControl" unique_id=1246746644]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -610.0
+offset_top = -352.0
+offset_right = 640.0
+offset_bottom = 193.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/normal_font_size = 36
+theme_override_font_sizes/bold_font_size = 36
+theme_override_font_sizes/bold_italics_font_size = 36
+theme_override_font_sizes/italics_font_size = 36
+theme_override_font_sizes/mono_font_size = 36
+bbcode_enabled = true
+text = "The dialogue text should appear here!"
+
+[node name="ColorRect" type="ColorRect" parent="LinePresenter/PresenterControl/LineText" unique_id=2139037226]
+modulate = Color(0.203922, 0.192157, 0.192157, 0.458824)
+show_behind_parent = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -1.0
+offset_right = -12.0
+offset_bottom = -158.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="CharacterNameText" type="RichTextLabel" parent="LinePresenter/PresenterControl" unique_id=1662101718]
+self_modulate = Color(0.321569, 0.87451, 0.254902, 1)
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -607.0
+offset_top = -415.0
+offset_right = 279.0
+offset_bottom = -362.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/normal_font_size = 36
+theme_override_font_sizes/bold_font_size = 36
+theme_override_font_sizes/bold_italics_font_size = 36
+theme_override_font_sizes/italics_font_size = 36
+theme_override_font_sizes/mono_font_size = 36
+bbcode_enabled = true
+text = "Character Name"
+
+[node name="ColorRect" type="ColorRect" parent="LinePresenter/PresenterControl/CharacterNameText" unique_id=1435376450]
+modulate = Color(0.203922, 0.192157, 0.192157, 0.458824)
+show_behind_parent = true
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="ContinueButton" type="Button" parent="LinePresenter/PresenterControl" unique_id=1502992809]
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = 337.0
+offset_top = -463.0
+offset_right = 569.0
+offset_bottom = -363.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_default_cursor_shape = 2
+theme_override_font_sizes/font_size = 36
+text = "Continue"
+
+[node name="LinePresenterButtonHandler" type="Control" parent="LinePresenter" unique_id=1639972675 node_paths=PackedStringArray("continueButton", "dialogueRunner")]
+anchors_preset = 0
+offset_right = 40.0
+offset_bottom = 40.0
+script = ExtResource("3_ib3ck")
+continueButton = NodePath("../PresenterControl/ContinueButton")
+dialogueRunner = NodePath("../../DialogueRunner")
+
+[node name="OptionsPresenter" type="Control" parent="." unique_id=13693412 node_paths=PackedStringArray("presenterControl", "lastLineCharacterNameContainer", "optionParent")]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("3_waeux")
+presenterControl = NodePath("PresenterControl")
+optionItemPrefab = ExtResource("4_xnawv")
+lastLineCharacterNameContainer = NodePath("PresenterControl/LastLineCharacterNameText")
+optionParent = NodePath("PresenterControl/VBoxContainer")
+useFadeEffect = false
+
+[node name="PresenterControl" type="Control" parent="OptionsPresenter" unique_id=179048145]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="OptionsPresenter/PresenterControl" unique_id=1864847442]
+custom_minimum_size = Vector2(160, 0)
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -587.0
+offset_top = 79.0
+offset_right = 585.0
+offset_bottom = 428.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="LastLineText" type="RichTextLabel" parent="OptionsPresenter/PresenterControl" unique_id=1588166918]
+visible = false
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -610.0
+offset_top = 100.0
+offset_right = 279.0
+offset_bottom = 185.0
+grow_horizontal = 2
+theme_override_font_sizes/normal_font_size = 36
+theme_override_font_sizes/bold_font_size = 36
+theme_override_font_sizes/bold_italics_font_size = 36
+theme_override_font_sizes/italics_font_size = 36
+theme_override_font_sizes/mono_font_size = 36
+bbcode_enabled = true
+text = "The last line text goes here"
+scroll_active = false
+
+[node name="ColorRect" type="ColorRect" parent="OptionsPresenter/PresenterControl/LastLineText" unique_id=1513317452]
+modulate = Color(0.203922, 0.192157, 0.192157, 0.458824)
+show_behind_parent = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="LastLineCharacterNameText" type="RichTextLabel" parent="OptionsPresenter/PresenterControl" unique_id=1063363937]
+visible = false
+self_modulate = Color(0.321569, 0.87451, 0.254902, 1)
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -608.0
+offset_top = -416.0
+offset_right = 278.0
+offset_bottom = -363.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/normal_font_size = 36
+theme_override_font_sizes/bold_font_size = 36
+theme_override_font_sizes/bold_italics_font_size = 36
+theme_override_font_sizes/italics_font_size = 36
+theme_override_font_sizes/mono_font_size = 36
+bbcode_enabled = true
+text = "Character Name"
+
+[node name="ColorRect" type="ColorRect" parent="OptionsPresenter/PresenterControl/LastLineCharacterNameText" unique_id=446556448]
+modulate = Color(0.203922, 0.192157, 0.192157, 0.458824)
+show_behind_parent = true
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="InMemoryVariableStorage" type="Node" parent="." unique_id=189682707]
+script = ExtResource("4")
+
+[node name="TextLineProvider" type="Node2D" parent="." unique_id=1335892241]
+script = ExtResource("1")

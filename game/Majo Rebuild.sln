@@ -1,0 +1,59 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "New Game Project", "New Game Project.csproj", "{0135C789-DF89-45AD-9E3C-0117636F0F9D}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "addons", "addons", "{E1748B93-FA13-C50B-BD89-C3B777E73FCB}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "YarnSpinner-Godot", "YarnSpinner-Godot", "{1A8A29F4-664B-CED0-5264-D36F6146CAD9}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SourceGenerator", "SourceGenerator", "{E682BC1E-4241-1F1F-7A69-7104C6BA4BDA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "YarnSpinnerGodotSourceGenerator", "addons\YarnSpinner-Godot\SourceGenerator\YarnSpinnerGodotSourceGenerator.csproj", "{1EDFB63B-E1A9-42C2-8FE8-C84DDE601828}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|Any CPU = Release|Any CPU
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{0135C789-DF89-45AD-9E3C-0117636F0F9D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0135C789-DF89-45AD-9E3C-0117636F0F9D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0135C789-DF89-45AD-9E3C-0117636F0F9D}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{0135C789-DF89-45AD-9E3C-0117636F0F9D}.Debug|x64.Build.0 = Debug|Any CPU
+		{0135C789-DF89-45AD-9E3C-0117636F0F9D}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{0135C789-DF89-45AD-9E3C-0117636F0F9D}.Debug|x86.Build.0 = Debug|Any CPU
+		{0135C789-DF89-45AD-9E3C-0117636F0F9D}.Release|Any CPU.ActiveCfg = Debug|Any CPU
+		{0135C789-DF89-45AD-9E3C-0117636F0F9D}.Release|Any CPU.Build.0 = Debug|Any CPU
+		{0135C789-DF89-45AD-9E3C-0117636F0F9D}.Release|x64.ActiveCfg = Debug|Any CPU
+		{0135C789-DF89-45AD-9E3C-0117636F0F9D}.Release|x64.Build.0 = Debug|Any CPU
+		{0135C789-DF89-45AD-9E3C-0117636F0F9D}.Release|x86.ActiveCfg = Debug|Any CPU
+		{0135C789-DF89-45AD-9E3C-0117636F0F9D}.Release|x86.Build.0 = Debug|Any CPU
+		{1EDFB63B-E1A9-42C2-8FE8-C84DDE601828}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1EDFB63B-E1A9-42C2-8FE8-C84DDE601828}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1EDFB63B-E1A9-42C2-8FE8-C84DDE601828}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{1EDFB63B-E1A9-42C2-8FE8-C84DDE601828}.Debug|x64.Build.0 = Debug|Any CPU
+		{1EDFB63B-E1A9-42C2-8FE8-C84DDE601828}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{1EDFB63B-E1A9-42C2-8FE8-C84DDE601828}.Debug|x86.Build.0 = Debug|Any CPU
+		{1EDFB63B-E1A9-42C2-8FE8-C84DDE601828}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1EDFB63B-E1A9-42C2-8FE8-C84DDE601828}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1EDFB63B-E1A9-42C2-8FE8-C84DDE601828}.Release|x64.ActiveCfg = Release|Any CPU
+		{1EDFB63B-E1A9-42C2-8FE8-C84DDE601828}.Release|x64.Build.0 = Release|Any CPU
+		{1EDFB63B-E1A9-42C2-8FE8-C84DDE601828}.Release|x86.ActiveCfg = Release|Any CPU
+		{1EDFB63B-E1A9-42C2-8FE8-C84DDE601828}.Release|x86.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{1A8A29F4-664B-CED0-5264-D36F6146CAD9} = {E1748B93-FA13-C50B-BD89-C3B777E73FCB}
+		{E682BC1E-4241-1F1F-7A69-7104C6BA4BDA} = {1A8A29F4-664B-CED0-5264-D36F6146CAD9}
+		{1EDFB63B-E1A9-42C2-8FE8-C84DDE601828} = {E682BC1E-4241-1F1F-7A69-7104C6BA4BDA}
+	EndGlobalSection
+EndGlobal
