@@ -36,7 +36,7 @@ public sealed class RuntimeHost : IRuntimeLifetime, IAsyncDisposable
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
-        await lifecycleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await lifecycleGate.WaitAsync(cancellationToken);
         try
         {
             if (State == RuntimeHostState.Initialized)
@@ -56,7 +56,7 @@ public sealed class RuntimeHost : IRuntimeLifetime, IAsyncDisposable
                     var service = resolver.Create(descriptor);
                     try
                     {
-                        await service.InitializeAsync(cancellationToken).ConfigureAwait(false);
+                        await service.InitializeAsync(cancellationToken);
                     }
                     catch (Exception exception)
                     {
@@ -78,7 +78,7 @@ public sealed class RuntimeHost : IRuntimeLifetime, IAsyncDisposable
                 TryCancel(sessionCancellation, "session", cleanupExceptions);
                 TryCancel(runtimeCancellation, "runtime", cleanupExceptions);
                 cleanupExceptions.AddRange(await ShutdownInitializedServicesAsync(
-                    CancellationToken.None).ConfigureAwait(false));
+                    CancellationToken.None));
                 var exception = CreateInitializationException(
                     initializationException,
                     cleanupExceptions);
@@ -94,7 +94,7 @@ public sealed class RuntimeHost : IRuntimeLifetime, IAsyncDisposable
 
     public async Task ResetAsync(CancellationToken cancellationToken = default)
     {
-        await lifecycleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await lifecycleGate.WaitAsync(cancellationToken);
         try
         {
             EnsureState(RuntimeHostState.Initialized, "reset");
@@ -112,8 +112,7 @@ public sealed class RuntimeHost : IRuntimeLifetime, IAsyncDisposable
                 try
                 {
                     await resolver.GetRuntimeService(descriptor.ServiceType)
-                        .ResetAsync(cancellationToken)
-                        .ConfigureAwait(false);
+                        .ResetAsync(cancellationToken);
                 }
                 catch (Exception exception)
                 {
@@ -146,7 +145,7 @@ public sealed class RuntimeHost : IRuntimeLifetime, IAsyncDisposable
 
     public async Task ShutdownAsync(CancellationToken cancellationToken = default)
     {
-        await lifecycleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await lifecycleGate.WaitAsync(cancellationToken);
         try
         {
             if (State == RuntimeHostState.Shutdown)
@@ -174,8 +173,7 @@ public sealed class RuntimeHost : IRuntimeLifetime, IAsyncDisposable
             var exceptions = new List<Exception>();
             CancelLifetimes(exceptions);
 
-            exceptions.AddRange(await ShutdownInitializedServicesAsync(cancellationToken)
-                .ConfigureAwait(false));
+            exceptions.AddRange(await ShutdownInitializedServicesAsync(cancellationToken));
             State = RuntimeHostState.Shutdown;
 
             ThrowIfShutdownFailed(exceptions);
@@ -197,7 +195,7 @@ public sealed class RuntimeHost : IRuntimeLifetime, IAsyncDisposable
 
         try
         {
-            await ShutdownAsync().ConfigureAwait(false);
+            await ShutdownAsync();
         }
         finally
         {
@@ -219,8 +217,7 @@ public sealed class RuntimeHost : IRuntimeLifetime, IAsyncDisposable
             try
             {
                 await resolver.GetRuntimeService(descriptor.ServiceType)
-                    .ShutdownAsync(cancellationToken)
-                    .ConfigureAwait(false);
+                    .ShutdownAsync(cancellationToken);
             }
             catch (Exception exception)
             {

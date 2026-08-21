@@ -10,7 +10,7 @@ Compatibility baseline:
 
 Yarn Spinner is an external prerequisite and is not bundled with this plugin.
 
-Current implementation status: M1 Runtime service kernel.
+Current implementation status: M2 Operation scheduling kernel.
 
 ## Runtime setup
 
@@ -39,6 +39,33 @@ cancels both runtime and session lifetime tokens; reset cancels and replaces
 the session token. Services can explicitly depend on the built-in
 `IRuntimeLifetime` to observe those tokens. Registration and configuration
 failures report typed errors before the service graph starts.
+
+## Operations
+
+`MajoRuntimeBootstrap` registers `IFrameClock` and `IOperationScheduler` by
+default. `Start` returns an `IOperationHandle` immediately; callers opt into
+waiting through the handle or a typed ID/group target:
+
+```csharp
+var operations = runtime.Host!.Services.Get<IOperationScheduler>();
+var fade = operations.Start(new OperationDefinition(
+    context => context.FrameClock.DelayAsync(
+        TimeSpan.FromSeconds(0.5), context.CancellationToken),
+    id: "maya-fade",
+    groupId: "scene-setup",
+    completeAsync: _ => ApplyFinalStateAsync()));
+
+await operations.WaitAsync(OperationTarget.ForId("maya-fade"));
+```
+
+`Cancel` stops without applying the final state and completes the handle as
+cancelled. `Complete` interrupts natural execution, applies the registered
+finalizer, and completes successfully. Faults remain observable through
+`Completion`; the scheduler also observes and logs every background fault.
+Reset cancels all active operations before accepting work for the next session.
+
+Games can replace either default service in `ConfigureServices` with
+`ReplaceSingleton` before the host builds.
 
 ## Testing
 

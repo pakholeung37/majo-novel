@@ -7,6 +7,8 @@ using Godot;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue.Yarn;
+using Majo.Runtime.Operations;
+using Majo.Runtime.Operations.Godot;
 
 namespace Majo.Runtime;
 
@@ -109,6 +111,7 @@ public partial class MajoRuntimeBootstrap : Node
             validation.ThrowIfInvalid();
 
             var services = new RuntimeServiceRegistry();
+            RegisterDefaultServices(services);
             ConfigureServices?.Invoke(services);
             Host = services.Build(new GodotRuntimeLogger());
             await ExecuteWithLifecycleTimeoutAsync(
@@ -137,6 +140,19 @@ public partial class MajoRuntimeBootstrap : Node
                 QueueFree();
             }
         }
+    }
+
+    private void RegisterDefaultServices(RuntimeServiceRegistry services)
+    {
+        services
+            .AddSingleton<IFrameClock>(_ => new GodotFrameClock(GetTree()))
+            .AddSingleton<IOperationScheduler>(
+                resolver => new OperationScheduler(
+                    resolver.Get<IFrameClock>(),
+                    resolver.Get<IRuntimeLifetime>(),
+                    new GodotRuntimeLogger()),
+                typeof(IFrameClock),
+                typeof(IRuntimeLifetime));
     }
 
     private async Task ShutdownHostAsync(CancellationToken cancellationToken = default)

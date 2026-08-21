@@ -370,7 +370,7 @@ Headless 验收：
 - 已建立 Inspector 可编辑的 `MajoProjectConfiguration` 和四类子配置，集中验证必填引用、数值、Actor ID、资源路径及 Yarn 版本要求。
 - 门禁通过：16 个纯 C# 单元测试全部通过；Godot headless 覆盖有效启动、Reset、节点退出单次 Shutdown、配置诊断和失败节点清理。
 
-### M2：Operation 调度内核
+### M2：Operation 调度内核（已完成）
 
 目标：覆盖核心 Naninovel 异步命令语义。
 
@@ -397,6 +397,15 @@ Headless 验收：
 - 真实 Godot 帧推进 Operation。
 - Tween 完成、取消和强制完成后的属性正确。
 - Runtime 退出期间启动的 Operation 被可靠清理。
+
+实施记录（2026-08-21）：
+
+- 已实现 `OperationDefinition`、`OperationContext`、`IOperationHandle` 状态机和 `IOperationScheduler`，`Start` 默认立即返回，由 `Completion` 提供显式等待边界。
+- 已实现类型化 ID/Group 目标、并发汇合、Cancel/Complete 双控制通道、活跃 ID 冲突检查，以及终态发布前的同步索引移除。
+- 后台 Operation 的取消和异常始终由 Scheduler 观察；Reset/Shutdown 停止接收新工作、取消活跃项并等待清理，新 Session 可继续调度。
+- Bootstrap 默认注册 Godot `IFrameClock` 和 Scheduler；`GodotTweenOperation` 支持自然完成、保留中间状态的取消，以及立即应用最终属性的强制完成。
+- Runtime Host 保留调用方同步上下文，Godot 服务生命周期和 Tween 回调不会因 `ConfigureAwait(false)` 漂移到线程池。
+- 门禁通过：24 个纯 C# 单元测试全部通过；Godot headless 覆盖真实帧、Tween 三种终态，以及 Runtime 退出前和退出过程中创建的 Operation 清理。
 
 ### M3：最小 Actor 系统
 
