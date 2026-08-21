@@ -1,13 +1,14 @@
 using System;
 using System.IO;
 using System.Text.RegularExpressions;
+using Majo.Runtime.Core;
 
 namespace Majo.Runtime.Dialogue.Yarn;
 
 public static partial class YarnDependencyValidator
 {
-    public const string RequiredPluginVersion = "0.3.22";
-    public const string RequiredRuntimeVersion = "3.2.0";
+    public const string RequiredPluginVersion = MajoRuntimeMetadata.RequiredYarnPluginVersion;
+    public const string RequiredRuntimeVersion = MajoRuntimeMetadata.RequiredYarnRuntimeVersion;
 
     private const string YarnAddonDirectory = "YarnSpinner-Godot";
     private const string PluginManifestFile = "plugin.cfg";

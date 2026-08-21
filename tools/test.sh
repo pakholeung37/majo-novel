@@ -45,4 +45,4 @@ if [[ "$failure_probe_status" -eq 0 ]]; then
     exit 1
 fi
 
-printf 'M0 test gate passed.\n'
+printf 'Majo Runtime test gate passed.\n'

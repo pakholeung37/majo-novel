@@ -334,7 +334,7 @@ Maya: 等一下！
 - `tools/test.sh` 统一执行非增量构建、单元测试、Godot headless 导入、集成测试和故意失败探针，并为各阶段设置确定超时。
 - 门禁通过：6 个单元测试全部通过，headless 生命周期测试通过，故意失败探针以非零状态退出；构建仅保留已明确白名单的 Yarn `SYSLIB1220` 警告。
 
-### M1：Runtime 服务内核
+### M1：Runtime 服务内核（已完成）
 
 目标：实现不依赖 Yarn 的稳定组合根。
 
@@ -361,6 +361,14 @@ Headless 验收：
 - Runtime Node 进入场景树时初始化服务。
 - 场景退出时所有服务只关闭一次。
 - 失败配置给出可定位错误且不残留 Node。
+
+实施记录（2026-08-21）：
+
+- 已实现显式 Singleton 注册、替换、Resolver、依赖声明，以及缺失依赖和循环依赖的构建期验证。
+- Runtime Host 按稳定拓扑顺序初始化和 Reset，按逆序 Shutdown；初始化失败和关闭失败均继续逆序清理并聚合带服务类型的错误。
+- Host 持有 Runtime/Session 两级取消生命周期，并通过内建 `IRuntimeLifetime` 支持构造工厂显式注入；Reset 替换 Session，Shutdown 取消两级 Token。
+- 已建立 Inspector 可编辑的 `MajoProjectConfiguration` 和四类子配置，集中验证必填引用、数值、Actor ID、资源路径及 Yarn 版本要求。
+- 门禁通过：16 个纯 C# 单元测试全部通过；Godot headless 覆盖有效启动、Reset、节点退出单次 Shutdown、配置诊断和失败节点清理。
 
 ### M2：Operation 调度内核
 
