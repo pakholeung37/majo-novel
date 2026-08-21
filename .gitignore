@@ -1,11 +1,15 @@
 /game/.godot/
 /game/android/
+/game/*.ysls.json
 /original/
 __pycache__/
 *.pyc
 .venv/
 *.tmp
 *.log
+**/bin/
+**/obj/
+TestResults/
 /export/
 /build/
 .DS_Store
