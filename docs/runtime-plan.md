@@ -307,7 +307,7 @@ Maya: 等一下！
 
 ## 10. Milestone 计划
 
-### M0：插件骨架和测试跑道
+### M0：插件骨架和测试跑道（已完成）
 
 目标：建立可持续实现和验证的最小工程结构。
 
@@ -326,6 +326,13 @@ Maya: 等一下！
 - `dotnet build`、`dotnet test` 和 Godot headless 命令全部可重复运行。
 - 故意失败的 headless 断言返回非零退出码。
 - 不产生新增编译警告；现有 Yarn 源生成器警告使用明确白名单处理。
+
+实施记录（2026-08-21）：
+
+- 已建立 `Majo.Runtime` 插件组合根、Core 元数据和隔离在 `Dialogue/Yarn` 下的 Yarn 依赖检查。
+- 已建立 xUnit 单元测试项目，以及覆盖真实 Godot 场景树初始化/关闭的 headless 测试。
+- `tools/test.sh` 统一执行非增量构建、单元测试、Godot headless 导入、集成测试和故意失败探针，并为各阶段设置确定超时。
+- 门禁通过：6 个单元测试全部通过，headless 生命周期测试通过，故意失败探针以非零状态退出；构建仅保留已明确白名单的 Yarn `SYSLIB1220` 警告。
 
 ### M1：Runtime 服务内核
 
@@ -583,4 +590,3 @@ M0-M5 只实现闭环所需能力。任何存档、音频、复杂 UI、脚本�
 - 自定义 Service、Actor 和 Command 能通过公开 API 接入。
 - Core 不依赖 Yarn Spinner。
 - 没有活跃 Operation、Node 泄漏、未观察异步异常或未解释的新警告。
-

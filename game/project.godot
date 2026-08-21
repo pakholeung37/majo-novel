@@ -28,7 +28,7 @@ project/assembly_name="Majo Rebuild"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/YarnSpinner-Godot/plugin.cfg")
+enabled=PackedStringArray("res://addons/YarnSpinner-Godot/plugin.cfg", "res://addons/majo_runtime/plugin.cfg")
 
 [physics]
 
