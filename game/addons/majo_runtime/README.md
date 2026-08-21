@@ -10,7 +10,7 @@ Compatibility baseline:
 
 Yarn Spinner is an external prerequisite and is not bundled with this plugin.
 
-Current implementation status: M2 Operation scheduling kernel.
+Current implementation status: M3 minimal Actor system.
 
 ## Runtime setup
 
@@ -66,6 +66,35 @@ Reset cancels all active operations before accepting work for the next session.
 
 Games can replace either default service in `ConfigureServices` with
 `ReplaceSingleton` before the host builds.
+
+## Actors
+
+Actor definitions live under `MajoProjectConfiguration.Actors`. Each definition
+selects a factory (`character` or `background`), a default appearance, and one
+or more appearance-to-texture mappings. Character definitions also select the
+configured `Left`, `Center`, or `Right` position preset.
+
+The bootstrap registers `IActorManager` by default:
+
+```csharp
+var actors = runtime.Host!.Services.Get<IActorManager>();
+actors.Create("maya");
+var maya = actors.Get<ICharacterActor>("maya");
+
+maya.SetAppearance("happy");
+var move = maya.ChangePosition(
+    CharacterPositionPreset.Left,
+    durationSeconds: 0.35,
+    operationId: "maya-move");
+await move.Completion;
+```
+
+Character views are `Sprite2D` nodes and backgrounds use full-rect
+`TextureRect` views. A new animation targeting the same Actor property first
+force-completes the previous animation, producing a deterministic starting
+state. Actor reset destroys all views and cancels their owned operations.
+Custom factories can be added or replace built-ins through
+`ConfigureActorFactories` before Runtime initialization.
 
 ## Testing
 

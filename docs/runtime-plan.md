@@ -407,7 +407,7 @@ Headless 验收：
 - Runtime Host 保留调用方同步上下文，Godot 服务生命周期和 Tween 回调不会因 `ConfigureAwait(false)` 漂移到线程池。
 - 门禁通过：24 个纯 C# 单元测试全部通过；Godot headless 覆盖真实帧、Tween 三种终态，以及 Runtime 退出前和退出过程中创建的 Operation 清理。
 
-### M3：最小 Actor 系统
+### M3：最小 Actor 系统（已完成）
 
 目标：用最简单的角色和背景验证 Actor 抽象。
 
@@ -435,6 +435,15 @@ Headless 验收：
 - 位置和透明度 Tween 的中间、最终状态正确。
 - 背景交叉淡化完成后旧资源被释放。
 - 场景关闭后无残留 Actor Node。
+
+实施记录（2026-08-21）：
+
+- 已实现 `IActor`、Character、Background、`IActorFactory` 和纯管理层 `ActorManager`，支持定义驱动的增删查、唯一 ID 与启动前工厂验证。
+- Actor 配置已扩展为 Factory、默认 Appearance、多 Texture 映射和 left/center/right 位置预设；集中验证重复 ID、缺失默认项、非法路径与非有限位置。
+- Character 使用 `Sprite2D`，Background 使用全屏 `TextureRect`；Bootstrap 默认建立 Background/Character 分层并注册 `IActorManager`。
+- 位置、透明度、显示和隐藏由 Operation Scheduler 驱动；同一属性冲突时前一 Operation 先强制完成并到达目标，新动画随后开始。
+- Background 交叉淡化并发驱动新旧 TextureRect，完成后释放旧视图；取消时恢复旧视图且不应用目标 Appearance。
+- 门禁通过：30 个纯 C# 单元测试全部通过；Godot headless 覆盖纹理加载、节点层级、立即状态、Tween 中间/最终值、冲突顺序、交叉淡化释放、Reset 和场景关闭清理。
 
 ### M4：Yarn Command 适配
 

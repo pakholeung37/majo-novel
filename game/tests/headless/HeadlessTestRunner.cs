@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime;
+using Majo.Runtime.Actors;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue.Yarn;
@@ -14,7 +15,7 @@ namespace Majo.Runtime.HeadlessTests;
 
 public partial class HeadlessTestRunner : Node
 {
-    private const double SuiteTimeoutSeconds = 10;
+    private const double SuiteTimeoutSeconds = 15;
     private const string ForcedFailureArgument = "--majo-force-failure";
 
     public override void _Ready()
@@ -51,7 +52,164 @@ public partial class HeadlessTestRunner : Node
         ValidateConfigurationDiagnostics();
         await ValidateSuccessfulRuntimeLifecycleAsync();
         await ValidateOperationKernelAsync();
+        await ValidateActorSystemAsync();
         await ValidateFailedConfigurationCleanupAsync();
+    }
+
+    private async Task ValidateActorSystemAsync()
+    {
+        var configuration = MajoProjectConfiguration.CreateDefault();
+        configuration.Actors!.LeftPosition = new Vector2(100, 200);
+        configuration.Actors.CenterPosition = new Vector2(200, 200);
+        configuration.Actors.RightPosition = new Vector2(300, 200);
+        configuration.Actors.Actors.Add(CreateActorDefinition(
+            "hero",
+            ActorFactoryIds.Character,
+            CharacterPositionPreset.Left,
+            ("red", "res://tests/headless/fixtures/character_red.svg"),
+            ("blue", "res://tests/headless/fixtures/character_blue.svg")));
+        configuration.Actors.Actors.Add(CreateActorDefinition(
+            "courtroom",
+            ActorFactoryIds.Background,
+            CharacterPositionPreset.Center,
+            ("dark", "res://tests/headless/fixtures/background_dark.svg"),
+            ("light", "res://tests/headless/fixtures/background_light.svg")));
+
+        var bootstrap = new MajoRuntimeBootstrap
+        {
+            Name = "ActorRuntime",
+            Configuration = configuration,
+        };
+        AddChild(bootstrap);
+        await bootstrap.InitializationCompletion;
+
+        var actorRoot = bootstrap.GetNode<CanvasLayer>("MajoActors");
+        var backgroundLayer = actorRoot.GetNode<Control>("Backgrounds");
+        var characterLayer = actorRoot.GetNode<Node2D>("Characters");
+        var manager = bootstrap.Host!.Services.Get<IActorManager>();
+        var scheduler = bootstrap.Host.Services.Get<IOperationScheduler>();
+        var character = manager.Get<ICharacterActor>(
+            manager.Create("hero").Id);
+        var background = manager.Get<IBackgroundActor>(
+            manager.Create("courtroom").Id);
+
+        Assert(character.SceneNode is Sprite2D,
+            "Character factory did not create a Sprite2D.");
+        Assert(ReferenceEquals(character.SceneNode.GetParent(), characterLayer),
+            "Character Sprite2D was created under the wrong layer.");
+        Assert(background.SceneNode is Control,
+            "Background factory did not create a Control host.");
+        Assert(ReferenceEquals(background.SceneNode.GetParent(), backgroundLayer),
+            "Background host was created under the wrong layer.");
+        Assert(ReferenceEquals(background.CurrentView.GetParent(), background.SceneNode),
+            "Background TextureRect was created under the wrong host.");
+        Assert(character.View.Texture is not null, "Character texture was not loaded.");
+        Assert(background.CurrentView.Texture is not null, "Background texture was not loaded.");
+        Assert(character.Position.IsEqualApprox(configuration.Actors.LeftPosition),
+            "Character did not use the configured left position preset.");
+
+        var initialTexture = character.View.Texture;
+        character.SetAppearance("blue");
+        Assert(character.Appearance == "blue", "Immediate appearance state was not updated.");
+        Assert(!ReferenceEquals(initialTexture, character.View.Texture),
+            "Character appearance did not replace its Texture2D.");
+        AssertThrows<UnknownActorAppearanceException>(() =>
+            character.SetAppearance("missing"));
+
+        character.SetPosition(configuration.Actors.LeftPosition);
+        var firstMove = character.ChangePosition(
+            CharacterPositionPreset.Center, 1, "first-move");
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        var secondMove = character.ChangePosition(
+            CharacterPositionPreset.Right, 0.04, "second-move");
+        await firstMove.Completion;
+        Assert(firstMove.State == OperationState.Completed,
+            "Conflicting prior position operation was not force-completed.");
+        Assert(character.Position.IsEqualApprox(configuration.Actors.CenterPosition),
+            "Prior position operation did not reach its target before the next began.");
+        await secondMove.Completion;
+        Assert(character.Position.IsEqualApprox(configuration.Actors.RightPosition),
+            "Second position operation did not reach its target.");
+
+        character.SetOpacity(0);
+        var fade = character.ChangeOpacity(1, 0.08, "character-fade");
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Assert(character.Opacity is > 0 and < 1,
+            "Character opacity Tween did not expose an intermediate value.");
+        await fade.Completion;
+        Assert(Mathf.IsEqualApprox(character.Opacity, 1),
+            "Character opacity Tween did not reach its final value.");
+
+        var oldBackgroundView = background.CurrentView;
+        var crossFade = background.CrossFadeAppearance("light", 0.06, "background-crossfade");
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Assert(background.SceneNode.GetChildCount() == 2,
+            "Background crossfade did not retain old and new TextureRects concurrently.");
+        await crossFade.Completion;
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Assert(background.Appearance == "light",
+            "Background appearance state did not reach the crossfade target.");
+        Assert(!IsInstanceValid(oldBackgroundView),
+            "Background crossfade did not release the old TextureRect.");
+        Assert(background.SceneNode.GetChildCount() == 1,
+            "Background crossfade left an extra TextureRect behind.");
+
+        var resetOperation = character.ChangePosition(
+            CharacterPositionPreset.Left, 10, "reset-character");
+        await bootstrap.ResetRuntimeAsync();
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Assert(resetOperation.State == OperationState.Cancelled,
+            "Runtime Reset did not cancel the Actor operation.");
+        Assert(manager.Actors.Count == 0, "Runtime Reset did not clear ActorManager state.");
+        Assert(scheduler.ActiveOperations.Count == 0,
+            "Runtime Reset left an active Actor operation.");
+        Assert(characterLayer.GetChildCount() == 0,
+            "Runtime Reset left Character nodes in the scene.");
+        Assert(backgroundLayer.GetChildCount() == 0,
+            "Runtime Reset left Background nodes in the scene.");
+
+        var closingCharacter = manager.Create("hero");
+        var closingBackground = manager.Create("courtroom");
+        var closingCharacterNode = closingCharacter.SceneNode;
+        var closingBackgroundNode = closingBackground.SceneNode;
+        bootstrap.QueueFree();
+        await bootstrap.ShutdownCompletion;
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Assert(!IsInstanceValid(closingCharacterNode),
+            "Runtime shutdown left a Character node behind.");
+        Assert(!IsInstanceValid(closingBackgroundNode),
+            "Runtime shutdown left a Background node behind.");
+        Assert(!IsInstanceValid(actorRoot), "Runtime shutdown left the Actor root behind.");
+        Assert(!IsInstanceValid(bootstrap), "Actor Runtime node leaked after shutdown.");
+    }
+
+    private static ActorDefinitionConfiguration CreateActorDefinition(
+        string id,
+        string factoryId,
+        CharacterPositionPreset initialPosition,
+        params (string Id, string Path)[] appearances)
+    {
+        var definition = new ActorDefinitionConfiguration
+        {
+            Id = id,
+            FactoryId = factoryId,
+            DefaultAppearance = appearances[0].Id,
+            InitialPosition = initialPosition,
+        };
+        foreach (var appearance in appearances)
+        {
+            definition.Appearances.Add(new ActorAppearanceConfiguration
+            {
+                Id = appearance.Id,
+                TexturePath = appearance.Path,
+            });
+        }
+
+        return definition;
     }
 
     private async Task ValidateOperationKernelAsync()
@@ -240,12 +398,28 @@ public partial class HeadlessTestRunner : Node
         configuration.Actors!.Actors.Add(new ActorDefinitionConfiguration
         {
             Id = "hero",
-            AssetPath = "res://missing/hero-a.png",
+            DefaultAppearance = "default",
+            Appearances =
+            {
+                new ActorAppearanceConfiguration
+                {
+                    Id = "default",
+                    TexturePath = "res://missing/hero-a.png",
+                },
+            },
         });
         configuration.Actors.Actors.Add(new ActorDefinitionConfiguration
         {
             Id = "hero",
-            AssetPath = "res://missing/hero-b.png",
+            DefaultAppearance = "default",
+            Appearances =
+            {
+                new ActorAppearanceConfiguration
+                {
+                    Id = "default",
+                    TexturePath = "res://missing/hero-b.png",
+                },
+            },
         });
         configuration.Dialogue!.RequiredYarnRuntimeVersion = "99.0.0";
 
@@ -305,6 +479,22 @@ public partial class HeadlessTestRunner : Node
         {
             throw new InvalidOperationException(message);
         }
+    }
+
+    private static void AssertThrows<TException>(Action action)
+        where TException : Exception
+    {
+        try
+        {
+            action();
+        }
+        catch (TException)
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"Expected exception '{typeof(TException).Name}' was not thrown.");
     }
 
     private sealed class HeadlessLifecycleService : IRuntimeService

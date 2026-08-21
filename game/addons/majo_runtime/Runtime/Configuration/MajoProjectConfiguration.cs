@@ -88,6 +88,9 @@ public partial class MajoProjectConfiguration : Resource
         }
 
         var actorIds = new HashSet<string>(StringComparer.Ordinal);
+        ValidatePosition(Actors.LeftPosition, nameof(Actors.LeftPosition), issues);
+        ValidatePosition(Actors.CenterPosition, nameof(Actors.CenterPosition), issues);
+        ValidatePosition(Actors.RightPosition, nameof(Actors.RightPosition), issues);
         for (var index = 0; index < Actors.Actors.Count; index++)
         {
             var actor = Actors.Actors[index];
@@ -109,18 +112,88 @@ public partial class MajoProjectConfiguration : Resource
                     $"Actor ID '{actor.Id}' is duplicated."));
             }
 
-            if (string.IsNullOrWhiteSpace(actor.AssetPath))
+            if (string.IsNullOrWhiteSpace(actor.FactoryId))
             {
                 issues.Add(new ConfigurationIssue(
-                    $"{path}.{nameof(actor.AssetPath)}",
-                    "Resource path is required."));
+                    $"{path}.{nameof(actor.FactoryId)}",
+                    "Factory ID is required."));
             }
-            else if (!resourceExists(actor.AssetPath))
+
+            if (string.IsNullOrWhiteSpace(actor.DefaultAppearance))
             {
                 issues.Add(new ConfigurationIssue(
-                    $"{path}.{nameof(actor.AssetPath)}",
-                    $"Resource '{actor.AssetPath}' does not exist."));
+                    $"{path}.{nameof(actor.DefaultAppearance)}",
+                    "Default appearance is required."));
             }
+
+            var appearanceIds = new HashSet<string>(StringComparer.Ordinal);
+            for (var appearanceIndex = 0;
+                appearanceIndex < actor.Appearances.Count;
+                appearanceIndex++)
+            {
+                var appearance = actor.Appearances[appearanceIndex];
+                var appearancePath =
+                    $"{path}.{nameof(actor.Appearances)}[{appearanceIndex}]";
+                if (appearance is null)
+                {
+                    issues.Add(new ConfigurationIssue(
+                        appearancePath, "Appearance definition is required."));
+                    continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(appearance.Id))
+                {
+                    issues.Add(new ConfigurationIssue(
+                        $"{appearancePath}.{nameof(appearance.Id)}",
+                        "Appearance ID is required."));
+                }
+                else if (!appearanceIds.Add(appearance.Id))
+                {
+                    issues.Add(new ConfigurationIssue(
+                        $"{appearancePath}.{nameof(appearance.Id)}",
+                        $"Appearance ID '{appearance.Id}' is duplicated."));
+                }
+
+                if (string.IsNullOrWhiteSpace(appearance.TexturePath))
+                {
+                    issues.Add(new ConfigurationIssue(
+                        $"{appearancePath}.{nameof(appearance.TexturePath)}",
+                        "Texture path is required."));
+                }
+                else if (!resourceExists(appearance.TexturePath))
+                {
+                    issues.Add(new ConfigurationIssue(
+                        $"{appearancePath}.{nameof(appearance.TexturePath)}",
+                        $"Resource '{appearance.TexturePath}' does not exist."));
+                }
+            }
+
+            if (actor.Appearances.Count == 0)
+            {
+                issues.Add(new ConfigurationIssue(
+                    $"{path}.{nameof(actor.Appearances)}",
+                    "At least one appearance is required."));
+            }
+            else if (!string.IsNullOrWhiteSpace(actor.DefaultAppearance) &&
+                !appearanceIds.Contains(actor.DefaultAppearance))
+            {
+                issues.Add(new ConfigurationIssue(
+                    $"{path}.{nameof(actor.DefaultAppearance)}",
+                    $"Default appearance '{actor.DefaultAppearance}' is not defined."));
+            }
+        }
+    }
+
+    private static void ValidatePosition(
+        Vector2 position,
+        string property,
+        ICollection<ConfigurationIssue> issues)
+    {
+        if (!float.IsFinite(position.X) || !float.IsFinite(position.Y))
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Actors)}.{property}",
+                "Position components must be finite."));
         }
     }
 

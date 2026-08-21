@@ -4,6 +4,8 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
+using Majo.Runtime.Actors;
+using Majo.Runtime.Actors.Godot;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue.Yarn;
@@ -36,6 +38,8 @@ public partial class MajoRuntimeBootstrap : Node
     public MajoProjectConfiguration? Configuration { get; set; }
 
     public Action<RuntimeServiceRegistry>? ConfigureServices { get; set; }
+
+    public Action<ActorManager>? ConfigureActorFactories { get; set; }
 
     public RuntimeHost? Host { get; private set; }
 
@@ -152,7 +156,38 @@ public partial class MajoRuntimeBootstrap : Node
                     resolver.Get<IRuntimeLifetime>(),
                     new GodotRuntimeLogger()),
                 typeof(IFrameClock),
-                typeof(IRuntimeLifetime));
+                typeof(IRuntimeLifetime))
+            .AddSingleton<GodotActorHost>(_ => new GodotActorHost(this))
+            .AddSingleton<IActorManager>(
+                resolver => CreateActorManager(
+                    resolver.Get<GodotActorHost>(),
+                    resolver.Get<IOperationScheduler>()),
+                typeof(GodotActorHost),
+                typeof(IOperationScheduler));
+    }
+
+    private ActorManager CreateActorManager(
+        GodotActorHost host,
+        IOperationScheduler scheduler)
+    {
+        var actorConfiguration = Configuration!.Actors!;
+        var textureLoader = new ResourceActorTextureLoader();
+        var manager = new ActorManager(
+            ActorConfigurationCompiler.Compile(actorConfiguration),
+            new IActorFactory[]
+            {
+                new CharacterActorFactory(
+                    host.CharacterLayer,
+                    scheduler,
+                    textureLoader,
+                    new CharacterPositionMap(actorConfiguration)),
+                new BackgroundActorFactory(
+                    host.BackgroundLayer,
+                    scheduler,
+                    textureLoader),
+            });
+        ConfigureActorFactories?.Invoke(manager);
+        return manager;
     }
 
     private async Task ShutdownHostAsync(CancellationToken cancellationToken = default)
