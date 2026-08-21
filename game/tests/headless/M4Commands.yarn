@@ -1,0 +1,26 @@
+title: Start
+tags: headless
+---
+<<back backdrop dark 0.12 false setup back-fade>>
+<<char hero red left 0.12 false setup hero-left>>
+<<await setup false group>>
+Narrator: after join #line:m4-after-join
+<<char hero blue right 0.08 true - hero-right>>
+Narrator: after wait #line:m4-after-wait
+<<hide hero 1 false - cancelled-hide>>
+<<cancel cancelled-hide id>>
+Narrator: after cancel #line:m4-after-cancel
+<<hide hero 1 false - completed-hide>>
+<<await completed-hide true id>>
+Narrator: after complete #line:m4-after-complete
+===
+
+title: BadArguments
+---
+<<char hero happy nowhere>>
+===
+
+title: UnknownCommand
+---
+<<majo_unknown detail>>
+===

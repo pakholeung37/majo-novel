@@ -8,9 +8,11 @@ using Majo.Runtime.Actors;
 using Majo.Runtime.Actors.Godot;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
+using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Dialogue.Yarn;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Operations.Godot;
+using YarnSpinnerGodot;
 
 namespace Majo.Runtime;
 
@@ -36,6 +38,9 @@ public partial class MajoRuntimeBootstrap : Node
 
     [Export]
     public MajoProjectConfiguration? Configuration { get; set; }
+
+    [Export]
+    public DialogueRunner? YarnDialogueRunner { get; set; }
 
     public Action<RuntimeServiceRegistry>? ConfigureServices { get; set; }
 
@@ -164,6 +169,20 @@ public partial class MajoRuntimeBootstrap : Node
                     resolver.Get<IOperationScheduler>()),
                 typeof(GodotActorHost),
                 typeof(IOperationScheduler));
+
+        if (YarnDialogueRunner is not null)
+        {
+            services.AddSingleton<IYarnCommandAdapter>(
+                resolver => new YarnCommandAdapter(
+                    new DialogueRunnerCommandRegistry(YarnDialogueRunner),
+                    new RuntimeCommandService(
+                        resolver.Get<IActorManager>(),
+                        resolver.Get<IOperationScheduler>()),
+                    new RuntimeCommandParser(
+                        Configuration!.Operations!.DefaultAnimationDurationSeconds)),
+                typeof(IActorManager),
+                typeof(IOperationScheduler));
+        }
     }
 
     private ActorManager CreateActorManager(

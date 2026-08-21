@@ -10,7 +10,7 @@ Compatibility baseline:
 
 Yarn Spinner is an external prerequisite and is not bundled with this plugin.
 
-Current implementation status: M3 minimal Actor system.
+Current implementation status: M4 Yarn Command adapter.
 
 ## Runtime setup
 
@@ -95,6 +95,52 @@ force-completes the previous animation, producing a deterministic starting
 state. Actor reset destroys all views and cancels their owned operations.
 Custom factories can be added or replace built-ins through
 `ConfigureActorFactories` before Runtime initialization.
+
+## Yarn commands
+
+Assign the scene's `DialogueRunner` to `MajoRuntimeBootstrap.YarnDialogueRunner`
+before adding the bootstrap to the tree. The Runtime then explicitly registers
+five command handlers during initialization and removes them during shutdown:
+
+```csharp
+var runtime = new MajoRuntimeBootstrap
+{
+    Configuration = configuration,
+    YarnDialogueRunner = dialogueRunner,
+};
+```
+
+The frozen M4 positional syntax is:
+
+```text
+back <actor> <appearance> [duration] [wait] [group|-] [operation|-]
+char <actor> <appearance> <left|center|right> [duration] [wait] [group|-] [operation|-]
+hide <actor> [duration] [wait] [group|-] [operation|-]
+await <target> [complete] [group|id]
+cancel <target> [group|id]
+```
+
+Durations default to `Operations.DefaultAnimationDurationSeconds`; animated
+commands default to `wait=false`. `-` leaves an optional group or operation ID
+unset. `await` and `cancel` target a group by default, or an individual
+operation when the final argument is `id`.
+
+```yarn
+<<back backdrop courtroom 0.5 false setup back-fade>>
+<<char maya happy left 0.5 false setup maya-move>>
+<<await setup false group>>
+
+Maya: 准备完成了。
+
+<<char maya surprised center 0.35 true - maya-center>>
+Maya: 等一下！
+```
+
+The adapter deliberately does not register `wait` or `stop`, preserving Yarn's
+built-in commands. Parsing failures include both the invalid parameter and the
+exact command usage. The pure command core depends only on `IActorManager` and
+`IOperationScheduler`, while the Yarn-specific layer is isolated behind an
+explicit command registry.
 
 ## Testing
 

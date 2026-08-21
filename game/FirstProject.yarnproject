@@ -3,6 +3,8 @@
   "sourceFiles": [
     "**/*.yarn"
   ],
-  "excludeFiles": [],
+  "excludeFiles": [
+    "tests/headless/**/*.yarn"
+  ],
   "baseLanguage": "en"
 }

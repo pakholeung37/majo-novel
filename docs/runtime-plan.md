@@ -293,13 +293,13 @@ Command 通过 `DialogueRunner.AddCommandHandler` 显式注册，不依赖 `[Yar
 首版使用类型化位置参数，所有可选参数必须位于末尾。精确签名由 M4 的编译和源生成器测试确定并冻结。示意：
 
 ```yarn
-<<back courtroom 0.5 false setup>>
-<<char Maya happy left 0.5 false setup>>
-<<await setup false>>
+<<back backdrop courtroom 0.5 false setup back-fade>>
+<<char Maya happy left 0.5 false setup maya-left>>
+<<await setup false group>>
 
 Maya: 准备完成了。
 
-<<char Maya surprised center 0.35 true>>
+<<char Maya surprised center 0.35 true - maya-center>>
 Maya: 等一下！
 ```
 
@@ -445,7 +445,7 @@ Headless 验收：
 - Background 交叉淡化并发驱动新旧 TextureRect，完成后释放旧视图；取消时恢复旧视图且不应用目标 Appearance。
 - 门禁通过：30 个纯 C# 单元测试全部通过；Godot headless 覆盖纹理加载、节点层级、立即状态、Tween 中间/最终值、冲突顺序、交叉淡化释放、Reset 和场景关闭清理。
 
-### M4：Yarn Command 适配
+### M4：Yarn Command 适配（已完成）
 
 目标：让 Yarn 通过显式 Command Adapter 驱动 Runtime。
 
@@ -473,6 +473,14 @@ Headless 验收：
 - `await` 后下一条台词只在全部目标动画完成后出现。
 - `cancel` 与强制完成后的 Actor 最终状态不同且符合定义。
 - 未处理 Command 和错误参数产生清晰失败信息。
+
+实施记录（2026-08-21）：
+
+- 已将命令拆分为只依赖 `IActorManager`/`IOperationScheduler` 的纯 Runtime Command 核心，以及只负责 `DialogueRunner.AddCommandHandler` 注册的 Yarn Adapter。
+- 已冻结 `back`、`char`、`hide`、`await`、`cancel` 的类型化位置参数；动画默认 `wait=false`，`-` 表示空绑定，等待和取消默认按组并可显式选择 Operation ID。
+- Adapter 随 Runtime 初始化显式注册五个命令、关闭时逆序卸载，不注册 Yarn 内建 `wait` 和 VM 特殊命令 `stop`；参数错误包含具体值及完整 usage。
+- Command 产生的后台动画均由 Operation Scheduler 持有；`wait=true` 直接返回 Operation Completion，`await complete` 使用强制完成通道，`cancel` 使用取消通道。
+- 门禁通过：44 个纯 C# 单元测试全部通过；真实 Yarn VM headless 覆盖非等待动画重叠、组汇合、等待型命令暂停、取消/强制完成差异、错误参数与未处理命令诊断。
 
 ### M5：最小可玩闭环与扩展证明
 

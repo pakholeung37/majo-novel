@@ -7,9 +7,11 @@ using Majo.Runtime;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
+using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Dialogue.Yarn;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Operations.Godot;
+using YarnSpinnerGodot;
 
 namespace Majo.Runtime.HeadlessTests;
 
@@ -53,7 +55,140 @@ public partial class HeadlessTestRunner : Node
         await ValidateSuccessfulRuntimeLifecycleAsync();
         await ValidateOperationKernelAsync();
         await ValidateActorSystemAsync();
+        await ValidateYarnCommandAdapterAsync();
         await ValidateFailedConfigurationCleanupAsync();
+    }
+
+    private async Task ValidateYarnCommandAdapterAsync()
+    {
+        var yarnProject = ResourceLoader.Load<YarnProject>(
+            "res://tests/headless/M4Commands.yarnproject");
+        Assert(yarnProject is not null, "M4 Yarn project failed to import.");
+        Assert(yarnProject.Program is not null, "M4 Yarn project has no compiled program.");
+
+        var presenter = new HeadlessDialoguePresenter { Name = "ProbePresenter" };
+        var runner = new DialogueRunner
+        {
+            Name = "M4DialogueRunner",
+            dialoguePresenters = new Godot.Collections.Array<Node> { presenter },
+        };
+        runner.AddChild(presenter);
+        runner.SetProject(yarnProject);
+
+        var configuration = MajoProjectConfiguration.CreateDefault();
+        configuration.Actors!.LeftPosition = new Vector2(100, 200);
+        configuration.Actors.CenterPosition = new Vector2(200, 200);
+        configuration.Actors.RightPosition = new Vector2(300, 200);
+        configuration.Actors.Actors.Add(CreateActorDefinition(
+            "hero",
+            ActorFactoryIds.Character,
+            CharacterPositionPreset.Center,
+            ("red", "res://tests/headless/fixtures/character_red.svg"),
+            ("blue", "res://tests/headless/fixtures/character_blue.svg")));
+        configuration.Actors.Actors.Add(CreateActorDefinition(
+            "backdrop",
+            ActorFactoryIds.Background,
+            CharacterPositionPreset.Center,
+            ("dark", "res://tests/headless/fixtures/background_dark.svg"),
+            ("light", "res://tests/headless/fixtures/background_light.svg")));
+
+        var bootstrap = new MajoRuntimeBootstrap
+        {
+            Name = "M4Runtime",
+            Configuration = configuration,
+            YarnDialogueRunner = runner,
+        };
+        AddChild(bootstrap);
+        await bootstrap.InitializationCompletion;
+        AddChild(runner);
+
+        var manager = bootstrap.Host!.Services.Get<IActorManager>();
+        var scheduler = bootstrap.Host.Services.Get<IOperationScheduler>();
+        var adapter = bootstrap.Host.Services.Get<IYarnCommandAdapter>();
+        var joinedAtFinalState = false;
+        var waitedAtFinalState = false;
+        var cancelKeptCharacterVisible = false;
+        var completeAppliedHiddenState = false;
+        presenter.LinePresented += line =>
+        {
+            var character = manager.Get<ICharacterActor>("hero");
+            switch (line.TextID)
+            {
+                case "line:m4-after-join":
+                    var background = manager.Get<IBackgroundActor>("backdrop");
+                    joinedAtFinalState =
+                        character.Position.IsEqualApprox(configuration.Actors.LeftPosition) &&
+                        background.Appearance == "dark" &&
+                        scheduler.ActiveOperations.Count == 0;
+                    break;
+                case "line:m4-after-wait":
+                    waitedAtFinalState =
+                        character.Position.IsEqualApprox(configuration.Actors.RightPosition) &&
+                        character.Appearance == "blue";
+                    break;
+                case "line:m4-after-cancel":
+                    cancelKeptCharacterVisible = character.Visible && character.Opacity > 0;
+                    break;
+                case "line:m4-after-complete":
+                    completeAppliedHiddenState =
+                        !character.Visible && Mathf.IsZeroApprox(character.Opacity);
+                    break;
+            }
+        };
+
+        await runner.StartDialogue("Start");
+        await WaitForConditionAsync(
+            () => scheduler.ActiveOperations.Count >= 2,
+            2);
+        Assert(presenter.Lines.Count == 0,
+            "Yarn advanced past await while grouped animations were active.");
+        await runner.DialogueTask;
+
+        Assert(presenter.Lines.SequenceEqual(new[]
+            {
+                "Narrator: after join",
+                "Narrator: after wait",
+                "Narrator: after cancel",
+                "Narrator: after complete",
+            }),
+            "Yarn command test lines were delivered out of order.");
+        Assert(joinedAtFinalState,
+            "Yarn await did not join both non-waiting grouped animations.");
+        Assert(waitedAtFinalState,
+            "wait=true allowed Yarn to present the next line before the move completed.");
+        Assert(cancelKeptCharacterVisible,
+            "cancel incorrectly applied the hide operation's final state.");
+        Assert(completeAppliedHiddenState,
+            "await complete did not apply the hide operation's final state.");
+        Assert(scheduler.ActiveOperations.Count == 0,
+            "Completed Yarn dialogue left active operations.");
+
+        await runner.StartDialogue("BadArguments");
+        await WaitForConditionAsync(() => adapter.LastFailure is not null, 2);
+        Assert(adapter.LastFailure!.CommandName == "char",
+            "Bad Yarn arguments were attributed to the wrong command.");
+        Assert(adapter.LastFailure.Message.Contains(
+                RuntimeCommandParser.CharacterUsage,
+                StringComparison.Ordinal),
+            "Bad Yarn arguments did not include command usage.");
+        await runner.Stop();
+
+        var unhandledCommand = string.Empty;
+        runner.Connect(
+            DialogueRunner.SignalName.onUnhandledCommand,
+            Callable.From<string>(command => unhandledCommand = command));
+        await runner.StartDialogue("UnknownCommand");
+        await WaitForConditionAsync(() => unhandledCommand.Length > 0, 2);
+        Assert(unhandledCommand == "majo_unknown detail",
+            "Yarn did not preserve the unhandled command diagnostic text.");
+        await runner.Stop();
+
+        await bootstrap.RequestShutdownAsync();
+        runner.QueueFree();
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Assert(!IsInstanceValid(bootstrap), "M4 Runtime node leaked after shutdown.");
+        Assert(!IsInstanceValid(runner), "M4 DialogueRunner leaked after cleanup.");
     }
 
     private async Task ValidateActorSystemAsync()
