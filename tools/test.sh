@@ -22,7 +22,8 @@ fi
 printf 'Checking Majo Runtime and test formatting/static diagnostics...\n'
 run_with_timeout 180 dotnet format "$GAME_PROJECT/Majo Rebuild.csproj" \
     --verify-no-changes \
-    --include "$GAME_PROJECT/addons/majo_runtime" "$GAME_PROJECT/tests/headless" \
+    --include "$GAME_PROJECT/addons/majo_runtime" "$GAME_PROJECT/demo" \
+        "$GAME_PROJECT/tests/headless" \
     --verbosity minimal
 run_with_timeout 180 dotnet format "$UNIT_TEST_PROJECT" \
     --verify-no-changes \
@@ -37,6 +38,9 @@ run_with_timeout 180 dotnet test "$UNIT_TEST_PROJECT" --nologo
 
 printf 'Checking Godot headless import and C# compilation...\n'
 run_with_timeout 180 "$GODOT_EXECUTABLE" --headless --path "$GAME_PROJECT" --editor --quit
+
+printf 'Running M5 visible-scene headless smoke test...\n'
+run_with_timeout 60 "$GODOT_EXECUTABLE" --headless --path "$GAME_PROJECT" -- --m5-auto
 
 for headless_run in 1 2 3; do
     printf 'Running Godot headless integration tests (%s/3)...\n' "$headless_run"

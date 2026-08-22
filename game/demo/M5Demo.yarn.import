@@ -1,0 +1,14 @@
+[remap]
+
+importer="yarnscript"
+type="Resource"
+uid="uid://bhyf0nvy8w1vm"
+path="res://.godot/imported/M5Demo.yarn-0c354f2b6ab7240564264654bcaedb8e.tres"
+
+[deps]
+
+source_file="res://demo/M5Demo.yarn"
+dest_files=["res://.godot/imported/M5Demo.yarn-0c354f2b6ab7240564264654bcaedb8e.tres"]
+
+[params]
+

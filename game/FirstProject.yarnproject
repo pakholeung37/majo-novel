@@ -4,7 +4,8 @@
     "**/*.yarn"
   ],
   "excludeFiles": [
-    "tests/headless/**/*.yarn"
+    "tests/headless/**/*.yarn",
+    "demo/**/*.yarn"
   ],
   "baseLanguage": "en"
 }

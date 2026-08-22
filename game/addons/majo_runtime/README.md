@@ -10,7 +10,15 @@ Compatibility baseline:
 
 Yarn Spinner is an external prerequisite and is not bundled with this plugin.
 
-Current implementation status: M4.5 architecture and timing hardening.
+Current implementation status: M5 minimum playable loop and extension proof.
+
+## Installation
+
+Copy `addons/majo_runtime` into the target Godot C# project's `addons`
+directory, install the compatible YarnSpinner-Godot plugin separately, and
+enable both plugins under **Project Settings > Plugins**. The complete local
+installation, configuration, run, and test walkthrough is in
+[`docs/plugin-quickstart.md`](../../../docs/plugin-quickstart.md).
 
 ## Runtime setup
 
@@ -184,6 +192,28 @@ Every handler receives a `RuntimeCommandContext`. Operations tracked through
 the context are cancelled when the current Yarn dialogue stops. Command
 failures emit `RuntimeCommandFailed`, abort the current dialogue and remain
 available through `IYarnCommandAdapter.LastFailure`.
+
+## M5 playable demo
+
+Run the project or open `res://demo/M5Demo.tscn`. The demo uses one Yarn script
+to exercise parallel background/character animation, group join, a waiting
+animation, dialogue, options, branching, a custom command, and clean Runtime
+shutdown.
+
+All extension code lives outside the plugin under `res://demo`:
+
+- `M5CaseService` demonstrates a service with Runtime lifetime dependency.
+- `M5PortraitActorFactory` demonstrates a custom Actor factory ID.
+- `demo_route` demonstrates a custom Yarn command resolving the service.
+- `M5DemoPresenter` supplies the visible line and option UI.
+- `M5DialogueProbe` runs the same content without graphics for deterministic
+  integration tests.
+
+The main scene also has a non-interactive smoke mode:
+
+```sh
+/path/to/godot --headless --path game -- --m5-auto
+```
 
 ## Testing
 

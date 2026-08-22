@@ -1,0 +1,21 @@
+title: Start
+tags: m5 demo
+---
+<<back backdrop courtroom 0.18 false opening backdrop-opening>>
+<<char hero calm left 0.18 false opening hero-opening>>
+<<await opening false group>>
+
+Narrator: 法庭与角色已经并行动画，并在这里完成汇合。 #line:m5-after-join
+
+<<back backdrop spotlight 0.12 false focus backdrop-focus>>
+<<char hero determined center 0.12 true focus hero-focus>>
+
+Maya: 等待型角色动画完成，现在请选择调查策略。 #line:m5-after-wait
+-> 追问证词 #line:m5-option-press
+    <<demo_route press>>
+    Maya: 我会继续追问证人的时间线。 #line:m5-branch-press
+-> 出示证物 #line:m5-option-evidence
+    <<demo_route evidence>>
+    Maya: 这份证物足以推翻刚才的陈述。 #line:m5-branch-evidence
+Narrator: M5 最小可玩闭环完成。 #line:m5-finished
+===

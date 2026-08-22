@@ -510,7 +510,7 @@ Headless 验收：
 - Shutdown 等待超时后可以再次调用并完成剩余清理。
 - 53 个纯 C# 单元测试、Godot/Yarn headless 连续三轮和失败探针全部通过。
 
-### M5：最小可玩闭环与扩展证明
+### M5：最小可玩闭环与扩展证明（已完成）
 
 目标：完成第一阶段验收场景，并证明架构可扩展。
 
@@ -543,6 +543,17 @@ Headless 验收：
 - 新增示例扩展不修改 Core 源码。
 - 所有单元和 headless 测试连续运行多次无偶发失败。
 - Runtime 结束后没有活跃 Operation、残留测试 Node 或未观察异常。
+
+实施记录（2026-08-22）：
+
+- 新增 `demo/M5Demo.tscn` 可见主场景及可点击台词/选项 Presenter；项目默认启动场景已指向该演示。
+- 新增独立的 `M5Demo.yarnproject`，单一剧本覆盖背景和角色并行动画、组汇合、等待型动画、台词、选项、分支与正常结束。
+- 所有扩展均位于插件目录外的 `Majo.Demo`：`M5CaseService`、`M5PortraitActorFactory` 和 `demo_route` Command 未修改 Runtime Core。
+- `M5DialogueProbe` 记录对话、Node、Line 和 Option 事件，并能确定性选择分支；真实 Yarn VM headless 同时断言 Actor 最终状态和事件顺序。
+- 关闭验收会检查自定义 Service 接收到 Runtime cancellation、Actor Node 被释放、Operation 为零以及 Runtime/Runner/外部 Host 无残留。
+- 主场景支持 `--m5-auto`，严格门禁会额外运行一次主场景装配 smoke test，再连续运行三轮完整 headless suite 与失败探针。
+- 56 个纯 C# 单元测试全部通过；M5 Service 的生命周期、状态重置和输入验证具有独立单测。
+- 新增插件安装、配置、运行、扩展和测试快速指南；M0-M5 首阶段闭环已形成可复用插件基线。
 
 ## 11. 后续 Roadmap
 

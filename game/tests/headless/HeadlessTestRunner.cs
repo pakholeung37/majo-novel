@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
+using Majo.Demo;
 using Majo.Runtime;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Configuration;
@@ -57,7 +58,124 @@ public partial class HeadlessTestRunner : Node
         await ValidateOperationKernelAsync();
         await ValidateActorSystemAsync();
         await ValidateYarnCommandAdapterAsync();
+        await ValidateM5PlayableLoopAsync();
         await ValidateFailedConfigurationCleanupAsync();
+    }
+
+    private async Task ValidateM5PlayableLoopAsync()
+    {
+        var yarnProject = ResourceLoader.Load<YarnProject>(
+            M5DemoComposition.YarnProjectPath);
+        Assert(yarnProject is not null, "M5 Yarn project failed to import.");
+        Assert(yarnProject.Program is not null, "M5 Yarn project has no compiled program.");
+
+        var presenter = new M5DialogueProbe
+        {
+            Name = "M5DialogueProbe",
+            PreferredOptionIndex = 1,
+        };
+        var runner = new DialogueRunner
+        {
+            Name = "M5DialogueRunner",
+            dialoguePresenters = new Godot.Collections.Array<Node> { presenter },
+        };
+        runner.AddChild(presenter);
+        runner.SetProject(yarnProject);
+
+        var portraitHost = new Node2D { Name = "M5PortraitHost" };
+        AddChild(portraitHost);
+        var configuration = M5DemoComposition.CreateConfiguration();
+        var bootstrap = new MajoRuntimeBootstrap
+        {
+            Name = "M5Runtime",
+            Configuration = configuration,
+            YarnDialogueRunner = runner,
+        };
+        var customFactory = M5DemoComposition.ConfigureRuntime(
+            bootstrap,
+            portraitHost,
+            configuration.Actors!);
+        AddChild(bootstrap);
+        await bootstrap.InitializationCompletion;
+        AddChild(runner);
+
+        var manager = bootstrap.Host!.Services.Get<IActorManager>();
+        var scheduler = bootstrap.Host.Services.Get<IOperationScheduler>();
+        var caseService = bootstrap.Host.Services.Get<M5CaseService>();
+        var joinedAtFinalState = false;
+        var waitedAtFinalState = false;
+        presenter.LinePresented += line =>
+        {
+            var hero = manager.Get<ICharacterActor>("hero");
+            if (line.TextID == "line:m5-after-join")
+            {
+                var backdrop = manager.Get<IBackgroundActor>("backdrop");
+                joinedAtFinalState =
+                    hero.Appearance == "calm" &&
+                    hero.Position.IsEqualApprox(configuration.Actors.LeftPosition) &&
+                    backdrop.Appearance == "courtroom" &&
+                    scheduler.ActiveOperations.Count == 0;
+            }
+            else if (line.TextID == "line:m5-after-wait")
+            {
+                waitedAtFinalState =
+                    hero.Appearance == "determined" &&
+                    hero.Position.IsEqualApprox(configuration.Actors.CenterPosition);
+            }
+        };
+
+        await runner.StartDialogue("Start");
+        await WaitForConditionAsync(() => scheduler.ActiveOperations.Count >= 2, 2);
+        Assert(presenter.Lines.Count == 0,
+            "M5 dialogue advanced before its parallel opening animations joined.");
+        await runner.DialogueTask;
+
+        Assert(joinedAtFinalState,
+            "M5 parallel animation join did not expose both final Actor states.");
+        Assert(waitedAtFinalState,
+            "M5 wait=true animation did not finish before the next line.");
+        Assert(presenter.Lines.Select(line => line.TextID).SequenceEqual(new[]
+            {
+                "line:m5-after-join",
+                "line:m5-after-wait",
+                "line:m5-branch-evidence",
+                "line:m5-finished",
+            }),
+            "M5 automatic option selection entered the wrong Yarn branch.");
+        Assert(caseService.SelectedRoute == "evidence",
+            "M5 custom command did not update the custom service.");
+        Assert(caseService.InitializeCount == 1,
+            "M5 custom service was not initialized exactly once.");
+        Assert(customFactory.CreateCount == 1,
+            "M5 custom Actor factory did not create the hero exactly once.");
+        Assert(manager.Get<ICharacterActor>("hero").SceneNode.GetParent() == portraitHost,
+            "M5 custom Actor factory did not use its external host.");
+        Assert(presenter.Events
+                .Where(entry => entry.Kind == "dialogue")
+                .Select(entry => entry.Value)
+                .SequenceEqual(new[] { "started", "completed" }),
+            "M5 Presenter probe did not observe the complete dialogue lifecycle.");
+        Assert(presenter.Events.Any(entry => entry.Kind == "option"),
+            "M5 Presenter probe did not observe an option selection.");
+        Assert(scheduler.ActiveOperations.Count == 0,
+            "M5 dialogue ended with active operations.");
+
+        var heroNode = manager.Get<ICharacterActor>("hero").SceneNode;
+        await bootstrap.RequestShutdownAsync();
+        runner.QueueFree();
+        portraitHost.QueueFree();
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+
+        Assert(caseService.ShutdownCount == 1,
+            "M5 custom service was not shut down exactly once.");
+        Assert(caseService.RuntimeWasCancelledAtShutdown,
+            "M5 custom service did not observe Runtime cancellation during shutdown.");
+        Assert(!IsInstanceValid(heroNode),
+            "M5 custom Actor node survived Runtime shutdown.");
+        Assert(!IsInstanceValid(bootstrap), "M5 Runtime node leaked after shutdown.");
+        Assert(!IsInstanceValid(runner), "M5 DialogueRunner leaked after cleanup.");
+        Assert(!IsInstanceValid(portraitHost), "M5 custom Actor host leaked after cleanup.");
     }
 
     private async Task ValidateYarnCommandAdapterAsync()
