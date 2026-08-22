@@ -172,29 +172,21 @@ public static class M5DemoComposition
     public static void RegisterCommands(RuntimeCommandRegistry commands)
     {
         ArgumentNullException.ThrowIfNull(commands);
-        commands.Register(
-            "demo_route",
-            (arguments, context) => SelectRouteAsync(arguments, context));
+        commands.Register<DemoRouteCommandArguments>(SelectRouteAsync);
     }
 
     private static Task SelectRouteAsync(
-        IReadOnlyList<string> arguments,
+        DemoRouteCommandArguments arguments,
         RuntimeCommandContext context)
     {
-        if (arguments.Count != 1)
+        if (arguments.Route is not "press" and not "evidence")
         {
             throw new RuntimeCommandException(
-                "demo_route", "Usage: demo_route <press|evidence>.");
-        }
-
-        if (arguments[0] is not "press" and not "evidence")
-        {
-            throw new RuntimeCommandException(
-                "demo_route", $"Unknown route '{arguments[0]}'.");
+                "demo_route", $"Unknown route '{arguments.Route}'.");
         }
 
         var services = context.Require(context.Services, "ServiceResolver");
-        services.Get<M5CaseService>().SelectRoute(arguments[0]);
+        services.Get<M5CaseService>().SelectRoute(arguments.Route);
         return Task.CompletedTask;
     }
 
@@ -215,4 +207,14 @@ public static class M5DemoComposition
         };
         return definition;
     }
+}
+
+[RuntimeCommand(
+    "demo_route",
+    Category = "Demo",
+    Usage = "demo_route <press|evidence>")]
+public sealed class DemoRouteCommandArguments
+{
+    [CommandParameter("route", 0, Primary = true, Required = true)]
+    public string Route { get; set; } = string.Empty;
 }

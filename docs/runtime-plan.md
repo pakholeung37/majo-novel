@@ -29,7 +29,8 @@ C# 命名空间：`Majo.Runtime`
 - 首版公共 API 只保证 C#；场景入口使用 Godot Node、Signal 和导出属性，为未来 GDScript 包装保留空间。
 - 配置入口使用 `MajoProjectConfiguration : Resource`，再引用各模块的子配置 Resource。
 - 服务采用显式注册和构造函数依赖注入，不使用反射扫描自动发现。
-- 首版 Yarn Command 使用类型化位置参数，不实现 Naninovel 风格的命名参数解析器。
+- Yarn Command 保留一个主位置参数，其余使用 Naninovel 风格命名参数；参数模型通过
+  Attribute 自描述，由通用 Binder 完成类型转换和验证。
 
 ## 3. 范围边界
 
@@ -458,7 +459,7 @@ Headless 验收：
 
 - DialogueRunner Adapter。
 - `back`、`char`、`hide`、`await`、`cancel`。
-- 类型化位置参数和错误诊断。
+- 自描述的类型化命名参数和错误诊断。
 - 默认非等待及 `wait=true`。
 - Command 到 Operation ID/组的绑定。
 
@@ -481,9 +482,9 @@ Headless 验收：
 
 实施记录（2026-08-21）：
 
-- 已将命令拆分为只依赖 `IActorManager`/`IOperationScheduler` 的纯 Runtime Command 核心，以及只负责 `DialogueRunner.AddCommandHandler` 注册的 Yarn Adapter。
-- 已冻结 `back`、`char`、`hide`、`await`、`cancel` 的类型化位置参数；动画默认 `wait=false`，`-` 表示空绑定，等待和取消默认按组并可显式选择 Operation ID。
-- Adapter 随 Runtime 初始化显式注册五个命令、关闭时逆序卸载，不注册 Yarn 内建 `wait` 和 VM 特殊命令 `stop`；参数错误包含具体值及完整 usage。
+- Command 参数模型、通用 Binder、执行 Dispatcher、Catalog 和 Yarn Adapter 已分层；Adapter 不认识任何具体 Command。
+- 已冻结 `back`、`char`、`hide`、`await`、`endAwait`、`cancel` 的一主参数加命名参数语法；动画默认 `wait:false`。
+- Adapter 随 Runtime 初始化遍历 Catalog 注册全部命令、关闭时逆序卸载，不注册 Yarn 内建 `wait` 和 VM 特殊命令 `stop`；参数错误包含具体值及完整 usage。
 - Command 产生的后台动画均由 Operation Scheduler 持有；`wait=true` 直接返回 Operation Completion，`await complete` 使用强制完成通道，`cancel` 使用取消通道。
 - 门禁通过：44 个纯 C# 单元测试全部通过；真实 Yarn VM headless 覆盖非等待动画重叠、组汇合、等待型命令暂停、取消/强制完成差异、错误参数与未处理命令诊断。
 
@@ -584,6 +585,28 @@ Scripts = scripts/<project-id>
 - M5 的 Actor、背景和 Yarn 资源迁入 `res://assets`，Demo 配置不再含资源路径。
 - 62 个纯 C# 单元测试覆盖资源键、优先级、override、缓存、并发和类型失败；
   Godot smoke/headless 覆盖真实 SVG 与 Yarn 导入资源。
+
+### M5.2：可扩展 Command Catalog（已完成）
+
+目标：消除中央 Parser、Adapter 分支和全局 Command Service 随命令数量线性膨胀的问题。
+
+交付与验收：
+
+- `RuntimeCommand`/`CommandParameter` Attribute 让每个参数模型自描述名称、主参数、
+  必填项、默认值、范围和 Usage。
+- `CommandBinder` 通用处理命名参数、类型转换、默认动画时长、未知/重复参数、枚举和
+  参数互斥集合；自定义类型通过 Converter Registry 扩展。
+- `RuntimeCommandCatalog` 是 Majo Command 名称的唯一真源，统一检测 Yarn 保留名、
+  大小写冲突、重复注册和初始化后注册。
+- `IRuntimeCommandModule` 支持按 Actor、Playback 及未来 Audio/Camera/UI 功能域组织并
+  原子注册一组 Command，模块失败不会留下部分注册。
+- `RuntimeCommandDispatcher` 统一执行绑定、异常归一、对话取消和 await scope 上下文；
+  Yarn Adapter 只遍历 Catalog 注册和逆序卸载，不包含具体 Command 分支。
+- 内建六条 Command、Demo 和 headless 自定义 Command 使用同一类型化注册路径。
+- Actor 执行收敛到 `IActorCommandService`，等待和取消 Handler 直接依赖 Operation
+  capability，不再使用随所有 Command 增长的全局 `IRuntimeCommandService`。
+- 运行时元数据使用显式注册和一次性缓存，不做程序集扫描；待 API 稳定后再以独立
+  milestone 引入 Source Generator，替换反射绑定并生成注册模块和编译期诊断。
 
 ## 11. 后续 Roadmap
 

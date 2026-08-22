@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 
 namespace Majo.Runtime.Dialogue.Commands;
 
-public interface IRuntimeCommandService
+public interface IActorCommandService
 {
     Task BackAsync(BackCommand command);
 
@@ -18,12 +18,4 @@ public interface IRuntimeCommandService
     Task HideAsync(HideCommand command);
 
     Task HideAsync(HideCommand command, RuntimeCommandContext context) => HideAsync(command);
-
-    Task AwaitAsync(AwaitCommand command);
-
-    Task AwaitAsync(AwaitCommand command, RuntimeCommandContext context) => AwaitAsync(command);
-
-    Task CancelAsync(CancelCommand command);
-
-    Task CancelAsync(CancelCommand command, RuntimeCommandContext context) => CancelAsync(command);
 }

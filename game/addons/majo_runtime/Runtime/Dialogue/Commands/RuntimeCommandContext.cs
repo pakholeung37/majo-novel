@@ -12,19 +12,22 @@ namespace Majo.Runtime.Dialogue.Commands;
 public sealed class RuntimeCommandContext
 {
     private readonly Action<IOperationHandle>? operationTracked;
+    private readonly AwaitScopeCoordinator? awaitScopes;
 
     internal RuntimeCommandContext(
         IActorManager? actors,
         IOperationScheduler? operations,
         IServiceResolver? services,
         CancellationToken cancellationToken,
-        Action<IOperationHandle>? operationTracked = null)
+        Action<IOperationHandle>? operationTracked = null,
+        AwaitScopeCoordinator? awaitScopes = null)
     {
         Actors = actors;
         Operations = operations;
         Services = services;
         CancellationToken = cancellationToken;
         this.operationTracked = operationTracked;
+        this.awaitScopes = awaitScopes;
     }
 
     public IActorManager? Actors { get; }
@@ -52,6 +55,17 @@ public sealed class RuntimeCommandContext
         _ = DisposeRegistrationWhenCompletedAsync(operation, registration);
         return operation;
     }
+
+    public void BeginAwait(bool complete) => RequireAwaitScopes().Begin(
+        complete,
+        CancellationToken);
+
+    public Task EndAwaitAsync() => RequireAwaitScopes().EndAsync(CancellationToken);
+
+    private AwaitScopeCoordinator RequireAwaitScopes() => awaitScopes ??
+        throw new RuntimeCommandException(
+            "await",
+            "Runtime command context does not provide await scope coordination.");
 
     private static async Task DisposeRegistrationWhenCompletedAsync(
         IOperationHandle operation,

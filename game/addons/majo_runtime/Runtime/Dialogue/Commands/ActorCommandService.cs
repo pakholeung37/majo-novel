@@ -7,21 +7,18 @@ using Majo.Runtime.Operations;
 
 namespace Majo.Runtime.Dialogue.Commands;
 
-public sealed class RuntimeCommandService : IRuntimeCommandService
+public sealed class ActorCommandService : IActorCommandService
 {
     private readonly IActorManager actors;
-    private readonly IOperationScheduler operations;
 
-    public RuntimeCommandService(
-        IActorManager actors,
-        IOperationScheduler operations)
+    public ActorCommandService(IActorManager actors)
     {
         this.actors = actors ?? throw new ArgumentNullException(nameof(actors));
-        this.operations = operations ?? throw new ArgumentNullException(nameof(operations));
     }
 
     public Task BackAsync(BackCommand command) => BackAsync(
-        command, CreateDetachedContext());
+        command,
+        CreateDetachedContext());
 
     public Task BackAsync(
         BackCommand command,
@@ -31,7 +28,8 @@ public sealed class RuntimeCommandService : IRuntimeCommandService
         {
             ArgumentNullException.ThrowIfNull(command);
             var (actor, created) = await GetOrCreateAsync<IBackgroundActor>(
-                command.ActorId, context.CancellationToken);
+                command.ActorId,
+                context.CancellationToken);
             var operationScheduled = false;
             try
             {
@@ -84,7 +82,8 @@ public sealed class RuntimeCommandService : IRuntimeCommandService
         });
 
     public Task CharacterAsync(CharacterCommand command) => CharacterAsync(
-        command, CreateDetachedContext());
+        command,
+        CreateDetachedContext());
 
     public Task CharacterAsync(
         CharacterCommand command,
@@ -94,7 +93,8 @@ public sealed class RuntimeCommandService : IRuntimeCommandService
         {
             ArgumentNullException.ThrowIfNull(command);
             var (actor, created) = await GetOrCreateAsync<ICharacterActor>(
-                command.ActorId, context.CancellationToken);
+                command.ActorId,
+                context.CancellationToken);
             var operationScheduled = false;
             try
             {
@@ -122,7 +122,8 @@ public sealed class RuntimeCommandService : IRuntimeCommandService
         });
 
     public Task HideAsync(HideCommand command) => HideAsync(
-        command, CreateDetachedContext());
+        command,
+        CreateDetachedContext());
 
     public Task HideAsync(
         HideCommand command,
@@ -139,26 +140,6 @@ public sealed class RuntimeCommandService : IRuntimeCommandService
             context.Track(operation);
             return WaitIfRequested(operation, command.Wait, context.CancellationToken);
         });
-
-    public Task AwaitAsync(AwaitCommand command)
-        => AwaitAsync(command, CreateDetachedContext());
-
-    public Task AwaitAsync(AwaitCommand command, RuntimeCommandContext context)
-    {
-        ArgumentNullException.ThrowIfNull(command);
-        return command.Complete
-            ? operations.CompleteAsync(command.Target, context.CancellationToken)
-            : operations.WaitAsync(command.Target, context.CancellationToken);
-    }
-
-    public Task CancelAsync(CancelCommand command)
-        => CancelAsync(command, CreateDetachedContext());
-
-    public Task CancelAsync(CancelCommand command, RuntimeCommandContext context)
-    {
-        ArgumentNullException.ThrowIfNull(command);
-        return operations.CancelAsync(command.Target, context.CancellationToken);
-    }
 
     private async Task<(TActor Actor, bool Created)> GetOrCreateAsync<TActor>(
         string actorId,
@@ -189,7 +170,7 @@ public sealed class RuntimeCommandService : IRuntimeCommandService
         wait ? operation.Completion.WaitAsync(cancellationToken) : Task.CompletedTask;
 
     private RuntimeCommandContext CreateDetachedContext() =>
-        new(actors, operations, null, System.Threading.CancellationToken.None);
+        new(actors, null, null, System.Threading.CancellationToken.None);
 
     private static async Task ExecuteActorCommandAsync(
         string commandName,
@@ -209,10 +190,7 @@ public sealed class RuntimeCommandService : IRuntimeCommandService
         }
         catch (Exception exception)
         {
-            throw new RuntimeCommandException(
-                commandName,
-                exception.Message,
-                exception);
+            throw new RuntimeCommandException(commandName, exception.Message, exception);
         }
     }
 }

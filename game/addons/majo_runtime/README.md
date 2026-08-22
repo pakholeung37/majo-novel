@@ -174,8 +174,9 @@ priority providers can replace project assets without changing logical IDs.
 ## Yarn commands
 
 Assign the scene's `DialogueRunner` to `MajoRuntimeBootstrap.YarnDialogueRunner`
-before adding the bootstrap to the tree. The Runtime then explicitly registers
-six command handlers during initialization and removes them during shutdown:
+before adding the bootstrap to the tree. During initialization the Runtime
+registers every entry in the immutable command catalog and removes them in
+reverse order during shutdown:
 
 ```csharp
 var runtime = new MajoRuntimeBootstrap
@@ -224,24 +225,39 @@ joining them. Targeted forms remain available as `<<await group:setup>>`,
 
 The adapter deliberately does not register `wait` or `stop`, preserving Yarn's
 built-in commands. Parsing failures include both the invalid parameter and the
-exact command usage. The pure command core depends only on `IActorManager` and
-`IOperationScheduler`, while the Yarn-specific layer is isolated behind an
-explicit command registry.
+exact command usage. `CommandDescriptor`, `CommandBinder`, and
+`RuntimeCommandDispatcher` are independent of Yarn; the adapter only translates
+catalog entries into Yarn handlers.
 
 Custom Yarn commands register before initialization without changing Runtime
 core source:
 
 ```csharp
-runtime.ConfigureCommands = commands => commands.Register(
-    "set_case_mode",
-    async (arguments, context) =>
+[RuntimeCommand("setCaseMode", Category = "Game")]
+public sealed class SetCaseModeArguments
+{
+    [CommandParameter("mode", 0, Primary = true, Required = true)]
+    public string Mode { get; set; } = string.Empty;
+}
+
+runtime.ConfigureCommands = commands =>
+    commands.Register<SetCaseModeArguments>(async (arguments, context) =>
     {
-        var actors = context.Require(context.Actors, "ActorManager");
         var services = context.Require(context.Services, "ServiceResolver");
-        // Apply game-specific behavior through public Runtime services.
+        services.Get<CaseService>().SetMode(arguments.Mode);
         await Task.CompletedTask;
     });
 ```
+
+Command argument classes own their names, usage metadata, defaults and
+constraints. The shared binder provides typed conversion and uniform errors;
+adding a command does not modify the Yarn adapter or a central parser. Register
+additional value types through `ConfigureCommandConverters` before startup.
+Related command families can implement `IRuntimeCommandModule` and register
+atomically with `RuntimeCommandRegistry.RegisterModule`.
+Keep each command's argument schema and handler in the same file; module files
+should contain registration only. The built-in commands under
+`Runtime/Dialogue/Commands/BuiltIn` follow this vertical-slice layout.
 
 Every handler receives a `RuntimeCommandContext`. Operations tracked through
 the context are cancelled when the current Yarn dialogue stops. Command

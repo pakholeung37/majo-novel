@@ -55,6 +55,8 @@ public partial class MajoRuntimeBootstrap : Node
 
     public Action<RuntimeCommandRegistry>? ConfigureCommands { get; set; }
 
+    public Action<CommandValueConverterRegistry>? ConfigureCommandConverters { get; set; }
+
     public Action<ResourceProviderRegistry>? ConfigureResourceProviders { get; set; }
 
     public RuntimeHost? Host { get; private set; }
@@ -198,22 +200,32 @@ public partial class MajoRuntimeBootstrap : Node
 
         if (YarnDialogueRunner is not null)
         {
-            var commandExtensions = new RuntimeCommandRegistry();
-            ConfigureCommands?.Invoke(commandExtensions);
             services.AddSingleton<IYarnCommandAdapter>(
                 resolver =>
                 {
                     var actors = resolver.Get<IActorManager>();
                     var operations = resolver.Get<IOperationScheduler>();
-                    return new YarnCommandAdapter(
-                        new DialogueRunnerCommandRegistry(YarnDialogueRunner),
-                        new RuntimeCommandService(actors, operations),
-                        new RuntimeCommandParser(
+                    var commands = new RuntimeCommandRegistry();
+                    BuiltInRuntimeCommands.Register(
+                        commands,
+                        new ActorCommandService(actors));
+                    ConfigureCommands?.Invoke(commands);
+                    var catalog = commands.BuildCatalog();
+                    var converters = new CommandValueConverterRegistry();
+                    ConfigureCommandConverters?.Invoke(converters);
+                    var binder = new CommandBinder(
+                        new CommandBindingContext(
                             Configuration!.Operations!.DefaultAnimationDurationSeconds),
+                        converters);
+                    var dispatcher = new RuntimeCommandDispatcher(
+                        binder,
                         actors,
                         operations,
-                        commandExtensions,
                         Host!.Services);
+                    return new YarnCommandAdapter(
+                        new DialogueRunnerCommandRegistry(YarnDialogueRunner),
+                        catalog,
+                        dispatcher);
                 },
                 typeof(IActorManager),
                 typeof(IOperationScheduler));

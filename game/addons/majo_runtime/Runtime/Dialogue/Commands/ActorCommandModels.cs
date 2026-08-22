@@ -1,7 +1,6 @@
 #nullable enable
 
 using Majo.Runtime.Actors;
-using Majo.Runtime.Operations;
 
 namespace Majo.Runtime.Dialogue.Commands;
 
@@ -28,13 +27,3 @@ public sealed record HideCommand(
     bool Wait,
     string? GroupId,
     string? OperationId);
-
-public sealed record AwaitCommand(OperationTarget Target, bool Complete);
-
-public abstract record AwaitDirective;
-
-public sealed record BeginAwaitDirective(bool Complete) : AwaitDirective;
-
-public sealed record TargetAwaitDirective(AwaitCommand Command) : AwaitDirective;
-
-public sealed record CancelCommand(OperationTarget Target);

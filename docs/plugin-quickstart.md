@@ -88,15 +88,29 @@ runtime.ConfigureServices += services => services.AddSingleton<MyService>(
 runtime.ConfigureActorFactories += actors =>
     actors.RegisterFactory(myActorFactory);
 
-runtime.ConfigureCommands += commands => commands.Register(
-    "my_command",
-    async (arguments, context) =>
+[RuntimeCommand("myCommand", Category = "Game")]
+public sealed class MyCommandArguments
+{
+    [CommandParameter("value", 0, Primary = true, Required = true)]
+    public string Value { get; set; } = string.Empty;
+}
+
+runtime.ConfigureCommands += commands =>
+    commands.Register<MyCommandArguments>(async (arguments, context) =>
     {
         var services = context.Require(context.Services, "ServiceResolver");
-        services.Get<MyService>().Apply(arguments);
+        services.Get<MyService>().Apply(arguments.Value);
         await Task.CompletedTask;
     });
 ```
+
+参数模型通过 `RuntimeCommand` 和 `CommandParameter` 自描述；统一 Binder 负责
+`name:value`、类型转换、默认值、未知/重复参数和 Usage 诊断。新增 Command 不需要
+修改 Yarn Adapter 或中央 Parser。自定义值类型可通过
+`ConfigureCommandConverters` 注册转换器；同一功能域的多条 Command 可封装为
+`IRuntimeCommandModule`，通过 `RegisterModule` 原子注册。
+推荐每条 Command 将参数类型与 Handler 放在同一文件，模块文件只负责注册；内置
+Command 的 `Runtime/Dialogue/Commands/BuiltIn` 目录可作为结构参考。
 
 所有注册必须在 `MajoRuntimeBootstrap` 进入场景树前完成。自定义 Actor Factory
 应验证自己的 `ActorDefinition.FactoryData`，并保证 `Destroy()` 能释放创建的 Node。

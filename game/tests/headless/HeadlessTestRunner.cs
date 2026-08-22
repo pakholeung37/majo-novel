@@ -229,11 +229,10 @@ public partial class HeadlessTestRunner : Node
             YarnDialogueRunner = runner,
             ConfigureServices = services => services.AddSingleton<HeadlessLifecycleService>(
                 _ => customCommandService),
-            ConfigureCommands = commands => commands.Register(
-                "majo_probe",
+            ConfigureCommands = commands => commands.Register<HeadlessProbeCommandArguments>(
                 (arguments, context) =>
                 {
-                    Assert(arguments.SequenceEqual(new[] { "alpha" }),
+                    Assert(arguments.Value == "alpha",
                         "Custom command received incorrect arguments.");
                     Assert(context.Actors is not null,
                         "Custom command did not receive ActorManager context.");
@@ -319,7 +318,7 @@ public partial class HeadlessTestRunner : Node
         Assert(adapter.LastFailure!.CommandName == "char",
             "Bad Yarn arguments were attributed to the wrong command.");
         Assert(adapter.LastFailure.Message.Contains(
-                RuntimeCommandParser.CharacterUsage,
+                "Usage: char <actor>",
                 StringComparison.Ordinal),
             "Bad Yarn arguments did not include command usage.");
         Assert(commandFailureSignal.StartsWith("char:", StringComparison.Ordinal),
@@ -886,6 +885,16 @@ public partial class HeadlessTestRunner : Node
 
         throw new InvalidOperationException(
             $"Expected exception '{typeof(TException).Name}' was not thrown.");
+    }
+
+    [RuntimeCommand(
+        "majo_probe",
+        Category = "Test",
+        Usage = "majo_probe <value>")]
+    private sealed class HeadlessProbeCommandArguments
+    {
+        [CommandParameter("value", 0, Primary = true, Required = true)]
+        public string Value { get; set; } = string.Empty;
     }
 
     private sealed class HeadlessLifecycleService : IRuntimeService
