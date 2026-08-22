@@ -12,6 +12,7 @@ using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Operations;
+using Majo.Runtime.Resources;
 
 namespace Majo.Demo;
 
@@ -70,13 +71,13 @@ public sealed class M5PortraitActorFactory : IActorFactory
 
     private readonly Node2D host;
     private readonly Func<IOperationScheduler> scheduler;
-    private readonly IActorTextureLoader textureLoader;
+    private readonly Func<IActorTextureLoader> textureLoader;
     private readonly CharacterPositionMap positions;
 
     public M5PortraitActorFactory(
         Node2D host,
         Func<IOperationScheduler> scheduler,
-        IActorTextureLoader textureLoader,
+        Func<IActorTextureLoader> textureLoader,
         CharacterPositionMap positions)
     {
         this.host = host ?? throw new ArgumentNullException(nameof(host));
@@ -106,7 +107,7 @@ public sealed class M5PortraitActorFactory : IActorFactory
                 definition,
                 view,
                 scheduler(),
-                textureLoader,
+                textureLoader(),
                 positions);
             CreateCount++;
             return actor;
@@ -121,7 +122,7 @@ public sealed class M5PortraitActorFactory : IActorFactory
 
 public static class M5DemoComposition
 {
-    public const string YarnProjectPath = "res://demo/M5Demo.yarnproject";
+    public const string DialogueProjectId = "main";
 
     public static MajoProjectConfiguration CreateConfiguration()
     {
@@ -133,15 +134,14 @@ public static class M5DemoComposition
         configuration.Actors.Actors.Add(CreateActorDefinition(
             "backdrop",
             ActorFactoryIds.Background,
-            CharacterPositionPreset.Center,
-            ("courtroom", "res://demo/assets/courtroom.svg"),
-            ("spotlight", "res://demo/assets/courtroom_spotlight.svg")));
+            "courtroom",
+            CharacterPositionPreset.Center));
         configuration.Actors.Actors.Add(CreateActorDefinition(
             "hero",
             M5PortraitActorFactory.Id,
+            "calm",
             CharacterPositionPreset.Right,
-            ("calm", "res://demo/assets/hero_calm.svg"),
-            ("determined", "res://demo/assets/hero_determined.svg")));
+            configuration.Resources!.CharactersPath));
         return configuration;
     }
 
@@ -157,7 +157,8 @@ public static class M5DemoComposition
         var factory = new M5PortraitActorFactory(
             portraitHost,
             () => runtime.Host!.Services.Get<IOperationScheduler>(),
-            new ResourceActorTextureLoader(),
+            () => new ResourceActorTextureLoader(
+                runtime.Host!.Services.Get<IResourceManager>()),
             new CharacterPositionMap(actorConfiguration));
 
         runtime.ConfigureServices += services => services.AddSingleton<M5CaseService>(
@@ -200,25 +201,18 @@ public static class M5DemoComposition
     private static ActorDefinitionConfiguration CreateActorDefinition(
         string id,
         string factoryId,
+        string defaultAppearance,
         CharacterPositionPreset initialPosition,
-        params (string Id, string Path)[] appearances)
+        string resourcePathPrefix = "")
     {
         var definition = new ActorDefinitionConfiguration
         {
             Id = id,
             FactoryId = factoryId,
-            DefaultAppearance = appearances[0].Id,
+            DefaultAppearance = defaultAppearance,
             InitialPosition = initialPosition,
+            ResourcePathPrefix = resourcePathPrefix,
         };
-        foreach (var appearance in appearances)
-        {
-            definition.Appearances.Add(new ActorAppearanceConfiguration
-            {
-                Id = appearance.Id,
-                TexturePath = appearance.Path,
-            });
-        }
-
         return definition;
     }
 }

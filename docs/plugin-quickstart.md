@@ -27,15 +27,7 @@ configuration.Actors!.Actors.Add(new ActorDefinitionConfiguration
 {
     Id = "hero",
     FactoryId = ActorFactoryIds.Character,
-    DefaultAppearance = "default",
-    Appearances =
-    {
-        new ActorAppearanceConfiguration
-        {
-            Id = "default",
-            TexturePath = "res://art/hero.png",
-        },
-    },
+    DefaultAppearance = "calm",
 });
 
 var runtime = new MajoRuntimeBootstrap
@@ -46,6 +38,22 @@ var runtime = new MajoRuntimeBootstrap
 AddChild(runtime);
 await runtime.InitializationCompletion;
 ```
+
+默认资源根目录为 `res://assets`，文件名不需要写进配置：
+
+```text
+res://assets/characters/hero/calm.svg
+res://assets/characters/hero/determined.png
+res://assets/backgrounds/backdrop/courtroom.webp
+res://assets/dialogue/main.yarnproject
+```
+
+Actor 纹理由 `characters/<actor-id>/<appearance>` 或
+`backgrounds/<actor-id>/<appearance>` 解析；Yarn 项目可通过
+`resources.CreateLoader<YarnProject>("dialogue").LoadAsync("main")` 加载。
+`ResourceConfiguration` 可替换根目录和分类前缀。只有不符合约定的个别资源才添加
+`ActorAppearanceConfiguration`；其中 `TexturePath` 是严格 override，路径失效时不会
+静默回退到约定资源。
 
 `DialogueRunner` 必须在 Runtime 初始化前赋给 `YarnDialogueRunner`。Runtime 初始化
 成功后再启动 Yarn 对话；关闭场景前可以显式等待 `RequestShutdownAsync()`。
@@ -89,6 +97,8 @@ runtime.ConfigureCommands += commands => commands.Register(
 
 所有注册必须在 `MajoRuntimeBootstrap` 进入场景树前完成。自定义 Actor Factory
 应验证自己的 `ActorDefinition.FactoryData`，并保证 `Destroy()` 能释放创建的 Node。
+自定义资源来源通过 `ConfigureResourceProviders` 注册并指定优先级；同一逻辑 ID
+的并发异步请求会共享一次 provider 加载。
 
 ## 运行演示
 

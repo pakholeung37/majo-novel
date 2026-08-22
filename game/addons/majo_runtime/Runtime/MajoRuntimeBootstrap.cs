@@ -12,6 +12,8 @@ using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Dialogue.Yarn;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Operations.Godot;
+using Majo.Runtime.Resources;
+using Majo.Runtime.Resources.Godot;
 using YarnSpinnerGodot;
 
 namespace Majo.Runtime;
@@ -52,6 +54,8 @@ public partial class MajoRuntimeBootstrap : Node
     public Action<ActorManager>? ConfigureActorFactories { get; set; }
 
     public Action<RuntimeCommandRegistry>? ConfigureCommands { get; set; }
+
+    public Action<ResourceProviderRegistry>? ConfigureResourceProviders { get; set; }
 
     public RuntimeHost? Host { get; private set; }
 
@@ -169,6 +173,12 @@ public partial class MajoRuntimeBootstrap : Node
     {
         services
             .AddSingleton<IFrameClock>(_ => new GodotFrameClock(GetTree()))
+            .AddSingleton<IResourceManager>(
+                resolver => CreateResourceManager(
+                    resolver.Get<IFrameClock>(),
+                    resolver.Get<IRuntimeLifetime>()),
+                typeof(IFrameClock),
+                typeof(IRuntimeLifetime))
             .AddSingleton<IOperationScheduler>(
                 resolver => new OperationScheduler(
                     resolver.Get<IFrameClock>(),
@@ -180,9 +190,11 @@ public partial class MajoRuntimeBootstrap : Node
             .AddSingleton<IActorManager>(
                 resolver => CreateActorManager(
                     resolver.Get<GodotActorHost>(),
-                    resolver.Get<IOperationScheduler>()),
+                    resolver.Get<IOperationScheduler>(),
+                    resolver.Get<IResourceManager>()),
                 typeof(GodotActorHost),
-                typeof(IOperationScheduler));
+                typeof(IOperationScheduler),
+                typeof(IResourceManager));
 
         if (YarnDialogueRunner is not null)
         {
@@ -210,12 +222,13 @@ public partial class MajoRuntimeBootstrap : Node
 
     private ActorManager CreateActorManager(
         GodotActorHost host,
-        IOperationScheduler scheduler)
+        IOperationScheduler scheduler,
+        IResourceManager resources)
     {
         var actorConfiguration = Configuration!.Actors!;
-        var textureLoader = new ResourceActorTextureLoader();
+        var textureLoader = new ResourceActorTextureLoader(resources);
         var manager = new ActorManager(
-            ActorConfigurationCompiler.Compile(actorConfiguration),
+            ActorConfigurationCompiler.Compile(actorConfiguration, Configuration.Resources!),
             new IActorFactory[]
             {
                 new CharacterActorFactory(
@@ -230,6 +243,19 @@ public partial class MajoRuntimeBootstrap : Node
             });
         ConfigureActorFactories?.Invoke(manager);
         return manager;
+    }
+
+    private IResourceManager CreateResourceManager(
+        IFrameClock frameClock,
+        IRuntimeLifetime lifetime)
+    {
+        var godotProvider = new GodotProjectResourceProvider(
+                Configuration!.Resources!.RootPath,
+                frameClock)
+            .RegisterSourceExtensions<YarnProject>(YarnProject.YARN_PROJECT_EXTENSION);
+        var providers = new ResourceProviderRegistry().Register(godotProvider);
+        ConfigureResourceProviders?.Invoke(providers);
+        return new ResourceManager(providers.Providers, lifetime);
     }
 
     private async Task ShutdownHostAsync(CancellationToken cancellationToken = default)

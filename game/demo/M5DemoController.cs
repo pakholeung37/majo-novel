@@ -7,6 +7,7 @@ using Godot;
 using Majo.Runtime;
 using Majo.Runtime.Core;
 using Majo.Runtime.Operations;
+using Majo.Runtime.Resources;
 using YarnSpinnerGodot;
 
 namespace Majo.Demo;
@@ -25,9 +26,6 @@ public partial class M5DemoController : Node
             "--m5-auto", StringComparer.Ordinal);
         try
         {
-            var yarnProject = ResourceLoader.Load<YarnProject>(
-                M5DemoComposition.YarnProjectPath) ?? throw new InvalidOperationException(
-                "M5 Yarn project failed to load.");
             var configuration = M5DemoComposition.CreateConfiguration();
 
             var portraitLayer = new CanvasLayer { Name = "M5PortraitLayer", Layer = 5 };
@@ -57,8 +55,6 @@ public partial class M5DemoController : Node
                 Name = "M5DialogueRunner",
                 dialoguePresenters = new Godot.Collections.Array<Node?> { dialoguePresenter },
             };
-            runner.SetProject(yarnProject);
-
             var runtime = new MajoRuntimeBootstrap
             {
                 Name = "M5Runtime",
@@ -72,6 +68,11 @@ public partial class M5DemoController : Node
 
             AddChild(runtime);
             await runtime.InitializationCompletion;
+            var resources = runtime.Host!.Services.Get<IResourceManager>();
+            var yarnProject = await resources
+                .CreateLoader<YarnProject>(configuration.Resources!.DialoguePath)
+                .LoadAsync(M5DemoComposition.DialogueProjectId);
+            runner.SetProject(yarnProject);
             AddChild(runner);
             await runner.StartDialogue("Start");
             await runner.DialogueTask;

@@ -77,7 +77,9 @@ public abstract class ActorBase : IActor, IGodotActorView
     public void SetAppearance(string appearance)
     {
         EnsureAlive();
-        var texture = TextureLoader.Load(Definition.GetAppearancePath(appearance));
+        var texture = TextureLoader.Load(
+            Definition.GetAppearanceResourceKey(appearance),
+            Definition.GetAppearanceOverride(appearance));
         CancelProperty(AppearanceProperty);
         ApplyTexture(texture);
         Appearance = appearance;

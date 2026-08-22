@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://coq621i3x4okn"
-path="res://.godot/imported/courtroom.svg-d9907391afe624b4fc34df4a626b7d51.ctex"
+uid="uid://b0h18ntqw70cy"
+path="res://.godot/imported/determined.svg-f278d5ecfcf08d9950062df6834e240e.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://demo/assets/courtroom.svg"
-dest_files=["res://.godot/imported/courtroom.svg-d9907391afe624b4fc34df4a626b7d51.ctex"]
+source_file="res://assets/characters/hero/determined.svg"
+dest_files=["res://.godot/imported/determined.svg-f278d5ecfcf08d9950062df6834e240e.ctex"]
 
 [params]
 

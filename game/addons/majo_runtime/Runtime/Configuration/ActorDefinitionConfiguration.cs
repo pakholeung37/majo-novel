@@ -15,7 +15,10 @@ public partial class ActorDefinitionConfiguration : Resource
     public string FactoryId { get; set; } = ActorFactoryIds.Character;
 
     [Export]
-    public string DefaultAppearance { get; set; } = string.Empty;
+    public string DefaultAppearance { get; set; } = "default";
+
+    [Export]
+    public string ResourcePathPrefix { get; set; } = string.Empty;
 
     [Export]
     public CharacterPositionPreset InitialPosition { get; set; } =

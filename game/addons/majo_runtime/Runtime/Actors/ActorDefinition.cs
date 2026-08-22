@@ -3,6 +3,8 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using Majo.Runtime.Configuration;
+using Majo.Runtime.Resources;
 
 namespace Majo.Runtime.Actors;
 
@@ -27,7 +29,30 @@ public class ActorDefinition
             id,
             factoryId,
             new TextureActorDefinitionData(
-                id, defaultAppearance, appearances, initialPosition))
+                id,
+                GetDefaultResourcePathPrefix(factoryId),
+                defaultAppearance,
+                appearances,
+                initialPosition))
+    {
+    }
+
+    public ActorDefinition(
+        string id,
+        string factoryId,
+        string resourcePathPrefix,
+        string defaultAppearance,
+        IEnumerable<KeyValuePair<string, string>> appearanceOverrides,
+        CharacterPositionPreset initialPosition = CharacterPositionPreset.Center)
+        : this(
+            id,
+            factoryId,
+            new TextureActorDefinitionData(
+                id,
+                resourcePathPrefix,
+                defaultAppearance,
+                appearanceOverrides,
+                initialPosition))
     {
     }
 
@@ -59,21 +84,36 @@ public class ActorDefinition
 
     public string GetAppearancePath(string appearance) =>
         GetFactoryData<TextureActorDefinitionData>().GetAppearancePath(Id, appearance);
+
+    public ResourceKey GetAppearanceResourceKey(string appearance) =>
+        GetFactoryData<TextureActorDefinitionData>().GetAppearanceResourceKey(Id, appearance);
+
+    public string? GetAppearanceOverride(string appearance) =>
+        GetFactoryData<TextureActorDefinitionData>().GetAppearanceOverride(appearance);
+
+    private static string GetDefaultResourcePathPrefix(string factoryId) => factoryId switch
+    {
+        ActorFactoryIds.Character => ResourceConfiguration.DefaultCharactersPath,
+        ActorFactoryIds.Background => ResourceConfiguration.DefaultBackgroundsPath,
+        _ => factoryId,
+    };
 }
 
 public sealed class TextureActorDefinitionData
 {
     public TextureActorDefinitionData(
         string actorId,
+        string resourcePathPrefix,
         string defaultAppearance,
-        IEnumerable<KeyValuePair<string, string>> appearances,
+        IEnumerable<KeyValuePair<string, string>> appearanceOverrides,
         CharacterPositionPreset initialPosition = CharacterPositionPreset.Center)
     {
+        ResourcePathPrefix = new ResourceKey(resourcePathPrefix).Path;
         ArgumentException.ThrowIfNullOrWhiteSpace(defaultAppearance);
-        ArgumentNullException.ThrowIfNull(appearances);
+        ArgumentNullException.ThrowIfNull(appearanceOverrides);
 
         var appearanceMap = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var appearance in appearances)
+        foreach (var appearance in appearanceOverrides)
         {
             if (string.IsNullOrWhiteSpace(appearance.Key))
             {
@@ -93,17 +133,6 @@ public sealed class TextureActorDefinitionData
             }
         }
 
-        if (appearanceMap.Count == 0)
-        {
-            throw new ActorDefinitionException(actorId, "At least one appearance is required.");
-        }
-
-        if (!appearanceMap.ContainsKey(defaultAppearance))
-        {
-            throw new ActorDefinitionException(
-                actorId, $"Default appearance '{defaultAppearance}' is not defined.");
-        }
-
         DefaultAppearance = defaultAppearance;
         InitialPosition = initialPosition;
         Appearances = new ReadOnlyDictionary<string, string>(appearanceMap);
@@ -111,19 +140,29 @@ public sealed class TextureActorDefinitionData
 
     public string DefaultAppearance { get; }
 
+    public string ResourcePathPrefix { get; }
+
     public CharacterPositionPreset InitialPosition { get; }
 
     public IReadOnlyDictionary<string, string> Appearances { get; }
 
     public string GetAppearancePath(string actorId, string appearance)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(appearance);
-        if (!Appearances.TryGetValue(appearance, out var path))
-        {
-            throw new UnknownActorAppearanceException(actorId, appearance);
-        }
+        return GetAppearanceOverride(appearance) ??
+            GetAppearanceResourceKey(actorId, appearance).Path;
+    }
 
-        return path;
+    public ResourceKey GetAppearanceResourceKey(string actorId, string appearance)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(actorId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(appearance);
+        return ResourceKey.Combine(ResourcePathPrefix, actorId, appearance);
+    }
+
+    public string? GetAppearanceOverride(string appearance)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(appearance);
+        return Appearances.TryGetValue(appearance, out var path) ? path : null;
     }
 }
 

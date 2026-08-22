@@ -12,6 +12,7 @@ using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Dialogue.Yarn;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Operations.Godot;
+using Majo.Runtime.Resources;
 using YarnSpinnerGodot;
 
 namespace Majo.Runtime.HeadlessTests;
@@ -64,11 +65,6 @@ public partial class HeadlessTestRunner : Node
 
     private async Task ValidateM5PlayableLoopAsync()
     {
-        var yarnProject = ResourceLoader.Load<YarnProject>(
-            M5DemoComposition.YarnProjectPath);
-        Assert(yarnProject is not null, "M5 Yarn project failed to import.");
-        Assert(yarnProject.Program is not null, "M5 Yarn project has no compiled program.");
-
         var presenter = new M5DialogueProbe
         {
             Name = "M5DialogueProbe",
@@ -80,8 +76,6 @@ public partial class HeadlessTestRunner : Node
             dialoguePresenters = new Godot.Collections.Array<Node> { presenter },
         };
         runner.AddChild(presenter);
-        runner.SetProject(yarnProject);
-
         var portraitHost = new Node2D { Name = "M5PortraitHost" };
         AddChild(portraitHost);
         var configuration = M5DemoComposition.CreateConfiguration();
@@ -97,6 +91,17 @@ public partial class HeadlessTestRunner : Node
             configuration.Actors!);
         AddChild(bootstrap);
         await bootstrap.InitializationCompletion;
+        var resources = bootstrap.Host!.Services.Get<IResourceManager>();
+        var yarnLoader = resources.CreateLoader<YarnProject>(
+            configuration.Resources!.DialoguePath);
+        var firstProjectLoad = yarnLoader.LoadAsync(M5DemoComposition.DialogueProjectId);
+        var secondProjectLoad = yarnLoader.LoadAsync(M5DemoComposition.DialogueProjectId);
+        var yarnProjects = await Task.WhenAll(firstProjectLoad, secondProjectLoad);
+        var yarnProject = yarnProjects[0];
+        Assert(ReferenceEquals(yarnProject, yarnProjects[1]),
+            "Concurrent Yarn loads did not share the cached resource instance.");
+        Assert(yarnProject.Program is not null, "M5 Yarn project has no compiled program.");
+        runner.SetProject(yarnProject);
         AddChild(runner);
 
         var manager = bootstrap.Host!.Services.Get<IActorManager>();
@@ -161,6 +166,8 @@ public partial class HeadlessTestRunner : Node
             "M5 dialogue ended with active operations.");
 
         var heroNode = manager.Get<ICharacterActor>("hero").SceneNode;
+        Assert(resources.LoadedResourceCount >= 3,
+            "Convention-based Actor and Yarn resources did not enter the Runtime cache.");
         await bootstrap.RequestShutdownAsync();
         runner.QueueFree();
         portraitHost.QueueFree();
@@ -176,6 +183,8 @@ public partial class HeadlessTestRunner : Node
         Assert(!IsInstanceValid(bootstrap), "M5 Runtime node leaked after shutdown.");
         Assert(!IsInstanceValid(runner), "M5 DialogueRunner leaked after cleanup.");
         Assert(!IsInstanceValid(portraitHost), "M5 custom Actor host leaked after cleanup.");
+        Assert(resources.LoadedResourceCount == 0,
+            "Runtime resource cache survived shutdown.");
     }
 
     private async Task ValidateYarnCommandAdapterAsync()
@@ -416,8 +425,12 @@ public partial class HeadlessTestRunner : Node
         Assert(character.Appearance == "blue", "Immediate appearance state was not updated.");
         Assert(!ReferenceEquals(initialTexture, character.View.Texture),
             "Character appearance did not replace its Texture2D.");
-        AssertThrows<UnknownActorAppearanceException>(() =>
+        var missingAppearance = AssertThrows<ResourceNotFoundException>(() =>
             character.SetAppearance("missing"));
+        Assert(missingAppearance.Candidates.Any(path => path.StartsWith(
+                "res://assets/characters/hero/missing.",
+                StringComparison.Ordinal)),
+            "Missing conventional appearance did not report resolved candidates.");
 
         character.SetPosition(configuration.Actors.LeftPosition);
         var firstMove = character.ChangePosition(
@@ -859,16 +872,16 @@ public partial class HeadlessTestRunner : Node
         }
     }
 
-    private static void AssertThrows<TException>(Action action)
+    private static TException AssertThrows<TException>(Action action)
         where TException : Exception
     {
         try
         {
             action();
         }
-        catch (TException)
+        catch (TException exception)
         {
-            return;
+            return exception;
         }
 
         throw new InvalidOperationException(

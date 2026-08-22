@@ -5,6 +5,8 @@ using System.Collections.Generic;
 using Godot;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Core;
+using Majo.Runtime.Resources;
+using RuntimeResourcePath = Majo.Runtime.Resources.ResourcePath;
 
 namespace Majo.Runtime.Configuration;
 
@@ -18,6 +20,9 @@ public partial class MajoProjectConfiguration : Resource
     public OperationConfiguration? Operations { get; set; }
 
     [Export]
+    public ResourceConfiguration? Resources { get; set; }
+
+    [Export]
     public ActorConfiguration? Actors { get; set; }
 
     [Export]
@@ -27,6 +32,7 @@ public partial class MajoProjectConfiguration : Resource
     {
         Runtime = new RuntimeConfiguration(),
         Operations = new OperationConfiguration(),
+        Resources = new ResourceConfiguration(),
         Actors = new ActorConfiguration(),
         Dialogue = new DialogueConfiguration(),
     };
@@ -38,10 +44,48 @@ public partial class MajoProjectConfiguration : Resource
 
         ValidateRuntime(issues);
         ValidateOperations(issues);
+        ValidateResources(issues);
         ValidateActors(issues, resourceExists);
         ValidateDialogue(issues);
 
         return new ConfigurationValidationResult(issues);
+    }
+
+    private void ValidateResources(ICollection<ConfigurationIssue> issues)
+    {
+        if (Resources is null)
+        {
+            issues.Add(new ConfigurationIssue(nameof(Resources), "Configuration is required."));
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(Resources.RootPath) ||
+            !Resources.RootPath.StartsWith("res://", StringComparison.Ordinal))
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Resources)}.{nameof(Resources.RootPath)}",
+                "Root path must be a Godot project path starting with 'res://'."));
+        }
+
+        ValidateResourceKeyPrefix(Resources.CharactersPath, nameof(Resources.CharactersPath), issues);
+        ValidateResourceKeyPrefix(Resources.BackgroundsPath, nameof(Resources.BackgroundsPath), issues);
+        ValidateResourceKeyPrefix(Resources.DialoguePath, nameof(Resources.DialoguePath), issues);
+    }
+
+    private static void ValidateResourceKeyPrefix(
+        string value,
+        string property,
+        ICollection<ConfigurationIssue> issues)
+    {
+        try
+        {
+            _ = new ResourceKey(value);
+        }
+        catch (ArgumentException exception)
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Resources)}.{property}", exception.Message));
+        }
     }
 
     private void ValidateRuntime(ICollection<ConfigurationIssue> issues)
@@ -130,7 +174,9 @@ public partial class MajoProjectConfiguration : Resource
             }
 
             var usesTextureDefinition = builtInTextureFactory ||
-                (actor.FactoryConfiguration is null && actor.Appearances.Count > 0);
+                (actor.FactoryConfiguration is null &&
+                    (!string.IsNullOrWhiteSpace(actor.ResourcePathPrefix) ||
+                        actor.Appearances.Count > 0));
             if (!usesTextureDefinition)
             {
                 continue;
@@ -144,6 +190,19 @@ public partial class MajoProjectConfiguration : Resource
             }
 
             var appearanceIds = new HashSet<string>(StringComparer.Ordinal);
+            if (!string.IsNullOrWhiteSpace(actor.ResourcePathPrefix))
+            {
+                try
+                {
+                    _ = new ResourceKey(actor.ResourcePathPrefix);
+                }
+                catch (ArgumentException exception)
+                {
+                    issues.Add(new ConfigurationIssue(
+                        $"{path}.{nameof(actor.ResourcePathPrefix)}", exception.Message));
+                }
+            }
+
             for (var appearanceIndex = 0;
                 appearanceIndex < actor.Appearances.Count;
                 appearanceIndex++)
@@ -177,27 +236,22 @@ public partial class MajoProjectConfiguration : Resource
                         $"{appearancePath}.{nameof(appearance.TexturePath)}",
                         "Texture path is required."));
                 }
-                else if (!resourceExists(appearance.TexturePath))
+                else
                 {
-                    issues.Add(new ConfigurationIssue(
-                        $"{appearancePath}.{nameof(appearance.TexturePath)}",
-                        $"Resource '{appearance.TexturePath}' does not exist."));
+                    var resolvedPath = RuntimeResourcePath.IsRooted(appearance.TexturePath)
+                        ? appearance.TexturePath
+                        : RuntimeResourcePath.Combine(
+                            Resources?.RootPath ?? ResourceConfiguration.DefaultRootPath,
+                            appearance.TexturePath);
+                    if (!resourceExists(resolvedPath))
+                    {
+                        issues.Add(new ConfigurationIssue(
+                            $"{appearancePath}.{nameof(appearance.TexturePath)}",
+                            $"Resource '{resolvedPath}' does not exist."));
+                    }
                 }
             }
 
-            if (actor.Appearances.Count == 0)
-            {
-                issues.Add(new ConfigurationIssue(
-                    $"{path}.{nameof(actor.Appearances)}",
-                    "At least one appearance is required."));
-            }
-            else if (!string.IsNullOrWhiteSpace(actor.DefaultAppearance) &&
-                !appearanceIds.Contains(actor.DefaultAppearance))
-            {
-                issues.Add(new ConfigurationIssue(
-                    $"{path}.{nameof(actor.DefaultAppearance)}",
-                    $"Default appearance '{actor.DefaultAppearance}' is not defined."));
-            }
         }
     }
 

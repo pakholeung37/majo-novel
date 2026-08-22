@@ -547,13 +547,39 @@ Headless 验收：
 实施记录（2026-08-22）：
 
 - 新增 `demo/M5Demo.tscn` 可见主场景及可点击台词/选项 Presenter；项目默认启动场景已指向该演示。
-- 新增独立的 `M5Demo.yarnproject`，单一剧本覆盖背景和角色并行动画、组汇合、等待型动画、台词、选项、分支与正常结束。
+- 新增独立的 M5 Yarn 项目，单一剧本覆盖背景和角色并行动画、组汇合、等待型动画、台词、选项、分支与正常结束；资源层完成后迁至 `assets/dialogue/main.yarnproject`。
 - 所有扩展均位于插件目录外的 `Majo.Demo`：`M5CaseService`、`M5PortraitActorFactory` 和 `demo_route` Command 未修改 Runtime Core。
 - `M5DialogueProbe` 记录对话、Node、Line 和 Option 事件，并能确定性选择分支；真实 Yarn VM headless 同时断言 Actor 最终状态和事件顺序。
 - 关闭验收会检查自定义 Service 接收到 Runtime cancellation、Actor Node 被释放、Operation 为零以及 Runtime/Runner/外部 Host 无残留。
 - 主场景支持 `--m5-auto`，严格门禁会额外运行一次主场景装配 smoke test，再连续运行三轮完整 headless suite 与失败探针。
 - 56 个纯 C# 单元测试全部通过；M5 Service 的生命周期、状态重置和输入验证具有独立单测。
 - 新增插件安装、配置、运行、扩展和测试快速指南；M0-M5 首阶段闭环已形成可复用插件基线。
+
+### M5.1：约定式 Runtime 资源层（已完成）
+
+目标：消除 Demo 与 Actor 定义中的物理资源硬编码，并为后续音频、UI、状态模块
+提供统一的可扩展资源边界。
+
+约定：
+
+```text
+Root = res://assets
+Character = characters/<actor-id>/<appearance>
+Background = backgrounds/<actor-id>/<appearance>
+Dialogue = dialogue/<project-id>
+```
+
+交付与验收：
+
+- `IResourceManager` 作为标准 Runtime Service 参与 Initialize、Reset、Shutdown。
+- `ResourceKey` 与 scoped typed loader 隔离逻辑 ID 和 Godot 物理路径。
+- provider registry 支持稳定优先级、重复检测与项目外扩展。
+- Godot provider 解析导入源扩展和原生资源扩展；Yarn 项目与纹理均使用无扩展名 ID。
+- 同一资源的并发异步加载去重，成功结果缓存，Reset/Shutdown 清空缓存。
+- Actor appearance 映射降级为可选严格 override；无映射时按约定解析。
+- M5 的 Actor、背景和 Yarn 资源迁入 `res://assets`，Demo 配置不再含资源路径。
+- 62 个纯 C# 单元测试覆盖资源键、优先级、override、缓存、并发和类型失败；
+  Godot smoke/headless 覆盖真实 SVG 与 Yarn 导入资源。
 
 ## 11. 后续 Roadmap
 

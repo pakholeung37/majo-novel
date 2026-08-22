@@ -1,6 +1,7 @@
 using Godot;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Operations;
+using Majo.Runtime.Resources;
 using Xunit;
 
 namespace Majo.Runtime.UnitTests;
@@ -52,13 +53,8 @@ public sealed class ActorManagerTests
     }
 
     [Fact]
-    public void DefinitionRejectsInvalidAppearancesAndUnknownAppearanceLookup()
+    public void DefinitionValidatesOverridesAndFallsBackToConventionKeys()
     {
-        Assert.Throws<ActorDefinitionException>(() => new ActorDefinition(
-            "hero",
-            "test",
-            "missing",
-            [new KeyValuePair<string, string>("default", "res://hero.svg")]));
         Assert.Throws<ActorDefinitionException>(() => new ActorDefinition(
             "hero",
             "test",
@@ -75,8 +71,20 @@ public sealed class ActorManagerTests
 
         var definition = CreateDefinition("hero");
         Assert.Equal("res://hero.svg", definition.GetAppearancePath("default"));
-        Assert.Throws<UnknownActorAppearanceException>(() =>
-            definition.GetAppearancePath("unknown"));
+        Assert.Equal("test/hero/unknown", definition.GetAppearancePath("unknown"));
+        Assert.Equal(
+            new ResourceKey("test/hero/unknown"),
+            definition.GetAppearanceResourceKey("unknown"));
+        Assert.Null(definition.GetAppearanceOverride("unknown"));
+
+        var conventional = new ActorDefinition(
+            "hero",
+            ActorFactoryIds.Character,
+            "calm",
+            []);
+        Assert.Equal(
+            "characters/hero/calm",
+            conventional.GetAppearanceResourceKey("calm").Path);
     }
 
     [Fact(Timeout = 5_000)]

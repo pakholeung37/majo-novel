@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://pn4u1s8j3o7y"
-path="res://.godot/imported/courtroom_spotlight.svg-163b809aa00859170272e2cc95e004fc.ctex"
+uid="uid://d2ttfbrvuafgr"
+path="res://.godot/imported/calm.svg-67a3bf99d4139dc7ca6f1dcbd7897b20.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://demo/assets/courtroom_spotlight.svg"
-dest_files=["res://.godot/imported/courtroom_spotlight.svg-163b809aa00859170272e2cc95e004fc.ctex"]
+source_file="res://assets/characters/hero/calm.svg"
+dest_files=["res://.godot/imported/calm.svg-67a3bf99d4139dc7ca6f1dcbd7897b20.ctex"]
 
 [params]
 

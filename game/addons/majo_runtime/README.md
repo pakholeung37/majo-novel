@@ -10,7 +10,8 @@ Compatibility baseline:
 
 Yarn Spinner is an external prerequisite and is not bundled with this plugin.
 
-Current implementation status: M5 minimum playable loop and extension proof.
+Current implementation status: M5 minimum playable loop plus convention-based
+Runtime resource loading.
 
 ## Installation
 
@@ -88,9 +89,10 @@ Games can replace either default service in `ConfigureServices` with
 ## Actors
 
 Actor definitions live under `MajoProjectConfiguration.Actors`. Each definition
-selects a factory (`character` or `background`), a default appearance, and one
-or more appearance-to-texture mappings. Character definitions also select the
-configured `Left`, `Center`, or `Right` position preset.
+selects a factory (`character` or `background`) and a default appearance.
+Character definitions also select the configured `Left`, `Center`, or `Right`
+position preset. Texture paths follow the resource conventions below; the
+appearance list is optional and contains only explicit overrides.
 
 The bootstrap registers `IActorManager` by default:
 
@@ -126,6 +128,48 @@ payload through `ValidateDefinition`; asynchronous factories can override
 Node. Godot-backed actors additionally implement `IGodotActorView`. Target
 properties preserve the requested final state while a Tween is still rendering
 an intermediate value.
+
+## Resources
+
+`IResourceManager` is a Runtime service with typed sync/async loading, scoped
+loaders, cache lifecycle, concurrent-load deduplication, and prioritized
+providers. The default Godot provider resolves extensionless logical keys under
+`res://assets` and discovers both imported source formats and native Godot
+resource formats.
+
+Default conventions:
+
+```text
+res://assets/characters/<actor-id>/<appearance>.<texture-extension>
+res://assets/backgrounds/<actor-id>/<appearance>.<texture-extension>
+res://assets/dialogue/<project-id>.yarnproject
+```
+
+An Actor therefore needs no physical texture paths:
+
+```csharp
+configuration.Actors!.Actors.Add(new ActorDefinitionConfiguration
+{
+    Id = "hero",
+    FactoryId = ActorFactoryIds.Character,
+    DefaultAppearance = "calm",
+});
+```
+
+Load other resources by logical ID after Runtime initialization:
+
+```csharp
+var resources = runtime.Host!.Services.Get<IResourceManager>();
+var yarnProject = await resources
+    .CreateLoader<YarnProject>(configuration.Resources!.DialoguePath)
+    .LoadAsync("main");
+```
+
+`ResourceConfiguration` can change the root or category prefixes. A non-empty
+`ActorAppearanceConfiguration.TexturePath` is a strict override: Runtime tries
+that path only and reports all attempted candidates if it is missing. Custom
+resource providers register through `ConfigureResourceProviders`; higher
+priority providers can replace project assets without changing logical IDs.
 
 ## Yarn commands
 

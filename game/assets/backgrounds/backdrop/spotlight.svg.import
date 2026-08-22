@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://o7xupdvs4h45"
-path="res://.godot/imported/hero_determined.svg-6d7611040e775d7435ddcac9fecebe80.ctex"
+uid="uid://vegm4y6ncvhj"
+path="res://.godot/imported/spotlight.svg-81f98e7089f37767e226d86d33181712.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://demo/assets/hero_determined.svg"
-dest_files=["res://.godot/imported/hero_determined.svg-6d7611040e775d7435ddcac9fecebe80.ctex"]
+source_file="res://assets/backgrounds/backdrop/spotlight.svg"
+dest_files=["res://.godot/imported/spotlight.svg-81f98e7089f37767e226d86d33181712.ctex"]
 
 [params]
 

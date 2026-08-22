@@ -1,7 +1,7 @@
 {
     "projectFileVersion": 3,
     "sourceFiles": [
-        "M5Demo.yarn"
+        "main.yarn"
     ],
     "excludeFiles": [],
     "baseLanguage": "en"

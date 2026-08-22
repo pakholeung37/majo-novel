@@ -45,7 +45,9 @@ public sealed class BackgroundActor : ActorBase, IBackgroundActor
         string? operationId = null,
         string? groupId = null)
     {
-        var texture = TextureLoader.Load(Definition.GetAppearancePath(appearance));
+        var texture = TextureLoader.Load(
+            Definition.GetAppearanceResourceKey(appearance),
+            Definition.GetAppearanceOverride(appearance));
         TargetAppearance = appearance;
         TextureRect? previousView = null;
         TextureRect? nextView = null;
