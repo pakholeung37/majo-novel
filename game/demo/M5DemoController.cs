@@ -70,7 +70,7 @@ public partial class M5DemoController : Node
             await runtime.InitializationCompletion;
             var resources = runtime.Host!.Services.Get<IResourceManager>();
             var yarnProject = await resources
-                .CreateLoader<YarnProject>(configuration.Resources!.DialoguePath)
+                .CreateLoader<YarnProject>(configuration.Resources!.ScriptsPath)
                 .LoadAsync(M5DemoComposition.DialogueProjectId);
             runner.SetProject(yarnProject);
             AddChild(runner);

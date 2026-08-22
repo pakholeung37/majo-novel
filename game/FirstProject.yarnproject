@@ -5,7 +5,7 @@
   ],
   "excludeFiles": [
     "tests/headless/**/*.yarn",
-    "assets/dialogue/**/*.yarn"
+    "assets/scripts/**/*.yarn"
   ],
   "baseLanguage": "en"
 }

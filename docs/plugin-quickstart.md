@@ -45,12 +45,12 @@ await runtime.InitializationCompletion;
 res://assets/characters/hero/calm.svg
 res://assets/characters/hero/determined.png
 res://assets/backgrounds/backdrop/courtroom.webp
-res://assets/dialogue/main.yarnproject
+res://assets/scripts/main.yarnproject
 ```
 
 Actor 纹理由 `characters/<actor-id>/<appearance>` 或
 `backgrounds/<actor-id>/<appearance>` 解析；Yarn 项目可通过
-`resources.CreateLoader<YarnProject>("dialogue").LoadAsync("main")` 加载。
+`resources.CreateLoader<YarnProject>("scripts").LoadAsync("main")` 加载。
 `ResourceConfiguration` 可替换根目录和分类前缀。只有不符合约定的个别资源才添加
 `ActorAppearanceConfiguration`；其中 `TexturePath` 是严格 override，路径失效时不会
 静默回退到约定资源。

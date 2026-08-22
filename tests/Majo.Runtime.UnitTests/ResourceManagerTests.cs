@@ -69,13 +69,13 @@ public sealed class ResourceManagerTests
         using var lifetime = new TestRuntimeLifetime();
         var asset = new TestAsset("shared");
         var provider = new MemoryProvider("memory")
-            .Add("memory://dialogue/main", asset)
+            .Add("memory://scripts/main", asset)
             .PauseAsyncLoads();
         var manager = new ResourceManager([provider], lifetime);
         await manager.InitializeAsync(CancellationToken.None);
 
-        var first = manager.LoadAsync<TestAsset>(new ResourceKey("dialogue/main"));
-        var second = manager.LoadAsync<TestAsset>(new ResourceKey("dialogue/main"));
+        var first = manager.LoadAsync<TestAsset>(new ResourceKey("scripts/main"));
+        var second = manager.LoadAsync<TestAsset>(new ResourceKey("scripts/main"));
         Assert.Equal(1, provider.AsyncLoadCount);
         provider.ReleaseAsyncLoads();
 
@@ -115,14 +115,14 @@ public sealed class ResourceManagerTests
     {
         using var lifetime = new TestRuntimeLifetime();
         var provider = new MemoryProvider("memory")
-            .Add("memory://dialogue/main", new object());
+            .Add("memory://scripts/main", new object());
         var manager = new ResourceManager([provider], lifetime);
         await manager.InitializeAsync(CancellationToken.None);
 
         Assert.Throws<ResourceTypeMismatchException>(() =>
-            manager.Load<TestAsset>(new ResourceKey("dialogue/main")));
+            manager.Load<TestAsset>(new ResourceKey("scripts/main")));
         await Assert.ThrowsAsync<ResourceTypeMismatchException>(() =>
-            manager.LoadAsync<TestAsset>(new ResourceKey("dialogue/main")));
+            manager.LoadAsync<TestAsset>(new ResourceKey("scripts/main")));
         Assert.Equal(0, manager.LoadedResourceCount);
         await manager.ShutdownAsync(CancellationToken.None);
     }

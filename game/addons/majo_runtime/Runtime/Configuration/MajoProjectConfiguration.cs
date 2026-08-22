@@ -69,7 +69,7 @@ public partial class MajoProjectConfiguration : Resource
 
         ValidateResourceKeyPrefix(Resources.CharactersPath, nameof(Resources.CharactersPath), issues);
         ValidateResourceKeyPrefix(Resources.BackgroundsPath, nameof(Resources.BackgroundsPath), issues);
-        ValidateResourceKeyPrefix(Resources.DialoguePath, nameof(Resources.DialoguePath), issues);
+        ValidateResourceKeyPrefix(Resources.ScriptsPath, nameof(Resources.ScriptsPath), issues);
     }
 
     private static void ValidateResourceKeyPrefix(

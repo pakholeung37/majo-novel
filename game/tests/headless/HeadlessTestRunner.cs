@@ -93,7 +93,7 @@ public partial class HeadlessTestRunner : Node
         await bootstrap.InitializationCompletion;
         var resources = bootstrap.Host!.Services.Get<IResourceManager>();
         var yarnLoader = resources.CreateLoader<YarnProject>(
-            configuration.Resources!.DialoguePath);
+            configuration.Resources!.ScriptsPath);
         var firstProjectLoad = yarnLoader.LoadAsync(M5DemoComposition.DialogueProjectId);
         var secondProjectLoad = yarnLoader.LoadAsync(M5DemoComposition.DialogueProjectId);
         var yarnProjects = await Task.WhenAll(firstProjectLoad, secondProjectLoad);

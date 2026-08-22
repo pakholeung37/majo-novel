@@ -547,7 +547,7 @@ Headless 验收：
 实施记录（2026-08-22）：
 
 - 新增 `demo/M5Demo.tscn` 可见主场景及可点击台词/选项 Presenter；项目默认启动场景已指向该演示。
-- 新增独立的 M5 Yarn 项目，单一剧本覆盖背景和角色并行动画、组汇合、等待型动画、台词、选项、分支与正常结束；资源层完成后迁至 `assets/dialogue/main.yarnproject`。
+- 新增独立的 M5 Yarn 项目，单一剧本覆盖背景和角色并行动画、组汇合、等待型动画、台词、选项、分支与正常结束；资源层完成后迁至 `assets/scripts/main.yarnproject`。
 - 所有扩展均位于插件目录外的 `Majo.Demo`：`M5CaseService`、`M5PortraitActorFactory` 和 `demo_route` Command 未修改 Runtime Core。
 - `M5DialogueProbe` 记录对话、Node、Line 和 Option 事件，并能确定性选择分支；真实 Yarn VM headless 同时断言 Actor 最终状态和事件顺序。
 - 关闭验收会检查自定义 Service 接收到 Runtime cancellation、Actor Node 被释放、Operation 为零以及 Runtime/Runner/外部 Host 无残留。
@@ -566,7 +566,7 @@ Headless 验收：
 Root = res://assets
 Character = characters/<actor-id>/<appearance>
 Background = backgrounds/<actor-id>/<appearance>
-Dialogue = dialogue/<project-id>
+Scripts = scripts/<project-id>
 ```
 
 交付与验收：

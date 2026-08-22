@@ -142,7 +142,7 @@ Default conventions:
 ```text
 res://assets/characters/<actor-id>/<appearance>.<texture-extension>
 res://assets/backgrounds/<actor-id>/<appearance>.<texture-extension>
-res://assets/dialogue/<project-id>.yarnproject
+res://assets/scripts/<project-id>.yarnproject
 ```
 
 An Actor therefore needs no physical texture paths:
@@ -161,7 +161,7 @@ Load other resources by logical ID after Runtime initialization:
 ```csharp
 var resources = runtime.Host!.Services.Get<IResourceManager>();
 var yarnProject = await resources
-    .CreateLoader<YarnProject>(configuration.Resources!.DialoguePath)
+    .CreateLoader<YarnProject>(configuration.Resources!.ScriptsPath)
     .LoadAsync("main");
 ```
 
