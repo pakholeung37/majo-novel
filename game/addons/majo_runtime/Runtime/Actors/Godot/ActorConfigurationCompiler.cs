@@ -15,6 +15,23 @@ public static class ActorConfigurationCompiler
                 throw new ActorDefinitionException("<null>", "Definition is required.");
             }
 
+            if (configuredActor.FactoryConfiguration is not null)
+            {
+                definitions.Add(new ActorDefinition(
+                    configuredActor.Id,
+                    configuredActor.FactoryId,
+                    configuredActor.FactoryConfiguration));
+                continue;
+            }
+
+            if (configuredActor.FactoryId is not ActorFactoryIds.Character and
+                not ActorFactoryIds.Background && configuredActor.Appearances.Count == 0)
+            {
+                definitions.Add(new ActorDefinition(
+                    configuredActor.Id, configuredActor.FactoryId));
+                continue;
+            }
+
             var appearances = new List<KeyValuePair<string, string>>(
                 configuredActor.Appearances.Count);
             foreach (var configuredAppearance in configuredActor.Appearances)

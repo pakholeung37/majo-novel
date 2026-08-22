@@ -33,15 +33,20 @@ public sealed class BackgroundActor : ActorBase, IBackgroundActor
         string appearance,
         double durationSeconds,
         string? operationId = null,
+        string? groupId = null) => CrossFadeAppearance(
+            appearance,
+            new AnimationSpec(durationSeconds),
+            operationId,
+            groupId);
+
+    public IOperationHandle CrossFadeAppearance(
+        string appearance,
+        AnimationSpec animation,
+        string? operationId = null,
         string? groupId = null)
     {
-        if (!double.IsFinite(durationSeconds) || durationSeconds < 0)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(durationSeconds), "Duration must be finite and non-negative.");
-        }
-
         var texture = TextureLoader.Load(Definition.GetAppearancePath(appearance));
+        TargetAppearance = appearance;
         TextureRect? previousView = null;
         TextureRect? nextView = null;
         OperationDefinition? previousFade = null;
@@ -64,13 +69,19 @@ public sealed class BackgroundActor : ActorBase, IBackgroundActor
                 previousView,
                 new NodePath("modulate:a"),
                 0.0f,
-                durationSeconds);
+                animation.DurationSeconds,
+                transition: GodotAnimationSpec.Transition(animation.Transition),
+                ease: GodotAnimationSpec.Ease(animation.Ease),
+                ignoreTimeScale: animation.TimeMode == AnimationTimeMode.Unscaled);
             nextFade = GodotTweenOperation.CreatePropertyTween(
                 Container,
                 nextView,
                 new NodePath("modulate:a"),
                 1.0f,
-                durationSeconds);
+                animation.DurationSeconds,
+                transition: GodotAnimationSpec.Transition(animation.Transition),
+                ease: GodotAnimationSpec.Ease(animation.Ease),
+                ignoreTimeScale: animation.TimeMode == AnimationTimeMode.Unscaled);
         }
 
         void Commit()
@@ -130,7 +141,11 @@ public sealed class BackgroundActor : ActorBase, IBackgroundActor
             });
 
         return StartSequencedOperation(
-            AppearanceProperty, transition, operationId, groupId);
+            AppearanceProperty,
+            transition,
+            operationId,
+            groupId,
+            animation.ConflictPolicy);
     }
 
     protected override void ApplyTexture(Texture2D texture)
@@ -156,4 +171,5 @@ public sealed class BackgroundActor : ActorBase, IBackgroundActor
         view.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         return view;
     }
+
 }

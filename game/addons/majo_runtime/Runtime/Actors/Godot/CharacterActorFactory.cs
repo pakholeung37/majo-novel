@@ -25,6 +25,9 @@ public sealed class CharacterActorFactory : IActorFactory
 
     public string FactoryId => ActorFactoryIds.Character;
 
+    public void ValidateDefinition(ActorDefinition definition) =>
+        _ = definition.GetFactoryData<TextureActorDefinitionData>();
+
     public IActor Create(ActorDefinition definition)
     {
         var view = new Sprite2D { Name = definition.Id, Centered = true };

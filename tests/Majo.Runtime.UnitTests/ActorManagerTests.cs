@@ -7,6 +7,21 @@ namespace Majo.Runtime.UnitTests;
 
 public sealed class ActorManagerTests
 {
+    [Fact]
+    public void AnimationSpecValidatesDurationAndPreservesConflictPolicy()
+    {
+        var animation = new AnimationSpec(
+            0.35,
+            AnimationTransition.Cubic,
+            AnimationEase.Out,
+            AnimationTimeMode.Unscaled,
+            AnimationConflictPolicy.CancelPrevious);
+
+        Assert.Equal(0.35, animation.DurationSeconds);
+        Assert.Equal(AnimationConflictPolicy.CancelPrevious, animation.ConflictPolicy);
+        Assert.Throws<ArgumentOutOfRangeException>(() => new AnimationSpec(double.NaN));
+    }
+
     [Fact(Timeout = 5_000)]
     public async Task ManagerCreatesQueriesRemovesAndEnforcesUniqueActiveIds()
     {
@@ -114,6 +129,39 @@ public sealed class ActorManagerTests
         await manager.ShutdownAsync(CancellationToken.None);
     }
 
+    [Fact(Timeout = 5_000)]
+    public async Task CustomFactoryOwnsItsDefinitionPayloadWithoutTextureSchema()
+    {
+        var payload = new CustomActorPayload("custom-value");
+        var definition = new ActorDefinition("custom", "payload", payload);
+        var factory = new PayloadActorFactory();
+        var manager = new ActorManager([definition], [factory]);
+
+        await manager.InitializeAsync(CancellationToken.None);
+        var actor = manager.Create("custom");
+
+        Assert.Same(payload, factory.ValidatedPayload);
+        Assert.Equal("custom", actor.Id);
+        await manager.ShutdownAsync(CancellationToken.None);
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task ConcurrentAsyncCreationSharesOneFactoryOperation()
+    {
+        var factory = new DeferredActorFactory();
+        var manager = new ActorManager([CreateDefinition("hero")], [factory]);
+        await manager.InitializeAsync(CancellationToken.None);
+
+        var first = manager.CreateAsync("hero");
+        var second = manager.CreateAsync("hero");
+        Assert.Equal(1, factory.CreateCount);
+        factory.Complete(new FakeActor("hero", "default"));
+
+        Assert.Same(await first, await second);
+        Assert.Single(manager.Actors);
+        await manager.ShutdownAsync(CancellationToken.None);
+    }
+
     private static ActorDefinition CreateDefinition(string id) => new(
         id,
         "test",
@@ -136,6 +184,44 @@ public sealed class ActorManagerTests
             CreateCount++;
             return new FakeActor(definition.Id, definition.DefaultAppearance);
         }
+    }
+
+    private sealed record CustomActorPayload(string Value);
+
+    private sealed class PayloadActorFactory : IActorFactory
+    {
+        public string FactoryId => "payload";
+
+        public CustomActorPayload? ValidatedPayload { get; private set; }
+
+        public void ValidateDefinition(ActorDefinition definition) =>
+            ValidatedPayload = definition.GetFactoryData<CustomActorPayload>();
+
+        public IActor Create(ActorDefinition definition) =>
+            new FakeActor(definition.Id, "custom");
+    }
+
+    private sealed class DeferredActorFactory : IActorFactory
+    {
+        private readonly TaskCompletionSource<IActor> completion = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public string FactoryId => "test";
+
+        public int CreateCount { get; private set; }
+
+        public IActor Create(ActorDefinition definition) =>
+            throw new NotSupportedException();
+
+        public async Task<IActor> CreateAsync(
+            ActorDefinition definition,
+            CancellationToken cancellationToken)
+        {
+            CreateCount++;
+            return await completion.Task.WaitAsync(cancellationToken);
+        }
+
+        public void Complete(IActor actor) => completion.SetResult(actor);
     }
 
     private sealed class FakeActor : IActor

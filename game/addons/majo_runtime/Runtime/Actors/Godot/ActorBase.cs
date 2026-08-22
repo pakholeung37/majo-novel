@@ -10,7 +10,7 @@ using Majo.Runtime.Operations.Godot;
 
 namespace Majo.Runtime.Actors.Godot;
 
-public abstract class ActorBase : IActor
+public abstract class ActorBase : IActor, IGodotActorView
 {
     private const string PositionProperty = "position";
     private const string OpacityProperty = "opacity";
@@ -31,6 +31,10 @@ public abstract class ActorBase : IActor
         Scheduler = scheduler ?? throw new ArgumentNullException(nameof(scheduler));
         TextureLoader = textureLoader ?? throw new ArgumentNullException(nameof(textureLoader));
         Appearance = definition.DefaultAppearance;
+        TargetAppearance = Appearance;
+        TargetVisible = view.Visible;
+        TargetPosition = Vector2.Zero;
+        TargetOpacity = view.Modulate.A;
     }
 
     protected ActorDefinition Definition { get; }
@@ -45,9 +49,15 @@ public abstract class ActorBase : IActor
 
     public string Appearance { get; protected set; }
 
+    public string TargetAppearance { get; protected set; }
+
     public bool Visible => View.Visible;
 
+    public bool TargetVisible { get; protected set; }
+
     public abstract Vector2 Position { get; }
+
+    public Vector2 TargetPosition { get; protected set; }
 
     public Color Tint
     {
@@ -60,6 +70,8 @@ public abstract class ActorBase : IActor
 
     public float Opacity => View.Modulate.A;
 
+    public float TargetOpacity { get; protected set; }
+
     public Node SceneNode => View;
 
     public void SetAppearance(string appearance)
@@ -69,12 +81,15 @@ public abstract class ActorBase : IActor
         CancelProperty(AppearanceProperty);
         ApplyTexture(texture);
         Appearance = appearance;
+        TargetAppearance = appearance;
     }
 
     public void SetVisible(bool visible)
     {
         EnsureAlive();
+        CancelProperty(OpacityProperty);
         View.Visible = visible;
+        TargetVisible = visible;
     }
 
     public void SetPosition(Vector2 position)
@@ -83,6 +98,7 @@ public abstract class ActorBase : IActor
         ValidatePosition(position);
         CancelProperty(PositionProperty);
         ApplyPosition(position);
+        TargetPosition = position;
     }
 
     public void SetTint(Color tint)
@@ -99,65 +115,123 @@ public abstract class ActorBase : IActor
         CancelProperty(OpacityProperty);
         var current = View.Modulate;
         View.Modulate = new Color(current.R, current.G, current.B, opacity);
+        TargetOpacity = opacity;
     }
 
     public IOperationHandle ChangePosition(
         Vector2 position,
         double durationSeconds,
         string? operationId = null,
+        string? groupId = null) => ChangePosition(
+            position,
+            new AnimationSpec(durationSeconds),
+            operationId,
+            groupId);
+
+    public IOperationHandle ChangePosition(
+        Vector2 position,
+        AnimationSpec animation,
+        string? operationId = null,
         string? groupId = null)
     {
         EnsureAlive();
         ValidatePosition(position);
+        TargetPosition = position;
         var tween = GodotTweenOperation.CreatePropertyTween(
             View,
             View,
             new NodePath("position"),
             position,
-            durationSeconds);
+            animation.DurationSeconds,
+            transition: GodotAnimationSpec.Transition(animation.Transition),
+            ease: GodotAnimationSpec.Ease(animation.Ease),
+            ignoreTimeScale: animation.TimeMode == AnimationTimeMode.Unscaled);
         return StartSequencedOperation(
-            PositionProperty, tween, operationId, groupId);
+            PositionProperty, tween, operationId, groupId, animation.ConflictPolicy);
     }
 
     public IOperationHandle ChangeOpacity(
         float opacity,
         double durationSeconds,
         string? operationId = null,
+        string? groupId = null) => ChangeOpacity(
+            opacity,
+            new AnimationSpec(durationSeconds),
+            operationId,
+            groupId);
+
+    public IOperationHandle ChangeOpacity(
+        float opacity,
+        AnimationSpec animation,
+        string? operationId = null,
         string? groupId = null)
     {
         EnsureAlive();
         ValidateOpacity(opacity);
+        TargetOpacity = opacity;
         var tween = GodotTweenOperation.CreatePropertyTween(
             View,
             View,
             new NodePath("modulate:a"),
             opacity,
-            durationSeconds);
+            animation.DurationSeconds,
+            transition: GodotAnimationSpec.Transition(animation.Transition),
+            ease: GodotAnimationSpec.Ease(animation.Ease),
+            ignoreTimeScale: animation.TimeMode == AnimationTimeMode.Unscaled);
         return StartSequencedOperation(
-            OpacityProperty, tween, operationId, groupId);
+            OpacityProperty, tween, operationId, groupId, animation.ConflictPolicy);
     }
 
     public IOperationHandle Show(
         double durationSeconds,
         string? operationId = null,
+        string? groupId = null) => Show(
+            new AnimationSpec(durationSeconds), operationId, groupId);
+
+    public IOperationHandle Show(
+        AnimationSpec animation,
+        string? operationId = null,
         string? groupId = null)
     {
-        SetVisible(true);
-        return ChangeOpacity(1, durationSeconds, operationId, groupId);
+        EnsureAlive();
+        TargetVisible = true;
+        TargetOpacity = 1;
+        var tween = CreateOpacityTween(1, animation);
+        var visibilityOperation = new OperationDefinition(
+            async context =>
+            {
+                View.Visible = true;
+                await tween.ExecuteAsync(context);
+            },
+            completeAsync: async cancellationToken =>
+            {
+                View.Visible = true;
+                await tween.CompleteAsync(cancellationToken);
+            },
+            cancelAsync: tween.CancelAsync);
+        return StartSequencedOperation(
+            OpacityProperty,
+            visibilityOperation,
+            operationId,
+            groupId,
+            animation.ConflictPolicy);
     }
 
     public IOperationHandle Hide(
         double durationSeconds,
         string? operationId = null,
+        string? groupId = null) => Hide(
+            new AnimationSpec(durationSeconds), operationId, groupId);
+
+    public IOperationHandle Hide(
+        AnimationSpec animation,
+        string? operationId = null,
         string? groupId = null)
     {
         EnsureAlive();
-        var tween = GodotTweenOperation.CreatePropertyTween(
-            View,
-            View,
-            new NodePath("modulate:a"),
-            0.0f,
-            durationSeconds);
+        TargetVisible = false;
+        TargetOpacity = 0;
+        var tween = CreateOpacityTween(0, animation);
         var visibilityOperation = new OperationDefinition(
             async context =>
             {
@@ -171,7 +245,11 @@ public abstract class ActorBase : IActor
             },
             cancelAsync: tween.CancelAsync);
         return StartSequencedOperation(
-            OpacityProperty, visibilityOperation, operationId, groupId);
+            OpacityProperty,
+            visibilityOperation,
+            operationId,
+            groupId,
+            animation.ConflictPolicy);
     }
 
     public virtual void Destroy()
@@ -202,7 +280,8 @@ public abstract class ActorBase : IActor
         string property,
         OperationDefinition operation,
         string? operationId,
-        string? groupId)
+        string? groupId,
+        AnimationConflictPolicy conflictPolicy = AnimationConflictPolicy.CompletePrevious)
     {
         EnsureAlive();
         propertyOperations.TryGetValue(property, out var previous);
@@ -211,7 +290,14 @@ public abstract class ActorBase : IActor
             previous = null;
         }
 
-        previous?.Complete();
+        if (conflictPolicy == AnimationConflictPolicy.CompletePrevious)
+        {
+            previous?.Complete();
+        }
+        else
+        {
+            previous?.Cancel();
+        }
         var sequenced = new OperationDefinition(
             async context =>
             {
@@ -294,4 +380,15 @@ public abstract class ActorBase : IActor
 
     private static bool IsTerminal(OperationState state) =>
         state is OperationState.Completed or OperationState.Cancelled or OperationState.Faulted;
+
+    private OperationDefinition CreateOpacityTween(float opacity, AnimationSpec animation) =>
+        GodotTweenOperation.CreatePropertyTween(
+            View,
+            View,
+            new NodePath("modulate:a"),
+            opacity,
+            animation.DurationSeconds,
+            transition: GodotAnimationSpec.Transition(animation.Transition),
+            ease: GodotAnimationSpec.Ease(animation.Ease),
+            ignoreTimeScale: animation.TimeMode == AnimationTimeMode.Unscaled);
 }

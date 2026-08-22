@@ -53,6 +53,7 @@ public partial class HeadlessTestRunner : Node
 
         ValidateConfigurationDiagnostics();
         await ValidateSuccessfulRuntimeLifecycleAsync();
+        await ValidateLifecycleTimeoutAsync();
         await ValidateOperationKernelAsync();
         await ValidateActorSystemAsync();
         await ValidateYarnCommandAdapterAsync();
@@ -92,11 +93,29 @@ public partial class HeadlessTestRunner : Node
             ("dark", "res://tests/headless/fixtures/background_dark.svg"),
             ("light", "res://tests/headless/fixtures/background_light.svg")));
 
+        var customCommandRan = false;
+        var customCommandService = new HeadlessLifecycleService();
         var bootstrap = new MajoRuntimeBootstrap
         {
             Name = "M4Runtime",
             Configuration = configuration,
             YarnDialogueRunner = runner,
+            ConfigureServices = services => services.AddSingleton<HeadlessLifecycleService>(
+                _ => customCommandService),
+            ConfigureCommands = commands => commands.Register(
+                "majo_probe",
+                (arguments, context) =>
+                {
+                    Assert(arguments.SequenceEqual(new[] { "alpha" }),
+                        "Custom command received incorrect arguments.");
+                    Assert(context.Actors is not null,
+                        "Custom command did not receive ActorManager context.");
+                    Assert(context.Services?.Get<HeadlessLifecycleService>() ==
+                        customCommandService,
+                        "Custom command could not resolve a game extension service.");
+                    customCommandRan = true;
+                    return Task.CompletedTask;
+                }),
         };
         AddChild(bootstrap);
         await bootstrap.InitializationCompletion;
@@ -163,6 +182,11 @@ public partial class HeadlessTestRunner : Node
         Assert(scheduler.ActiveOperations.Count == 0,
             "Completed Yarn dialogue left active operations.");
 
+        var commandFailureSignal = string.Empty;
+        bootstrap.Connect(
+            MajoRuntimeBootstrap.SignalName.RuntimeCommandFailed,
+            Callable.From<string, string>((command, message) =>
+                commandFailureSignal = $"{command}:{message}"));
         await runner.StartDialogue("BadArguments");
         await WaitForConditionAsync(() => adapter.LastFailure is not null, 2);
         Assert(adapter.LastFailure!.CommandName == "char",
@@ -171,7 +195,9 @@ public partial class HeadlessTestRunner : Node
                 RuntimeCommandParser.CharacterUsage,
                 StringComparison.Ordinal),
             "Bad Yarn arguments did not include command usage.");
-        await runner.Stop();
+        Assert(commandFailureSignal.StartsWith("char:", StringComparison.Ordinal),
+            "Command failure was not exposed through the Runtime signal.");
+        await WaitForConditionAsync(() => !runner.IsDialogueRunning, 2);
 
         var unhandledCommand = string.Empty;
         runner.Connect(
@@ -182,6 +208,30 @@ public partial class HeadlessTestRunner : Node
         Assert(unhandledCommand == "majo_unknown detail",
             "Yarn did not preserve the unhandled command diagnostic text.");
         await runner.Stop();
+
+        var lineCountBeforeStop = presenter.Lines.Count;
+        await runner.StartDialogue("StopCancellation");
+        await WaitForConditionAsync(
+            () => scheduler.ActiveOperations.Any(
+                operation => operation.Id == "stop-cancelled"),
+            2);
+        var dialogueScopedOperation = scheduler.ActiveOperations.Single(
+            operation => operation.Id == "stop-cancelled");
+        await runner.Stop();
+        await WaitForConditionAsync(
+            () => dialogueScopedOperation.State == OperationState.Cancelled,
+            2);
+        Assert(presenter.Lines.Count == lineCountBeforeStop,
+            "Yarn presented a line after dialogue-scoped command cancellation.");
+        Assert(scheduler.ActiveOperations.Count == 0,
+            "Stopping Yarn dialogue left a dialogue-scoped operation active.");
+
+        await runner.StartDialogue("CustomCommand");
+        await runner.DialogueTask;
+        Assert(customCommandRan,
+            "Public Runtime command registry did not invoke the custom command.");
+        Assert(presenter.Lines[^1] == "Narrator: custom command completed",
+            "Yarn did not continue after the custom Runtime command.");
 
         await bootstrap.RequestShutdownAsync();
         runner.QueueFree();
@@ -272,12 +322,26 @@ public partial class HeadlessTestRunner : Node
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         Assert(character.Opacity is > 0 and < 1,
             "Character opacity Tween did not expose an intermediate value.");
+        Assert(Mathf.IsEqualApprox(character.TargetOpacity, 1),
+            "Character target opacity did not preserve the requested final state.");
         await fade.Completion;
         Assert(Mathf.IsEqualApprox(character.Opacity, 1),
             "Character opacity Tween did not reach its final value.");
 
+        var interruptedHide = character.Hide(1, "interrupted-hide");
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        var replacementShow = character.Show(0.04, "replacement-show");
+        await interruptedHide.Completion;
+        await replacementShow.Completion;
+        Assert(character.Visible,
+            "Show interrupting Hide left the Character invisible.");
+        Assert(Mathf.IsEqualApprox(character.Opacity, 1),
+            "Show interrupting Hide did not reach full opacity.");
+
         var oldBackgroundView = background.CurrentView;
         var crossFade = background.CrossFadeAppearance("light", 0.06, "background-crossfade");
+        Assert(background.TargetAppearance == "light" && background.Appearance == "dark",
+            "Background did not distinguish target and rendered appearance state.");
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         Assert(background.SceneNode.GetChildCount() == 2,
             "Background crossfade did not retain old and new TextureRects concurrently.");
@@ -308,8 +372,8 @@ public partial class HeadlessTestRunner : Node
 
         var closingCharacter = manager.Create("hero");
         var closingBackground = manager.Create("courtroom");
-        var closingCharacterNode = closingCharacter.SceneNode;
-        var closingBackgroundNode = closingBackground.SceneNode;
+        var closingCharacterNode = ((IGodotActorView)closingCharacter).SceneNode;
+        var closingBackgroundNode = ((IGodotActorView)closingBackground).SceneNode;
         bootstrap.QueueFree();
         await bootstrap.ShutdownCompletion;
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -455,6 +519,7 @@ public partial class HeadlessTestRunner : Node
     private async Task ValidateSuccessfulRuntimeLifecycleAsync()
     {
         var service = new HeadlessLifecycleService();
+        var shutdownSignalCount = 0;
         var bootstrap = new MajoRuntimeBootstrap
         {
             Name = "SuccessfulRuntime",
@@ -462,6 +527,7 @@ public partial class HeadlessTestRunner : Node
             ConfigureServices = services =>
                 services.AddSingleton<HeadlessLifecycleService>(_ => service),
         };
+        bootstrap.RuntimeShutdown += () => shutdownSignalCount++;
 
         AddChild(bootstrap);
         await bootstrap.InitializationCompletion;
@@ -489,9 +555,58 @@ public partial class HeadlessTestRunner : Node
         Assert(exited, "Bootstrap did not exit the scene tree during shutdown.");
         Assert(!IsInstanceValid(bootstrap), "Bootstrap node leaked after shutdown.");
         Assert(service.ShutdownCount == 1, "Runtime service was not shut down exactly once.");
+        Assert(shutdownSignalCount == 1,
+            "Runtime shutdown signal was not emitted exactly once during tree exit.");
 
         await bootstrap.ShutdownCompletion;
         Assert(service.ShutdownCount == 1, "Repeated shutdown completion changed service state.");
+        Assert(shutdownSignalCount == 1,
+            "Repeated shutdown completion emitted another Runtime shutdown signal.");
+    }
+
+    private async Task ValidateLifecycleTimeoutAsync()
+    {
+        var service = new NonCooperativeInitializationService();
+        var configuration = MajoProjectConfiguration.CreateDefault();
+        configuration.Runtime!.LifecycleTimeoutSeconds = 0.05;
+        var bootstrap = new MajoRuntimeBootstrap
+        {
+            Name = "TimedOutRuntime",
+            Configuration = configuration,
+            ConfigureServices = services =>
+                services.AddSingleton<NonCooperativeInitializationService>(_ => service),
+        };
+        var exited = false;
+        bootstrap.TreeExited += () => exited = true;
+
+        AddChild(bootstrap);
+        Exception initializationFailure = null;
+        try
+        {
+            await bootstrap.InitializationCompletion;
+        }
+        catch (Exception exception)
+        {
+            initializationFailure = exception;
+        }
+        finally
+        {
+            service.CompleteInitialization();
+        }
+
+        Assert(initializationFailure is TimeoutException,
+            "A service that ignored cancellation did not trigger the hard lifecycle timeout.");
+        Assert(initializationFailure.Message.Contains("initialization", StringComparison.Ordinal),
+            "Lifecycle timeout did not identify the timed-out operation.");
+
+        await bootstrap.ShutdownCompletion;
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+
+        Assert(service.ShutdownCount == 1,
+            "A late-completing initialization was not subsequently shut down.");
+        Assert(exited && !IsInstanceValid(bootstrap),
+            "Timed-out Runtime bootstrap leaked after late initialization cleanup.");
     }
 
     private async Task ValidateFailedConfigurationCleanupAsync()
@@ -570,6 +685,16 @@ public partial class HeadlessTestRunner : Node
         Assert(validation.Issues.Any(issue =>
                 issue.Path.Contains("RequiredYarnRuntimeVersion", StringComparison.Ordinal)),
             "Invalid Yarn runtime version was not diagnosed.");
+
+        var customActorConfiguration = MajoProjectConfiguration.CreateDefault();
+        customActorConfiguration.Actors!.Actors.Add(new ActorDefinitionConfiguration
+        {
+            Id = "custom",
+            FactoryId = "custom-payload",
+            FactoryConfiguration = new Resource(),
+        });
+        Assert(customActorConfiguration.Validate(_ => false).IsValid,
+            "Factory-owned Actor configuration was incorrectly validated as a texture Actor.");
     }
 
     private async Task RunWithTimeoutAsync(Task suite, double timeoutSeconds)
@@ -657,6 +782,26 @@ public partial class HeadlessTestRunner : Node
             await Task.Yield();
             ShutdownCount++;
         }
+    }
+
+    private sealed class NonCooperativeInitializationService : IRuntimeService
+    {
+        private readonly TaskCompletionSource initialization =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public int ShutdownCount { get; private set; }
+
+        public Task InitializeAsync(CancellationToken cancellationToken) => initialization.Task;
+
+        public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task ShutdownAsync(CancellationToken cancellationToken)
+        {
+            ShutdownCount++;
+            return Task.CompletedTask;
+        }
+
+        public void CompleteInitialization() => initialization.TrySetResult();
     }
 
     private sealed class ShutdownStartsOperationService : IRuntimeService

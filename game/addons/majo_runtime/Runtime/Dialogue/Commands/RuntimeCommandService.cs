@@ -20,65 +20,113 @@ public sealed class RuntimeCommandService : IRuntimeCommandService
         this.operations = operations ?? throw new ArgumentNullException(nameof(operations));
     }
 
-    public Task BackAsync(BackCommand command) => ExecuteActorCommandAsync(
+    public Task BackAsync(BackCommand command) => BackAsync(
+        command, CreateDetachedContext());
+
+    public Task BackAsync(
+        BackCommand command,
+        RuntimeCommandContext context) => ExecuteActorCommandAsync(
         "back",
-        () =>
+        async () =>
         {
             ArgumentNullException.ThrowIfNull(command);
-            var (actor, created) = GetOrCreate<IBackgroundActor>(command.ActorId);
-            IOperationHandle operation;
-            if (created)
+            var (actor, created) = await GetOrCreateAsync<IBackgroundActor>(
+                command.ActorId, context.CancellationToken);
+            var operationScheduled = false;
+            try
+            {
+                IOperationHandle operation;
+                if (created)
+                {
+                    actor.SetAppearance(command.Appearance);
+                    actor.SetOpacity(0);
+                    operation = actor.Show(
+                        command.DurationSeconds,
+                        command.OperationId,
+                        command.GroupId);
+                }
+                else if (string.Equals(
+                    actor.TargetAppearance,
+                    command.Appearance,
+                    StringComparison.Ordinal))
+                {
+                    actor.SetVisible(true);
+                    operation = actor.ChangeOpacity(
+                        1,
+                        command.DurationSeconds,
+                        command.OperationId,
+                        command.GroupId);
+                }
+                else
+                {
+                    actor.SetVisible(true);
+                    actor.SetOpacity(1);
+                    operation = actor.CrossFadeAppearance(
+                        command.Appearance,
+                        command.DurationSeconds,
+                        command.OperationId,
+                        command.GroupId);
+                }
+
+                context.Track(operation);
+                operationScheduled = true;
+                await WaitIfRequested(operation, command.Wait, context.CancellationToken);
+            }
+            catch
+            {
+                if (created && !operationScheduled)
+                {
+                    actors.Remove(command.ActorId);
+                }
+
+                throw;
+            }
+        });
+
+    public Task CharacterAsync(CharacterCommand command) => CharacterAsync(
+        command, CreateDetachedContext());
+
+    public Task CharacterAsync(
+        CharacterCommand command,
+        RuntimeCommandContext context) => ExecuteActorCommandAsync(
+        "char",
+        async () =>
+        {
+            ArgumentNullException.ThrowIfNull(command);
+            var (actor, created) = await GetOrCreateAsync<ICharacterActor>(
+                command.ActorId, context.CancellationToken);
+            var operationScheduled = false;
+            try
             {
                 actor.SetAppearance(command.Appearance);
-                actor.SetOpacity(0);
-                operation = actor.Show(
-                    command.DurationSeconds,
-                    command.OperationId,
-                    command.GroupId);
-            }
-            else if (string.Equals(
-                actor.Appearance,
-                command.Appearance,
-                StringComparison.Ordinal))
-            {
-                actor.SetVisible(true);
-                operation = actor.ChangeOpacity(
-                    1,
-                    command.DurationSeconds,
-                    command.OperationId,
-                    command.GroupId);
-            }
-            else
-            {
-                actor.SetVisible(true);
                 actor.SetOpacity(1);
-                operation = actor.CrossFadeAppearance(
-                    command.Appearance,
+                actor.SetVisible(true);
+                var operation = actor.ChangePosition(
+                    command.Position,
                     command.DurationSeconds,
                     command.OperationId,
                     command.GroupId);
+                context.Track(operation);
+                operationScheduled = true;
+                await WaitIfRequested(operation, command.Wait, context.CancellationToken);
             }
+            catch
+            {
+                if (created && !operationScheduled)
+                {
+                    actors.Remove(command.ActorId);
+                }
 
-            return WaitIfRequested(operation, command.Wait);
+                throw;
+            }
         });
 
-    public Task CharacterAsync(CharacterCommand command) => ExecuteActorCommandAsync(
-        "char",
-        () =>
-        {
-            ArgumentNullException.ThrowIfNull(command);
-            var (actor, _) = GetOrCreate<ICharacterActor>(command.ActorId);
-            actor.SetAppearance(command.Appearance);
-            actor.SetVisible(true);
-            var operation = actor.ChangePosition(
-                command.Position,
-                command.DurationSeconds,
-                command.OperationId,
-                command.GroupId);
-            return WaitIfRequested(operation, command.Wait);
-        });
+    public Task HideAsync(HideCommand command) => HideAsync(
+        command, CreateDetachedContext());
 
-    public Task HideAsync(HideCommand command) => ExecuteActorCommandAsync(
+    public Task HideAsync(
+        HideCommand command,
+        RuntimeCommandContext context) => ExecuteActorCommandAsync(
         "hide",
         () =>
         {
@@ -88,24 +136,33 @@ public sealed class RuntimeCommandService : IRuntimeCommandService
                 command.DurationSeconds,
                 command.OperationId,
                 command.GroupId);
-            return WaitIfRequested(operation, command.Wait);
+            context.Track(operation);
+            return WaitIfRequested(operation, command.Wait, context.CancellationToken);
         });
 
     public Task AwaitAsync(AwaitCommand command)
+        => AwaitAsync(command, CreateDetachedContext());
+
+    public Task AwaitAsync(AwaitCommand command, RuntimeCommandContext context)
     {
         ArgumentNullException.ThrowIfNull(command);
         return command.Complete
-            ? operations.CompleteAsync(command.Target)
-            : operations.WaitAsync(command.Target);
+            ? operations.CompleteAsync(command.Target, context.CancellationToken)
+            : operations.WaitAsync(command.Target, context.CancellationToken);
     }
 
     public Task CancelAsync(CancelCommand command)
+        => CancelAsync(command, CreateDetachedContext());
+
+    public Task CancelAsync(CancelCommand command, RuntimeCommandContext context)
     {
         ArgumentNullException.ThrowIfNull(command);
-        return operations.CancelAsync(command.Target);
+        return operations.CancelAsync(command.Target, context.CancellationToken);
     }
 
-    private (TActor Actor, bool Created) GetOrCreate<TActor>(string actorId)
+    private async Task<(TActor Actor, bool Created)> GetOrCreateAsync<TActor>(
+        string actorId,
+        System.Threading.CancellationToken cancellationToken)
         where TActor : class, IActor
     {
         if (actors.TryGet(actorId, out _))
@@ -113,12 +170,26 @@ public sealed class RuntimeCommandService : IRuntimeCommandService
             return (actors.Get<TActor>(actorId), false);
         }
 
-        actors.Create(actorId);
-        return (actors.Get<TActor>(actorId), true);
+        var actor = await actors.CreateAsync(actorId, cancellationToken);
+        if (actor is not TActor typedActor)
+        {
+            actors.Remove(actorId);
+            throw new ActorException(
+                $"Actor '{actorId}' is '{actor.GetType().FullName}', " +
+                $"not '{typeof(TActor).FullName}'.");
+        }
+
+        return (typedActor, true);
     }
 
-    private static Task WaitIfRequested(IOperationHandle operation, bool wait) =>
-        wait ? operation.Completion : Task.CompletedTask;
+    private static Task WaitIfRequested(
+        IOperationHandle operation,
+        bool wait,
+        System.Threading.CancellationToken cancellationToken) =>
+        wait ? operation.Completion.WaitAsync(cancellationToken) : Task.CompletedTask;
+
+    private RuntimeCommandContext CreateDetachedContext() =>
+        new(actors, operations, null, System.Threading.CancellationToken.None);
 
     private static async Task ExecuteActorCommandAsync(
         string commandName,
@@ -129,6 +200,10 @@ public sealed class RuntimeCommandService : IRuntimeCommandService
             await execute();
         }
         catch (RuntimeCommandException)
+        {
+            throw;
+        }
+        catch (OperationCanceledException)
         {
             throw;
         }

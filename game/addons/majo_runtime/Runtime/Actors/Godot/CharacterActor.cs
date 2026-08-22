@@ -21,6 +21,7 @@ public sealed class CharacterActor : ActorBase, ICharacterActor
         this.positions = positions ?? throw new ArgumentNullException(nameof(positions));
         PositionPreset = definition.InitialPosition;
         ApplyPosition(positions.Get(PositionPreset));
+        TargetPosition = Position;
         SetAppearance(definition.DefaultAppearance);
     }
 
@@ -34,11 +35,21 @@ public sealed class CharacterActor : ActorBase, ICharacterActor
         CharacterPositionPreset preset,
         double durationSeconds,
         string? operationId = null,
+        string? groupId = null) => ChangePosition(
+            preset,
+            new AnimationSpec(durationSeconds),
+            operationId,
+            groupId);
+
+    public IOperationHandle ChangePosition(
+        CharacterPositionPreset preset,
+        AnimationSpec animation,
+        string? operationId = null,
         string? groupId = null)
     {
         PositionPreset = preset;
         return ChangePosition(
-            positions.Get(preset), durationSeconds, operationId, groupId);
+            positions.Get(preset), animation, operationId, groupId);
     }
 
     protected override void ApplyTexture(Texture2D texture)

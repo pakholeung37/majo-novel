@@ -216,6 +216,75 @@ public sealed class RuntimeCommandTests
         Assert.All(parameters, parameter => Assert.True(parameter.ParameterType.IsInterface));
     }
 
+    [Fact(Timeout = 5_000)]
+    public async Task ExtensionCommandUsesPublicRegistryAndRuntimeContext()
+    {
+        var yarnRegistry = new FakeCommandRegistry();
+        var actorManager = new FakeActorManager();
+        var scheduler = new FakeOperationScheduler();
+        var extensions = new RuntimeCommandRegistry();
+        IReadOnlyList<string>? received = null;
+        extensions.Register("probe", (arguments, context) =>
+        {
+            received = arguments;
+            Assert.Same(actorManager, context.Actors);
+            Assert.Same(scheduler, context.Operations);
+            return Task.CompletedTask;
+        });
+        var adapter = new YarnCommandAdapter(
+            yarnRegistry,
+            new RuntimeCommandService(actorManager, scheduler),
+            new RuntimeCommandParser(0.35),
+            actorManager,
+            scheduler,
+            extensions);
+
+        await adapter.InitializeAsync(CancellationToken.None);
+        var handler = Assert.IsType<Func<string[], Task>>(yarnRegistry.Handlers["probe"]);
+        await handler(["alpha", "beta"]);
+
+        Assert.Equal(["alpha", "beta"], received);
+        await adapter.ShutdownAsync(CancellationToken.None);
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task DialogueCancellationCancelsTrackedNonWaitingOperation()
+    {
+        var yarnRegistry = new FakeCommandRegistry();
+        var actor = new FakeCharacterActor("hero", "idle");
+        var actorManager = new FakeActorManager(actor);
+        var scheduler = new FakeOperationScheduler();
+        var adapter = new YarnCommandAdapter(
+            yarnRegistry,
+            new RuntimeCommandService(actorManager, scheduler),
+            new RuntimeCommandParser(0.35),
+            actorManager,
+            scheduler);
+        await adapter.InitializeAsync(CancellationToken.None);
+        var handler = Assert.IsType<Func<string[], Task>>(yarnRegistry.Handlers["char"]);
+
+        await handler(["hero", "happy", "center", "10", "false"]);
+        Assert.Equal(OperationState.Running, actor.LastOperation.State);
+        yarnRegistry.CancelDialogue();
+
+        Assert.Equal(OperationState.Cancelled, actor.LastOperation.State);
+        Assert.Null(adapter.LastFailure);
+        await adapter.ShutdownAsync(CancellationToken.None);
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task FailedInitialModificationRollsBackNewActor()
+    {
+        var manager = new FakeActorManager();
+        var service = new RuntimeCommandService(manager, new FakeOperationScheduler());
+
+        await Assert.ThrowsAsync<RuntimeCommandException>(() =>
+            service.CharacterAsync(new CharacterCommand(
+                "broken", "invalid", CharacterPositionPreset.Center, 0, false, null, null)));
+
+        Assert.False(manager.TryGet("broken", out _));
+    }
+
     private static RuntimeCommandService CreateService(
         FakeCharacterActor actor,
         out FakeOperationScheduler scheduler)
@@ -227,6 +296,10 @@ public sealed class RuntimeCommandTests
 
     private sealed class FakeCommandRegistry : IYarnCommandRegistry
     {
+        private readonly CancellationTokenSource dialogueCancellation = new();
+
+        public CancellationToken DialogueCancellationToken => dialogueCancellation.Token;
+
         public Dictionary<string, Delegate> Handlers { get; } = new(StringComparer.Ordinal);
 
         public List<string> RemovedCommands { get; } = new();
@@ -243,6 +316,10 @@ public sealed class RuntimeCommandTests
 
             RemovedCommands.Add(commandName);
         }
+
+        public void CancelDialogue() => dialogueCancellation.Cancel();
+
+        public void Dispose() => dialogueCancellation.Dispose();
     }
 
     private sealed class RecordingCommandService : IRuntimeCommandService
@@ -280,9 +357,12 @@ public sealed class RuntimeCommandTests
 
         public IActor Create(string actorId)
         {
-            IActor actor = actorId == "backdrop"
-                ? new FakeBackgroundActor(actorId, "default")
-                : new FakeCharacterActor(actorId, "default");
+            IActor actor = actorId switch
+            {
+                "backdrop" => new FakeBackgroundActor(actorId, "default"),
+                "broken" => new FailingAppearanceActor(actorId, "default"),
+                _ => new FakeCharacterActor(actorId, "default"),
+            };
             actors.Add(actorId, actor);
             return actor;
         }
@@ -328,7 +408,7 @@ public sealed class RuntimeCommandTests
 
         public FakeOperationHandle LastOperation { get; protected set; } = new();
 
-        public void SetAppearance(string appearance) => Appearance = appearance;
+        public virtual void SetAppearance(string appearance) => Appearance = appearance;
 
         public void SetVisible(bool visible) => Visible = visible;
 
@@ -381,7 +461,7 @@ public sealed class RuntimeCommandTests
         }
     }
 
-    private sealed class FakeCharacterActor : FakeActor, ICharacterActor
+    private class FakeCharacterActor : FakeActor, ICharacterActor
     {
         public FakeCharacterActor(string id, string appearance)
             : base(id, appearance)
@@ -401,6 +481,17 @@ public sealed class RuntimeCommandTests
             PositionPreset = preset;
             return LastOperation = new FakeOperationHandle(operationId, groupId);
         }
+    }
+
+    private sealed class FailingAppearanceActor : FakeCharacterActor
+    {
+        public FailingAppearanceActor(string id, string appearance)
+            : base(id, appearance)
+        {
+        }
+
+        public override void SetAppearance(string appearance) =>
+            throw new UnknownActorAppearanceException(Id, appearance);
     }
 
     private sealed class FakeBackgroundActor : FakeActor, IBackgroundActor

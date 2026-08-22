@@ -118,7 +118,7 @@ public sealed class OperationSchedulerTests
     }
 
     [Fact(Timeout = 5_000)]
-    public async Task FaultPropagatesAndCompletedEntryIsRemoved()
+    public async Task FaultPropagatesAndCompletedEntryRemainsAwaitableForTheSession()
     {
         var logger = new RecordingLogger();
         var harness = await OperationHarness.CreateAsync(logger);
@@ -134,8 +134,52 @@ public sealed class OperationSchedulerTests
 
         Assert.Equal(OperationState.Faulted, handle.State);
         Assert.Single(logger.Exceptions);
-        await Assert.ThrowsAsync<OperationNotFoundException>(() =>
+        await Assert.ThrowsAsync<ExpectedException>(() =>
             harness.Scheduler.WaitAsync(OperationTarget.ForId("faulted")));
+        await harness.Host.ShutdownAsync();
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task CompletedIdAndGroupRemainAwaitableUntilReset()
+    {
+        var harness = await OperationHarness.CreateAsync();
+        var first = harness.Scheduler.Start(new OperationDefinition(
+            _ => Task.CompletedTask,
+            id: "instant",
+            groupId: "instant-group"));
+
+        await first.Completion;
+        Assert.Empty(harness.Scheduler.ActiveOperations);
+
+        await harness.Scheduler.WaitAsync(OperationTarget.ForId("instant"));
+        await harness.Scheduler.WaitAsync(OperationTarget.ForGroup("instant-group"));
+
+        await harness.Host.ResetAsync();
+        await Assert.ThrowsAsync<OperationNotFoundException>(() =>
+            harness.Scheduler.WaitAsync(OperationTarget.ForId("instant")));
+        await Assert.ThrowsAsync<OperationNotFoundException>(() =>
+            harness.Scheduler.WaitAsync(OperationTarget.ForGroup("instant-group")));
+        await harness.Host.ShutdownAsync();
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task GroupWaitIncludesMembersThatFinishedBeforeAwaitStarted()
+    {
+        var harness = await OperationHarness.CreateAsync();
+        var completed = harness.Scheduler.Start(new OperationDefinition(
+            _ => Task.CompletedTask,
+            groupId: "mixed"));
+        await completed.Completion;
+        var pendingGate = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        harness.Scheduler.Start(new OperationDefinition(
+            _ => pendingGate.Task,
+            groupId: "mixed"));
+
+        var wait = harness.Scheduler.WaitAsync(OperationTarget.ForGroup("mixed"));
+        Assert.False(wait.IsCompleted);
+        pendingGate.SetResult();
+        await wait;
         await harness.Host.ShutdownAsync();
     }
 
@@ -229,6 +273,36 @@ public sealed class OperationSchedulerTests
         Assert.Equal(OperationState.Completed, first.State);
         Assert.Equal(OperationState.Completed, second.State);
         await harness.Host.ShutdownAsync();
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task TimedOutShutdownCanRetryUntilOperationCleanupFinishes()
+    {
+        var harness = await OperationHarness.CreateAsync();
+        var cleanupStarted = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var cleanupGate = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        harness.Scheduler.Start(new OperationDefinition(
+            context => context.FrameClock.NextFrameAsync(context.CancellationToken),
+            id: "slow-cleanup",
+            cancelAsync: async _ =>
+            {
+                cleanupStarted.SetResult();
+                await cleanupGate.Task;
+            }));
+        using var cancellation = new CancellationTokenSource();
+
+        var firstShutdown = harness.Host.ShutdownAsync(cancellation.Token);
+        await cleanupStarted.Task;
+        cancellation.Cancel();
+        await Assert.ThrowsAsync<RuntimeLifecycleException>(() => firstShutdown);
+        Assert.Equal(RuntimeHostState.Faulted, harness.Host.State);
+
+        cleanupGate.SetResult();
+        await harness.Host.ShutdownAsync();
+        Assert.Equal(RuntimeHostState.Shutdown, harness.Host.State);
+        Assert.Empty(harness.Scheduler.ActiveOperations);
     }
 
     private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan timeout)

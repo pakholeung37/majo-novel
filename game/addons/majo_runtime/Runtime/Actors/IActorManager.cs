@@ -13,6 +13,14 @@ public interface IActorManager : IRuntimeService
 
     IActor Create(string actorId);
 
+    Task<IActor> CreateAsync(
+        string actorId,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(Create(actorId));
+    }
+
     TActor Get<TActor>(string actorId) where TActor : class, IActor;
 
     bool TryGet(string actorId, out IActor? actor);

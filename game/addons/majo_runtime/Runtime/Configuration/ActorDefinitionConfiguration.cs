@@ -1,3 +1,5 @@
+#nullable enable
+
 using Godot;
 using Majo.Runtime.Actors;
 
@@ -18,6 +20,9 @@ public partial class ActorDefinitionConfiguration : Resource
     [Export]
     public CharacterPositionPreset InitialPosition { get; set; } =
         CharacterPositionPreset.Center;
+
+    [Export]
+    public Resource? FactoryConfiguration { get; set; }
 
     [Export]
     public Godot.Collections.Array<ActorAppearanceConfiguration> Appearances { get; set; } = new();

@@ -19,6 +19,16 @@ if [[ ! -x "$GODOT_EXECUTABLE" ]]; then
     exit 1
 fi
 
+printf 'Checking Majo Runtime and test formatting/static diagnostics...\n'
+run_with_timeout 180 dotnet format "$GAME_PROJECT/Majo Rebuild.csproj" \
+    --verify-no-changes \
+    --include "$GAME_PROJECT/addons/majo_runtime" "$GAME_PROJECT/tests/headless" \
+    --verbosity minimal
+run_with_timeout 180 dotnet format "$UNIT_TEST_PROJECT" \
+    --verify-no-changes \
+    --include "$REPOSITORY_ROOT/tests/Majo.Runtime.UnitTests" \
+    --verbosity minimal
+
 printf 'Building Godot C# project...\n'
 run_with_timeout 180 dotnet build "$GAME_PROJECT/Majo Rebuild.csproj" --nologo --no-incremental
 
@@ -28,9 +38,11 @@ run_with_timeout 180 dotnet test "$UNIT_TEST_PROJECT" --nologo
 printf 'Checking Godot headless import and C# compilation...\n'
 run_with_timeout 180 "$GODOT_EXECUTABLE" --headless --path "$GAME_PROJECT" --editor --quit
 
-printf 'Running Godot headless integration tests...\n'
-run_with_timeout 60 "$GODOT_EXECUTABLE" --headless --path "$GAME_PROJECT" \
-    res://tests/headless/HeadlessTestRunner.tscn
+for headless_run in 1 2 3; do
+    printf 'Running Godot headless integration tests (%s/3)...\n' "$headless_run"
+    run_with_timeout 60 "$GODOT_EXECUTABLE" --headless --path "$GAME_PROJECT" \
+        res://tests/headless/HeadlessTestRunner.tscn
+done
 
 printf 'Verifying that a failing headless assertion returns a non-zero exit code...\n'
 set +e

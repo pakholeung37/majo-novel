@@ -27,14 +27,19 @@ public partial class MajoRuntimeBootstrap : Node
     [Signal]
     public delegate void RuntimeShutdownEventHandler();
 
+    [Signal]
+    public delegate void RuntimeCommandFailedEventHandler(string commandName, string message);
+
     private readonly TaskCompletionSource initializationCompletion =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource shutdownCompletion =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly CancellationTokenSource bootstrapLifetime = new();
     private Task? shutdownTask;
+    private IYarnCommandAdapter? yarnCommandAdapter;
     private bool isExitingTree;
     private bool isBootstrapLifetimeDisposed;
+    private bool isRuntimeShutdownSignalEmitted;
 
     [Export]
     public MajoProjectConfiguration? Configuration { get; set; }
@@ -45,6 +50,8 @@ public partial class MajoRuntimeBootstrap : Node
     public Action<RuntimeServiceRegistry>? ConfigureServices { get; set; }
 
     public Action<ActorManager>? ConfigureActorFactories { get; set; }
+
+    public Action<RuntimeCommandRegistry>? ConfigureCommands { get; set; }
 
     public RuntimeHost? Host { get; private set; }
 
@@ -66,6 +73,7 @@ public partial class MajoRuntimeBootstrap : Node
     {
         isExitingTree = true;
         CancelBootstrapLifetime();
+        EmitRuntimeShutdownOnce();
         shutdownTask ??= ShutdownHostAsync();
     }
 
@@ -128,6 +136,12 @@ public partial class MajoRuntimeBootstrap : Node
                 bootstrapLifetime.Token,
                 "initialization");
 
+            if (Host.Services.TryGet<IYarnCommandAdapter>(out var adapter))
+            {
+                yarnCommandAdapter = adapter!;
+                adapter!.CommandFailed += HandleCommandFailed;
+            }
+
             if (isExitingTree)
             {
                 throw new OperationCanceledException(
@@ -172,14 +186,23 @@ public partial class MajoRuntimeBootstrap : Node
 
         if (YarnDialogueRunner is not null)
         {
+            var commandExtensions = new RuntimeCommandRegistry();
+            ConfigureCommands?.Invoke(commandExtensions);
             services.AddSingleton<IYarnCommandAdapter>(
-                resolver => new YarnCommandAdapter(
-                    new DialogueRunnerCommandRegistry(YarnDialogueRunner),
-                    new RuntimeCommandService(
-                        resolver.Get<IActorManager>(),
-                        resolver.Get<IOperationScheduler>()),
-                    new RuntimeCommandParser(
-                        Configuration!.Operations!.DefaultAnimationDurationSeconds)),
+                resolver =>
+                {
+                    var actors = resolver.Get<IActorManager>();
+                    var operations = resolver.Get<IOperationScheduler>();
+                    return new YarnCommandAdapter(
+                        new DialogueRunnerCommandRegistry(YarnDialogueRunner),
+                        new RuntimeCommandService(actors, operations),
+                        new RuntimeCommandParser(
+                            Configuration!.Operations!.DefaultAnimationDurationSeconds),
+                        actors,
+                        operations,
+                        commandExtensions,
+                        Host!.Services);
+                },
                 typeof(IActorManager),
                 typeof(IOperationScheduler));
         }
@@ -213,6 +236,12 @@ public partial class MajoRuntimeBootstrap : Node
     {
         try
         {
+            if (yarnCommandAdapter is not null)
+            {
+                yarnCommandAdapter.CommandFailed -= HandleCommandFailed;
+                yarnCommandAdapter = null;
+            }
+
             if (Host is not null)
             {
                 await ExecuteWithLifecycleTimeoutAsync(
@@ -224,7 +253,7 @@ public partial class MajoRuntimeBootstrap : Node
             shutdownCompletion.TrySetResult();
             if (!isExitingTree && IsInsideTree())
             {
-                EmitSignal(SignalName.RuntimeShutdown);
+                EmitRuntimeShutdownOnce();
             }
         }
         catch (Exception exception)
@@ -243,6 +272,22 @@ public partial class MajoRuntimeBootstrap : Node
         }
     }
 
+    private void HandleCommandFailed(RuntimeCommandException failure) => EmitSignal(
+        SignalName.RuntimeCommandFailed,
+        failure.CommandName,
+        failure.Message);
+
+    private void EmitRuntimeShutdownOnce()
+    {
+        if (isRuntimeShutdownSignalEmitted || Host is null)
+        {
+            return;
+        }
+
+        isRuntimeShutdownSignalEmitted = true;
+        EmitSignal(SignalName.RuntimeShutdown);
+    }
+
     private void CancelBootstrapLifetime()
     {
         if (!isBootstrapLifetimeDisposed && !bootstrapLifetime.IsCancellationRequested)
@@ -257,22 +302,90 @@ public partial class MajoRuntimeBootstrap : Node
         string operationName)
     {
         var timeoutSeconds = Configuration?.Runtime?.LifecycleTimeoutSeconds ?? 10;
-        using var timeout = new CancellationTokenSource(
-            TimeSpan.FromSeconds(timeoutSeconds));
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(
-            cancellationToken,
-            timeout.Token);
+        var timeout = TimeSpan.FromSeconds(timeoutSeconds);
+        var operationCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken);
+        Task operationTask;
 
         try
         {
-            await operation(linked.Token);
+            operationTask = operation(operationCancellation.Token);
         }
-        catch (Exception exception) when (
-            timeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        catch
         {
-            throw new TimeoutException(
-                $"Majo Runtime {operationName} exceeded {timeoutSeconds:0.###} seconds.",
-                exception);
+            operationCancellation.Dispose();
+            throw;
+        }
+
+        using var deadlineCancellation = new CancellationTokenSource();
+        var cancellationSignal = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        using var cancellationRegistration = cancellationToken.Register(
+            () => cancellationSignal.TrySetResult());
+        var deadlineTask = Task.Delay(timeout, deadlineCancellation.Token);
+        var completedTask = await Task.WhenAny(
+            operationTask,
+            deadlineTask,
+            cancellationSignal.Task);
+
+        if (completedTask == operationTask)
+        {
+            deadlineCancellation.Cancel();
+            try
+            {
+                await operationTask;
+            }
+            finally
+            {
+                operationCancellation.Dispose();
+            }
+
+            return;
+        }
+
+        var cancellationException = TryCancel(operationCancellation);
+        deadlineCancellation.Cancel();
+        _ = ObserveTimedOutOperationAsync(operationTask, operationCancellation);
+
+        if (cancellationToken.IsCancellationRequested)
+        {
+            throw new OperationCanceledException(cancellationToken);
+        }
+
+        var message =
+            $"Majo Runtime {operationName} exceeded {timeoutSeconds:0.###} seconds.";
+        throw cancellationException is null
+            ? new TimeoutException(message)
+            : new TimeoutException(message, cancellationException);
+    }
+
+    private static Exception? TryCancel(CancellationTokenSource cancellation)
+    {
+        try
+        {
+            cancellation.Cancel();
+            return null;
+        }
+        catch (Exception exception)
+        {
+            return exception;
+        }
+    }
+
+    private static async Task ObserveTimedOutOperationAsync(
+        Task operation,
+        CancellationTokenSource cancellation)
+    {
+        try
+        {
+            await operation.ConfigureAwait(false);
+        }
+        catch
+        {
+        }
+        finally
+        {
+            cancellation.Dispose();
         }
     }
 }

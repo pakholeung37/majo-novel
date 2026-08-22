@@ -22,6 +22,9 @@ public sealed class BackgroundActorFactory : IActorFactory
 
     public string FactoryId => ActorFactoryIds.Background;
 
+    public void ValidateDefinition(ActorDefinition definition) =>
+        _ = definition.GetFactoryData<TextureActorDefinitionData>();
+
     public IActor Create(ActorDefinition definition)
     {
         var container = new Control

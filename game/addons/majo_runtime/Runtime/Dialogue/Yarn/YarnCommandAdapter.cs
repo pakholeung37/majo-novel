@@ -4,7 +4,10 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Majo.Runtime.Actors;
+using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue.Commands;
+using Majo.Runtime.Operations;
 
 namespace Majo.Runtime.Dialogue.Yarn;
 
@@ -16,6 +19,10 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
     private readonly IYarnCommandRegistry registry;
     private readonly IRuntimeCommandService commands;
     private readonly RuntimeCommandParser parser;
+    private readonly IActorManager? actors;
+    private readonly IOperationScheduler? operations;
+    private readonly IServiceResolver? services;
+    private readonly RuntimeCommandRegistry extensions;
     private readonly List<string> registeredCommands = new();
     private bool isInitialized;
 
@@ -23,11 +30,29 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
         IYarnCommandRegistry registry,
         IRuntimeCommandService commands,
         RuntimeCommandParser parser)
+        : this(registry, commands, parser, null, null, new RuntimeCommandRegistry(), null)
+    {
+    }
+
+    public YarnCommandAdapter(
+        IYarnCommandRegistry registry,
+        IRuntimeCommandService commands,
+        RuntimeCommandParser parser,
+        IActorManager? actors,
+        IOperationScheduler? operations,
+        RuntimeCommandRegistry? extensions = null,
+        IServiceResolver? services = null)
     {
         this.registry = registry ?? throw new ArgumentNullException(nameof(registry));
         this.commands = commands ?? throw new ArgumentNullException(nameof(commands));
         this.parser = parser ?? throw new ArgumentNullException(nameof(parser));
+        this.actors = actors;
+        this.operations = operations;
+        this.services = services;
+        this.extensions = extensions ?? new RuntimeCommandRegistry();
     }
+
+    public event Action<RuntimeCommandException>? CommandFailed;
 
     public RuntimeCommandException? LastFailure { get; private set; }
 
@@ -41,11 +66,21 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
 
         try
         {
+            extensions.Seal();
             Register("back", (Func<string[], Task>)BackAsync);
             Register("char", (Func<string[], Task>)CharacterAsync);
             Register("hide", (Func<string[], Task>)HideAsync);
             Register("await", (Func<string[], Task>)AwaitAsync);
             Register("cancel", (Func<string[], Task>)CancelAsync);
+            foreach (var extension in extensions.Registrations)
+            {
+                Register(
+                    extension.Name,
+                    (Func<string[], Task>)(arguments => ExecuteAsync(
+                        extension.Name,
+                        context => extension.Handler(arguments, context))));
+            }
+
             isInitialized = true;
             return Task.CompletedTask;
         }
@@ -67,39 +102,56 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
     {
         if (!isInitialized && registeredCommands.Count == 0)
         {
+            registry.Dispose();
             return Task.CompletedTask;
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        UnregisterAll();
-        isInitialized = false;
-        return Task.CompletedTask;
+        try
+        {
+            UnregisterAll();
+            isInitialized = false;
+            return Task.CompletedTask;
+        }
+        finally
+        {
+            registry.Dispose();
+        }
     }
 
     private Task BackAsync(params string[] arguments) => ExecuteAsync(
-        "back", () => commands.BackAsync(parser.ParseBack(arguments)));
+        "back", context => commands.BackAsync(parser.ParseBack(arguments), context));
 
     private Task CharacterAsync(params string[] arguments) => ExecuteAsync(
-        "char", () => commands.CharacterAsync(parser.ParseCharacter(arguments)));
+        "char", context => commands.CharacterAsync(parser.ParseCharacter(arguments), context));
 
     private Task HideAsync(params string[] arguments) => ExecuteAsync(
-        "hide", () => commands.HideAsync(parser.ParseHide(arguments)));
+        "hide", context => commands.HideAsync(parser.ParseHide(arguments), context));
 
     private Task AwaitAsync(params string[] arguments) => ExecuteAsync(
-        "await", () => commands.AwaitAsync(parser.ParseAwait(arguments)));
+        "await", context => commands.AwaitAsync(parser.ParseAwait(arguments), context));
 
     private Task CancelAsync(params string[] arguments) => ExecuteAsync(
-        "cancel", () => commands.CancelAsync(parser.ParseCancel(arguments)));
+        "cancel", context => commands.CancelAsync(parser.ParseCancel(arguments), context));
 
-    private async Task ExecuteAsync(string commandName, Func<Task> execute)
+    private async Task ExecuteAsync(
+        string commandName,
+        Func<RuntimeCommandContext, Task> execute)
     {
+        var context = new RuntimeCommandContext(
+            actors, operations, services, registry.DialogueCancellationToken);
         try
         {
-            await execute();
+            await execute(context);
+        }
+        catch (OperationCanceledException) when (
+            context.CancellationToken.IsCancellationRequested)
+        {
+            // DialogueRunner owns this cancellation; stopping dialogue is not a command failure.
         }
         catch (RuntimeCommandException exception)
         {
-            LastFailure = exception;
+            ReportFailure(exception);
             throw;
         }
         catch (Exception exception)
@@ -108,8 +160,22 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
                 commandName,
                 exception.Message,
                 exception);
-            LastFailure = failure;
+            ReportFailure(failure);
             throw failure;
+        }
+    }
+
+    private void ReportFailure(RuntimeCommandException failure)
+    {
+        LastFailure = failure;
+        try
+        {
+            CommandFailed?.Invoke(failure);
+        }
+        finally
+        {
+            // A diagnostic listener must never prevent the dialogue from being aborted.
+            registry.AbortDialogue();
         }
     }
 

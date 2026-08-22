@@ -81,6 +81,12 @@ public sealed class GodotFrameClock : IFrameClock
 
     public async Task DelayAsync(
         TimeSpan duration,
+        CancellationToken cancellationToken = default) =>
+        await DelayAsync(duration, FrameTimeMode.Scaled, cancellationToken);
+
+    public async Task DelayAsync(
+        TimeSpan duration,
+        FrameTimeMode timeMode,
         CancellationToken cancellationToken = default)
     {
         if (duration < TimeSpan.Zero)
@@ -95,11 +101,23 @@ public sealed class GodotFrameClock : IFrameClock
             return;
         }
 
-        var durationMicroseconds = duration.TotalMilliseconds * 1_000;
-        var startedAtMicroseconds = Time.GetTicksUsec();
-        while (Time.GetTicksUsec() - startedAtMicroseconds < durationMicroseconds)
+        if (timeMode == FrameTimeMode.Unscaled)
+        {
+            var durationMicroseconds = duration.TotalMilliseconds * 1_000;
+            var startedAtMicroseconds = Time.GetTicksUsec();
+            while (Time.GetTicksUsec() - startedAtMicroseconds < durationMicroseconds)
+            {
+                await NextFrameAsync(cancellationToken);
+            }
+
+            return;
+        }
+
+        var elapsedSeconds = 0.0;
+        while (elapsedSeconds < duration.TotalSeconds)
         {
             await NextFrameAsync(cancellationToken);
+            elapsedSeconds += sceneTree.Root.GetProcessDeltaTime();
         }
     }
 

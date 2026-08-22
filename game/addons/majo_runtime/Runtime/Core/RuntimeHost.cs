@@ -54,6 +54,7 @@ public sealed class RuntimeHost : IRuntimeLifetime, IAsyncDisposable
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     var service = resolver.Create(descriptor);
+                    initializedServices.Add(descriptor);
                     try
                     {
                         await service.InitializeAsync(cancellationToken);
@@ -64,8 +65,6 @@ public sealed class RuntimeHost : IRuntimeLifetime, IAsyncDisposable
                             $"Service '{descriptor.ServiceType.FullName}' failed to initialize.",
                             exception);
                     }
-
-                    initializedServices.Add(descriptor);
                 }
 
                 State = RuntimeHostState.Initialized;
@@ -174,7 +173,9 @@ public sealed class RuntimeHost : IRuntimeLifetime, IAsyncDisposable
             CancelLifetimes(exceptions);
 
             exceptions.AddRange(await ShutdownInitializedServicesAsync(cancellationToken));
-            State = RuntimeHostState.Shutdown;
+            State = exceptions.Count == 0
+                ? RuntimeHostState.Shutdown
+                : RuntimeHostState.Faulted;
 
             ThrowIfShutdownFailed(exceptions);
 
@@ -211,13 +212,15 @@ public sealed class RuntimeHost : IRuntimeLifetime, IAsyncDisposable
     {
         var exceptions = new List<Exception>();
 
-        for (var index = initializedServices.Count - 1; index >= 0; index--)
+        var snapshot = initializedServices.ToArray();
+        for (var index = snapshot.Length - 1; index >= 0; index--)
         {
-            var descriptor = initializedServices[index];
+            var descriptor = snapshot[index];
             try
             {
                 await resolver.GetRuntimeService(descriptor.ServiceType)
                     .ShutdownAsync(cancellationToken);
+                initializedServices.Remove(descriptor);
             }
             catch (Exception exception)
             {
@@ -226,8 +229,6 @@ public sealed class RuntimeHost : IRuntimeLifetime, IAsyncDisposable
                     exception));
             }
         }
-
-        initializedServices.Clear();
         return exceptions;
     }
 

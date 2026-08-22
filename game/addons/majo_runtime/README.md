@@ -10,7 +10,7 @@ Compatibility baseline:
 
 Yarn Spinner is an external prerequisite and is not bundled with this plugin.
 
-Current implementation status: M4 Yarn Command adapter.
+Current implementation status: M4.5 architecture and timing hardening.
 
 ## Runtime setup
 
@@ -40,6 +40,14 @@ the session token. Services can explicitly depend on the built-in
 `IRuntimeLifetime` to observe those tokens. Registration and configuration
 failures report typed errors before the service graph starts.
 
+`RuntimeConfiguration.LifecycleTimeoutSeconds` is a hard upper bound on how
+long the bootstrap waits for each lifecycle call. At the deadline it requests
+cancellation and returns a `TimeoutException`; a non-cooperative service task
+continues to be observed until it eventually finishes, avoiding an unobserved
+background fault. `RuntimeShutdown` is emitted exactly once when shutdown
+starts, including direct scene-tree exit. Await `ShutdownCompletion` when the
+caller needs to know that service cleanup has finished.
+
 ## Operations
 
 `MajoRuntimeBootstrap` registers `IFrameClock` and `IOperationScheduler` by
@@ -62,7 +70,9 @@ await operations.WaitAsync(OperationTarget.ForId("maya-fade"));
 cancelled. `Complete` interrupts natural execution, applies the registered
 finalizer, and completes successfully. Faults remain observable through
 `Completion`; the scheduler also observes and logs every background fault.
-Reset cancels all active operations before accepting work for the next session.
+Completed IDs and groups remain awaitable for the current session, including
+their terminal failure or cancellation; reset cancels active operations and
+clears these completion records before accepting work for the next session.
 
 Games can replace either default service in `ConfigureServices` with
 `ReplaceSingleton` before the host builds.
@@ -84,7 +94,11 @@ var maya = actors.Get<ICharacterActor>("maya");
 maya.SetAppearance("happy");
 var move = maya.ChangePosition(
     CharacterPositionPreset.Left,
-    durationSeconds: 0.35,
+    new AnimationSpec(
+        0.35,
+        AnimationTransition.Cubic,
+        AnimationEase.Out,
+        conflictPolicy: AnimationConflictPolicy.CompletePrevious),
     operationId: "maya-move");
 await move.Completion;
 ```
@@ -94,7 +108,16 @@ Character views are `Sprite2D` nodes and backgrounds use full-rect
 force-completes the previous animation, producing a deterministic starting
 state. Actor reset destroys all views and cancels their owned operations.
 Custom factories can be added or replace built-ins through
-`ConfigureActorFactories` before Runtime initialization.
+`ConfigureActorFactories` before Runtime initialization. A custom actor can use
+`ActorDefinitionConfiguration.FactoryConfiguration` for factory-owned data
+instead of the built-in texture appearance schema. Factories validate that
+payload through `ValidateDefinition`; asynchronous factories can override
+`CreateAsync`, while concurrent requests for one Actor ID share one creation.
+
+`IActor` exposes logical/presentation state but no longer exposes a concrete
+Node. Godot-backed actors additionally implement `IGodotActorView`. Target
+properties preserve the requested final state while a Tween is still rendering
+an intermediate value.
 
 ## Yarn commands
 
@@ -142,6 +165,26 @@ exact command usage. The pure command core depends only on `IActorManager` and
 `IOperationScheduler`, while the Yarn-specific layer is isolated behind an
 explicit command registry.
 
+Custom Yarn commands register before initialization without changing Runtime
+core source:
+
+```csharp
+runtime.ConfigureCommands = commands => commands.Register(
+    "set_case_mode",
+    async (arguments, context) =>
+    {
+        var actors = context.Require(context.Actors, "ActorManager");
+        var services = context.Require(context.Services, "ServiceResolver");
+        // Apply game-specific behavior through public Runtime services.
+        await Task.CompletedTask;
+    });
+```
+
+Every handler receives a `RuntimeCommandContext`. Operations tracked through
+the context are cancelled when the current Yarn dialogue stops. Command
+failures emit `RuntimeCommandFailed`, abort the current dialogue and remain
+available through `IYarnCommandAdapter.LastFailure`.
+
 ## Testing
 
 Run the complete local gate from the repository root:
@@ -150,9 +193,10 @@ Run the complete local gate from the repository root:
 ./tools/test.sh
 ```
 
-The gate performs a non-incremental C# build, xUnit tests, Godot headless
-import/compilation, runtime lifecycle integration tests, and a negative probe
-that confirms failed headless assertions return a non-zero exit code.
+The gate performs scoped formatting/static checks, a non-incremental C# build,
+xUnit tests, Godot headless import/compilation, three consecutive runtime/Yarn
+integration runs, and a negative probe that confirms failed headless assertions
+return a non-zero exit code.
 
 Set `GODOT_BIN` when Godot Mono is installed outside the default macOS path:
 

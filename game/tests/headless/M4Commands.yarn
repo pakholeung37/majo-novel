@@ -24,3 +24,15 @@ title: UnknownCommand
 ---
 <<majo_unknown detail>>
 ===
+
+title: StopCancellation
+---
+<<char hero red center 10 true - stop-cancelled>>
+Narrator: should not be presented #line:m45-after-stop
+===
+
+title: CustomCommand
+---
+<<majo_probe alpha>>
+Narrator: custom command completed #line:m45-custom-command
+===

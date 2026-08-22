@@ -98,7 +98,7 @@ public sealed class RuntimeServiceRegistryTests
 
         Assert.Equal(RuntimeHostState.Faulted, host.State);
         Assert.Equal(
-            ["initialize:C", "initialize:failing", "shutdown:C"],
+            ["initialize:C", "initialize:failing", "shutdown:failing", "shutdown:C"],
             events);
         Assert.Contains(nameof(FailingService), exception.ToString(), StringComparison.Ordinal);
 
@@ -199,7 +199,7 @@ public sealed class RuntimeServiceRegistryTests
     }
 
     [Fact(Timeout = 5_000)]
-    public async Task ShutdownContinuesAfterAServiceFailsAndDoesNotRunTwice()
+    public async Task ShutdownRetainsFailedServiceAndCanRetryCleanup()
     {
         var events = new List<string>();
         var registry = new RuntimeServiceRegistry()
@@ -213,7 +213,7 @@ public sealed class RuntimeServiceRegistryTests
         var exception = await Assert.ThrowsAsync<RuntimeLifecycleException>(
             () => host.ShutdownAsync());
 
-        Assert.Equal(RuntimeHostState.Shutdown, host.State);
+        Assert.Equal(RuntimeHostState.Faulted, host.State);
         Assert.Contains(nameof(FailingShutdownService), exception.ToString(), StringComparison.Ordinal);
         Assert.Equal(
             [
@@ -225,7 +225,9 @@ public sealed class RuntimeServiceRegistryTests
             events);
 
         await host.ShutdownAsync();
-        Assert.Equal(4, events.Count);
+        Assert.Equal(RuntimeHostState.Shutdown, host.State);
+        Assert.Equal("shutdown:failing-shutdown", events[^1]);
+        Assert.Equal(5, events.Count);
     }
 
     private abstract class RecordingService : IRuntimeService
@@ -307,6 +309,8 @@ public sealed class RuntimeServiceRegistryTests
 
     private sealed class FailingShutdownService : RecordingService
     {
+        private bool hasFailed;
+
         public FailingShutdownService(ServiceC dependency, IList<string> events)
             : base("failing-shutdown", events)
         {
@@ -318,7 +322,13 @@ public sealed class RuntimeServiceRegistryTests
         public override Task ShutdownAsync(CancellationToken cancellationToken)
         {
             base.ShutdownAsync(cancellationToken);
-            throw new InvalidOperationException("Expected shutdown failure.");
+            if (!hasFailed)
+            {
+                hasFailed = true;
+                throw new InvalidOperationException("Expected shutdown failure.");
+            }
+
+            return Task.CompletedTask;
         }
     }
 

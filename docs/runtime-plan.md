@@ -369,6 +369,7 @@ Headless 验收：
 - Host 持有 Runtime/Session 两级取消生命周期，并通过内建 `IRuntimeLifetime` 支持构造工厂显式注入；Reset 替换 Session，Shutdown 取消两级 Token。
 - 已建立 Inspector 可编辑的 `MajoProjectConfiguration` 和四类子配置，集中验证必填引用、数值、Actor ID、资源路径及 Yarn 版本要求。
 - 门禁通过：16 个纯 C# 单元测试全部通过；Godot headless 覆盖有效启动、Reset、节点退出单次 Shutdown、配置诊断和失败节点清理。
+- 2026-08-22 加固：生命周期等待采用硬 deadline；超时后取消并持续观察底层 Task；场景树退出时 `RuntimeShutdown` 恰好发出一次，完成状态由 `ShutdownCompletion` 表达。
 
 ### M2：Operation 调度内核（已完成）
 
@@ -481,6 +482,33 @@ Headless 验收：
 - Adapter 随 Runtime 初始化显式注册五个命令、关闭时逆序卸载，不注册 Yarn 内建 `wait` 和 VM 特殊命令 `stop`；参数错误包含具体值及完整 usage。
 - Command 产生的后台动画均由 Operation Scheduler 持有；`wait=true` 直接返回 Operation Completion，`await complete` 使用强制完成通道，`cancel` 使用取消通道。
 - 门禁通过：44 个纯 C# 单元测试全部通过；真实 Yarn VM headless 覆盖非等待动画重叠、组汇合、等待型命令暂停、取消/强制完成差异、错误参数与未处理命令诊断。
+
+### M4.5：核心架构与时序加固（已完成）
+
+目标：在 M5 冻结首阶段公共扩展 API 前，修复审查发现的时序窗口并补齐插件扩展边界。
+
+交付：
+
+- Operation ID/Group 在当前 Session 内保留终态记录，已结束 Operation 仍可被精确等待，Reset 后清除记录。
+- Visibility/Opacity 使用同一属性顺序通道，`Show` 可以可靠接管正在执行的 `Hide`。
+- `AnimationSpec` 统一时长、缓动、时间模式和同属性冲突策略；旧 duration 重载保持兼容。
+- Command 获得对话级取消上下文；Yarn Stop 取消该对话拥有的 Operation，正常取消不记为命令失败。
+- 公开 `ConfigureCommands`/`RuntimeCommandRegistry`，自定义 Command 不修改 Core 即可接入 Actor 和 Operation。
+- Command 失败通过 C# event 和 Godot Signal 报告，并终止当前 Yarn 对话。
+- Actor 定义支持 Factory 自有 payload/Resource 和工厂级验证；Texture 配置继续兼容。
+- ActorManager 支持异步创建和同 ID 并发创建去重，Reset/Shutdown 取消 pending creation。
+- Actor 明确区分当前画面状态和 Target 状态；Godot Node 暴露移动到独立 capability。
+- 初始化失败服务参与补偿关闭；失败 Shutdown 保留未清理服务并允许重试。
+- 统一门禁增加限定 Majo 源码的格式/静态检查，并连续执行三次真实 headless 时序测试。
+
+验收：
+
+- 零时长/已结束 Operation 可以 late-await，未知目标仍返回明确错误。
+- `Hide -> Show` 最终为可见且完全不透明。
+- Yarn Stop 后没有对话级活跃 Operation，也不会展示后续台词。
+- 示例自定义 Command 通过公开 Registry 在真实 Yarn VM 中执行。
+- Shutdown 等待超时后可以再次调用并完成剩余清理。
+- 53 个纯 C# 单元测试、Godot/Yarn headless 连续三轮和失败探针全部通过。
 
 ### M5：最小可玩闭环与扩展证明
 

@@ -18,7 +18,8 @@ public static class GodotTweenOperation
         string? id = null,
         string? groupId = null,
         Tween.TransitionType transition = Tween.TransitionType.Linear,
-        Tween.EaseType ease = Tween.EaseType.InOut)
+        Tween.EaseType ease = Tween.EaseType.InOut,
+        bool ignoreTimeScale = false)
     {
         ArgumentNullException.ThrowIfNull(owner);
         ArgumentNullException.ThrowIfNull(target);
@@ -41,6 +42,7 @@ public static class GodotTweenOperation
                 tween = owner.CreateTween();
                 tween.SetTrans(transition);
                 tween.SetEase(ease);
+                tween.SetIgnoreTimeScale(ignoreTimeScale);
                 tween.TweenProperty(target, property, finalValue, durationSeconds);
                 await WaitForTweenAsync(tween, context.CancellationToken);
                 tween = null;

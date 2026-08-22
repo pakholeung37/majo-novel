@@ -20,6 +20,10 @@ public sealed class OperationScheduler : IOperationScheduler
         new(StringComparer.Ordinal);
     private readonly Dictionary<string, HashSet<OperationHandle>> operationsByGroup =
         new(StringComparer.Ordinal);
+    private readonly Dictionary<string, OperationHandle> completedOperationsById =
+        new(StringComparer.Ordinal);
+    private readonly Dictionary<string, HashSet<OperationHandle>> completedOperationsByGroup =
+        new(StringComparer.Ordinal);
     private bool isInitialized;
     private bool acceptsOperations;
 
@@ -75,6 +79,8 @@ public sealed class OperationScheduler : IOperationScheduler
 
         lock (gate)
         {
+            completedOperationsById.Clear();
+            completedOperationsByGroup.Clear();
             if (isInitialized)
             {
                 acceptsOperations = true;
@@ -93,11 +99,16 @@ public sealed class OperationScheduler : IOperationScheduler
             }
 
             acceptsOperations = false;
-            isInitialized = false;
             snapshot = activeOperations.ToArray();
         }
 
         await CancelHandlesAsync(snapshot, cancellationToken);
+        lock (gate)
+        {
+            isInitialized = false;
+            completedOperationsById.Clear();
+            completedOperationsByGroup.Clear();
+        }
     }
 
     public IOperationHandle Start(OperationDefinition definition)
@@ -116,6 +127,11 @@ public sealed class OperationScheduler : IOperationScheduler
             if (definition.Id is not null && operationsById.ContainsKey(definition.Id))
             {
                 throw new DuplicateOperationIdException(definition.Id);
+            }
+
+            if (definition.Id is not null)
+            {
+                completedOperationsById.Remove(definition.Id);
             }
 
             handle = new OperationHandle(
@@ -187,11 +203,30 @@ public sealed class OperationScheduler : IOperationScheduler
                 return [operation];
             }
 
-            if (target.Kind == OperationTargetKind.Group &&
-                operationsByGroup.TryGetValue(target.Name, out var group) &&
-                group.Count > 0)
+            if (target.Kind == OperationTargetKind.Id &&
+                completedOperationsById.TryGetValue(target.Name, out var completedOperation))
             {
-                return group.ToArray();
+                return [completedOperation];
+            }
+
+            if (target.Kind == OperationTargetKind.Group)
+            {
+                var handles = new HashSet<OperationHandle>();
+                if (operationsByGroup.TryGetValue(target.Name, out var group))
+                {
+                    handles.UnionWith(group);
+                }
+
+                if (completedOperationsByGroup.TryGetValue(
+                        target.Name, out var completedGroup))
+                {
+                    handles.UnionWith(completedGroup);
+                }
+
+                if (handles.Count > 0)
+                {
+                    return handles.ToArray();
+                }
             }
         }
 
@@ -270,6 +305,7 @@ public sealed class OperationScheduler : IOperationScheduler
             if (handle.Id is not null)
             {
                 operationsById.Remove(handle.Id);
+                completedOperationsById[handle.Id] = handle;
             }
 
             if (handle.GroupId is not null &&
@@ -280,6 +316,15 @@ public sealed class OperationScheduler : IOperationScheduler
                 {
                     operationsByGroup.Remove(handle.GroupId);
                 }
+
+                if (!completedOperationsByGroup.TryGetValue(
+                        handle.GroupId, out var completedGroup))
+                {
+                    completedGroup = new HashSet<OperationHandle>();
+                    completedOperationsByGroup.Add(handle.GroupId, completedGroup);
+                }
+
+                completedGroup.Add(handle);
             }
         }
     }

@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using Godot;
+using Majo.Runtime.Actors;
 using Majo.Runtime.Core;
 
 namespace Majo.Runtime.Configuration;
@@ -117,6 +118,22 @@ public partial class MajoProjectConfiguration : Resource
                 issues.Add(new ConfigurationIssue(
                     $"{path}.{nameof(actor.FactoryId)}",
                     "Factory ID is required."));
+            }
+
+            var builtInTextureFactory = actor.FactoryId is ActorFactoryIds.Character or
+                ActorFactoryIds.Background;
+            if (builtInTextureFactory && actor.FactoryConfiguration is not null)
+            {
+                issues.Add(new ConfigurationIssue(
+                    $"{path}.{nameof(actor.FactoryConfiguration)}",
+                    $"Built-in factory '{actor.FactoryId}' uses the texture appearance fields."));
+            }
+
+            var usesTextureDefinition = builtInTextureFactory ||
+                (actor.FactoryConfiguration is null && actor.Appearances.Count > 0);
+            if (!usesTextureDefinition)
+            {
+                continue;
             }
 
             if (string.IsNullOrWhiteSpace(actor.DefaultAppearance))

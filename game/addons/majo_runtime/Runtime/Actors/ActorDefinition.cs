@@ -6,17 +6,69 @@ using System.Collections.ObjectModel;
 
 namespace Majo.Runtime.Actors;
 
-public sealed class ActorDefinition
+public class ActorDefinition
 {
+    public ActorDefinition(string id, string factoryId, object? factoryData = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        ArgumentException.ThrowIfNullOrWhiteSpace(factoryId);
+        Id = id;
+        FactoryId = factoryId;
+        FactoryData = factoryData;
+    }
+
     public ActorDefinition(
         string id,
         string factoryId,
         string defaultAppearance,
         IEnumerable<KeyValuePair<string, string>> appearances,
         CharacterPositionPreset initialPosition = CharacterPositionPreset.Center)
+        : this(
+            id,
+            factoryId,
+            new TextureActorDefinitionData(
+                id, defaultAppearance, appearances, initialPosition))
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(id);
-        ArgumentException.ThrowIfNullOrWhiteSpace(factoryId);
+    }
+
+    public string Id { get; }
+
+    public string FactoryId { get; }
+
+    public object? FactoryData { get; }
+
+    public string DefaultAppearance =>
+        GetFactoryData<TextureActorDefinitionData>().DefaultAppearance;
+
+    public CharacterPositionPreset InitialPosition =>
+        GetFactoryData<TextureActorDefinitionData>().InitialPosition;
+
+    public IReadOnlyDictionary<string, string> Appearances =>
+        GetFactoryData<TextureActorDefinitionData>().Appearances;
+
+    public TData GetFactoryData<TData>() where TData : class =>
+        FactoryData as TData ?? throw new ActorDefinitionException(
+            Id,
+            $"Factory '{FactoryId}' requires definition data '{typeof(TData).FullName}'.");
+
+    public bool TryGetFactoryData<TData>(out TData? data) where TData : class
+    {
+        data = FactoryData as TData;
+        return data is not null;
+    }
+
+    public string GetAppearancePath(string appearance) =>
+        GetFactoryData<TextureActorDefinitionData>().GetAppearancePath(Id, appearance);
+}
+
+public sealed class TextureActorDefinitionData
+{
+    public TextureActorDefinitionData(
+        string actorId,
+        string defaultAppearance,
+        IEnumerable<KeyValuePair<string, string>> appearances,
+        CharacterPositionPreset initialPosition = CharacterPositionPreset.Center)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(defaultAppearance);
         ArgumentNullException.ThrowIfNull(appearances);
 
@@ -25,43 +77,37 @@ public sealed class ActorDefinition
         {
             if (string.IsNullOrWhiteSpace(appearance.Key))
             {
-                throw new ActorDefinitionException(id, "Appearance ID is required.");
+                throw new ActorDefinitionException(actorId, "Appearance ID is required.");
             }
 
             if (string.IsNullOrWhiteSpace(appearance.Value))
             {
                 throw new ActorDefinitionException(
-                    id, $"Appearance '{appearance.Key}' requires a resource path.");
+                    actorId, $"Appearance '{appearance.Key}' requires a resource path.");
             }
 
             if (!appearanceMap.TryAdd(appearance.Key, appearance.Value))
             {
                 throw new ActorDefinitionException(
-                    id, $"Appearance ID '{appearance.Key}' is duplicated.");
+                    actorId, $"Appearance ID '{appearance.Key}' is duplicated.");
             }
         }
 
         if (appearanceMap.Count == 0)
         {
-            throw new ActorDefinitionException(id, "At least one appearance is required.");
+            throw new ActorDefinitionException(actorId, "At least one appearance is required.");
         }
 
         if (!appearanceMap.ContainsKey(defaultAppearance))
         {
             throw new ActorDefinitionException(
-                id, $"Default appearance '{defaultAppearance}' is not defined.");
+                actorId, $"Default appearance '{defaultAppearance}' is not defined.");
         }
 
-        Id = id;
-        FactoryId = factoryId;
         DefaultAppearance = defaultAppearance;
         InitialPosition = initialPosition;
         Appearances = new ReadOnlyDictionary<string, string>(appearanceMap);
     }
-
-    public string Id { get; }
-
-    public string FactoryId { get; }
 
     public string DefaultAppearance { get; }
 
@@ -69,12 +115,12 @@ public sealed class ActorDefinition
 
     public IReadOnlyDictionary<string, string> Appearances { get; }
 
-    public string GetAppearancePath(string appearance)
+    public string GetAppearancePath(string actorId, string appearance)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(appearance);
         if (!Appearances.TryGetValue(appearance, out var path))
         {
-            throw new UnknownActorAppearanceException(Id, appearance);
+            throw new UnknownActorAppearanceException(actorId, appearance);
         }
 
         return path;
