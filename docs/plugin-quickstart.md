@@ -61,17 +61,20 @@ Actor 纹理由 `characters/<actor-id>/<appearance>` 或
 ## Command 与动画闭环
 
 ```yarn
-<<back backdrop courtroom 0.5 false setup backdrop-fade>>
-<<char hero calm left 0.5 false setup hero-move>>
-<<await setup false group>>
+<<await>>
+<<back backdrop appearance:courtroom duration:0.5 operation:backdrop-fade>>
+<<char hero appearance:calm position:left duration:0.5 operation:hero-move>>
+<<endAwait>>
 Narrator: 两个动画已经汇合。
-<<char hero determined center 0.3 true - hero-focus>>
+<<char hero appearance:determined position:center duration:0.3 wait:true operation:hero-focus>>
 Narrator: 等待型动画已经完成。
 ```
 
-动画 Command 默认不等待；使用 Group 或 Operation ID 显式汇合。`wait=true`
-只等待当前 Command 创建的 Operation。Yarn Stop 会取消当前对话通过 Context
-追踪的 Operation。
+Actor ID 是唯一的位置参数，其余参数使用不区分大小写的 `name:value` 形式，文档统一
+采用 camelCase Command 名。动画 Command 默认不等待；`await` / `endAwait` 块会等待
+块内所有经 Context 追踪的 Operation。也可使用 `<<await group:setup>>` 或
+`<<await operation:hero-move complete:true>>` 精确汇合。`wait:true` 只等待当前
+Command 创建的 Operation。Yarn Stop 会取消当前对话通过 Context 追踪的 Operation。
 
 ## 扩展
 

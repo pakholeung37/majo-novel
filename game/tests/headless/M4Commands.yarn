@@ -1,23 +1,24 @@
 title: Start
 tags: headless
 ---
-<<back backdrop dark 0.12 false setup back-fade>>
-<<char hero red left 0.12 false setup hero-left>>
-<<await setup false group>>
+<<await>>
+<<back backdrop appearance:dark duration:0.12 operation:back-fade>>
+<<char hero appearance:red position:left duration:0.12 operation:hero-left>>
+<<endAwait>>
 Narrator: after join #line:m4-after-join
-<<char hero blue right 0.08 true - hero-right>>
+<<char hero appearance:blue position:right duration:0.08 wait:true operation:hero-right>>
 Narrator: after wait #line:m4-after-wait
-<<hide hero 1 false - cancelled-hide>>
-<<cancel cancelled-hide id>>
+<<hide hero duration:1 operation:cancelled-hide>>
+<<cancel operation:cancelled-hide>>
 Narrator: after cancel #line:m4-after-cancel
-<<hide hero 1 false - completed-hide>>
-<<await completed-hide true id>>
+<<hide hero duration:1 operation:completed-hide>>
+<<await operation:completed-hide complete:true>>
 Narrator: after complete #line:m4-after-complete
 ===
 
 title: BadArguments
 ---
-<<char hero happy nowhere>>
+<<char hero appearance:happy position:nowhere>>
 ===
 
 title: UnknownCommand
@@ -27,7 +28,7 @@ title: UnknownCommand
 
 title: StopCancellation
 ---
-<<char hero red center 10 true - stop-cancelled>>
+<<char hero appearance:red position:center duration:10 wait:true operation:stop-cancelled>>
 Narrator: should not be presented #line:m45-after-stop
 ===
 

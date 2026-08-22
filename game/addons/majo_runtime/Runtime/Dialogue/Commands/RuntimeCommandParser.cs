@@ -11,15 +11,15 @@ namespace Majo.Runtime.Dialogue.Commands;
 public sealed class RuntimeCommandParser
 {
     public const string BackUsage =
-        "back <actor> <appearance> [duration] [wait] [group|-] [operation|-]";
+        "back <actor> appearance:<id> [duration:<seconds>] [wait:<bool>] [group:<id>] [operation:<id>]";
     public const string CharacterUsage =
-        "char <actor> <appearance> <left|center|right> [duration] [wait] [group|-] [operation|-]";
+        "char <actor> appearance:<id> position:<left|center|right> [duration:<seconds>] [wait:<bool>] [group:<id>] [operation:<id>]";
     public const string HideUsage =
-        "hide <actor> [duration] [wait] [group|-] [operation|-]";
+        "hide <actor> [duration:<seconds>] [wait:<bool>] [group:<id>] [operation:<id>]";
     public const string AwaitUsage =
-        "await <target> [complete] [group|id]";
-    public const string CancelUsage =
-        "cancel <target> [group|id]";
+        "await [group:<id>|operation:<id>] [complete:<bool>]";
+    public const string EndAwaitUsage = "endAwait";
+    public const string CancelUsage = "cancel <group:<id>|operation:<id>>";
 
     private readonly double defaultDurationSeconds;
 
@@ -37,67 +37,117 @@ public sealed class RuntimeCommandParser
 
     public BackCommand ParseBack(IReadOnlyList<string> arguments)
     {
-        RequireCount("back", arguments, 2, 6, BackUsage);
+        var parsed = NamedCommandArguments.Parse(
+            "back",
+            arguments,
+            BackUsage,
+            primaryCount: 1,
+            "appearance",
+            "duration",
+            "wait",
+            "group",
+            "operation");
         return new BackCommand(
-            Required("back", arguments[0], "actor", BackUsage),
-            Required("back", arguments[1], "appearance", BackUsage),
-            Duration("back", arguments, 2, BackUsage),
-            Boolean("back", arguments, 3, false, "wait", BackUsage),
-            OptionalIdentifier(arguments, 4),
-            OptionalIdentifier(arguments, 5));
+            parsed.Primary(0, "actor"),
+            parsed.Required("appearance"),
+            Duration("back", parsed, BackUsage),
+            Boolean("back", parsed, "wait", false, BackUsage),
+            parsed.OptionalIdentifier("group"),
+            parsed.OptionalIdentifier("operation"));
     }
 
     public CharacterCommand ParseCharacter(IReadOnlyList<string> arguments)
     {
-        RequireCount("char", arguments, 3, 7, CharacterUsage);
+        var parsed = NamedCommandArguments.Parse(
+            "char",
+            arguments,
+            CharacterUsage,
+            primaryCount: 1,
+            "appearance",
+            "position",
+            "duration",
+            "wait",
+            "group",
+            "operation");
         return new CharacterCommand(
-            Required("char", arguments[0], "actor", CharacterUsage),
-            Required("char", arguments[1], "appearance", CharacterUsage),
-            Position(arguments[2]),
-            Duration("char", arguments, 3, CharacterUsage),
-            Boolean("char", arguments, 4, false, "wait", CharacterUsage),
-            OptionalIdentifier(arguments, 5),
-            OptionalIdentifier(arguments, 6));
+            parsed.Primary(0, "actor"),
+            parsed.Required("appearance"),
+            Position(parsed.Required("position")),
+            Duration("char", parsed, CharacterUsage),
+            Boolean("char", parsed, "wait", false, CharacterUsage),
+            parsed.OptionalIdentifier("group"),
+            parsed.OptionalIdentifier("operation"));
     }
 
     public HideCommand ParseHide(IReadOnlyList<string> arguments)
     {
-        RequireCount("hide", arguments, 1, 5, HideUsage);
+        var parsed = NamedCommandArguments.Parse(
+            "hide",
+            arguments,
+            HideUsage,
+            primaryCount: 1,
+            "duration",
+            "wait",
+            "group",
+            "operation");
         return new HideCommand(
-            Required("hide", arguments[0], "actor", HideUsage),
-            Duration("hide", arguments, 1, HideUsage),
-            Boolean("hide", arguments, 2, false, "wait", HideUsage),
-            OptionalIdentifier(arguments, 3),
-            OptionalIdentifier(arguments, 4));
+            parsed.Primary(0, "actor"),
+            Duration("hide", parsed, HideUsage),
+            Boolean("hide", parsed, "wait", false, HideUsage),
+            parsed.OptionalIdentifier("group"),
+            parsed.OptionalIdentifier("operation"));
     }
 
-    public AwaitCommand ParseAwait(IReadOnlyList<string> arguments)
+    public AwaitDirective ParseAwait(IReadOnlyList<string> arguments)
     {
-        RequireCount("await", arguments, 1, 3, AwaitUsage);
-        return new AwaitCommand(
-            Target("await", arguments, 0, 2, AwaitUsage),
-            Boolean("await", arguments, 1, false, "complete", AwaitUsage));
+        var parsed = NamedCommandArguments.Parse(
+            "await",
+            arguments,
+            AwaitUsage,
+            primaryCount: 0,
+            "group",
+            "operation",
+            "complete");
+        var complete = Boolean("await", parsed, "complete", false, AwaitUsage);
+        var target = Target("await", parsed, required: false, AwaitUsage);
+        return target is null
+            ? new BeginAwaitDirective(complete)
+            : new TargetAwaitDirective(new AwaitCommand(target.Value, complete));
     }
+
+    public void ParseEndAwait(IReadOnlyList<string> arguments) =>
+        _ = NamedCommandArguments.Parse(
+            "endAwait",
+            arguments,
+            EndAwaitUsage,
+            primaryCount: 0);
 
     public CancelCommand ParseCancel(IReadOnlyList<string> arguments)
     {
-        RequireCount("cancel", arguments, 1, 2, CancelUsage);
-        return new CancelCommand(Target("cancel", arguments, 0, 1, CancelUsage));
+        var parsed = NamedCommandArguments.Parse(
+            "cancel",
+            arguments,
+            CancelUsage,
+            primaryCount: 0,
+            "group",
+            "operation");
+        return new CancelCommand(
+            Target("cancel", parsed, required: true, CancelUsage)!.Value);
     }
 
     private double Duration(
         string command,
-        IReadOnlyList<string> arguments,
-        int index,
+        NamedCommandArguments arguments,
         string usage)
     {
-        if (arguments.Count <= index)
+        var value = arguments.Optional("duration");
+        if (value is null)
         {
             return defaultDurationSeconds;
         }
 
         if (!double.TryParse(
-                arguments[index],
+                value,
                 NumberStyles.Float,
                 CultureInfo.InvariantCulture,
                 out var duration) ||
@@ -106,7 +156,7 @@ public sealed class RuntimeCommandParser
         {
             throw Invalid(
                 command,
-                $"duration '{arguments[index]}' must be a finite, non-negative number",
+                $"duration '{value}' must be a finite, non-negative number",
                 usage);
         }
 
@@ -115,22 +165,22 @@ public sealed class RuntimeCommandParser
 
     private static bool Boolean(
         string command,
-        IReadOnlyList<string> arguments,
-        int index,
-        bool defaultValue,
+        NamedCommandArguments arguments,
         string parameter,
+        bool defaultValue,
         string usage)
     {
-        if (arguments.Count <= index)
+        var text = arguments.Optional(parameter);
+        if (text is null)
         {
             return defaultValue;
         }
 
-        if (!bool.TryParse(arguments[index], out var value))
+        if (!bool.TryParse(text, out var value))
         {
             throw Invalid(
                 command,
-                $"{parameter} '{arguments[index]}' must be true or false",
+                $"{parameter} '{text}' must be true or false",
                 usage);
         }
 
@@ -160,75 +210,44 @@ public sealed class RuntimeCommandParser
             CharacterUsage);
     }
 
-    private static OperationTarget Target(
+    private static OperationTarget? Target(
         string command,
-        IReadOnlyList<string> arguments,
-        int targetIndex,
-        int kindIndex,
+        NamedCommandArguments arguments,
+        bool required,
         string usage)
     {
-        var name = Required(command, arguments[targetIndex], "target", usage);
-        var kind = arguments.Count > kindIndex ? arguments[kindIndex] : "group";
-        if (kind.Equals("group", StringComparison.OrdinalIgnoreCase))
-        {
-            return OperationTarget.ForGroup(name);
-        }
-
-        if (kind.Equals("id", StringComparison.OrdinalIgnoreCase))
-        {
-            return OperationTarget.ForId(name);
-        }
-
-        throw Invalid(
-            command,
-            $"target kind '{kind}' must be group or id",
-            usage);
-    }
-
-    private static string Required(
-        string command,
-        string value,
-        string parameter,
-        string usage)
-    {
-        if (string.IsNullOrWhiteSpace(value) || value == "-")
-        {
-            throw Invalid(command, $"{parameter} is required", usage);
-        }
-
-        return value;
-    }
-
-    private static string? OptionalIdentifier(IReadOnlyList<string> arguments, int index)
-    {
-        if (arguments.Count <= index ||
-            string.IsNullOrWhiteSpace(arguments[index]) ||
-            arguments[index] == "-")
-        {
-            return null;
-        }
-
-        return arguments[index];
-    }
-
-    private static void RequireCount(
-        string command,
-        IReadOnlyCollection<string> arguments,
-        int minimum,
-        int maximum,
-        string usage)
-    {
-        ArgumentNullException.ThrowIfNull(arguments);
-        if (arguments.Count < minimum || arguments.Count > maximum)
+        var group = arguments.OptionalIdentifier("group");
+        var operation = arguments.OptionalIdentifier("operation");
+        if (group is not null && operation is not null)
         {
             throw Invalid(
                 command,
-                $"expected {minimum} to {maximum} arguments, received {arguments.Count}",
+                "group and operation are mutually exclusive",
                 usage);
         }
+
+        if (group is not null)
+        {
+            return OperationTarget.ForGroup(group);
+        }
+
+        if (operation is not null)
+        {
+            return OperationTarget.ForId(operation);
+        }
+
+        if (required)
+        {
+            throw Invalid(
+                command,
+                "either group or operation is required",
+                usage);
+        }
+
+        return null;
     }
 
-    private static RuntimeCommandException Invalid(
+    internal static RuntimeCommandException Invalid(
         string command,
         string message,
         string usage) =>

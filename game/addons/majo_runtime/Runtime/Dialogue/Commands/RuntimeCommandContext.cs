@@ -11,16 +11,20 @@ namespace Majo.Runtime.Dialogue.Commands;
 
 public sealed class RuntimeCommandContext
 {
+    private readonly Action<IOperationHandle>? operationTracked;
+
     internal RuntimeCommandContext(
         IActorManager? actors,
         IOperationScheduler? operations,
         IServiceResolver? services,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action<IOperationHandle>? operationTracked = null)
     {
         Actors = actors;
         Operations = operations;
         Services = services;
         CancellationToken = cancellationToken;
+        this.operationTracked = operationTracked;
     }
 
     public IActorManager? Actors { get; }
@@ -38,6 +42,7 @@ public sealed class RuntimeCommandContext
     public IOperationHandle Track(IOperationHandle operation)
     {
         ArgumentNullException.ThrowIfNull(operation);
+        operationTracked?.Invoke(operation);
         if (!CancellationToken.CanBeCanceled)
         {
             return operation;

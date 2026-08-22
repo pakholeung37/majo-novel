@@ -175,7 +175,7 @@ priority providers can replace project assets without changing logical IDs.
 
 Assign the scene's `DialogueRunner` to `MajoRuntimeBootstrap.YarnDialogueRunner`
 before adding the bootstrap to the tree. The Runtime then explicitly registers
-five command handlers during initialization and removes them during shutdown:
+six command handlers during initialization and removes them during shutdown:
 
 ```csharp
 var runtime = new MajoRuntimeBootstrap
@@ -185,31 +185,42 @@ var runtime = new MajoRuntimeBootstrap
 };
 ```
 
-The frozen M4 positional syntax is:
+Actor commands use one primary positional actor ID followed by order-independent
+named parameters. Parameter names are case-insensitive; canonical command names
+use camelCase:
 
 ```text
-back <actor> <appearance> [duration] [wait] [group|-] [operation|-]
-char <actor> <appearance> <left|center|right> [duration] [wait] [group|-] [operation|-]
-hide <actor> [duration] [wait] [group|-] [operation|-]
-await <target> [complete] [group|id]
-cancel <target> [group|id]
+back <actor> appearance:<id> [duration:<seconds>] [wait:<bool>] [group:<id>] [operation:<id>]
+char <actor> appearance:<id> position:<left|center|right> [duration:<seconds>] [wait:<bool>] [group:<id>] [operation:<id>]
+hide <actor> [duration:<seconds>] [wait:<bool>] [group:<id>] [operation:<id>]
+await [group:<id>|operation:<id>] [complete:<bool>]
+endAwait
+cancel <group:<id>|operation:<id>>
 ```
 
 Durations default to `Operations.DefaultAnimationDurationSeconds`; animated
-commands default to `wait=false`. `-` leaves an optional group or operation ID
-unset. `await` and `cancel` target a group by default, or an individual
-operation when the final argument is `id`.
+commands default to `wait:false`. `group` and `operation` are mutually exclusive
+for `await` and `cancel`. Unknown, duplicated, missing, and unexpected positional
+parameters fail the command with its exact usage.
 
 ```yarn
-<<back backdrop courtroom 0.5 false setup back-fade>>
-<<char maya happy left 0.5 false setup maya-move>>
-<<await setup false group>>
+<<await>>
+<<back backdrop appearance:courtroom duration:0.5 operation:back-fade>>
+<<char maya appearance:happy position:left duration:0.5 operation:maya-move>>
+<<endAwait>>
 
 Maya: 准备完成了。
 
-<<char maya surprised center 0.35 true - maya-center>>
+<<char maya appearance:surprised position:center duration:0.35 wait:true operation:maya-center>>
 Maya: 等一下！
 ```
+
+An `await` block collects operation handles directly, so custom commands are
+included when they call `RuntimeCommandContext.Track`. Blocks may be nested.
+`<<await complete:true>>` completes running operations at `<<endAwait>>` before
+joining them. Targeted forms remain available as `<<await group:setup>>`,
+`<<await operation:maya-move complete:true>>`, and
+`<<cancel operation:maya-move>>`.
 
 The adapter deliberately does not register `wait` or `stop`, preserving Yarn's
 built-in commands. Parsing failures include both the invalid parameter and the

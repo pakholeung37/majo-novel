@@ -16,9 +16,18 @@ public sealed class RuntimeCommandTests
         var parser = new RuntimeCommandParser(0.35);
 
         var character = parser.ParseCharacter(
-            ["maya", "happy", "RIGHT", "0.5", "true", "setup", "maya-move"]);
-        var awaitCommand = parser.ParseAwait(["maya-move", "true", "id"]);
-        var cancelCommand = parser.ParseCancel(["setup"]);
+            [
+                "maya",
+                "operation:maya-move",
+                "WAIT:true",
+                "position:RIGHT",
+                "duration:0.5",
+                "appearance:happy",
+                "group:setup",
+            ]);
+        var awaitDirective = Assert.IsType<TargetAwaitDirective>(
+            parser.ParseAwait(["operation:maya-move", "complete:true"]));
+        var cancelCommand = parser.ParseCancel(["group:setup"]);
 
         Assert.Equal("maya", character.ActorId);
         Assert.Equal("happy", character.Appearance);
@@ -27,20 +36,20 @@ public sealed class RuntimeCommandTests
         Assert.True(character.Wait);
         Assert.Equal("setup", character.GroupId);
         Assert.Equal("maya-move", character.OperationId);
-        Assert.True(awaitCommand.Complete);
-        Assert.Equal(OperationTargetKind.Id, awaitCommand.Target.Kind);
-        Assert.Equal("maya-move", awaitCommand.Target.Name);
+        Assert.True(awaitDirective.Command.Complete);
+        Assert.Equal(OperationTargetKind.Id, awaitDirective.Command.Target.Kind);
+        Assert.Equal("maya-move", awaitDirective.Command.Target.Name);
         Assert.Equal(OperationTargetKind.Group, cancelCommand.Target.Kind);
         Assert.Equal("setup", cancelCommand.Target.Name);
     }
 
     [Fact]
-    public void ParserUsesDefaultsAndDashClearsOptionalBindings()
+    public void ParserUsesDefaultsForOmittedOptionalBindings()
     {
         var parser = new RuntimeCommandParser(0.35);
 
-        var background = parser.ParseBack(["backdrop", "courtroom"]);
-        var hidden = parser.ParseHide(["maya", "0", "false", "-", "hide-maya"]);
+        var background = parser.ParseBack(["backdrop", "appearance:courtroom"]);
+        var hidden = parser.ParseHide(["maya", "operation:hide-maya", "duration:0"]);
 
         Assert.Equal(0.35, background.DurationSeconds);
         Assert.False(background.Wait);
@@ -51,12 +60,32 @@ public sealed class RuntimeCommandTests
         Assert.Equal("hide-maya", hidden.OperationId);
     }
 
+    [Fact]
+    public void ParserDistinguishesAwaitBlockAndTargetForms()
+    {
+        var parser = new RuntimeCommandParser(0.35);
+
+        Assert.Equal(new BeginAwaitDirective(false), parser.ParseAwait([]));
+        Assert.Equal(
+            new BeginAwaitDirective(true),
+            parser.ParseAwait(["complete:true"]));
+        var target = Assert.IsType<TargetAwaitDirective>(
+            parser.ParseAwait(["group:opening"]));
+        Assert.False(target.Command.Complete);
+        Assert.Equal(OperationTarget.ForGroup("opening"), target.Command.Target);
+        parser.ParseEndAwait([]);
+    }
+
     [Theory]
-    [InlineData("expected", "char")]
-    [InlineData("position", "char hero happy diagonal")]
-    [InlineData("duration", "back backdrop dark NaN")]
-    [InlineData("wait", "hide hero 0.2 sometimes")]
-    [InlineData("target kind", "await setup false actor")]
+    [InlineData("appearance", "char hero position:left")]
+    [InlineData("position", "char hero appearance:happy position:diagonal")]
+    [InlineData("duration", "back backdrop appearance:dark duration:NaN")]
+    [InlineData("wait", "hide hero duration:0.2 wait:sometimes")]
+    [InlineData("mutually exclusive", "await group:setup operation:move")]
+    [InlineData("unexpected positional", "back backdrop dark")]
+    [InlineData("duplicated", "hide hero wait:true WAIT:false")]
+    [InlineData("unknown parameter", "back backdrop appearance:dark time:1")]
+    [InlineData("unexpected positional", "endAwait now")]
     public void ParserRejectsInvalidArgumentsWithUsage(
         string expectedDiagnostic,
         string commandText)
@@ -79,6 +108,9 @@ public sealed class RuntimeCommandTests
                     break;
                 case "await":
                     parser.ParseAwait(pieces[1..]);
+                    break;
+                case "endAwait":
+                    parser.ParseEndAwait(pieces[1..]);
                     break;
             }
         });
@@ -174,7 +206,8 @@ public sealed class RuntimeCommandTests
         Assert.DoesNotContain("wait", registry.Handlers.Keys);
         Assert.DoesNotContain("stop", registry.Handlers.Keys);
         var characterHandler = Assert.IsType<Func<string[], Task>>(registry.Handlers["char"]);
-        await characterHandler(["hero", "happy", "center", "0.2", "false", "setup"]);
+        await characterHandler(
+            ["hero", "group:setup", "position:center", "appearance:happy", "duration:0.2"]);
         Assert.Equal("hero", service.Character!.ActorId);
         Assert.Equal(CharacterPositionPreset.Center, service.Character.Position);
 
@@ -197,11 +230,132 @@ public sealed class RuntimeCommandTests
         var handler = Assert.IsType<Func<string[], Task>>(registry.Handlers["char"]);
 
         var exception = await Assert.ThrowsAsync<RuntimeCommandException>(() =>
-            handler(["hero", "happy", "somewhere"]));
+            handler(["hero", "appearance:happy", "position:somewhere"]));
 
         Assert.Same(exception, adapter.LastFailure);
         Assert.Contains("position", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(RuntimeCommandParser.CharacterUsage, exception.Message, StringComparison.Ordinal);
+        await adapter.ShutdownAsync(CancellationToken.None);
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task AwaitBlockWaitsForAllTrackedOperations()
+    {
+        var registry = new FakeCommandRegistry();
+        var hero = new FakeCharacterActor("hero", "idle");
+        var actors = new FakeActorManager(hero);
+        var scheduler = new FakeOperationScheduler();
+        var adapter = new YarnCommandAdapter(
+            registry,
+            new RuntimeCommandService(actors, scheduler),
+            new RuntimeCommandParser(0.35),
+            actors,
+            scheduler);
+        await adapter.InitializeAsync(CancellationToken.None);
+
+        await Handler("await")([]);
+        await Handler("back")(
+            ["backdrop", "appearance:courtroom", "duration:1"]);
+        await Handler("char")(
+            ["hero", "appearance:happy", "position:left", "duration:1"]);
+        var backdrop = actors.Get<FakeBackgroundActor>("backdrop");
+
+        var endTask = Handler("endAwait")([]);
+        Assert.False(endTask.IsCompleted);
+        backdrop.LastOperation.Complete();
+        await Task.Yield();
+        Assert.False(endTask.IsCompleted);
+        hero.LastOperation.Complete();
+        await endTask;
+
+        await adapter.ShutdownAsync(CancellationToken.None);
+
+        Func<string[], Task> Handler(string name) =>
+            Assert.IsType<Func<string[], Task>>(registry.Handlers[name]);
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task AwaitBlockCompleteFinishesTrackedOperationsAtBoundary()
+    {
+        var registry = new FakeCommandRegistry();
+        var hero = new FakeCharacterActor("hero", "idle");
+        var actors = new FakeActorManager(hero);
+        var scheduler = new FakeOperationScheduler();
+        var adapter = new YarnCommandAdapter(
+            registry,
+            new RuntimeCommandService(actors, scheduler),
+            new RuntimeCommandParser(0.35),
+            actors,
+            scheduler);
+        await adapter.InitializeAsync(CancellationToken.None);
+
+        await Handler("await")(["complete:true"]);
+        await Handler("char")(
+            ["hero", "appearance:happy", "position:right", "duration:10"]);
+        await Handler("endAwait")([]);
+
+        Assert.Equal(OperationState.Completed, hero.LastOperation.State);
+        await adapter.ShutdownAsync(CancellationToken.None);
+
+        Func<string[], Task> Handler(string name) =>
+            Assert.IsType<Func<string[], Task>>(registry.Handlers[name]);
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task NestedAwaitBlocksTrackInnerOperationsInBothScopes()
+    {
+        var registry = new FakeCommandRegistry();
+        var hero = new FakeCharacterActor("hero", "idle");
+        var actors = new FakeActorManager(hero);
+        var scheduler = new FakeOperationScheduler();
+        var adapter = new YarnCommandAdapter(
+            registry,
+            new RuntimeCommandService(actors, scheduler),
+            new RuntimeCommandParser(0.35),
+            actors,
+            scheduler);
+        await adapter.InitializeAsync(CancellationToken.None);
+
+        await Handler("await")([]);
+        await Handler("char")(
+            ["hero", "appearance:happy", "position:left", "duration:1"]);
+        await Handler("await")([]);
+        await Handler("back")(
+            ["backdrop", "appearance:courtroom", "duration:1"]);
+        var backdrop = actors.Get<FakeBackgroundActor>("backdrop");
+
+        var innerEnd = Handler("endAwait")([]);
+        Assert.False(innerEnd.IsCompleted);
+        backdrop.LastOperation.Complete();
+        await innerEnd;
+
+        var outerEnd = Handler("endAwait")([]);
+        Assert.False(outerEnd.IsCompleted);
+        hero.LastOperation.Complete();
+        await outerEnd;
+
+        await adapter.ShutdownAsync(CancellationToken.None);
+
+        Func<string[], Task> Handler(string name) =>
+            Assert.IsType<Func<string[], Task>>(registry.Handlers[name]);
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task UnmatchedEndAwaitAbortsDialogueWithClearFailure()
+    {
+        var registry = new FakeCommandRegistry();
+        var adapter = new YarnCommandAdapter(
+            registry,
+            new RecordingCommandService(),
+            new RuntimeCommandParser(0.35));
+        await adapter.InitializeAsync(CancellationToken.None);
+
+        var handler = Assert.IsType<Func<string[], Task>>(registry.Handlers["endAwait"]);
+        var exception = await Assert.ThrowsAsync<RuntimeCommandException>(() => handler([]));
+
+        Assert.Same(exception, adapter.LastFailure);
+        Assert.Contains("matching await block", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(1, registry.AbortCount);
         await adapter.ShutdownAsync(CancellationToken.None);
     }
 
@@ -223,12 +377,14 @@ public sealed class RuntimeCommandTests
         var actorManager = new FakeActorManager();
         var scheduler = new FakeOperationScheduler();
         var extensions = new RuntimeCommandRegistry();
+        var operation = new FakeOperationHandle();
         IReadOnlyList<string>? received = null;
         extensions.Register("probe", (arguments, context) =>
         {
             received = arguments;
             Assert.Same(actorManager, context.Actors);
             Assert.Same(scheduler, context.Operations);
+            context.Track(operation);
             return Task.CompletedTask;
         });
         var adapter = new YarnCommandAdapter(
@@ -240,10 +396,17 @@ public sealed class RuntimeCommandTests
             extensions);
 
         await adapter.InitializeAsync(CancellationToken.None);
+        var begin = Assert.IsType<Func<string[], Task>>(yarnRegistry.Handlers["await"]);
         var handler = Assert.IsType<Func<string[], Task>>(yarnRegistry.Handlers["probe"]);
+        var end = Assert.IsType<Func<string[], Task>>(yarnRegistry.Handlers["endAwait"]);
+        await begin([]);
         await handler(["alpha", "beta"]);
+        var endTask = end([]);
 
         Assert.Equal(["alpha", "beta"], received);
+        Assert.False(endTask.IsCompleted);
+        operation.Complete();
+        await endTask;
         await adapter.ShutdownAsync(CancellationToken.None);
     }
 
@@ -263,12 +426,43 @@ public sealed class RuntimeCommandTests
         await adapter.InitializeAsync(CancellationToken.None);
         var handler = Assert.IsType<Func<string[], Task>>(yarnRegistry.Handlers["char"]);
 
-        await handler(["hero", "happy", "center", "10", "false"]);
+        await handler(
+            ["hero", "appearance:happy", "position:center", "duration:10"]);
         Assert.Equal(OperationState.Running, actor.LastOperation.State);
         yarnRegistry.CancelDialogue();
 
         Assert.Equal(OperationState.Cancelled, actor.LastOperation.State);
         Assert.Null(adapter.LastFailure);
+        await adapter.ShutdownAsync(CancellationToken.None);
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task DialogueCancellationClearsOpenAwaitBlocks()
+    {
+        var yarnRegistry = new FakeCommandRegistry();
+        var actor = new FakeCharacterActor("hero", "idle");
+        var actorManager = new FakeActorManager(actor);
+        var scheduler = new FakeOperationScheduler();
+        var adapter = new YarnCommandAdapter(
+            yarnRegistry,
+            new RuntimeCommandService(actorManager, scheduler),
+            new RuntimeCommandParser(0.35),
+            actorManager,
+            scheduler);
+        await adapter.InitializeAsync(CancellationToken.None);
+        var begin = Assert.IsType<Func<string[], Task>>(yarnRegistry.Handlers["await"]);
+        var character = Assert.IsType<Func<string[], Task>>(yarnRegistry.Handlers["char"]);
+        var end = Assert.IsType<Func<string[], Task>>(yarnRegistry.Handlers["endAwait"]);
+
+        await begin([]);
+        await character(
+            ["hero", "appearance:happy", "position:center", "duration:10"]);
+        yarnRegistry.CancelDialogue();
+        yarnRegistry.BeginDialogue();
+
+        var exception = await Assert.ThrowsAsync<RuntimeCommandException>(() => end([]));
+        Assert.Contains("matching await block", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(OperationState.Cancelled, actor.LastOperation.State);
         await adapter.ShutdownAsync(CancellationToken.None);
     }
 
@@ -296,13 +490,15 @@ public sealed class RuntimeCommandTests
 
     private sealed class FakeCommandRegistry : IYarnCommandRegistry
     {
-        private readonly CancellationTokenSource dialogueCancellation = new();
+        private CancellationTokenSource dialogueCancellation = new();
 
         public CancellationToken DialogueCancellationToken => dialogueCancellation.Token;
 
         public Dictionary<string, Delegate> Handlers { get; } = new(StringComparer.Ordinal);
 
         public List<string> RemovedCommands { get; } = new();
+
+        public int AbortCount { get; private set; }
 
         public void AddCommandHandler(string commandName, Delegate handler) =>
             Handlers.Add(commandName, handler);
@@ -318,6 +514,14 @@ public sealed class RuntimeCommandTests
         }
 
         public void CancelDialogue() => dialogueCancellation.Cancel();
+
+        public void BeginDialogue()
+        {
+            dialogueCancellation.Dispose();
+            dialogueCancellation = new CancellationTokenSource();
+        }
+
+        public void AbortDialogue() => AbortCount++;
 
         public void Dispose() => dialogueCancellation.Dispose();
     }

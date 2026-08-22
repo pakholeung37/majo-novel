@@ -1,14 +1,15 @@
 title: Start
 tags: m5 demo
 ---
-<<back backdrop courtroom 0.18 false opening backdrop-opening>>
-<<char hero calm left 0.18 false opening hero-opening>>
-<<await opening false group>>
+<<await>>
+<<back backdrop appearance:courtroom duration:0.18 operation:backdrop-opening>>
+<<char hero appearance:calm position:left duration:0.18 operation:hero-opening>>
+<<endAwait>>
 
 Narrator: 法庭与角色已经并行动画，并在这里完成汇合。 #line:m5-after-join
 
-<<back backdrop spotlight 0.12 false focus backdrop-focus>>
-<<char hero determined center 0.12 true focus hero-focus>>
+<<back backdrop appearance:spotlight duration:0.12 operation:backdrop-focus>>
+<<char hero appearance:determined position:center duration:0.12 wait:true operation:hero-focus>>
 
 Maya: 等待型角色动画完成，现在请选择调查策略。 #line:m5-after-wait
 -> 追问证词 #line:m5-option-press

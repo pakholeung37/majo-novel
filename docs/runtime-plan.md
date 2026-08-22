@@ -282,7 +282,8 @@ Command 通过 `DialogueRunner.AddCommandHandler` 显式注册，不依赖 `[Yar
 - `back`：设置背景 Appearance 和淡化时长。
 - `char`：创建或修改 Character 的 Appearance、位置、可见性和动画时长。
 - `hide`：隐藏指定 Actor。
-- `await`：等待命名 Operation/组；可选择强制完成。
+- `await`：等待命名 Operation/组，或开始一个收集 Operation 的等待块；可选择强制完成。
+- `endAwait`：结束等待块，并等待块内追踪的 Operation。
 - `cancel`：取消命名 Operation/组。
 
 保留 Yarn 内建命令：
@@ -290,20 +291,23 @@ Command 通过 `DialogueRunner.AddCommandHandler` 显式注册，不依赖 `[Yar
 - `wait`：计时等待。
 - `stop`：结束 Yarn 对话。由于它是 Yarn VM 特殊命令，不能复用为取消命名任务。
 
-首版使用类型化位置参数，所有可选参数必须位于末尾。精确签名由 M4 的编译和源生成器测试确定并冻结。示意：
+Actor ID 保留为主位置参数，其余参数使用不区分大小写的 `name:value` 形式，避免较长
+Command 依赖参数顺序。Command 名的规范拼写使用 camelCase。示意：
 
 ```yarn
-<<back backdrop courtroom 0.5 false setup back-fade>>
-<<char Maya happy left 0.5 false setup maya-left>>
-<<await setup false group>>
+<<await>>
+<<back backdrop appearance:courtroom duration:0.5 operation:back-fade>>
+<<char Maya appearance:happy position:left duration:0.5 operation:maya-left>>
+<<endAwait>>
 
 Maya: 准备完成了。
 
-<<char Maya surprised center 0.35 true - maya-center>>
+<<char Maya appearance:surprised position:center duration:0.35 wait:true operation:maya-center>>
 Maya: 等一下！
 ```
 
-未来可以在不改变底层服务的前提下增加 Naninovel 风格命名参数解析器。
+命名目标仍可独立汇合，例如 `<<await group:setup>>`；使用
+`<<await operation:maya-center complete:true>>` 会先强制完成目标再继续。
 
 ## 10. Milestone 计划
 

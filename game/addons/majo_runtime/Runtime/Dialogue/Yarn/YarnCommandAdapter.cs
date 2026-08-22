@@ -14,7 +14,7 @@ namespace Majo.Runtime.Dialogue.Yarn;
 public sealed class YarnCommandAdapter : IYarnCommandAdapter
 {
     public static readonly IReadOnlyList<string> CommandNames =
-        Array.AsReadOnly(new[] { "back", "char", "hide", "await", "cancel" });
+        Array.AsReadOnly(new[] { "back", "char", "hide", "await", "endAwait", "cancel" });
 
     private readonly IYarnCommandRegistry registry;
     private readonly IRuntimeCommandService commands;
@@ -24,6 +24,7 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
     private readonly IServiceResolver? services;
     private readonly RuntimeCommandRegistry extensions;
     private readonly List<string> registeredCommands = new();
+    private readonly AwaitScopeCoordinator awaitScopes = new();
     private bool isInitialized;
 
     public YarnCommandAdapter(
@@ -71,6 +72,7 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
             Register("char", (Func<string[], Task>)CharacterAsync);
             Register("hide", (Func<string[], Task>)HideAsync);
             Register("await", (Func<string[], Task>)AwaitAsync);
+            Register("endAwait", (Func<string[], Task>)EndAwaitAsync);
             Register("cancel", (Func<string[], Task>)CancelAsync);
             foreach (var extension in extensions.Registrations)
             {
@@ -95,6 +97,7 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
     {
         cancellationToken.ThrowIfCancellationRequested();
         LastFailure = null;
+        awaitScopes.Reset();
         return Task.CompletedTask;
     }
 
@@ -109,12 +112,14 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
         cancellationToken.ThrowIfCancellationRequested();
         try
         {
+            awaitScopes.Reset();
             UnregisterAll();
             isInitialized = false;
             return Task.CompletedTask;
         }
         finally
         {
+            awaitScopes.Dispose();
             registry.Dispose();
         }
     }
@@ -129,7 +134,21 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
         "hide", context => commands.HideAsync(parser.ParseHide(arguments), context));
 
     private Task AwaitAsync(params string[] arguments) => ExecuteAsync(
-        "await", context => commands.AwaitAsync(parser.ParseAwait(arguments), context));
+        "await",
+        context => parser.ParseAwait(arguments) switch
+        {
+            BeginAwaitDirective begin => BeginAwaitAsync(begin, context),
+            TargetAwaitDirective target => commands.AwaitAsync(target.Command, context),
+            _ => throw new RuntimeCommandException("await", "Unknown await directive."),
+        });
+
+    private Task EndAwaitAsync(params string[] arguments) => ExecuteAsync(
+        "endAwait",
+        context =>
+        {
+            parser.ParseEndAwait(arguments);
+            return awaitScopes.EndAsync(context.CancellationToken);
+        });
 
     private Task CancelAsync(params string[] arguments) => ExecuteAsync(
         "cancel", context => commands.CancelAsync(parser.ParseCancel(arguments), context));
@@ -139,7 +158,11 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
         Func<RuntimeCommandContext, Task> execute)
     {
         var context = new RuntimeCommandContext(
-            actors, operations, services, registry.DialogueCancellationToken);
+            actors,
+            operations,
+            services,
+            registry.DialogueCancellationToken,
+            awaitScopes.Track);
         try
         {
             await execute(context);
@@ -163,6 +186,14 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
             ReportFailure(failure);
             throw failure;
         }
+    }
+
+    private Task BeginAwaitAsync(
+        BeginAwaitDirective directive,
+        RuntimeCommandContext context)
+    {
+        awaitScopes.Begin(directive.Complete, context.CancellationToken);
+        return Task.CompletedTask;
     }
 
     private void ReportFailure(RuntimeCommandException failure)
