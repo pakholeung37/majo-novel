@@ -13,6 +13,10 @@ public interface IYarnCommandRegistry
 
     void RemoveCommandHandler(string commandName);
 
+    void CancelDialogue()
+    {
+    }
+
     void AbortDialogue()
     {
     }

@@ -4,8 +4,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using Godot;
-using YarnSpinnerGodot;
+using Majo.Runtime.Dialogue;
 
 namespace Majo.Demo;
 
@@ -14,40 +15,39 @@ public sealed record M5DialogueProbeEvent(
     string Value,
     ulong TimestampMilliseconds);
 
-public partial class M5DialogueProbe : Node, DialoguePresenterBase
+public partial class M5DialogueProbe : Node, IDialoguePresenter
 {
     private readonly List<M5DialogueProbeEvent> events = new();
-    private readonly List<LocalizedLine> lines = new();
+    private readonly List<DialogueLine> lines = new();
 
-    public event Action<LocalizedLine>? LinePresented;
+    public event Action<DialogueLine>? LinePresented;
 
     public IReadOnlyList<M5DialogueProbeEvent> Events => events;
 
-    public IReadOnlyList<LocalizedLine> Lines => lines;
+    public IReadOnlyList<DialogueLine> Lines => lines;
 
     public int PreferredOptionIndex { get; set; }
 
-    public List<IActionMarkupHandler> ActionMarkupHandlers { get; } = new();
-
-    public YarnTask OnDialogueStartedAsync()
+    public Task OnDialogueStartedAsync(CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         Record("dialogue", "started");
-        return YarnTask.CompletedTask;
+        return Task.CompletedTask;
     }
 
-    public async YarnTask RunLineAsync(
-        LocalizedLine line,
-        LineCancellationToken token)
+    public async Task PresentLineAsync(
+        DialogueLine line,
+        DialoguePresentationContext context)
     {
-        token.NextLineToken.ThrowIfCancellationRequested();
+        context.NextLineToken.ThrowIfCancellationRequested();
         lines.Add(line);
-        Record("line", line.TextID);
+        Record("line", line.Id);
         LinePresented?.Invoke(line);
-        await YarnTask.Yield();
+        await Task.Yield();
     }
 
-    public async YarnTask<DialogueOption?> RunOptionsAsync(
-        DialogueOption[] dialogueOptions,
+    public async Task<DialogueOption?> PresentOptionsAsync(
+        IReadOnlyList<DialogueOption> dialogueOptions,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -55,25 +55,26 @@ public partial class M5DialogueProbe : Node, DialoguePresenterBase
         if (available.Length == 0)
         {
             Record("options", "none");
-            return await DialogueRunner.NoOptionSelected;
+            return null;
         }
 
         var selectedIndex = Math.Clamp(PreferredOptionIndex, 0, available.Length - 1);
         var selected = available[selectedIndex];
-        Record("option", selected.TextID);
-        await YarnTask.Yield();
+        Record("option", selected.Line.Id);
+        await Task.Yield();
         return selected;
     }
 
-    public YarnTask OnDialogueCompleteAsync()
+    public Task OnDialogueCompletedAsync(CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         Record("dialogue", "completed");
-        return YarnTask.CompletedTask;
+        return Task.CompletedTask;
     }
 
-    public void OnNodeEnter(string nodeName) => Record("node-enter", nodeName);
+    public void OnNodeEntered(string nodeName) => Record("node-enter", nodeName);
 
-    public void OnNodeExit(string nodeName) => Record("node-exit", nodeName);
+    public void OnNodeExited(string nodeName) => Record("node-exit", nodeName);
 
     private void Record(string kind, string value) => events.Add(
         new M5DialogueProbeEvent(kind, value, Time.GetTicksMsec()));

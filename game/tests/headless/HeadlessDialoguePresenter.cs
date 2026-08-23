@@ -2,27 +2,28 @@
 
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using Godot;
-using YarnSpinnerGodot;
+using Majo.Runtime.Dialogue;
 
 namespace Majo.Runtime.HeadlessTests;
 
-public partial class HeadlessDialoguePresenter : Node, DialoguePresenterBase
+public partial class HeadlessDialoguePresenter : Node, IDialoguePresenter
 {
     private readonly List<string> lines = new();
 
-    public event Action<LocalizedLine>? LinePresented;
+    public event Action<DialogueLine>? LinePresented;
 
     public IReadOnlyList<string> Lines => lines;
 
-    public List<IActionMarkupHandler> ActionMarkupHandlers { get; } = new();
-
-    public async YarnTask RunLineAsync(
-        LocalizedLine line,
-        LineCancellationToken token)
+    public async Task PresentLineAsync(
+        DialogueLine line,
+        DialoguePresentationContext context)
     {
-        lines.Add(line.RawText ?? string.Empty);
+        context.NextLineToken.ThrowIfCancellationRequested();
+        lines.Add(line.Text.Text);
         LinePresented?.Invoke(line);
-        await YarnTask.Yield();
+        await Task.Yield();
     }
 }

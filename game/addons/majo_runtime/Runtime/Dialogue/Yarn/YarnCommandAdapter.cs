@@ -31,6 +31,13 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
 
     public RuntimeCommandException? LastFailure => dispatcher.LastFailure;
 
+    public bool HasActiveCommands => dispatcher.HasActiveCommands;
+
+    public void CancelDialogue() => registry.CancelDialogue();
+
+    public Task DrainDialogueOperationsAsync(CancellationToken cancellationToken) =>
+        dispatcher.DrainDialogueOperationsAsync(cancellationToken);
+
     public Task InitializeAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -64,30 +71,30 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
         }
     }
 
-    public Task ResetAsync(CancellationToken cancellationToken)
+    public async Task ResetAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        await dispatcher.DrainDialogueOperationsAsync(cancellationToken);
         dispatcher.Reset();
-        return Task.CompletedTask;
     }
 
-    public Task ShutdownAsync(CancellationToken cancellationToken)
+    public async Task ShutdownAsync(CancellationToken cancellationToken)
     {
         if (!isInitialized && registeredCommands.Count == 0)
         {
             dispatcher.Dispose();
             registry.Dispose();
-            return Task.CompletedTask;
+            return;
         }
 
         cancellationToken.ThrowIfCancellationRequested();
         try
         {
+            await dispatcher.DrainDialogueOperationsAsync(cancellationToken);
             dispatcher.Reset();
             dispatcher.CommandFailed -= HandleCommandFailed;
             UnregisterAll();
             isInitialized = false;
-            return Task.CompletedTask;
         }
         finally
         {

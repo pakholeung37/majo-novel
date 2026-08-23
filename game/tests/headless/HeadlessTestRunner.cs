@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -8,6 +9,7 @@ using Majo.Runtime;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
+using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Dialogue.Yarn;
 using Majo.Runtime.Operations;
@@ -70,12 +72,7 @@ public partial class HeadlessTestRunner : Node
             Name = "M5DialogueProbe",
             PreferredOptionIndex = 1,
         };
-        var runner = new DialogueRunner
-        {
-            Name = "M5DialogueRunner",
-            dialoguePresenters = new Godot.Collections.Array<Node> { presenter },
-        };
-        runner.AddChild(presenter);
+        AddChild(presenter);
         var portraitHost = new Node2D { Name = "M5PortraitHost" };
         AddChild(portraitHost);
         var configuration = M5DemoComposition.CreateConfiguration();
@@ -83,8 +80,9 @@ public partial class HeadlessTestRunner : Node
         {
             Name = "M5Runtime",
             Configuration = configuration,
-            YarnDialogueRunner = runner,
         };
+        bootstrap.ConfigureDialoguePresenters += presenters =>
+            presenters.Register(presenter);
         var customFactory = M5DemoComposition.ConfigureRuntime(
             bootstrap,
             portraitHost,
@@ -92,27 +90,22 @@ public partial class HeadlessTestRunner : Node
         AddChild(bootstrap);
         await bootstrap.InitializationCompletion;
         var resources = bootstrap.Host!.Services.Get<IResourceManager>();
-        var yarnLoader = resources.CreateLoader<YarnProject>(
-            configuration.Resources!.ScriptsPath);
-        var firstProjectLoad = yarnLoader.LoadAsync(M5DemoComposition.DialogueProjectId);
-        var secondProjectLoad = yarnLoader.LoadAsync(M5DemoComposition.DialogueProjectId);
-        var yarnProjects = await Task.WhenAll(firstProjectLoad, secondProjectLoad);
-        var yarnProject = yarnProjects[0];
-        Assert(ReferenceEquals(yarnProject, yarnProjects[1]),
-            "Concurrent Yarn loads did not share the cached resource instance.");
-        Assert(yarnProject.Program is not null, "M5 Yarn project has no compiled program.");
-        runner.SetProject(yarnProject);
-        AddChild(runner);
-
         var manager = bootstrap.Host!.Services.Get<IActorManager>();
         var scheduler = bootstrap.Host.Services.Get<IOperationScheduler>();
         var caseService = bootstrap.Host.Services.Get<M5CaseService>();
+        var dialogue = bootstrap.Host.Services.Get<IDialoguePlayer>();
+        var variables = bootstrap.Host.Services.Get<IDialogueVariables>();
+        var ownedRunner = bootstrap.Host.Services.Get<IYarnDialogueBackend>().Runner;
+        var sessionEvents = new List<string>();
+        dialogue.Started += _ => sessionEvents.Add("started");
+        dialogue.Completed += _ => sessionEvents.Add("completed");
+        dialogue.Stopped += _ => sessionEvents.Add("stopped");
         var joinedAtFinalState = false;
         var waitedAtFinalState = false;
         presenter.LinePresented += line =>
         {
             var hero = manager.Get<ICharacterActor>("hero");
-            if (line.TextID == "line:m5-after-join")
+            if (line.Id == "line:m5-after-join")
             {
                 var backdrop = manager.Get<IBackgroundActor>("backdrop");
                 joinedAtFinalState =
@@ -121,7 +114,7 @@ public partial class HeadlessTestRunner : Node
                     backdrop.Appearance == "courtroom" &&
                     scheduler.ActiveOperations.Count == 0;
             }
-            else if (line.TextID == "line:m5-after-wait")
+            else if (line.Id == "line:m5-after-wait")
             {
                 waitedAtFinalState =
                     hero.Appearance == "determined" &&
@@ -129,17 +122,33 @@ public partial class HeadlessTestRunner : Node
             }
         };
 
-        await runner.StartDialogue("Start");
+        variables.SetString("headlessProbe", "ready");
+        Assert(variables.Get("$headlessProbe").StringValue == "ready",
+            "Yarn-free dialogue variables did not preserve a string value.");
+        Assert(ownedRunner.VariableStorage.TryGetValue<string>(
+                "$headlessProbe",
+                out var yarnVariable) && yarnVariable == "ready",
+            "Yarn-free dialogue variables were not bridged into Yarn storage.");
+
+        await dialogue.StartAsync();
+        Assert(dialogue.State == DialogueSessionState.Running,
+            "M6 StartAsync returned before the dialogue entered Running.");
+        Assert(dialogue.CurrentProjectId == "main" && dialogue.CurrentNode == "Start",
+            "M6 dialogue did not expose its resolved project and node.");
         await WaitForConditionAsync(() => scheduler.ActiveOperations.Count >= 2, 2);
         Assert(presenter.Lines.Count == 0,
             "M5 dialogue advanced before its parallel opening animations joined.");
-        await runner.DialogueTask;
+        await dialogue.Completion;
 
+        Assert(dialogue.State == DialogueSessionState.Idle,
+            "Naturally completed M6 dialogue did not return to Idle.");
+        Assert(sessionEvents.SequenceEqual(new[] { "started", "completed" }),
+            "M6 natural dialogue session events were out of order.");
         Assert(joinedAtFinalState,
             "M5 parallel animation join did not expose both final Actor states.");
         Assert(waitedAtFinalState,
             "M5 wait=true animation did not finish before the next line.");
-        Assert(presenter.Lines.Select(line => line.TextID).SequenceEqual(new[]
+        Assert(presenter.Lines.Select(line => line.Id).SequenceEqual(new[]
             {
                 "line:m5-after-join",
                 "line:m5-after-wait",
@@ -147,6 +156,11 @@ public partial class HeadlessTestRunner : Node
                 "line:m5-finished",
             }),
             "M5 automatic option selection entered the wrong Yarn branch.");
+        Assert(presenter.Lines[0].Speaker == "Narrator" &&
+                !presenter.Lines[0].Text.Text.StartsWith("Narrator:", StringComparison.Ordinal),
+            "M6 line projection did not separate the speaker from dialogue text.");
+        Assert(dialogue.CurrentLineId == "line:m5-finished",
+            "M6 dialogue did not retain the most recently presented line ID.");
         Assert(caseService.SelectedRoute == "evidence",
             "M5 custom command did not update the custom service.");
         Assert(caseService.InitializeCount == 1,
@@ -165,11 +179,42 @@ public partial class HeadlessTestRunner : Node
         Assert(scheduler.ActiveOperations.Count == 0,
             "M5 dialogue ended with active operations.");
 
+        var missingProject = await AssertThrowsAsync<DialogueProjectException>(
+            () => dialogue.StartAsync(new DialogueStartRequest("missing", "Start")));
+        Assert(missingProject.ProjectId == "missing",
+            "Dialogue project failure did not retain its logical project ID.");
+        Assert(dialogue.State == DialogueSessionState.Faulted,
+            "Dialogue project load failure did not enter Faulted.");
+        Assert(!ownedRunner.IsDialogueRunning && scheduler.ActiveOperations.Count == 0,
+            "Dialogue project load failure leaked Runner or Operation work.");
+
+        var lineCountBeforeStop = presenter.Lines.Count;
+        await dialogue.StartAsync();
+        var stoppedCompletion = dialogue.Completion;
+        await WaitForConditionAsync(() => scheduler.ActiveOperations.Count >= 2, 2);
+        await dialogue.StopAsync();
+        var stopped = await stoppedCompletion;
+        Assert(stopped.Kind == DialogueCompletionKind.Stopped,
+            "M6 active stop did not produce a Stopped completion.");
+        Assert(dialogue.State == DialogueSessionState.Idle,
+            "M6 active stop did not return to Idle.");
+        Assert(sessionEvents.SequenceEqual(new[]
+            {
+                "started",
+                "completed",
+                "started",
+                "stopped",
+            }),
+            "M6 stopped dialogue session events were out of order.");
+        Assert(presenter.Lines.Count == lineCountBeforeStop,
+            "M6 stop allowed a dialogue-owned Presenter line to escape.");
+        Assert(scheduler.ActiveOperations.Count == 0,
+            "M6 stop left dialogue-owned operations active.");
+
         var heroNode = manager.Get<ICharacterActor>("hero").SceneNode;
         Assert(resources.LoadedResourceCount >= 3,
             "Convention-based Actor and Yarn resources did not enter the Runtime cache.");
         await bootstrap.RequestShutdownAsync();
-        runner.QueueFree();
         portraitHost.QueueFree();
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -181,7 +226,7 @@ public partial class HeadlessTestRunner : Node
         Assert(!IsInstanceValid(heroNode),
             "M5 custom Actor node survived Runtime shutdown.");
         Assert(!IsInstanceValid(bootstrap), "M5 Runtime node leaked after shutdown.");
-        Assert(!IsInstanceValid(runner), "M5 DialogueRunner leaked after cleanup.");
+        Assert(!IsInstanceValid(ownedRunner), "M5 DialogueRunner leaked after cleanup.");
         Assert(!IsInstanceValid(portraitHost), "M5 custom Actor host leaked after cleanup.");
         Assert(resources.LoadedResourceCount == 0,
             "Runtime resource cache survived shutdown.");
@@ -189,21 +234,13 @@ public partial class HeadlessTestRunner : Node
 
     private async Task ValidateYarnCommandAdapterAsync()
     {
-        var yarnProject = ResourceLoader.Load<YarnProject>(
-            "res://tests/headless/M4Commands.yarnproject");
-        Assert(yarnProject is not null, "M4 Yarn project failed to import.");
-        Assert(yarnProject.Program is not null, "M4 Yarn project has no compiled program.");
-
         var presenter = new HeadlessDialoguePresenter { Name = "ProbePresenter" };
-        var runner = new DialogueRunner
-        {
-            Name = "M4DialogueRunner",
-            dialoguePresenters = new Godot.Collections.Array<Node> { presenter },
-        };
-        runner.AddChild(presenter);
-        runner.SetProject(yarnProject);
+        AddChild(presenter);
 
         var configuration = MajoProjectConfiguration.CreateDefault();
+        configuration.Resources!.RootPath = "res://tests";
+        configuration.Resources.ScriptsPath = "headless";
+        configuration.Dialogue!.DefaultProjectId = "M4Commands";
         configuration.Actors!.LeftPosition = new Vector2(100, 200);
         configuration.Actors.CenterPosition = new Vector2(200, 200);
         configuration.Actors.RightPosition = new Vector2(300, 200);
@@ -226,7 +263,6 @@ public partial class HeadlessTestRunner : Node
         {
             Name = "M4Runtime",
             Configuration = configuration,
-            YarnDialogueRunner = runner,
             ConfigureServices = services => services.AddSingleton<HeadlessLifecycleService>(
                 _ => customCommandService),
             ConfigureCommands = commands => commands.Register<HeadlessProbeCommandArguments>(
@@ -243,9 +279,13 @@ public partial class HeadlessTestRunner : Node
                     return Task.CompletedTask;
                 }),
         };
+        bootstrap.ConfigureDialoguePresenters += presenters =>
+            presenters.Register(presenter);
         AddChild(bootstrap);
         await bootstrap.InitializationCompletion;
-        AddChild(runner);
+        var yarnBackend = bootstrap.Host!.Services.Get<IYarnDialogueBackend>();
+        var dialogue = bootstrap.Host.Services.Get<IDialoguePlayer>();
+        var runner = yarnBackend.Runner;
 
         var manager = bootstrap.Host!.Services.Get<IActorManager>();
         var scheduler = bootstrap.Host.Services.Get<IOperationScheduler>();
@@ -257,7 +297,7 @@ public partial class HeadlessTestRunner : Node
         presenter.LinePresented += line =>
         {
             var character = manager.Get<ICharacterActor>("hero");
-            switch (line.TextID)
+            switch (line.Id)
             {
                 case "line:m4-after-join":
                     var background = manager.Get<IBackgroundActor>("backdrop");
@@ -281,20 +321,20 @@ public partial class HeadlessTestRunner : Node
             }
         };
 
-        await runner.StartDialogue("Start");
+        await dialogue.StartAsync();
         await WaitForConditionAsync(
             () => scheduler.ActiveOperations.Count >= 2,
             2);
         Assert(presenter.Lines.Count == 0,
             "Yarn advanced past await while grouped animations were active.");
-        await runner.DialogueTask;
+        await dialogue.Completion;
 
         Assert(presenter.Lines.SequenceEqual(new[]
             {
-                "Narrator: after join",
-                "Narrator: after wait",
-                "Narrator: after cancel",
-                "Narrator: after complete",
+                "after join",
+                "after wait",
+                "after cancel",
+                "after complete",
             }),
             "Yarn command test lines were delivered out of order.");
         Assert(joinedAtFinalState,
@@ -313,7 +353,10 @@ public partial class HeadlessTestRunner : Node
             MajoRuntimeBootstrap.SignalName.RuntimeCommandFailed,
             Callable.From<string, string>((command, message) =>
                 commandFailureSignal = $"{command}:{message}"));
-        await runner.StartDialogue("BadArguments");
+        var badArgumentsStart = dialogue.StartAsync(
+            new DialogueStartRequest(StartNode: "BadArguments"));
+        var badArgumentsCompletion = dialogue.Completion;
+        await badArgumentsStart;
         await WaitForConditionAsync(() => adapter.LastFailure is not null, 2);
         Assert(adapter.LastFailure!.CommandName == "char",
             "Bad Yarn arguments were attributed to the wrong command.");
@@ -324,26 +367,29 @@ public partial class HeadlessTestRunner : Node
         Assert(commandFailureSignal.StartsWith("char:", StringComparison.Ordinal),
             "Command failure was not exposed through the Runtime signal.");
         await WaitForConditionAsync(() => !runner.IsDialogueRunning, 2);
+        await AssertThrowsAsync<RuntimeCommandException>(() => badArgumentsCompletion);
+        Assert(dialogue.State == DialogueSessionState.Faulted,
+            "M6 command failure did not fault the dialogue session.");
 
         var unhandledCommand = string.Empty;
         runner.Connect(
             DialogueRunner.SignalName.onUnhandledCommand,
             Callable.From<string>(command => unhandledCommand = command));
-        await runner.StartDialogue("UnknownCommand");
+        await dialogue.StartAsync(new DialogueStartRequest(StartNode: "UnknownCommand"));
         await WaitForConditionAsync(() => unhandledCommand.Length > 0, 2);
         Assert(unhandledCommand == "majo_unknown detail",
             "Yarn did not preserve the unhandled command diagnostic text.");
-        await runner.Stop();
+        await dialogue.StopAsync();
 
         var lineCountBeforeStop = presenter.Lines.Count;
-        await runner.StartDialogue("StopCancellation");
+        await dialogue.StartAsync(new DialogueStartRequest(StartNode: "StopCancellation"));
         await WaitForConditionAsync(
             () => scheduler.ActiveOperations.Any(
                 operation => operation.Id == "stop-cancelled"),
             2);
         var dialogueScopedOperation = scheduler.ActiveOperations.Single(
             operation => operation.Id == "stop-cancelled");
-        await runner.Stop();
+        await dialogue.StopAsync();
         await WaitForConditionAsync(
             () => dialogueScopedOperation.State == OperationState.Cancelled,
             2);
@@ -352,17 +398,18 @@ public partial class HeadlessTestRunner : Node
         Assert(scheduler.ActiveOperations.Count == 0,
             "Stopping Yarn dialogue left a dialogue-scoped operation active.");
 
-        await runner.StartDialogue("CustomCommand");
-        await runner.DialogueTask;
+        await dialogue.StartAsync(new DialogueStartRequest(StartNode: "CustomCommand"));
+        await dialogue.Completion;
         Assert(customCommandRan,
             "Public Runtime command registry did not invoke the custom command.");
-        Assert(presenter.Lines[^1] == "Narrator: custom command completed",
+        Assert(presenter.Lines[^1] == "custom command completed",
             "Yarn did not continue after the custom Runtime command.");
 
         await bootstrap.RequestShutdownAsync();
-        runner.QueueFree();
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Assert(presenter.Lines.Count(line => line == "custom command completed") == 1,
+            "A stopped Yarn command continuation escaped into a later session.");
         Assert(!IsInstanceValid(bootstrap), "M4 Runtime node leaked after shutdown.");
         Assert(!IsInstanceValid(runner), "M4 DialogueRunner leaked after cleanup.");
     }
@@ -877,6 +924,22 @@ public partial class HeadlessTestRunner : Node
         try
         {
             action();
+        }
+        catch (TException exception)
+        {
+            return exception;
+        }
+
+        throw new InvalidOperationException(
+            $"Expected exception '{typeof(TException).Name}' was not thrown.");
+    }
+
+    private static async Task<TException> AssertThrowsAsync<TException>(Func<Task> action)
+        where TException : Exception
+    {
+        try
+        {
+            await action();
         }
         catch (TException exception)
         {

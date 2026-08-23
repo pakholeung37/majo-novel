@@ -16,7 +16,8 @@ C# 命名空间：`Majo.Runtime`
 3. 动画可以按 Naninovel 语义执行：默认非等待、显式等待、并发汇合、取消和强制完成。
 4. 以上行为可以通过严格的纯 C# 单元测试和 Godot headless 测试自动验证。
 
-未来将支持完整视觉小说功能以及类似《逆转裁判》的证词、推理和辩证模式，但当前不实现这些玩法。
+Runtime 将支持完整的通用视觉小说能力；类似《逆转裁判》的证词、证据、推理和辩证
+模式永久由游戏项目或独立玩法插件实现，不进入 Runtime。
 
 ## 2. 已确认的技术基线
 
@@ -34,7 +35,7 @@ C# 命名空间：`Majo.Runtime`
 
 ## 3. 范围边界
 
-### 当前核心范围
+### 第一阶段核心范围（M0-M5，已完成）
 
 - Runtime 组合根和服务生命周期。
 - 配置加载与验证。
@@ -44,16 +45,26 @@ C# 命名空间：`Majo.Runtime`
 - 最小 Yarn 台词与选项闭环。
 - 单元测试、Godot headless 测试和可运行示例。
 
-### 明确后置
+### 第二阶段范围（M6-M10）
+
+- 对话项目加载、播放、停止和会话状态。
+- 键盘、鼠标和手柄输入，以及模态输入所有权。
+- 可直接使用且可整体替换的视觉小说 Presenter。
+- BGM、SFX、Voice 和 Voice Presenter。
+- Auto 阅读与当前 Session 的 History。
+
+### M6-M10 不包含
 
 - 存档、读取、按 line ID 恢复、回滚。
-- 自动播放、快进、已读判定和历史记录。
-- BGM、SFX、Voice。
-- 镜头、复杂转场和特效。
-- 自定义完整对话 UI 和设置 UI。
+- Skip、快进和独立已读判定。
+- 镜头、复杂转场、屏幕特效和设置 UI。
 - Live2D、Spine、分层立绘、视频背景。
 - 多 Yarn 脚本轨道、后台脚本循环以及 Naninovel `sync` 轨道接管。
-- 证词、证据、推理和辩证玩法。
+- 运行时语言切换和完整本地化工具链。
+- Command Source Generator。
+
+证词、证据、推理和辩证玩法永久位于 Majo Runtime 之外，由游戏项目或独立玩法
+插件通过 Runtime 的公开扩展接口实现。
 
 ## 4. 参考 Naninovel 后保留与替换的部分
 
@@ -610,40 +621,255 @@ Scripts = scripts/<project-id>
 
 ## 11. 后续 Roadmap
 
-以下 milestone 只有在 M0-M5 稳定后开始：
+M6-M10 构成第二阶段 Runtime Roadmap。M10 完成后停止继续扩张范围，重新审查是否
+需要存档、镜头或其他独立阶段；推理玩法不进入 Runtime Roadmap。
 
-### M6：视觉小说 Presenter 与输入
+### 11.1 Yarn 隔离标准
 
-- 自定义台词和选项 Presenter。
-- 打字机、继续输入和输入锁。
-- 自动播放、快进、已读判定和历史记录。
+Yarn Spinner 是唯一剧本后端和外部前置依赖，但普通游戏代码不应依赖具体 Yarn 类型。
 
-### M7：音频、镜头和表现
+稳定公共 API 位于：
 
-- BGM、SFX、Voice 服务。
-- 镜头移动、缩放和震动。
-- 更多转场和可复用特效 Operation。
+```text
+Majo.Runtime.Dialogue
+├── IDialoguePlayer
+├── IDialogueVariables
+├── IDialoguePresenter
+├── DialogueLine / DialogueOption
+├── DialogueStartRequest
+└── DialogueSessionState
+```
 
-### M8：状态与存档
+Yarn 细节隔离在：
 
-- 游戏、全局、设置三类状态。
-- Actor、Yarn 变量和播放位置。
-- 存档槽、自动/快速存档和缩略图。
-- 按 Yarn line ID 精确恢复的独立技术设计与验证。
+```text
+Majo.Runtime.Dialogue.Yarn
+├── YarnDialogueBackend
+├── YarnPresenterAdapter
+├── YarnCommandAdapter
+└── YarnLineConverter
+```
 
-### M9：并发脚本轨道
+依赖方向固定为：
 
-- 多 DialogueRunner/Yarn VM 轨道研究。
-- 命名后台脚本、循环、await 和 cancel。
-- 真正的 `sync` 轨道接管语义。
-- 与存档、读取和回滚集成。
+```text
+Game / Default UI -> Majo Dialogue API -> Yarn Adapter -> YarnSpinner-Godot
+```
 
-### M10：推理模式和产品化
+Runtime 不为 Ink、Ren'Py 或其他 VM 建立通用剧本抽象。需要原生 LineProvider、Yarn
+Presenter 或调试能力的高级用户可以显式引用 `Majo.Runtime.Dialogue.Yarn` 的
+Integration Builder；基础安装和使用流程不暴露该入口。
 
-- Dialogue 与证词/证据/推理模式切换协议。
-- 游戏模式栈、输入所有权和 UI 模态管理。
-- 本地化、设置、标题、存读档 UI。
-- 插件打包、版本迁移和兼容性测试。
+### 11.2 M6：Dialogue Session 与 Yarn 隔离（已完成）
+
+目标：让 Runtime 完整拥有对话项目加载和会话生命周期，移除 Demo 对 YarnProject 和
+DialogueRunner 的手工控制。
+
+公共入口建议：
+
+```csharp
+await dialogue.StartAsync(new DialogueStartRequest(
+    ProjectId: "main",
+    StartNode: "Start"));
+
+await dialogue.StopAsync();
+```
+
+状态机：
+
+```text
+Idle -> Loading -> Running -> Stopping -> Idle
+                -> Faulted
+```
+
+确认的所有权规则：
+
+- Runtime 默认创建、持有并释放 Yarn Backend 与 DialogueRunner。
+- 对话必须由 `StartAsync` 显式启动；Runtime 初始化后不自动播放。
+- `DialogueConfiguration` 提供 `main` 和 `Start` 作为默认项目与节点，但调用方可以覆盖。
+- 普通宿主不直接传入 DialogueRunner；测试通过 Fake Backend，原生 Yarn 定制通过高级
+  Integration Builder。
+- Integration Builder 产生的 Backend 仍由 Runtime 管理生命周期，避免双重释放。
+
+交付：
+
+- `IDialoguePlayer`：Start、Stop、状态查询和会话事件。
+- `IDialogueVariables`：Yarn 原生 string、bool、number 的 Yarn 无关访问和变化事件。
+- Yarn 无关的 Line、Option、会话和错误 DTO。
+- 当前 Project ID、Node、最近 Line ID 和选项阶段。
+- Started、LinePresented、OptionsPresented、Completed、Stopped、Failed 事件。
+- 按 `res://assets/scripts/<project-id>` 约定加载项目。
+- Stop、Reset 和 Shutdown 取消当前对话及其拥有的 Operation。
+- M5 Demo 改为只调用 `IDialoguePlayer`，不读取 YarnProject 或操作 DialogueRunner。
+
+非目标：
+
+- 默认可视 UI、打字机、Auto、History 和音频。
+- 通用多剧本 VM 抽象。
+- 对话状态持久化和 line ID 恢复。
+
+严格验收：
+
+- 重复启动、运行中再次启动、加载失败、命令失败、主动停止、Reset 和 Shutdown 都有
+  明确状态及类型化错误。
+- Stop 后不存在对话拥有的活跃 Operation、Presenter 等待或残留 Node。
+- 架构测试保证 `Majo.Runtime.Dialogue` 公共签名不引用 Yarn/YarnSpinner 类型；仅
+  `Majo.Runtime.Dialogue.Yarn` 可以引用。
+- Fake Backend 单元测试覆盖状态机和竞态；真实 Yarn VM headless 覆盖项目加载、事件
+  顺序、变量、正常完成、停止和失败清理。
+
+实施记录（2026-08-23）：
+
+- 新增 Yarn 无关的 `IDialoguePlayer`、`IDialogueVariables`、Presenter Context、Line、
+  Option、Markup、会话状态及类型化异常；稳定 `Majo.Runtime.Dialogue` 公共签名通过反射
+  架构测试保证不引用 Yarn 类型。
+- Runtime 按 `res://assets/scripts/<project-id>` 约定创建并拥有 Yarn Backend、
+  DialogueRunner、变量存储和 Presenter Adapter；默认入口为 `main/Start`，初始化后不
+  自动播放。
+- `StartAsync` 与 `Completion` 分离启动和完成语义；公开 Loading、Running、Stopping、
+  Idle、Faulted 状态，以及 Started、Completed、Stopped、Failed、Line 和 Options 事件。
+- Stop 在等待型 Command 中先取消并汇合 Command/Operation，再于安全 Presenter 边界
+  停止 Yarn VM；返回时没有对话拥有的 Operation、Presenter 等待或延迟 VM Continue。
+- M4/M5 集成测试和可见 Demo 均迁移到 `IDialoguePlayer`；普通代码不再加载 YarnProject、
+  注入或手工释放 DialogueRunner，高级 Yarn 能力隔离在 `Majo.Runtime.Dialogue.Yarn`。
+- 纯 C# 单元测试覆盖默认入口、重复启动、加载期停止、自然完成、主动停止、Faulted
+  恢复、Reset、选项阶段、变量类型和 API 隔离；真实 Yarn headless 覆盖约定加载、
+  事件顺序、变量桥接、项目与 Command 失败、运行中停止及清理。
+- 门禁通过：92 个纯 C# 单元测试、可见 Demo smoke、真实 Yarn/Godot headless 连续
+  三轮和失败探针；Stop/Command 竞态另执行 20 轮 headless 压力测试且无延迟台词、
+  VM Continue、Operation 或 Node 泄漏。
+
+### 11.3 M7：Input Manager
+
+目标：建立 Presenter、菜单和宿主玩法共享的输入所有权系统，避免各 Node 直接争抢
+Godot 输入。
+
+交付：
+
+- `IInputManager`、`IInputHandle` 和 Owner-based Input Scope/Muter。
+- 键盘、鼠标和手柄 Backend；触屏后置。
+- `majo_` 前缀的默认 InputMap Action；只补充缺失项，不覆盖宿主已有绑定。
+- 同帧激活去重、启用/禁用和模态输入接管。
+- Fake Input Backend，使输入仲裁不依赖 SceneTree 即可单元测试。
+
+默认逻辑动作：
+
+```text
+advance
+cancel
+auto
+history
+menu
+optionUp
+optionDown
+confirm
+```
+
+严格验收：
+
+- 后取得的模态 Scope 可以按允许列表接管动作，释放后准确恢复之前所有权。
+- 一个确认输入不会同时完成打字机并跳过整行。
+- Reset、Shutdown 或 Owner 销毁后没有遗留 Muter/Scope。
+- 键鼠和手柄在真实 Godot headless 输入注入下产生相同逻辑动作序列。
+
+### 11.4 M8：Default VN Presenter 与 Yarn Markup Bridge
+
+目标：提供可直接使用、同时可以通过 PackedScene 整体替换的传统单文本框视觉小说 UI。
+
+交付：
+
+- `IDialoguePresenter` 和 Yarn 无关的 Presentation Context。
+- 默认角色名、RichText 正文和选项 Presenter。
+- 可配置打字速度和两阶段继续：首次 Advance 完成立即显示，第二次进入下一行。
+- Presenter 只消费 `IInputManager`，不直接散落处理 Godot `_Input`。
+- Theme、字体和 Presenter PackedScene override。
+- Text 与 Options 内部职责分离，选项支持键鼠和手柄焦点导航。
+- Yarn Adapter 复用 Yarn 的 markup parser、Typewriter 和 Action Markup Handler 能力，
+  将解析结果投影为不可变的 Majo facade；不重新解析或发明新的 markup 语法。
+- 普通自定义 markup handler 通过 Majo 扩展接口注册；原生 Yarn handler 使用高级入口。
+
+非目标：
+
+- 聊天气泡、多 TextPrinter、按角色切换 Printer、Auto 和 History。
+
+严格验收：
+
+- HurryUp、NextLine 和取消 Token 在 Majo Presentation Context 中保持 Yarn 原语义。
+- 打字过程中连续输入、同帧输入、取消、选项出现和 Presenter 被释放均不会越过内容。
+- 未知 markup 保留信息且不破坏文本；已注册 handler 按确定顺序执行。
+- 默认 PackedScene 可直接运行，自定义 PackedScene 可以替换而不修改 Runtime 源码。
+
+### 11.5 M9：Audio Runtime
+
+目标：建立独立、可替换、符合 Operation 时序的 BGM、SFX 和 Voice 服务。
+
+确认的播放模型：
+
+- BGM 支持命名多轨、淡入淡出和交叉淡化。
+- SFX 可以重叠播放，并可按命名实例控制。
+- Voice 默认单通道；新 Voice 中断上一条 Voice。
+
+资源约定：
+
+```text
+res://assets/audio/bgm/<id>
+res://assets/audio/sfx/<id>
+res://assets/audio/voice/<locale>/<line-id>
+```
+
+交付：
+
+- `IAudioManager`、Audio Backend、Audio Configuration 和分类资源 Loader。
+- Master、BGM、SFX、Voice 音量与静音。
+- 所有淡化接入 Operation 的 wait、group、cancel 和 complete 语义。
+- Voice Presenter 根据 line ID 自动解析资源；line metadata 可以严格 override。
+- Audio Command 按 arguments 与 handler colocate，并通过独立 Command Module 注册。
+- Fake Audio Backend 支持确定性时序单元测试。
+
+严格验收：
+
+- BGM 交叉淡化、SFX 重叠、Voice 抢占、取消和强制完成的终态准确。
+- Reset/Shutdown 释放全部 AudioStreamPlayer 和 Operation。
+- Headless 不依赖物理音频设备，通过 Backend、Node 和事件状态验证。
+
+### 11.6 M10：Auto 与 History
+
+目标：补齐普通视觉小说的自动阅读和当前 Session 回看能力，不引入 Skip 或持久化。
+
+Auto 交付：
+
+- Manual 和 Auto 两种状态及明确切换事件。
+- Auto 等待打字完成、Voice 完成和可配置的额外停留时间。
+- 进入选项或打开 History 时自动暂停；关闭后是否恢复由进入前状态决定。
+- 手动 Advance 与 Auto deadline 同时发生时只推进一次。
+
+History 交付：
+
+- 只记录实际展示完成的台词，不记录 Command 和选项。
+- 保存 line ID、角色名、最终文本和 Voice ID。
+- 可配置容量和确定的淘汰顺序。
+- 默认 History UI，并支持重新播放对应 Voice。
+- History 仅存在于当前 Runtime Session，Reset 后清空，不写入磁盘。
+
+严格验收：
+
+- Fake Frame Clock、Fake Input 和 Fake Audio 验证 Auto，不使用真实睡眠。
+- 无 Voice、有 Voice、Voice 被抢占、选项、History 模态和手动输入竞态均有独立测试。
+- History 容量、顺序、重复 line ID、markup 最终文本和 Voice 重播行为确定。
+- 完整可视 Demo 与真实 Yarn/Godot headless 覆盖 Manual、Auto 和 History 闭环。
+
+### 11.7 第二阶段完成定义
+
+M6-M10 只有同时满足以下条件才算完成：
+
+- 完整 Demo 覆盖项目加载、台词、markup、选项、输入、BGM、SFX、Voice、Auto 和
+  History。
+- 普通游戏代码和默认 UI 不引用 Yarn 类型；Yarn 细节仅存在于隔离集成命名空间。
+- 默认 Presenter 可直接运行，也能通过 PackedScene 整体替换。
+- 没有输入争抢、活跃 Operation、残留 Node、Presenter 等待或未观察异步异常。
+- 每个 milestone 通过纯 C# 单元测试、Godot headless、可视 smoke 和失败探针。
+- 核心时序 headless 连续运行三次，无偶发失败和新增未解释警告。
+- Runtime 源码中不存在证词、证据、推理或辩证玩法实现。
 
 ## 12. 严格测试策略
 
@@ -703,7 +929,8 @@ Operation API 和测试明确区分 Cancel 与 Complete，Tween 实现必须分�
 
 ### 过早复制 Naninovel 功能
 
-M0-M5 只实现闭环所需能力。任何存档、音频、复杂 UI、脚本轨道或推理玩法需求进入后续 milestone，不侵入核心交付。
+每个 milestone 只实现已确认的 Runtime 能力。M6-M10 不引入存档、镜头、脚本轨道、
+完整本地化或 Source Generator；推理玩法始终由 Runtime 外部模块实现。
 
 ## 14. 完成定义
 

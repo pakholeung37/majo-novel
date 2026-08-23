@@ -10,16 +10,17 @@ Compatibility baseline:
 
 Yarn Spinner is an external prerequisite and is not bundled with this plugin.
 
-Current implementation status: M5 minimum playable loop plus convention-based
-Runtime resource loading.
+Current implementation status: M6 dialogue session, Yarn isolation, and the M5
+playable loop on the stable Runtime API.
 
 ## Installation
 
 Copy `addons/majo_runtime` into the target Godot C# project's `addons`
 directory, install the compatible YarnSpinner-Godot plugin separately, and
 enable both plugins under **Project Settings > Plugins**. The complete local
-installation, configuration, run, and test walkthrough is in
-[`docs/plugin-quickstart.md`](../../../docs/plugin-quickstart.md).
+installation, configuration, run, and test walkthrough from the M5 baseline is
+archived under `docs/archive/plugin-quickstart.md`; the current dialogue API is
+documented below.
 
 ## Runtime setup
 
@@ -160,9 +161,9 @@ Load other resources by logical ID after Runtime initialization:
 
 ```csharp
 var resources = runtime.Host!.Services.Get<IResourceManager>();
-var yarnProject = await resources
-    .CreateLoader<YarnProject>(configuration.Resources!.ScriptsPath)
-    .LoadAsync("main");
+var texture = await resources
+    .CreateLoader<Texture2D>(configuration.Resources!.CharactersPath)
+    .LoadAsync("maya/happy");
 ```
 
 `ResourceConfiguration` can change the root or category prefixes. A non-empty
@@ -171,20 +172,47 @@ that path only and reports all attempted candidates if it is missing. Custom
 resource providers register through `ConfigureResourceProviders`; higher
 priority providers can replace project assets without changing logical IDs.
 
-## Yarn commands
+## Dialogue sessions
 
-Assign the scene's `DialogueRunner` to `MajoRuntimeBootstrap.YarnDialogueRunner`
-before adding the bootstrap to the tree. During initialization the Runtime
-registers every entry in the immutable command catalog and removes them in
-reverse order during shutdown:
+Runtime creates, owns, and releases its Yarn `DialogueRunner`. Game and Presenter
+code use the Yarn-free `IDialoguePlayer`, while projects continue to follow the
+`res://assets/scripts/<project-id>.yarnproject` resource convention:
 
 ```csharp
-var runtime = new MajoRuntimeBootstrap
-{
-    Configuration = configuration,
-    YarnDialogueRunner = dialogueRunner,
-};
+var dialogue = runtime.Host!.Services.Get<IDialoguePlayer>();
+await dialogue.StartAsync(); // defaults to project "main", node "Start"
+await dialogue.Completion;
+
+await dialogue.StartAsync(new DialogueStartRequest("chapter2", "Opening"));
+await dialogue.StopAsync();
 ```
+
+`StartAsync` returns after the session reaches `Running`; `Completion` represents
+natural completion or an explicit stop. The state machine is
+`Idle -> Loading -> Running -> Stopping -> Idle`, with `Faulted` for project or
+command failures. The player publishes resolved start/stop/completion events,
+current project/node/line IDs, and the current option phase.
+
+Register Yarn-free Presenters before adding the bootstrap to the scene tree:
+
+```csharp
+runtime.ConfigureDialoguePresenters += presenters =>
+    presenters.Register(myPresenter);
+```
+
+`IDialogueVariables` provides number, string, and boolean values without exposing
+Yarn's `$` prefix. The prefix is accepted at the boundary but public change events
+publish normalized names. Reset clears the in-memory session variables.
+
+Only integrations that need native Yarn presenters, providers, or diagnostics
+should reference `Majo.Runtime.Dialogue.Yarn` and resolve `IYarnDialogueBackend`.
+Normal playback and stopping must still go through `IDialoguePlayer` so Runtime can
+enforce Command, Operation, Presenter, and Runner cleanup ordering.
+
+## Yarn commands
+
+During initialization Runtime registers every entry in the immutable command
+catalog on its owned Runner and removes them in reverse order during shutdown.
 
 Actor commands use one primary positional actor ID followed by order-independent
 named parameters. Parameter names are case-insensitive; canonical command names

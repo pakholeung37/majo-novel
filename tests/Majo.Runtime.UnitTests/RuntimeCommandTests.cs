@@ -533,7 +533,8 @@ public sealed class RuntimeCommandTests
         await handler(
             ["hero", "appearance:happy", "position:center", "duration:10"]);
         Assert.Equal(OperationState.Running, actor.LastOperation.State);
-        yarnRegistry.CancelDialogue();
+        adapter.CancelDialogue();
+        await adapter.DrainDialogueOperationsAsync(CancellationToken.None);
 
         Assert.Equal(OperationState.Cancelled, actor.LastOperation.State);
         Assert.Null(adapter.LastFailure);
@@ -567,6 +568,25 @@ public sealed class RuntimeCommandTests
         var exception = await Assert.ThrowsAsync<RuntimeCommandException>(() => end([]));
         Assert.Contains("matching await block", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(OperationState.Cancelled, actor.LastOperation.State);
+        await adapter.ShutdownAsync(CancellationToken.None);
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task CommandsDispatchedAfterDialogueCancellationAreIgnored()
+    {
+        var yarnRegistry = new FakeCommandRegistry();
+        var adapter = CreateAdapter(
+            yarnRegistry,
+            new RecordingCommandService(),
+            out _);
+        await adapter.InitializeAsync(CancellationToken.None);
+        var end = Assert.IsType<Func<string[], Task>>(yarnRegistry.Handlers["endAwait"]);
+
+        adapter.CancelDialogue();
+        await end([]);
+
+        Assert.Null(adapter.LastFailure);
+        Assert.Equal(0, yarnRegistry.AbortCount);
         await adapter.ShutdownAsync(CancellationToken.None);
     }
 

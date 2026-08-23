@@ -8,6 +8,7 @@ using Majo.Runtime.Actors;
 using Majo.Runtime.Actors.Godot;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
+using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Dialogue.Yarn;
 using Majo.Runtime.Operations;
@@ -46,9 +47,6 @@ public partial class MajoRuntimeBootstrap : Node
     [Export]
     public MajoProjectConfiguration? Configuration { get; set; }
 
-    [Export]
-    public DialogueRunner? YarnDialogueRunner { get; set; }
-
     public Action<RuntimeServiceRegistry>? ConfigureServices { get; set; }
 
     public Action<ActorManager>? ConfigureActorFactories { get; set; }
@@ -58,6 +56,8 @@ public partial class MajoRuntimeBootstrap : Node
     public Action<CommandValueConverterRegistry>? ConfigureCommandConverters { get; set; }
 
     public Action<ResourceProviderRegistry>? ConfigureResourceProviders { get; set; }
+
+    public Action<DialoguePresenterRegistry>? ConfigureDialoguePresenters { get; set; }
 
     public RuntimeHost? Host { get; private set; }
 
@@ -198,38 +198,63 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(IOperationScheduler),
                 typeof(IResourceManager));
 
-        if (YarnDialogueRunner is not null)
-        {
-            services.AddSingleton<IYarnCommandAdapter>(
-                resolver =>
-                {
-                    var actors = resolver.Get<IActorManager>();
-                    var operations = resolver.Get<IOperationScheduler>();
-                    var commands = new RuntimeCommandRegistry();
-                    BuiltInRuntimeCommands.Register(
-                        commands,
-                        new ActorCommandService(actors));
-                    ConfigureCommands?.Invoke(commands);
-                    var catalog = commands.BuildCatalog();
-                    var converters = new CommandValueConverterRegistry();
-                    ConfigureCommandConverters?.Invoke(converters);
-                    var binder = new CommandBinder(
-                        new CommandBindingContext(
-                            Configuration!.Operations!.DefaultAnimationDurationSeconds),
-                        converters);
-                    var dispatcher = new RuntimeCommandDispatcher(
-                        binder,
-                        actors,
-                        operations,
-                        Host!.Services);
-                    return new YarnCommandAdapter(
-                        new DialogueRunnerCommandRegistry(YarnDialogueRunner),
-                        catalog,
-                        dispatcher);
-                },
+        var presenterRegistry = new DialoguePresenterRegistry();
+        ConfigureDialoguePresenters?.Invoke(presenterRegistry);
+        services
+            .AddSingleton<IYarnDialogueBackend>(
+                resolver => new YarnDialogueBackend(
+                    this,
+                    resolver.Get<IResourceManager>(),
+                    Configuration!.Resources!.ScriptsPath,
+                    presenterRegistry.Presenters),
+                typeof(IResourceManager))
+            .AddSingleton<IDialogueVariables>(
+                resolver => new DialogueVariables(
+                    resolver.Get<IYarnDialogueBackend>().VariableStore),
+                typeof(IYarnDialogueBackend))
+            .AddSingleton<IYarnCommandAdapter>(
+                resolver => CreateYarnCommandAdapter(
+                    resolver.Get<IYarnDialogueBackend>(),
+                    resolver.Get<IActorManager>(),
+                    resolver.Get<IOperationScheduler>()),
+                typeof(IYarnDialogueBackend),
                 typeof(IActorManager),
-                typeof(IOperationScheduler));
-        }
+                typeof(IOperationScheduler))
+            .AddSingleton<IDialoguePlayer>(
+                resolver => new DialoguePlayer(
+                    resolver.Get<IYarnDialogueBackend>(),
+                    Configuration!.Dialogue!.DefaultProjectId,
+                    Configuration.Dialogue.DefaultStartNode),
+                typeof(IYarnDialogueBackend),
+                typeof(IYarnCommandAdapter));
+    }
+
+    private IYarnCommandAdapter CreateYarnCommandAdapter(
+        IYarnDialogueBackend backend,
+        IActorManager actors,
+        IOperationScheduler operations)
+    {
+        var commands = new RuntimeCommandRegistry();
+        BuiltInRuntimeCommands.Register(commands, new ActorCommandService(actors));
+        ConfigureCommands?.Invoke(commands);
+        var catalog = commands.BuildCatalog();
+        var converters = new CommandValueConverterRegistry();
+        ConfigureCommandConverters?.Invoke(converters);
+        var binder = new CommandBinder(
+            new CommandBindingContext(
+                Configuration!.Operations!.DefaultAnimationDurationSeconds),
+            converters);
+        var dispatcher = new RuntimeCommandDispatcher(
+            binder,
+            actors,
+            operations,
+            Host!.Services);
+        var adapter = new YarnCommandAdapter(
+            new DialogueRunnerCommandRegistry(backend.Runner),
+            catalog,
+            dispatcher);
+        backend.ObserveCommandAdapter(adapter);
+        return adapter;
     }
 
     private ActorManager CreateActorManager(

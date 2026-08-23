@@ -6,9 +6,8 @@ using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime;
 using Majo.Runtime.Core;
+using Majo.Runtime.Dialogue;
 using Majo.Runtime.Operations;
-using Majo.Runtime.Resources;
-using YarnSpinnerGodot;
 
 namespace Majo.Demo;
 
@@ -33,7 +32,7 @@ public partial class M5DemoController : Node
             portraitLayer.AddChild(portraitHost);
             AddChild(portraitLayer);
 
-            Node dialoguePresenter;
+            IDialoguePresenter dialoguePresenter;
             if (automatic)
             {
                 dialoguePresenter = new M5DialogueProbe
@@ -48,19 +47,15 @@ public partial class M5DemoController : Node
                 dialoguePresenter = presenter;
             }
 
-            AddChild(dialoguePresenter);
+            AddChild((Node)dialoguePresenter);
 
-            var runner = new DialogueRunner
-            {
-                Name = "M5DialogueRunner",
-                dialoguePresenters = new Godot.Collections.Array<Node?> { dialoguePresenter },
-            };
             var runtime = new MajoRuntimeBootstrap
             {
                 Name = "M5Runtime",
                 Configuration = configuration,
-                YarnDialogueRunner = runner,
             };
+            runtime.ConfigureDialoguePresenters += presenters =>
+                presenters.Register(dialoguePresenter);
             M5DemoComposition.ConfigureRuntime(
                 runtime,
                 portraitHost,
@@ -68,14 +63,9 @@ public partial class M5DemoController : Node
 
             AddChild(runtime);
             await runtime.InitializationCompletion;
-            var resources = runtime.Host!.Services.Get<IResourceManager>();
-            var yarnProject = await resources
-                .CreateLoader<YarnProject>(configuration.Resources!.ScriptsPath)
-                .LoadAsync(M5DemoComposition.DialogueProjectId);
-            runner.SetProject(yarnProject);
-            AddChild(runner);
-            await runner.StartDialogue("Start");
-            await runner.DialogueTask;
+            var dialogue = runtime.Host!.Services.Get<IDialoguePlayer>();
+            await dialogue.StartAsync();
+            await dialogue.Completion;
 
             var services = runtime.Host!.Services;
             var scheduler = services.Get<IOperationScheduler>();
@@ -88,7 +78,6 @@ public partial class M5DemoController : Node
             }
 
             await runtime.RequestShutdownAsync();
-            runner.QueueFree();
             portraitLayer.QueueFree();
             if (caseService.ShutdownCount != 1 ||
                 !caseService.RuntimeWasCancelledAtShutdown)
@@ -99,7 +88,7 @@ public partial class M5DemoController : Node
 
             if (automatic)
             {
-                dialoguePresenter.QueueFree();
+                ((Node)dialoguePresenter).QueueFree();
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 GD.Print($"M5 visible-scene smoke test passed: route={route}.");

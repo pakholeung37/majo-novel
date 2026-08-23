@@ -295,5 +295,19 @@ public partial class MajoProjectConfiguration : Resource
                 $"{nameof(Dialogue)}.{nameof(Dialogue.RequiredYarnRuntimeVersion)}",
                 $"Version must be {MajoRuntimeMetadata.RequiredYarnRuntimeVersion}."));
         }
+
+        if (string.IsNullOrWhiteSpace(Dialogue.DefaultProjectId))
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Dialogue)}.{nameof(Dialogue.DefaultProjectId)}",
+                "Default project ID is required."));
+        }
+
+        if (string.IsNullOrWhiteSpace(Dialogue.DefaultStartNode))
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Dialogue)}.{nameof(Dialogue.DefaultStartNode)}",
+                "Default start node is required."));
+        }
     }
 }

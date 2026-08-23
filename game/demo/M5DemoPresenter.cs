@@ -6,11 +6,11 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
-using YarnSpinnerGodot;
+using Majo.Runtime.Dialogue;
 
 namespace Majo.Demo;
 
-public partial class M5DemoPresenter : CanvasLayer, DialoguePresenterBase
+public partial class M5DemoPresenter : CanvasLayer, IDialoguePresenter
 {
     private readonly List<Button> optionButtons = new();
     private Label lineLabel = null!;
@@ -19,38 +19,37 @@ public partial class M5DemoPresenter : CanvasLayer, DialoguePresenterBase
     private VBoxContainer optionList = null!;
     private TaskCompletionSource? lineCompletion;
 
-    public List<IActionMarkupHandler> ActionMarkupHandlers { get; } = new();
-
     public override void _Ready()
     {
         Layer = 20;
         BuildInterface();
     }
 
-    public YarnTask OnDialogueStartedAsync()
+    public Task OnDialogueStartedAsync(CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         SetStatus("Runtime ready · Yarn dialogue running");
-        return YarnTask.CompletedTask;
+        return Task.CompletedTask;
     }
 
-    public async YarnTask RunLineAsync(
-        LocalizedLine line,
-        LineCancellationToken token)
+    public async Task PresentLineAsync(
+        DialogueLine line,
+        DialoguePresentationContext context)
     {
         ClearOptions();
-        lineLabel.Text = line.RawText ?? string.Empty;
+        lineLabel.Text = line.Text.Text;
         continueButton.Visible = true;
         lineCompletion = new TaskCompletionSource(
             TaskCreationOptions.RunContinuationsAsynchronously);
-        using var registration = token.NextLineToken.Register(
+        using var registration = context.NextLineToken.Register(
             () => lineCompletion.TrySetResult());
         await lineCompletion.Task;
         lineCompletion = null;
         continueButton.Visible = false;
     }
 
-    public async YarnTask<DialogueOption?> RunOptionsAsync(
-        DialogueOption[] dialogueOptions,
+    public async Task<DialogueOption?> PresentOptionsAsync(
+        IReadOnlyList<DialogueOption> dialogueOptions,
         CancellationToken cancellationToken)
     {
         continueButton.Visible = false;
@@ -64,7 +63,7 @@ public partial class M5DemoPresenter : CanvasLayer, DialoguePresenterBase
         {
             var button = new Button
             {
-                Text = option.Line.RawText ?? option.TextID,
+                Text = option.Line.Text.Text,
                 CustomMinimumSize = new Vector2(0, 52),
             };
             button.Pressed += () => completion.TrySetResult(option);
@@ -74,7 +73,7 @@ public partial class M5DemoPresenter : CanvasLayer, DialoguePresenterBase
 
         if (optionButtons.Count == 0)
         {
-            return await DialogueRunner.NoOptionSelected;
+            return null;
         }
 
         optionButtons[0].GrabFocus();
@@ -83,11 +82,12 @@ public partial class M5DemoPresenter : CanvasLayer, DialoguePresenterBase
         return selected;
     }
 
-    public YarnTask OnDialogueCompleteAsync()
+    public Task OnDialogueCompletedAsync(CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         continueButton.Visible = false;
         ClearOptions();
-        return YarnTask.CompletedTask;
+        return Task.CompletedTask;
     }
 
     public void SetStatus(string text)

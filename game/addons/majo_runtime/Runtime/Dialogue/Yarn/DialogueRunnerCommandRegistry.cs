@@ -81,7 +81,7 @@ public sealed class DialogueRunnerCommandRegistry : IYarnCommandRegistry
 
     private void CompleteDialogue() => CancelDialogue();
 
-    private void CancelDialogue()
+    public void CancelDialogue()
     {
         if (!dialogueCancellation.IsCancellationRequested)
         {
