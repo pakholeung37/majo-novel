@@ -11,6 +11,8 @@ using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Dialogue.Yarn;
+using Majo.Runtime.Input;
+using Majo.Runtime.Input.Godot;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Operations.Godot;
 using Majo.Runtime.Resources;
@@ -174,6 +176,13 @@ public partial class MajoRuntimeBootstrap : Node
     private void RegisterDefaultServices(RuntimeServiceRegistry services)
     {
         services
+            .AddSingleton<IInputBackend>(
+                _ => new GodotInputBackend(this, Configuration!.Input!))
+            .AddSingleton<IInputManager>(
+                resolver => new InputManager(
+                    resolver.Get<IInputBackend>(),
+                    Configuration!.Input!.Enabled),
+                typeof(IInputBackend))
             .AddSingleton<IFrameClock>(_ => new GodotFrameClock(GetTree()))
             .AddSingleton<IResourceManager>(
                 resolver => CreateResourceManager(

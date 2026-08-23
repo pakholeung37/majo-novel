@@ -28,6 +28,9 @@ public partial class MajoProjectConfiguration : Resource
     [Export]
     public DialogueConfiguration? Dialogue { get; set; }
 
+    [Export]
+    public InputConfiguration? Input { get; set; }
+
     public static MajoProjectConfiguration CreateDefault() => new()
     {
         Runtime = new RuntimeConfiguration(),
@@ -35,6 +38,7 @@ public partial class MajoProjectConfiguration : Resource
         Resources = new ResourceConfiguration(),
         Actors = new ActorConfiguration(),
         Dialogue = new DialogueConfiguration(),
+        Input = new InputConfiguration(),
     };
 
     public ConfigurationValidationResult Validate(Func<string, bool>? resourceExists = null)
@@ -47,6 +51,7 @@ public partial class MajoProjectConfiguration : Resource
         ValidateResources(issues);
         ValidateActors(issues, resourceExists);
         ValidateDialogue(issues);
+        ValidateInput(issues);
 
         return new ConfigurationValidationResult(issues);
     }
@@ -308,6 +313,14 @@ public partial class MajoProjectConfiguration : Resource
             issues.Add(new ConfigurationIssue(
                 $"{nameof(Dialogue)}.{nameof(Dialogue.DefaultStartNode)}",
                 "Default start node is required."));
+        }
+    }
+
+    private void ValidateInput(ICollection<ConfigurationIssue> issues)
+    {
+        if (Input is null)
+        {
+            issues.Add(new ConfigurationIssue(nameof(Input), "Configuration is required."));
         }
     }
 }

@@ -741,6 +741,8 @@ Idle -> Loading -> Running -> Stopping -> Idle
 
 ### 11.3 M7：Input Manager
 
+状态：已完成。
+
 目标：建立 Presenter、菜单和宿主玩法共享的输入所有权系统，避免各 Node 直接争抢
 Godot 输入。
 
@@ -772,20 +774,53 @@ confirm
 - Reset、Shutdown 或 Owner 销毁后没有遗留 Muter/Scope。
 - 键鼠和手柄在真实 Godot headless 输入注入下产生相同逻辑动作序列。
 
+实施记录（2026-08-23）：
+
+- 新增 Yarn 无关的 `IInputManager`、`IInputHandle`、`IInputBackend`、逻辑 Action、设备
+  类型与激活事件；Presenter 和玩法层不需要直接处理 Godot `_Input`。
+- 普通 Scope 按后取得者优先拥有匹配动作；Modal Scope 形成 allowlist 边界并阻止其余
+  动作穿透；Muter 可屏蔽全部或指定动作，释放或禁用后确定恢复。
+- Scope 与 Muter 均绑定 Owner；同一 Owner 可统一释放，Godot Node 退出树时自动释放，
+  Reset 和 Shutdown 强制清空全部 Handle 与输入订阅。
+- Godot Backend 只安装缺失的 `majo_` InputMap Action，不改写宿主已有绑定；键盘、鼠标、
+  手柄事件投影为同一逻辑动作，一个物理事件即使匹配重叠绑定也至多产生一个激活。
+- Manager 对同动作执行同帧去重；提供全局和 Handle 级启停，配置的初始启用状态会在
+  Reset 后恢复。
+- `FakeInputBackend` 支持不启动 SceneTree 的输入仲裁测试；真实 Godot headless 覆盖
+  InputMap 约定、宿主绑定保留、键鼠手柄注入、重叠绑定、Owner 销毁、Reset、Shutdown
+  及 Node 清理。
+- 门禁通过：103 个纯 C# 单元测试、可见 Demo smoke、Godot headless 导入与编译、真实
+  Yarn/Godot headless 连续三轮及失败探针；仅保留 Yarn 插件既有的 `SYSLIB1220` 警告。
+
 ### 11.4 M8：Default VN Presenter 与 Yarn Markup Bridge
 
 目标：提供可直接使用、同时可以通过 PackedScene 整体替换的传统单文本框视觉小说 UI。
 
+架构决策：
+
+- 默认台词显示以内建集成方式组合 Yarn `LinePresenter`、`IAsyncTypewriter`、
+  `MarkupParseResult` 和 `ActionMarkupHandler`；Majo 不重新实现打字机、Markup 解析、
+  HurryUp/NextLine Token 或台词淡入淡出。
+- `IDialoguePlayer`、Yarn-free Line/Option/Markup DTO、项目加载、会话状态和安全停止继续由
+  M6 提供；`IDialoguePresenter` 保留为可选的 Yarn-free 扩展入口，不要求默认 UI 通过它
+  重写 Yarn 已有能力。
+- Runtime 内部允许原生 Yarn Presenter 与 Majo 投影 Adapter 同时挂载；原生类型只存在于
+  `Majo.Runtime.Dialogue.Yarn` 集成层，不进入普通游戏代码或稳定公共 API。
+- 不使用 Yarn `LineAdvancer`。默认输入桥只消费 M7 `IInputManager`，一次 Advance 根据
+  当前显示阶段选择 HurryUp 或 NextLine，避免同一物理输入在一帧内触发两者。
+- Options 可以复用 Yarn 的 OptionItem/Button/焦点机制，但导航、确认和取消的所有权必须
+  由 M7 Modal Scope 管理，不能绕过输入仲裁直接轮询 Godot Input。
+
 交付：
 
 - `IDialoguePresenter` 和 Yarn 无关的 Presentation Context。
-- 默认角色名、RichText 正文和选项 Presenter。
+- 基于 Yarn 原生 Presenter 能力组合默认角色名、RichText 正文和选项 UI。
 - 可配置打字速度和两阶段继续：首次 Advance 完成立即显示，第二次进入下一行。
 - Presenter 只消费 `IInputManager`，不直接散落处理 Godot `_Input`。
 - Theme、字体和 Presenter PackedScene override。
 - Text 与 Options 内部职责分离，选项支持键鼠和手柄焦点导航。
-- Yarn Adapter 复用 Yarn 的 markup parser、Typewriter 和 Action Markup Handler 能力，
-  将解析结果投影为不可变的 Majo facade；不重新解析或发明新的 markup 语法。
+- Yarn Adapter 直接复用 Yarn 的 markup parser、Typewriter 和 Action Markup Handler，
+  同时将解析结果投影为不可变的 Majo facade；不重新解析或发明新的 markup 语法。
 - 普通自定义 markup handler 通过 Majo 扩展接口注册；原生 Yarn handler 使用高级入口。
 
 非目标：
@@ -798,6 +833,8 @@ confirm
 - 打字过程中连续输入、同帧输入、取消、选项出现和 Presenter 被释放均不会越过内容。
 - 未知 markup 保留信息且不破坏文本；已注册 handler 按确定顺序执行。
 - 默认 PackedScene 可直接运行，自定义 PackedScene 可以替换而不修改 Runtime 源码。
+- 架构测试保证默认 Presenter 组合复用 Yarn Typewriter/Markup 实现，Majo Runtime 中不出现
+  第二套逐字计时器或 Markup parser。
 
 ### 11.5 M9：Audio Runtime
 

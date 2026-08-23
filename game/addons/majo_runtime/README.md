@@ -10,8 +10,8 @@ Compatibility baseline:
 
 Yarn Spinner is an external prerequisite and is not bundled with this plugin.
 
-Current implementation status: M6 dialogue session, Yarn isolation, and the M5
-playable loop on the stable Runtime API.
+Current implementation status: M7 input ownership, M6 dialogue sessions, Yarn
+isolation, and the M5 playable loop on the stable Runtime API.
 
 ## Installation
 
@@ -86,6 +86,69 @@ clears these completion records before accepting work for the next session.
 
 Games can replace either default service in `ConfigureServices` with
 `ReplaceSingleton` before the host builds.
+
+## Input
+
+Runtime registers a Yarn-free `IInputManager`; Presenter, menu, and host gameplay
+code acquire logical actions instead of implementing competing Godot `_Input`
+callbacks:
+
+```csharp
+var input = runtime.Host!.Services.Get<IInputManager>();
+using var dialogueInput = input.AcquireScope(
+    presenter,
+    new InputScopeOptions(
+        [MajoInputActions.Advance, MajoInputActions.Auto],
+        name: "dialogue"));
+dialogueInput.Activated += activation =>
+{
+    if (activation.Action == MajoInputActions.Advance)
+    {
+        AdvanceDialogue();
+    }
+};
+```
+
+For a given action, the newest enabled normal Scope owns delivery. Disposing or
+disabling it restores the previous owner. A modal Scope forms a global boundary:
+its allowlist is delivered only to that Scope and every other action is blocked
+until the modal handle is released. A Muter blocks all or selected actions without
+claiming them:
+
+```csharp
+using var menuInput = input.AcquireScope(
+    menu,
+    new InputScopeOptions(
+        [MajoInputActions.OptionUp, MajoInputActions.OptionDown,
+         MajoInputActions.Confirm, MajoInputActions.Cancel],
+        isModal: true,
+        name: "menu"));
+```
+
+Handles are bound to their Owner. Runtime disposes them on Reset and Shutdown;
+handles owned by a Godot `Node` are also released when that Node exits the tree.
+One logical action is dispatched at most once per Godot frame, and one physical
+event resolves to at most one logical action even when host bindings overlap.
+
+The default Godot backend installs only missing InputMap actions and never changes
+an action already defined by the host project:
+
+```text
+majo_advance      Space / left mouse / gamepad A
+majo_cancel       Escape / right mouse / gamepad B
+majo_auto         A / gamepad Y
+majo_history      H / gamepad Back
+majo_menu         M / gamepad Start
+majo_option_up    Up / wheel up / d-pad up
+majo_option_down  Down / wheel down / d-pad down
+majo_confirm      Enter / middle mouse / gamepad X
+```
+
+Set `InputConfiguration.InstallDefaultBindings` to `false` when the host owns the
+complete InputMap. `InputConfiguration.Enabled` controls the initial and
+post-Reset state; `IInputManager.Enabled` can temporarily suspend routing. Tests
+and non-Godot hosts can use `FakeInputBackend`, while projects can replace
+`IInputBackend` through `ConfigureServices`.
 
 ## Actors
 
@@ -208,6 +271,12 @@ Only integrations that need native Yarn presenters, providers, or diagnostics
 should reference `Majo.Runtime.Dialogue.Yarn` and resolve `IYarnDialogueBackend`.
 Normal playback and stopping must still go through `IDialoguePlayer` so Runtime can
 enforce Command, Operation, Presenter, and Runner cleanup ordering.
+
+The default visual Presenter planned for M8 will internally compose Yarn's native
+`LinePresenter`, Typewriter, and markup handlers instead of duplicating them.
+`IDialoguePresenter` remains the Yarn-free extension boundary for game-specific
+observers and Presenters. Input will be supplied by `IInputManager`; Yarn's polling
+`LineAdvancer` is deliberately not part of the default composition.
 
 ## Yarn commands
 
