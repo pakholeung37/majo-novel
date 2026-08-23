@@ -246,6 +246,15 @@ public sealed class ActorManager : IActorManager
         return true;
     }
 
+    public bool CanCreate(string actorId, string factoryId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(actorId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(factoryId);
+        return definitions.TryGetValue(actorId, out var definition) &&
+            string.Equals(definition.FactoryId, factoryId, StringComparison.Ordinal) &&
+            factories.ContainsKey(factoryId);
+    }
+
     private void DestroyAll()
     {
         IActor[] snapshot;

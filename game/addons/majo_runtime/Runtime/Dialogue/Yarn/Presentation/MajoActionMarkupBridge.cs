@@ -28,6 +28,10 @@ internal sealed partial class MajoActionMarkupBridge : ActionMarkupHandler
 
     public bool IsDisplayComplete { get; private set; }
 
+    public event Action? DisplayCompleted;
+
+    public event Action? LineDismissed;
+
     public override void OnPrepareForLine(MarkupParseResult line, RichTextLabel text)
     {
         // Yarn's LinePresenter currently prepares handlers directly and its
@@ -78,6 +82,8 @@ internal sealed partial class MajoActionMarkupBridge : ActionMarkupHandler
         {
             handler.OnLineDisplayCompleted();
         }
+
+        DisplayCompleted?.Invoke();
     }
 
     public override void OnLineWillDismiss()
@@ -87,6 +93,7 @@ internal sealed partial class MajoActionMarkupBridge : ActionMarkupHandler
             handler.OnLineWillDismiss();
         }
 
+        LineDismissed?.Invoke();
         ResetState();
     }
 

@@ -1,6 +1,9 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Majo.Runtime.Core;
@@ -72,6 +75,12 @@ public interface IDialogueVariableStore
     void Set(string name, DialogueValue value);
 
     void Clear();
+
+    IReadOnlyDictionary<string, DialogueValue> Capture() =>
+        throw new NotSupportedException("The variable store does not support snapshots.");
+
+    void ReplaceAll(IReadOnlyDictionary<string, DialogueValue> values) =>
+        throw new NotSupportedException("The variable store does not support snapshots.");
 }
 
 public interface IDialogueVariables : IRuntimeService
@@ -91,6 +100,10 @@ public interface IDialogueVariables : IRuntimeService
     void SetString(string name, string value);
 
     void SetBoolean(string name, bool value);
+
+    IReadOnlyDictionary<string, DialogueValue> Capture();
+
+    void ReplaceAll(IReadOnlyDictionary<string, DialogueValue> values);
 }
 
 public sealed class DialogueVariables : IDialogueVariables
@@ -165,6 +178,25 @@ public sealed class DialogueVariables : IDialogueVariables
 
     public void SetBoolean(string name, bool value) =>
         Set(name, DialogueValue.FromBoolean(value));
+
+    public IReadOnlyDictionary<string, DialogueValue> Capture()
+    {
+        var snapshot = store.Capture().ToDictionary(
+            pair => NormalizeName(pair.Key),
+            pair => pair.Value,
+            StringComparer.Ordinal);
+        return new ReadOnlyDictionary<string, DialogueValue>(snapshot);
+    }
+
+    public void ReplaceAll(IReadOnlyDictionary<string, DialogueValue> values)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        var normalized = values.ToDictionary(
+            pair => NormalizeName(pair.Key),
+            pair => pair.Value,
+            StringComparer.Ordinal);
+        store.ReplaceAll(normalized);
+    }
 
     public static string NormalizeName(string name)
     {

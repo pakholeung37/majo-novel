@@ -51,11 +51,15 @@ Runtime 将支持完整的通用视觉小说能力；类似《逆转裁判》的
 - 键盘、鼠标和手柄输入，以及模态输入所有权。
 - 可直接使用且可整体替换的视觉小说 Presenter。
 - BGM、SFX、Voice 和 Voice Presenter。
+- Yarn 无关的 Script 资源身份、播放位置、安全恢复边界和版本指纹。
+- 可扩展的 State 快照、服务状态贡献和内存恢复事务。
 - Auto 阅读与当前 Session 的 History。
 
 ### M6-M10 不包含
 
-- 存档、读取、按 line ID 恢复、回滚。
+- 用户存档/读档产品能力：磁盘格式、槽位、缩略图、Quick Save、
+  Auto Save 和 Save/Load UI。
+- Rollback、time travel 和快照栈。
 - Skip、快进和独立已读判定。
 - 镜头、复杂转场、屏幕特效和设置 UI。
 - Live2D、Spine、分层立绘、视频背景。
@@ -80,25 +84,40 @@ Runtime 将支持完整的通用视觉小说能力；类似《逆转裁判》的
 
 ### 由 Yarn Spinner 替换的部分
 
-- Naninovel Script 编译器。
-- ScriptManager、ScriptLoader 和主 ScriptPlayer。
-- 分支、变量表达式、台词和选项执行。
+- Naninovel Script 语法、编译器和表达式求值器。
+- Naninovel Command playlist 和单轨 VM 执行器。
+- 分支、变量表达式、台词、选项和 node 跳转执行。
 - Naninovel Command 参数编译体系。
 
-Majo Runtime 不复制上述脚本层，而是在 Yarn `DialogueRunner` 外建立适配层。
+### 仍由 Majo Runtime 负责的 Script / State 能力
+
+- 脚本项目和 node 的稳定身份、枚举、加载、校验和版本指纹。
+- 对话会话、播放位置、安全暂停点、恢复语义和播放事件。
+- 系统变量、Actor、Audio 及其他 Runtime Service 的状态捕获与恢复协调。
+- Session、Game、Global 和 Settings 状态作用域的边界；本阶段只实现
+  Session 和内存 Game Snapshot，不实现槽位持久化。
+
+Majo Runtime 不复制 Yarn 已经提供的脚本语言和 VM，但不再把 Naninovel
+`ScriptManager`/`ScriptPlayer` 的全部职责等同于 VM 而一并丢弃。Yarn 细节仍隔离在
+`Dialogue.Yarn` 和独立 Bridge 程序集内。
 
 ## 5. 模块和依赖方向
 
 ```text
 Majo.Runtime.Core
 ├── Configuration
+├── Resources
 ├── Operations
-│   └── Actors
-│       └── Commands
-└── Dialogue.Yarn
+├── Actors
+├── Input
+├── Audio
+├── Dialogue
+├── Script
+├── State
+└── Dialogue.Yarn / Yarn VM Bridge
 
 Tests
-├── Unit -> Core / Operations / Actors / Commands
+├── Unit -> Core / Operations / Actors / Commands / Script / State
 └── Headless -> 完整 Godot + Yarn + Majo Runtime
 ```
 
@@ -107,7 +126,11 @@ Tests
 - `Core` 不依赖 Godot 场景对象和 Yarn Spinner。
 - `Operations` 不依赖 Yarn Spinner。
 - `Actors` 可以依赖 Godot，但不依赖 Yarn Spinner。
-- `Dialogue.Yarn` 是唯一直接依赖 YarnSpinner-Godot 的 Majo 模块。
+- `Script` 公共契约不依赖 Yarn；`Dialogue.Yarn` 和 Yarn VM Bridge 是唯一可以
+  直接依赖 YarnSpinner-Godot/YarnSpinner 的 Majo 集成边界。
+- `State` 只依赖稳定的 State 契约和明确注册的 Contributor，不识别 Yarn、
+  Godot Node 或具体 Actor/Audio 实现。
+- Script 播放快照是 State 的一个 Contributor，不反向让 Script 依赖 StateManager。
 - Command 只能通过服务接口访问 Actor 和 Operation。
 - 不允许修改 `addons/YarnSpinner-Godot` 来实现 Majo 功能。
 
@@ -122,13 +145,18 @@ game/addons/majo_runtime/
 │   ├── Operations/
 │   ├── Actors/
 │   ├── Commands/
-│   └── Dialogue/Yarn/
+│   ├── Dialogue/Yarn/
+│   ├── Script/
+│   └── State/
 ├── Editor/
 └── Samples/
 
 game/tests/
 ├── Unit/
 └── Headless/
+
+bridges/
+└── YarnSpinnerStateBridge/
 ```
 
 ## 6. Runtime 内核契约
@@ -181,6 +209,12 @@ services.AddSingleton<IOperationScheduler>(resolver =>
 - `OperationConfiguration`
 - `ActorConfiguration`
 - `DialogueConfiguration`
+- `ResourceConfiguration`
+- `InputConfiguration`
+- `DialoguePresentationConfiguration`
+- `AudioConfiguration`
+- `ScriptConfiguration`
+- `StateConfiguration`
 
 配置要求：
 
@@ -621,10 +655,43 @@ Scripts = scripts/<project-id>
 
 ## 11. 后续 Roadmap
 
-M6-M10 构成第二阶段 Runtime Roadmap。M10 完成后停止继续扩张范围，重新审查是否
-需要存档、镜头或其他独立阶段；推理玩法不进入 Runtime Roadmap。
+M6-M10 构成第二阶段 Runtime Roadmap；M9.5 和 M9.6 是在 M10 开始前必须
+通过的架构门。M10 完成后停止继续扩张范围，重新审查是否需要磁盘
+存档、Rollback、镜头或其他独立阶段；推理玩法不进入 Runtime Roadmap。
 
-### 11.1 Yarn 隔离标准
+### 11.1 Naninovel State / Script 职责复盘
+
+先前计划把 `ScriptManager`、`ScriptLoader` 和主 `ScriptPlayer` 整体归类为“由
+Yarn Spinner 替换”。对照 Naninovel 源码后，这个结论过度合并了脚本语言、
+资源管理、播放协调和状态恢复四类不同职责。
+
+| Naninovel 能力 | 真实职责 | Majo 处理 |
+| --- | --- | --- |
+| Script 编译/表达式/Command playlist | 将 NaniScript 转为可执行内容 | 已由 Yarn compiler 和 VM 替换，不复制 |
+| `ScriptManager` | 管理脚本资源路径、加载器、临时脚本和 endpoint | M5.1/M6 只完成约定加载；M9.5 补身份、目录和版本指纹 |
+| `ScriptLoader` | 按轨道预加载/释放脚本引用的资源 | 当前由 ResourceManager 和 Command 按需加载；保守/乐观/懒加载策略延后 |
+| `ScriptPlayer` / main track | 管理播放位置、执行事件、输入等待、Auto/Skip 和状态快照 | M6 已实现会话外观；M9.5 抽出唯一播放真相和恢复契约，M10 再实现 Auto |
+| 额外 `ScriptTrack` | 并行脚本、循环和轨道独立序列化 | 不等同于 Operation 组；本阶段仍延后 |
+| Played register | 跨周目记录已执行位置，服务于 read-only Skip | 延后到 Skip/Global State 阶段，不与 Session History 混合 |
+| `StateMap` + `IStatefulService` | 让服务自主贡献 Game/Global/Settings 状态 | M9.6 实现显式 Contributor Registry 和稳定 key/schema，不使用程序集类名作存档 key |
+| `StateManager` | 在安全播放边界协调完成操作、重置、捕获和有序恢复 | M9.6 先做内存快照与恢复事务，为未来存档和 Rollback 复用 |
+| SlotManager / QuickSave / AutoSave / thumbnail | 状态快照的持久化产品层 | 延后，不阻塞 M10 |
+| Rollback stack / recovery rollback | 密集快照、回退和脚本变更恢复 | 延后；M9.5 只提供版本不匹配的明确拒绝和诊断 |
+
+前置顺序确认为：
+
+```text
+M5.1 Resources + M6 Dialogue Session
+    -> M9.5 Script Runtime Foundation
+    -> M9.6 State Snapshot Foundation
+    -> M10 Auto + Session History
+```
+
+M10 并非因“保存历史记录”而需要磁盘存档，而是需要先统一播放阶段、
+安全边界和 Session 状态所有权。否则 Auto、History、`DialoguePlayer` 和未来 Save/Load
+会各自维护一套 current line / waiting / resume 状态。
+
+### 11.2 Yarn 隔离标准
 
 Yarn Spinner 是唯一剧本后端和外部前置依赖，但普通游戏代码不应依赖具体 Yarn 类型。
 
@@ -640,6 +707,20 @@ Majo.Runtime.Dialogue
 └── DialogueSessionState
 ```
 
+M9.5/M9.6 新增的 Yarn-free 公共边界位于：
+
+```text
+Majo.Runtime.Script
+├── IScriptManager / IScriptPlayback
+├── ScriptId / ScriptDescriptor
+└── ScriptPlaybackSpot / ScriptCheckpoint
+
+Majo.Runtime.State
+├── IStateManager / IStateContributor
+├── StateScope / StateContributorRegistry
+└── StateSnapshot / StateRecord
+```
+
 Yarn 细节隔离在：
 
 ```text
@@ -653,14 +734,15 @@ Majo.Runtime.Dialogue.Yarn
 依赖方向固定为：
 
 ```text
-Game / Default UI -> Majo Dialogue API -> Yarn Adapter -> YarnSpinner-Godot
+Game / Default UI -> Majo Dialogue API -> Majo Script API -> Yarn Adapter -> YarnSpinner-Godot
+Majo State Core <- Script State Contributor -> Majo Script API
 ```
 
 Runtime 不为 Ink、Ren'Py 或其他 VM 建立通用剧本抽象。需要原生 LineProvider、Yarn
 Presenter 或调试能力的高级用户可以显式引用 `Majo.Runtime.Dialogue.Yarn` 的
 Integration Builder；基础安装和使用流程不暴露该入口。
 
-### 11.2 M6：Dialogue Session 与 Yarn 隔离（已完成）
+### 11.3 M6：Dialogue Session 与 Yarn 隔离（已完成）
 
 目标：让 Runtime 完整拥有对话项目加载和会话生命周期，移除 Demo 对 YarnProject 和
 DialogueRunner 的手工控制。
@@ -739,7 +821,7 @@ Idle -> Loading -> Running -> Stopping -> Idle
   三轮和失败探针；Stop/Command 竞态另执行 20 轮 headless 压力测试且无延迟台词、
   VM Continue、Operation 或 Node 泄漏。
 
-### 11.3 M7：Input Manager
+### 11.4 M7：Input Manager
 
 状态：已完成。
 
@@ -792,7 +874,7 @@ confirm
 - 门禁通过：103 个纯 C# 单元测试、可见 Demo smoke、Godot headless 导入与编译、真实
   Yarn/Godot headless 连续三轮及失败探针；仅保留 Yarn 插件既有的 `SYSLIB1220` 警告。
 
-### 11.4 M8：Default VN Presenter 与 Yarn Markup Bridge
+### 11.5 M8：Default VN Presenter 与 Yarn Markup Bridge
 
 状态：已完成。
 
@@ -858,7 +940,7 @@ confirm
 - 门禁通过：105 个纯 C# 单元测试，完整 headless 测试正文通过；仅保留 Yarn 插件既有的
   `SYSLIB1220` 编译警告。
 
-### 11.5 M9：Audio Runtime
+### 11.6 M9：Audio Runtime
 
 状态：已完成。
 
@@ -914,20 +996,186 @@ res://assets/audio/voice/<locale>/<line-id>
 - 真实 Godot headless 使用生成式 AudioStream（不依赖物理音频设备）验证 Player 节点、
   BGM 交叉淡化、SFX 重叠、Voice 抢占、取消、强制完成以及 Reset/Shutdown 零残留。
 
-### 11.6 M10：Auto 与 History
+### 11.7 M9.5：Script Runtime Foundation（已完成）
 
-目标：补齐普通视觉小说的自动阅读和当前 Session 回看能力，不引入 Skip 或持久化。
+目标：恢复 Naninovel Script 模块中不属于“脚本语法/VM”的 Runtime 职责，在不
+重新实现 Yarn 的前提下，为 State 和 M10 提供唯一、可恢复的播放真相。
+
+边界决策：
+
+- `IDialoguePlayer` 继续是宿主用于启动/停止对话及订阅台词的高层外观。
+- 新的 `Majo.Runtime.Script` 持有 Script ID、目录、版本、播放阶段和快照契约；
+  `ScriptPlayback` 投影 `DialoguePlayer` 的会话身份和当前位置，不保留第二份
+  current node/line 可变状态。
+- `YarnDialogueBackend` 负责把 `YarnProject`/`DialogueRunner` 投影到 Script 契约；
+  公共 `Majo.Runtime.Script` 签名不出现 Yarn 类型。
+- Yarn VM Bridge 只是 Yarn 3.2.0 的隔离实现细节，不是普通游戏代码可调用的 API。
+
+公共模型：
+
+```text
+ScriptId              = ProjectId + NodeName
+ScriptDescriptor      = ScriptId + ProgramFingerprint + available line metadata
+ScriptPlaybackSpot    = ScriptId + stable LineId + boundary/replay semantics
+ScriptPlaybackPhase   = Idle / Loading / Executing / PresentingLine /
+                        AwaitingAdvance / PresentingOptions / Stopping / Faulted
+ScriptCheckpoint      = format version + descriptor fingerprint + playback spot +
+                        backend-neutral replay data
+```
+
+交付：
+
+- `IScriptManager`：按逻辑 ID 解析、加载和校验 Script，产生确定的
+  `ProgramFingerprint`。
+- `IScriptPlayback`：暴露当前位置、播放阶段、安全快照可用性和阶段变化事件。
+- `IScriptCheckpointBridge`：捕获安全行边界，并在新会话中重放当前行一次后
+  从下一条 Yarn 指令继续。
+- 脚本快照持久化锚点是 stable Line ID，program counter 只能用于当前进程诊断，
+  不进入稳定 State 协议。
+- 恢复数据要包含重现当前行所需的 resolved substitutions；不允许为了恢复行
+  而从 node 开头重放 Command。
+- 重复 Line ID、缺失 node/line、非安全边界、待选选项、非空 call/value stack、
+  格式版本或 ProgramFingerprint 不兼容时明确拒绝，不猜测附近位置。
+- 首版恢复要求 ProgramFingerprint 完全一致；脚本修改后的兼容迁移和
+  recovery rollback 延后到独立 milestone。
+- 保留未来 Transient Script Provider 扩展口，但本 milestone 不开放社区 modding。
+
+Yarn VM Bridge 产品化门禁：
+
+- 锁定 Yarn Spinner 3.2.0，启动时同时校验版本和 Bridge 内部布局。
+- `InternalsVisibleTo("YarnSpinner.Tests")` 和 `UnsafeAccessor` 依赖被封装在独立程序集；
+  字段或执行状态布局不匹配时 fail fast，不运行降级。
+- Bridge 的快照 DTO 不直接作为 State 持久化 DTO；由 Yarn Adapter 投影为
+  backend-neutral `ScriptCheckpoint`。
+
+严格验收：
+
+- 单元测试覆盖 Script ID、目录、指纹、快照格式、重复 Line ID 和所有拒绝路径。
+- 真实 Yarn 编译结果同时验证普通行和带变量 substitution 的行；恢复后当前行
+  只展示一次，文本与捕获时完全一致，下一次 Advance 进入正确后续行。
+- 在脚本中插入无关指令但不改变目标行时，Bridge 仍能用 Line ID 定位；
+  产品恢复则在破坏当前状态前因 ProgramFingerprint 变化而拒绝。
+- Godot headless 验证 Stop -> 新 Session -> 注入 -> 重放 -> 继续 -> 正常结束，
+  且无 Runner、Presenter、Operation 或延迟 Continue 残留。
+- 架构测试保证 `Majo.Runtime.Script` 和普通 `Majo.Runtime.Dialogue` 公共签名不引用 Yarn。
+
+实施记录（2026-08-23）：
+
+- 已新增 Yarn-free 的 Script 身份、Descriptor、播放阶段、安全边界和 checkpoint v1
+  契约；`ScriptPlayback` 只读取现有 Dialogue 会话真相，并由默认 Presentation 的
+  display-complete/dismiss 事件确定 `AwaitingAdvance`。
+- `YarnDialogueBackend` 以 compiled Program protobuf 的 SHA-256 生成精确指纹，校验
+  node、全项目 Line ID 唯一性、格式、边界、指纹和锚点，再将恢复请求注入新 Session。
+- 独立 Bridge 已支持 resolved substitutions 的捕获和按 Yarn 栈顺序重建；恢复使用
+  stable Line ID 定位，program counter 只保留为诊断信息。
+- Bootstrap 在建立 Runtime 前同时校验 Yarn 版本和 `Dialogue.vm`、`callStack`、
+  `isContinuing` 内部布局；不匹配直接失败，不执行降级恢复。
+- 真实 Yarn compiler 和 Godot `DialogueRunner` 已验证普通行、动态 substitution、停止旧
+  Session、重放当前行一次、继续下一行和完整清理。
+
+### 11.8 M9.6：State Snapshot Foundation（已完成）
+
+目标：实现 Naninovel State 模块的状态贡献和有序恢复内核，但不把磁盘槽位、
+存档 UI 或 Rollback 快照栈拉入第二阶段。
+
+状态作用域：
+
+```text
+Session   仅当前 Runtime Session；Reset 清空；永不进入磁盘存档
+Game      当前 playthrough 可恢复快照；本阶段只在内存中 round-trip
+Global    跨 playthrough 状态；冻结契约，持久化延后
+Settings  用户设置；冻结契约，持久化延后
+```
+
+公共契约：
+
+- `IStateManager`：捕获 Game Snapshot、恢复 Game Snapshot、重置 Session，并发布开始、
+  完成和失败事件。
+- `IStateContributor`：显式声明稳定 `Key`、`Scope`、`SchemaVersion`、依赖项，
+  以及 Capture/Preflight/Restore 操作。
+- `StateSnapshot`/`StateRecord`：不可变、Yarn/Godot 无关，通过显式 key 和 schema
+  索引 payload；不把 assembly-qualified type name 当作长期兼容 key。
+- `StateContributorRegistry`：显式注册，检查 key 重复、缺失依赖和循环，并给出确定
+  Capture/Restore 顺序。
+
+Game Contributor 范围：
+
+- Script Playback：`ScriptCheckpoint`。
+- Dialogue Variables：Yarn string/bool/number 的完整快照，包括恢复前清理多余变量。
+- Actors：Actor ID、Factory ID、Appearance、Visible、Position、Tint/Opacity 的确定终态。
+- Audio：命名 BGM Track 及其可恢复属性；一次性 SFX 和当前 Voice 不恢复。
+- 活跃 Operation、Input Scope/Muter、Presenter token 和 Godot Node 引用永不序列化；恢复时
+  由各服务重建。
+
+恢复事务顺序：
+
+```text
+Preflight 全部 record/schema/fingerprint/anchor
+    -> 接管模态输入并停止对话
+    -> 取消并汇合活跃 Operation
+    -> Reset Game contributor
+    -> 按依赖顺序恢复 Variables / Actors / Audio / 扩展服务
+    -> 最后恢复 Script Playback 并重放当前行
+    -> 释放输入所有权并发布 Restored
+```
+
+所有 Preflight 在破坏当前状态前完成。如果已开始 Restore 后 Contributor 失败，
+Runtime 进入明确 Faulted 状态、保留输入阻断且不自动继续脚本；本阶段不虚假声称可对任意
+外部副作用做全局原子回滚。
+
+严格验收：
+
+- 纯 C# 测试覆盖 Registry 顺序、稳定 key、schema 版本、缺失/未知 record、
+  Preflight 不破坏当前状态、Restore 失败和 Reset 清理。
+- Fake Script/Actor/Audio/Variables Contributor 验证完整捕获和恢复顺序，不使用磁盘。
+- 真实 Yarn/Godot headless 在带 substitution 的等待行捕获快照，随后修改变量、
+  Actor、Background 和 BGM，Restore 后验证全部回到快照状态并从正确后续行继续。
+- 快照与恢复期间没有输入穿透、重复 Command、重复 Voice、活跃 Operation、
+  延迟 VM Continue 或 Node 泄漏。
+- State 内核和快照 DTO 的反射架构测试保证不引用 Yarn 或 Godot 类型。
+
+实施记录（2026-08-23）：
+
+- 已实现不可变 `StateSnapshot`/`StateRecord`、四种 Scope、稳定 key/schema、显式
+  Contributor Registry，以及缺失依赖、重复 key、循环依赖和确定拓扑顺序诊断。
+- 默认 Game Contributor 已覆盖 Script Playback、Dialogue Variables、Actors/Background
+  和命名 BGM；变量恢复先清空，Actor 校验 ID/Factory，SFX 和 Voice 明确不进入快照。
+- `StateManager` 捕获前强制完成活跃 Operation；恢复先完成全量 Preflight，再接管输入、
+  停止 Dialogue、取消并汇合 Operation、逆序 Reset、正序 Restore，最后恢复 Script。
+- Preflight 失败不会停止或修改当前 Game；破坏性阶段失败进入 `Faulted` 并持续静音输入，
+  直到 Runtime Reset/Shutdown 明确释放。
+- 真实 Godot headless 已完成带 substitution 等待行、变量、角色、背景和 BGM 的内存
+  round-trip，并验证当前行只重放一次、下一次 Advance 正确、无临时音频和节点泄漏。
+- 全量门禁通过：127 个纯 C# 单元测试、可见场景 smoke、Godot import/编译和三轮
+  headless 集成测试均通过。
+
+非目标：
+
+- JSON/二进制存档文件、加密、压缩、槽位命名和迁移 UI。
+- Quick Save、Auto Save、应用退出时保存、缩略图和 Save/Load UI。
+- Rollback 快照栈、玩家回退输入、脚本变更后的 recovery rollback。
+- 恢复待选选项、非空 Yarn call/value stack 或任意 VM 指令中间态。
+
+### 11.9 M10：Auto 与 History
+
+目标：补齐普通视觉小说的自动阅读和当前 Session 回看能力。
+
+前置：M9.5 和 M9.6 必须完成。Auto 消费 `IScriptPlayback` 的播放阶段和安全
+Advance 边界；History 是 State `Session` 作用域的 Contributor，明确不进入
+Game Snapshot 或未来磁盘存档。
 
 Auto 交付：
 
 - Manual 和 Auto 两种状态及明确切换事件。
-- Auto 等待打字完成、Voice 完成和可配置的额外停留时间。
+- Auto 只在 `AwaitingAdvance` 阶段启动 deadline，等待打字完成、Voice 完成
+  和可配置的额外停留时间。
 - 进入选项或打开 History 时自动暂停；关闭后是否恢复由进入前状态决定。
 - 手动 Advance 与 Auto deadline 同时发生时只推进一次。
 
 History 交付：
 
-- 只记录实际展示完成的台词，不记录 Command 和选项。
+- 只记录实际展示完成的台词；以最终文本可见事件为准，不以较早的
+  `LinePresented` 投递事件为准，也不记录 Command 和选项。
 - 保存 line ID、角色名、最终文本和 Voice ID。
 - 可配置容量和确定的淘汰顺序。
 - 默认 History UI，并支持重新播放对应 Voice。
@@ -940,13 +1188,17 @@ History 交付：
 - History 容量、顺序、重复 line ID、markup 最终文本和 Voice 重播行为确定。
 - 完整可视 Demo 与真实 Yarn/Godot headless 覆盖 Manual、Auto 和 History 闭环。
 
-### 11.7 第二阶段完成定义
+### 11.10 第二阶段完成定义
 
 M6-M10 只有同时满足以下条件才算完成：
 
 - 完整 Demo 覆盖项目加载、台词、markup、选项、输入、BGM、SFX、Voice、Auto 和
   History。
 - 普通游戏代码和默认 UI 不引用 Yarn 类型；Yarn 细节仅存在于隔离集成命名空间。
+- Script 资源身份、播放阶段和安全快照只有一个真相来源，`DialoguePlayer`、
+  Auto、History 和 State 不各自复制 current line/node 状态机。
+- 内存 Game Snapshot 能恢复 Script、Variables、Actors、Background 和 BGM，而 Session History
+  在 Reset 后清空且不进入 Game Snapshot。
 - 默认 Presenter 可直接运行，也能通过 PackedScene 整体替换。
 - 没有输入争抢、活跃 Operation、残留 Node、Presenter 等待或未观察异步异常。
 - 每个 milestone 通过纯 C# 单元测试、Godot headless、可视 smoke 和失败探针。
@@ -1011,8 +1263,9 @@ Operation API 和测试明确区分 Cancel 与 Complete，Tween 实现必须分�
 
 ### 过早复制 Naninovel 功能
 
-每个 milestone 只实现已确认的 Runtime 能力。M6-M10 不引入存档、镜头、脚本轨道、
-完整本地化或 Source Generator；推理玩法始终由 Runtime 外部模块实现。
+每个 milestone 只实现已确认的 Runtime 能力。M6-M10 只前置 Script/State 的播放与
+内存快照内核，不引入磁盘存档产品层、Rollback、镜头、多脚本轨道、完整本地化
+或 Source Generator；推理玩法始终由 Runtime 外部模块实现。
 
 ## 14. 完成定义
 

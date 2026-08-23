@@ -26,4 +26,6 @@ public interface IActorManager : IRuntimeService
     bool TryGet(string actorId, out IActor? actor);
 
     bool Remove(string actorId);
+
+    bool CanCreate(string actorId, string factoryId) => true;
 }

@@ -37,6 +37,12 @@ public partial class MajoProjectConfiguration : Resource
     [Export]
     public AudioConfiguration? Audio { get; set; }
 
+    [Export]
+    public ScriptConfiguration? Script { get; set; }
+
+    [Export]
+    public StateConfiguration? State { get; set; }
+
     public static MajoProjectConfiguration CreateDefault() => new()
     {
         Runtime = new RuntimeConfiguration(),
@@ -47,6 +53,8 @@ public partial class MajoProjectConfiguration : Resource
         Input = new InputConfiguration(),
         Presentation = new DialoguePresentationConfiguration(),
         Audio = new AudioConfiguration(),
+        Script = new ScriptConfiguration(),
+        State = new StateConfiguration(),
     };
 
     public ConfigurationValidationResult Validate(Func<string, bool>? resourceExists = null)
@@ -62,8 +70,34 @@ public partial class MajoProjectConfiguration : Resource
         ValidateInput(issues);
         ValidatePresentation(issues);
         ValidateAudio(issues);
+        ValidateScript(issues);
+        ValidateState(issues);
 
         return new ConfigurationValidationResult(issues);
+    }
+
+    private void ValidateScript(ICollection<ConfigurationIssue> issues)
+    {
+        if (Script is null)
+        {
+            issues.Add(new ConfigurationIssue(nameof(Script), "Configuration is required."));
+            return;
+        }
+
+        if (!Script.RequireExactProgramFingerprint)
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Script)}.{nameof(Script.RequireExactProgramFingerprint)}",
+                "Exact program fingerprint validation is required by checkpoint format v1."));
+        }
+    }
+
+    private void ValidateState(ICollection<ConfigurationIssue> issues)
+    {
+        if (State is null)
+        {
+            issues.Add(new ConfigurationIssue(nameof(State), "Configuration is required."));
+        }
     }
 
     private void ValidateResources(ICollection<ConfigurationIssue> issues)

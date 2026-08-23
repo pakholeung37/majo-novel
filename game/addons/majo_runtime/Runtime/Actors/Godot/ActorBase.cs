@@ -47,6 +47,8 @@ public abstract class ActorBase : IActor, IGodotActorView
 
     public string Id => Definition.Id;
 
+    public string FactoryId => Definition.FactoryId;
+
     public string Appearance { get; protected set; }
 
     public string TargetAppearance { get; protected set; }

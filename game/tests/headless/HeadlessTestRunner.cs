@@ -20,6 +20,8 @@ using Majo.Runtime.Input;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Operations.Godot;
 using Majo.Runtime.Resources;
+using Majo.Runtime.Script;
+using Majo.Runtime.State;
 using YarnSpinnerGodot;
 
 namespace Majo.Runtime.HeadlessTests;
@@ -66,6 +68,7 @@ public partial class HeadlessTestRunner : Node
         await ValidateAudioRuntimeAsync();
         await ValidateInputRuntimeAsync();
         await ValidateYarnVmStateBridgeAsync();
+        await ValidateScriptAndStateRuntimeAsync();
         await ValidateDefaultPresentationAsync();
         await ValidateSuccessfulRuntimeLifecycleAsync();
         await ValidateLifecycleTimeoutAsync();
@@ -237,6 +240,170 @@ public partial class HeadlessTestRunner : Node
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         Assert(!IsInstanceValid(bootstrap) && !IsInstanceValid(runner),
             "Yarn VM Bridge headless validation leaked Runtime nodes.");
+    }
+
+    private async Task ValidateScriptAndStateRuntimeAsync()
+    {
+        var configuration = MajoProjectConfiguration.CreateDefault();
+        configuration.Resources!.RootPath = "res://tests";
+        configuration.Resources.ScriptsPath = "headless";
+        configuration.Dialogue!.DefaultProjectId = "M95State";
+        configuration.Presentation!.Enabled = true;
+        configuration.Presentation.LettersPerSecond = 10_000;
+        configuration.Presentation.UseFadeEffect = false;
+        configuration.Actors!.Actors.Add(CreateActorDefinition(
+            "state-hero",
+            ActorFactoryIds.Character,
+            CharacterPositionPreset.Left,
+            ("red", "res://tests/headless/fixtures/character_red.svg"),
+            ("blue", "res://tests/headless/fixtures/character_blue.svg")));
+        configuration.Actors.Actors.Add(CreateActorDefinition(
+            "state-room",
+            ActorFactoryIds.Background,
+            CharacterPositionPreset.Center,
+            ("dark", "res://tests/headless/fixtures/background_dark.svg"),
+            ("light", "res://tests/headless/fixtures/background_light.svg")));
+        var loader = new HeadlessAudioClipLoader()
+            .Register("calm")
+            .Register("battle")
+            .Register("hit")
+            .Register("en/voice");
+        var lineProbe = new StateLineProbePresenter();
+        var bootstrap = new MajoRuntimeBootstrap
+        {
+            Name = "ScriptStateRuntime",
+            Configuration = configuration,
+        };
+        bootstrap.ConfigureDialoguePresenters += presenters => presenters.Register(lineProbe);
+        bootstrap.ConfigureServices = services => services.ReplaceSingleton<IAudioManager>(
+            resolver => new AudioManager(
+                new GodotAudioBackend(bootstrap),
+                resolver.Get<IOperationScheduler>(),
+                loader,
+                loader,
+                loader,
+                new AudioSettings()),
+            typeof(IOperationScheduler));
+        AddChild(bootstrap);
+        await bootstrap.InitializationCompletion;
+
+        var services = bootstrap.Host!.Services;
+        var dialogue = services.Get<IDialoguePlayer>();
+        var presentation = services.Get<IDialoguePresentation>();
+        var scriptManager = services.Get<IScriptManager>();
+        var script = services.Get<IScriptPlayback>();
+        var state = services.Get<IStateManager>();
+        var variables = services.Get<IDialogueVariables>();
+        var actors = services.Get<IActorManager>();
+        var audio = services.Get<IAudioManager>();
+        var input = services.Get<IInputManager>();
+        var operations = services.Get<IOperationScheduler>();
+
+        var descriptor = await scriptManager.ResolveAsync(
+            new ScriptId("M95State", "Start"));
+        Assert(descriptor.LineIds.SequenceEqual(
+                ["line:m95-state-current", "line:m95-state-after"]) &&
+                descriptor.ProgramFingerprint.Length == 64,
+            "M9.5 ScriptManager did not resolve stable line metadata and fingerprint.");
+
+        await dialogue.StartAsync();
+        await WaitForConditionAsync(() => presentation.IsLineActive, 2);
+        dialogue.RequestHurryUp();
+        await WaitForConditionAsync(() => presentation.IsLineDisplayComplete, 2);
+        Assert(script.Phase == ScriptPlaybackPhase.AwaitingAdvance &&
+                script.CanCaptureCheckpoint &&
+                script.CurrentSpot?.LineId == "line:m95-state-current",
+            "M9.5 ScriptPlayback did not expose the safe line checkpoint boundary.");
+
+        variables.SetString("name", "Maya");
+        variables.SetNumber("score", 7);
+        var hero = actors.Create("state-hero");
+        hero.SetAppearance("red");
+        hero.SetPosition(new Vector2(123, 234));
+        hero.SetTint(new Color(0.2f, 0.4f, 0.8f));
+        hero.SetOpacity(0.65f);
+        hero.SetVisible(true);
+        var room = actors.Create("state-room");
+        room.SetAppearance("dark");
+        await audio.PlayBgmAsync("calm", "music", volume: 0.7f);
+
+        var snapshot = await state.CaptureGameAsync();
+        Assert(snapshot.Records.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(
+                [
+                    BuiltInStateKeys.DialogueVariables,
+                    BuiltInStateKeys.Actors,
+                    BuiltInStateKeys.AudioBgm,
+                    BuiltInStateKeys.ScriptPlayback,
+                ]),
+            "M9.6 StateManager did not capture all built-in Game contributors.");
+
+        variables.SetString("name", "Changed");
+        variables.SetBoolean("extra", true);
+        hero.SetAppearance("blue");
+        hero.SetPosition(new Vector2(500, 600));
+        hero.SetOpacity(0.1f);
+        room.SetAppearance("light");
+        await audio.PlayBgmAsync("battle", "music", volume: 0.2f);
+        await audio.PlaySfxAsync("hit", "transient-sfx");
+        await audio.PlayVoiceAsync("voice");
+
+        await state.RestoreGameAsync(snapshot);
+        await WaitForConditionAsync(
+            () => lineProbe.Lines.Count >= 2 && presentation.IsLineActive,
+            2);
+        dialogue.RequestHurryUp();
+        await WaitForConditionAsync(() => presentation.IsLineDisplayComplete, 2);
+
+        var restoredHero = actors.Get<IActor>("state-hero");
+        var restoredRoom = actors.Get<IActor>("state-room");
+        Assert(variables.Get("name").StringValue == "Maya" &&
+                Mathf.IsEqualApprox((float)variables.Get("score").NumberValue, 7) &&
+                !variables.Contains("extra"),
+            "M9.6 dialogue variables did not replace the mutated store exactly.");
+        Assert(restoredHero.Appearance == "red" &&
+                restoredHero.Position.IsEqualApprox(new Vector2(123, 234)) &&
+                restoredHero.Tint.IsEqualApprox(new Color(0.2f, 0.4f, 0.8f)) &&
+                Mathf.IsEqualApprox(restoredHero.Opacity, 0.65f) &&
+                restoredHero.Visible &&
+                restoredRoom.Appearance == "dark",
+            "M9.6 actor/background state did not round-trip.");
+        Assert(audio.BgmTracks.Count == 1 &&
+                audio.BgmTracks.Single().ClipId == "calm" &&
+                audio.BgmTracks.Single().InstanceId == "music" &&
+                Mathf.IsEqualApprox(audio.BgmTracks.Single().BaseVolume, 0.7f) &&
+                audio.SfxInstances.Count == 0 &&
+                audio.CurrentVoice is null,
+            "M9.6 BGM restore or transient SFX/Voice exclusion was incorrect.");
+        Assert(lineProbe.Lines[0].Id == "line:m95-state-current" &&
+                lineProbe.Lines[1].Id == "line:m95-state-current" &&
+                lineProbe.Lines[0].Text.Text == lineProbe.Lines[1].Text.Text &&
+                lineProbe.Lines[1].Text.Text.Contains("Maya", StringComparison.Ordinal) &&
+                dialogue.CurrentLineId == "line:m95-state-current" &&
+                script.Phase == ScriptPlaybackPhase.AwaitingAdvance &&
+                input.ActiveHandleCount == 1,
+            "M9.5 restore did not replay the captured resolved line exactly once.");
+
+        dialogue.RequestNextLine();
+        await WaitForConditionAsync(
+            () => dialogue.CurrentLineId == "line:m95-state-after" &&
+                lineProbe.Lines.Count == 3,
+            2);
+        dialogue.RequestHurryUp();
+        await WaitForConditionAsync(() => presentation.IsLineDisplayComplete, 2);
+        dialogue.RequestNextLine();
+        await dialogue.Completion.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert(operations.ActiveOperations.Count == 0 && input.ActiveHandleCount == 0,
+            "M9.5/M9.6 completion left active Operations or input ownership.");
+
+        var actorRoot = bootstrap.GetNode<CanvasLayer>("MajoActors");
+        var audioHost = bootstrap.GetNode("MajoAudioHost");
+        await bootstrap.RequestShutdownAsync();
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Assert(!IsInstanceValid(bootstrap) &&
+                !IsInstanceValid(actorRoot) &&
+                !IsInstanceValid(audioHost),
+            "M9.5/M9.6 Runtime nodes leaked after shutdown.");
     }
 
     private async Task ValidateInputRuntimeAsync()
@@ -1595,6 +1762,19 @@ public partial class HeadlessTestRunner : Node
                 when (context.NextLineToken.IsCancellationRequested)
             {
             }
+        }
+    }
+
+    private sealed class StateLineProbePresenter : IDialoguePresenter
+    {
+        public List<DialogueLine> Lines { get; } = new();
+
+        public Task PresentLineAsync(
+            DialogueLine line,
+            DialoguePresentationContext context)
+        {
+            Lines.Add(line);
+            return Task.CompletedTask;
         }
     }
 

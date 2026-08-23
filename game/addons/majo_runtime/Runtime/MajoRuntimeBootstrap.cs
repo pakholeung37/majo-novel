@@ -23,6 +23,9 @@ using Majo.Runtime.Operations;
 using Majo.Runtime.Operations.Godot;
 using Majo.Runtime.Resources;
 using Majo.Runtime.Resources.Godot;
+using Majo.Runtime.Script;
+using Majo.Runtime.State;
+using Majo.YarnBridge;
 using YarnSpinnerGodot;
 
 namespace Majo.Runtime;
@@ -68,6 +71,8 @@ public partial class MajoRuntimeBootstrap : Node
     public Action<DialoguePresenterRegistry>? ConfigureDialoguePresenters { get; set; }
 
     public Action<DialogueMarkupHandlerRegistry>? ConfigureDialogueMarkupHandlers { get; set; }
+
+    public Action<StateContributorRegistry>? ConfigureStateContributors { get; set; }
 
     public Func<Node, IAudioBackend>? AudioBackendFactory { get; set; }
 
@@ -133,6 +138,8 @@ public partial class MajoRuntimeBootstrap : Node
                 throw new RuntimeLifecycleException(
                     $"Yarn dependency check failed: {DependencyStatus.Message}");
             }
+
+            YarnVmStateBridge.ValidateRuntimeLayout();
 
             if (Configuration is null)
             {
@@ -270,7 +277,56 @@ public partial class MajoRuntimeBootstrap : Node
                     Configuration.Dialogue.DefaultStartNode),
                 typeof(IYarnDialogueBackend),
                 typeof(IYarnCommandAdapter),
-                typeof(IDialoguePresentation));
+                typeof(IDialoguePresentation))
+            .AddSingleton<IScriptManager>(
+                resolver => new ScriptManager(resolver.Get<IYarnDialogueBackend>()),
+                typeof(IYarnDialogueBackend))
+            .AddSingleton<IScriptPlayback>(
+                resolver => new ScriptPlayback(
+                    resolver.Get<IDialoguePlayer>(),
+                    resolver.Get<IDialoguePresentation>(),
+                    resolver.Get<IYarnDialogueBackend>()),
+                typeof(IDialoguePlayer),
+                typeof(IDialoguePresentation),
+                typeof(IYarnDialogueBackend));
+
+        if (Configuration!.State!.Enabled)
+        {
+            services.AddSingleton<IStateManager>(
+                resolver => CreateStateManager(
+                    resolver.Get<IDialogueVariables>(),
+                    resolver.Get<IActorManager>(),
+                    resolver.Get<IAudioManager>(),
+                    resolver.Get<IScriptPlayback>(),
+                    resolver.Get<IDialoguePlayer>(),
+                    resolver.Get<IInputManager>(),
+                    resolver.Get<IOperationScheduler>()),
+                typeof(IDialogueVariables),
+                typeof(IActorManager),
+                typeof(IAudioManager),
+                typeof(IScriptPlayback),
+                typeof(IDialoguePlayer),
+                typeof(IInputManager),
+                typeof(IOperationScheduler));
+        }
+    }
+
+    private StateManager CreateStateManager(
+        IDialogueVariables variables,
+        IActorManager actors,
+        IAudioManager audio,
+        IScriptPlayback scriptPlayback,
+        IDialoguePlayer dialogue,
+        IInputManager input,
+        IOperationScheduler operations)
+    {
+        var contributors = new StateContributorRegistry()
+            .Register(new DialogueVariablesStateContributor(variables))
+            .Register(new ActorStateContributor(actors))
+            .Register(new AudioStateContributor(audio));
+        ConfigureStateContributors?.Invoke(contributors);
+        contributors.Register(new ScriptStateContributor(scriptPlayback));
+        return new StateManager(contributors.Build(), dialogue, input, operations);
     }
 
     private IYarnCommandAdapter CreateYarnCommandAdapter(

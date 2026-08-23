@@ -7,4 +7,5 @@ public sealed record YarnVmLineSnapshot(
     string ExecutionState,
     int OperandStackDepth,
     int CallStackDepth,
-    int PendingOptionCount);
+    int PendingOptionCount,
+    IReadOnlyList<string> ResolvedSubstitutions);

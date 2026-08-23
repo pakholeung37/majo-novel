@@ -2,20 +2,28 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
+using Google.Protobuf;
+using Majo.Runtime.Script;
+using Majo.YarnBridge;
 using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Resources;
 using YarnSpinnerGodot;
 
 namespace Majo.Runtime.Dialogue.Yarn;
 
-public sealed class YarnDialogueBackend : IYarnDialogueBackend
+public sealed class YarnDialogueBackend : IYarnDialogueBackend,
+    IScriptCatalogBackend,
+    IScriptCheckpointBackend
 {
     private readonly Node owner;
     private readonly IResourceLoader<YarnProject> projects;
     private readonly IReadOnlyList<IDialoguePresenter> presenters;
+    private readonly YarnVmStateBridge stateBridge = new();
     private readonly YarnDialogueVariableStore variableStore = new();
     private readonly object sync = new();
     private DialogueRunner? runner;
@@ -24,9 +32,14 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend
     private Callable nodeStarted;
     private Callable nodeCompleted;
     private Callable dialogueCompleted;
+    private Callable dialogueStarted;
     private TaskCompletionSource<DialogueCompletion> completion = CompletedSource();
     private string currentProjectId = string.Empty;
     private string currentStartNode = string.Empty;
+    private string currentNodeName = string.Empty;
+    private string currentLineId = string.Empty;
+    private IReadOnlyList<string> currentSubstitutions = Array.Empty<string>();
+    private ScriptCheckpoint? pendingRestore;
     private Exception? pendingFailure;
     private bool isStopping;
     private bool isInitialized;
@@ -85,7 +98,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend
         presenterAdapter = new YarnDialoguePresenterAdapter(
             presenters,
             runner,
-            line => LinePresented?.Invoke(line),
+            HandleLinePresented,
             options => OptionsPresented?.Invoke(options))
         {
             Name = "MajoPresenterAdapter",
@@ -100,9 +113,11 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend
         nodeStarted = Callable.From<string>(HandleNodeStarted);
         nodeCompleted = Callable.From<string>(HandleNodeCompleted);
         dialogueCompleted = Callable.From(HandleDialogueCompleted);
+        dialogueStarted = Callable.From(HandleDialogueStarted);
         runner.Connect(DialogueRunner.SignalName.onNodeStart, nodeStarted);
         runner.Connect(DialogueRunner.SignalName.onNodeComplete, nodeCompleted);
         runner.Connect(DialogueRunner.SignalName.onDialogueComplete, dialogueCompleted);
+        runner.Connect(DialogueRunner.SignalName.onDialogueStart, dialogueStarted);
         isInitialized = true;
         return Task.CompletedTask;
     }
@@ -111,6 +126,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend
     {
         await StopAsync(cancellationToken);
         pendingFailure = null;
+        pendingRestore = null;
     }
 
     public async Task ShutdownAsync(CancellationToken cancellationToken)
@@ -135,6 +151,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend
 
         runner = null;
         presenterAdapter = null;
+        pendingRestore = null;
         isInitialized = false;
     }
 
@@ -188,6 +205,9 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend
         {
             currentProjectId = projectId;
             currentStartNode = startNode;
+            currentNodeName = startNode;
+            currentLineId = string.Empty;
+            currentSubstitutions = Array.Empty<string>();
             pendingFailure = null;
             isStopping = false;
             completion = new TaskCompletionSource<DialogueCompletion>(
@@ -291,6 +311,114 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend
         adapter.CommandFailed += HandleCommandFailed;
     }
 
+    public async Task<ScriptDescriptor> ResolveAsync(
+        ScriptId id,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(id);
+        YarnProject project;
+        try
+        {
+            project = await projects.LoadAsync(
+                id.ProjectId,
+                cancellationToken: cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            throw new ScriptRuntimeException(
+                $"Failed to load script project '{id.ProjectId}'.",
+                exception);
+        }
+
+        return CreateDescriptor(project, id);
+    }
+
+    public ScriptCheckpoint CaptureCheckpoint()
+    {
+        EnsureInitialized();
+        var project = Runner.YarnProject ?? throw new ScriptCheckpointException(
+            "No Yarn project is active.");
+        if (string.IsNullOrWhiteSpace(currentNodeName) ||
+            string.IsNullOrWhiteSpace(currentLineId))
+        {
+            throw new ScriptCheckpointException(
+                "Yarn playback is not waiting at a line boundary.");
+        }
+
+        var id = new ScriptId(currentProjectId, currentNodeName);
+        var descriptor = CreateDescriptor(project, id);
+        var snapshot = stateBridge.CaptureAtLine(
+            Runner.Dialogue,
+            currentLineId,
+            currentSubstitutions);
+        return new ScriptCheckpoint(
+            ScriptCheckpoint.CurrentFormatVersion,
+            descriptor.ProgramFingerprint,
+            new ScriptPlaybackSpot(id, snapshot.LineId),
+            snapshot.ResolvedSubstitutions);
+    }
+
+    public async Task ValidateCheckpointAsync(
+        ScriptCheckpoint checkpoint,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(checkpoint);
+        if (checkpoint.FormatVersion != ScriptCheckpoint.CurrentFormatVersion)
+        {
+            throw new ScriptCheckpointException(
+                $"Unsupported script checkpoint format '{checkpoint.FormatVersion}'; " +
+                $"expected '{ScriptCheckpoint.CurrentFormatVersion}'.");
+        }
+
+        if (checkpoint.Spot.Boundary != ScriptCheckpointBoundary.AwaitingLineAdvance)
+        {
+            throw new ScriptCheckpointException(
+                $"Unsupported script checkpoint boundary '{checkpoint.Spot.Boundary}'.");
+        }
+
+        var descriptor = await ResolveAsync(checkpoint.Spot.Script, cancellationToken);
+        if (!string.Equals(
+                descriptor.ProgramFingerprint,
+                checkpoint.ProgramFingerprint,
+                StringComparison.Ordinal))
+        {
+            throw new ScriptCheckpointException(
+                $"Script '{checkpoint.Spot.Script}' no longer matches checkpoint fingerprint.");
+        }
+
+        if (!descriptor.LineIds.Contains(checkpoint.Spot.LineId, StringComparer.Ordinal))
+        {
+            throw new ScriptCheckpointException(
+                $"Line '{checkpoint.Spot.LineId}' does not exist in script " +
+                $"'{checkpoint.Spot.Script}'.");
+        }
+    }
+
+    public void PrepareRestore(ScriptCheckpoint checkpoint)
+    {
+        ArgumentNullException.ThrowIfNull(checkpoint);
+        if (pendingRestore is not null)
+        {
+            throw new ScriptCheckpointException(
+                "Another script checkpoint restore is already pending.");
+        }
+
+        pendingRestore = checkpoint;
+    }
+
+    public void CancelPreparedRestore(ScriptCheckpoint checkpoint)
+    {
+        ArgumentNullException.ThrowIfNull(checkpoint);
+        if (ReferenceEquals(pendingRestore, checkpoint) || pendingRestore == checkpoint)
+        {
+            pendingRestore = null;
+        }
+    }
+
     public void RegisterNativePresenter(Node presenter)
     {
         ArgumentNullException.ThrowIfNull(presenter);
@@ -323,7 +451,11 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend
         Runner.dialoguePresenters.Remove(presenter);
     }
 
-    private void HandleNodeStarted(string nodeName) => NodeEntered?.Invoke(nodeName);
+    private void HandleNodeStarted(string nodeName)
+    {
+        currentNodeName = nodeName;
+        NodeEntered?.Invoke(nodeName);
+    }
 
     private void HandleNodeCompleted(string nodeName) => NodeExited?.Invoke(nodeName);
 
@@ -347,6 +479,41 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend
         CompleteSession(stopping
             ? DialogueCompletionKind.Stopped
             : DialogueCompletionKind.Completed);
+    }
+
+    private void HandleDialogueStarted()
+    {
+        if (pendingRestore is not { } checkpoint)
+        {
+            return;
+        }
+
+        pendingRestore = null;
+
+        var project = Runner.YarnProject ?? throw new ScriptCheckpointException(
+            "DialogueRunner has no Yarn project during checkpoint restore.");
+        var bridgeSnapshot = new YarnVmLineSnapshot(
+            checkpoint.Spot.Script.NodeName,
+            checkpoint.Spot.LineId,
+            0,
+            "WaitingForContinue",
+            0,
+            0,
+            0,
+            checkpoint.ResolvedSubstitutions);
+        stateBridge.InjectReplayAfterNodeSelected(
+            Runner.Dialogue,
+            project.Program,
+            bridgeSnapshot);
+    }
+
+    private void HandleLinePresented(
+        DialogueLine line,
+        IReadOnlyList<string> substitutions)
+    {
+        currentLineId = line.Id;
+        currentSubstitutions = substitutions;
+        LinePresented?.Invoke(line);
     }
 
     private void HandleCommandFailed(RuntimeCommandException failure)
@@ -391,6 +558,50 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend
         {
             Runner.Disconnect(DialogueRunner.SignalName.onDialogueComplete, dialogueCompleted);
         }
+
+
+        if (Runner.IsConnected(DialogueRunner.SignalName.onDialogueStart, dialogueStarted))
+        {
+            Runner.Disconnect(DialogueRunner.SignalName.onDialogueStart, dialogueStarted);
+        }
+    }
+
+    private static ScriptDescriptor CreateDescriptor(YarnProject project, ScriptId id)
+    {
+        if (project.Program is null)
+        {
+            throw new ScriptRuntimeException(
+                $"Script project '{id.ProjectId}' has no compiled program.");
+        }
+
+        if (!project.Program.Nodes.TryGetValue(id.NodeName, out var node))
+        {
+            throw new ScriptRuntimeException(
+                $"Node '{id.NodeName}' was not found in project '{id.ProjectId}'.");
+        }
+
+        var allLineIds = project.Program.Nodes.Values
+            .SelectMany(programNode => programNode.Instructions)
+            .Where(instruction => instruction.InstructionTypeCase ==
+                global::Yarn.Instruction.InstructionTypeOneofCase.RunLine)
+            .Select(instruction => instruction.RunLine.LineID)
+            .ToArray();
+        var duplicate = allLineIds.GroupBy(lineId => lineId, StringComparer.Ordinal)
+            .FirstOrDefault(group => group.Count() > 1);
+        if (duplicate is not null)
+        {
+            throw new ScriptCheckpointException(
+                $"Project '{id.ProjectId}' contains duplicate line ID '{duplicate.Key}'.");
+        }
+
+        var lineIds = node.Instructions
+            .Where(instruction => instruction.InstructionTypeCase ==
+                global::Yarn.Instruction.InstructionTypeOneofCase.RunLine)
+            .Select(instruction => instruction.RunLine.LineID)
+            .ToArray();
+        var fingerprint = Convert.ToHexString(
+            SHA256.HashData(project.Program.ToByteArray())).ToLowerInvariant();
+        return new ScriptDescriptor(id, fingerprint, lineIds);
     }
 
     private void EnsureInitialized()

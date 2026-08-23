@@ -50,6 +50,10 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation
 
     public bool IsPresentingOptions => inputPresenter?.IsPresentingOptions == true;
 
+    public event Action? LineDisplayCompleted;
+
+    public event Action? LineDismissed;
+
     public Task InitializeAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -95,6 +99,8 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation
         {
             Name = "MajoMarkupBridge",
         };
+        markupBridge.DisplayCompleted += HandleLineDisplayCompleted;
+        markupBridge.LineDismissed += HandleLineDismissed;
         linePresenter.AddChild(markupBridge);
         inputPresenter = new MajoPresentationInputPresenter(input, markupBridge, optionParent)
         {
@@ -127,6 +133,12 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation
         }
 
         inputPresenter?.ResetInput();
+        if (markupBridge is not null)
+        {
+            markupBridge.DisplayCompleted -= HandleLineDisplayCompleted;
+            markupBridge.LineDismissed -= HandleLineDismissed;
+        }
+
         UnregisterPresenter(inputPresenter);
         UnregisterPresenter(optionsPresenter);
         UnregisterPresenter(linePresenter);
@@ -161,6 +173,10 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation
         inputPresenter = null;
         isInitialized = false;
     }
+
+    private void HandleLineDisplayCompleted() => LineDisplayCompleted?.Invoke();
+
+    private void HandleLineDismissed() => LineDismissed?.Invoke();
 
     private void UnregisterPresenter(Node? presenter)
     {

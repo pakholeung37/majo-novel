@@ -9,6 +9,8 @@ public interface IActor
 {
     string Id { get; }
 
+    string FactoryId => string.Empty;
+
     string Appearance { get; }
 
     string TargetAppearance => Appearance;

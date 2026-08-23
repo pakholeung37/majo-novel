@@ -96,6 +96,64 @@ public sealed class YarnVmStateBridgeTests
             deliveredLines);
     }
 
+    [Fact]
+    public void BridgeReplaysCapturedResolvedSubstitutions()
+    {
+        const string source = """
+            title: Start
+            ---
+            <<declare $name = "Maya">>
+            <<declare $score = 7>>
+            <<declare $won = true>>
+            Narrator: Hello, {$name}; score {$score}; won {$won}. #line:bridge-substitution
+            Narrator: After. #line:bridge-after
+            ===
+            """;
+        var compilation = Compiler.Compile(
+            CompilationJob.CreateFromString("bridge-substitution.yarn", source));
+        Assert.DoesNotContain(
+            compilation.Diagnostics,
+            diagnostic => diagnostic.Severity == Diagnostic.DiagnosticSeverity.Error);
+        var program = Assert.IsType<Program>(compilation.Program);
+        var storage = new FakeVariableStorage();
+        storage.SetValue("$name", "Maya");
+        storage.SetValue("$score", 7f);
+        storage.SetValue("$won", true);
+        var delivered = new List<(string Id, string[] Substitutions)>();
+        var dialogue = new YarnDialogue(storage)
+        {
+            LineHandler = line => delivered.Add((line.ID, line.Substitutions.ToArray())),
+            CommandHandler = _ => { },
+            OptionsHandler = _ => { },
+        };
+        dialogue.SetProgram(program);
+        dialogue.SetNode("Start");
+        var bridge = new YarnVmStateBridge();
+
+        dialogue.Continue();
+        var first = Assert.Single(delivered);
+        Assert.Equal(3, first.Substitutions.Length);
+        Assert.Equal("Maya", first.Substitutions[0]);
+        var snapshot = bridge.CaptureAtLine(
+            dialogue,
+            "line:bridge-substitution",
+            first.Substitutions);
+        dialogue.Stop();
+        storage.SetValue("$name", "Changed after capture");
+        storage.SetValue("$score", 999f);
+        storage.SetValue("$won", false);
+
+        bridge.PrepareReplay(dialogue, program, snapshot);
+        dialogue.Continue();
+        dialogue.Continue();
+
+        Assert.Equal(
+            ["line:bridge-substitution", "line:bridge-substitution", "line:bridge-after"],
+            delivered.Select(line => line.Id));
+        Assert.Equal(delivered[0].Substitutions, delivered[1].Substitutions);
+        Assert.Empty(delivered[2].Substitutions);
+    }
+
     private static YarnDialogue CreateDialogue(
         Program program,
         out List<string> deliveredLines)

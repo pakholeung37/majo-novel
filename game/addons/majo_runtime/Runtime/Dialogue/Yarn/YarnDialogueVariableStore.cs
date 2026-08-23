@@ -1,6 +1,8 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using YarnSpinnerGodot;
 
 namespace Majo.Runtime.Dialogue.Yarn;
@@ -99,6 +101,39 @@ public partial class YarnDialogueVariableStore : InMemoryVariableStorage,
     }
 
     void IDialogueVariableStore.Clear() => Clear();
+
+    IReadOnlyDictionary<string, DialogueValue> IDialogueVariableStore.Capture()
+    {
+        var result = new Dictionary<string, DialogueValue>(StringComparer.Ordinal);
+        var (numbers, strings, booleans) = GetAllVariables();
+        foreach (var pair in numbers)
+        {
+            result[FromYarnName(pair.Key)] = DialogueValue.FromNumber(pair.Value);
+        }
+
+        foreach (var pair in strings)
+        {
+            result[FromYarnName(pair.Key)] = DialogueValue.FromString(pair.Value);
+        }
+
+        foreach (var pair in booleans)
+        {
+            result[FromYarnName(pair.Key)] = DialogueValue.FromBoolean(pair.Value);
+        }
+
+        return new ReadOnlyDictionary<string, DialogueValue>(result);
+    }
+
+    void IDialogueVariableStore.ReplaceAll(
+        IReadOnlyDictionary<string, DialogueValue> values)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        Clear();
+        foreach (var pair in values)
+        {
+            ((IDialogueVariableStore)this).Set(pair.Key, pair.Value);
+        }
+    }
 
     public override void SetValue(string variableName, float floatValue)
     {

@@ -16,7 +16,7 @@ internal sealed partial class YarnDialoguePresenterAdapter : Node, DialoguePrese
 {
     private readonly IReadOnlyList<IDialoguePresenter> presenters;
     private readonly DialogueRunner runner;
-    private readonly Action<DialogueLine> linePresented;
+    private readonly Action<DialogueLine, IReadOnlyList<string>> linePresented;
     private readonly Action<IReadOnlyList<MajoDialogueOption>> optionsPresented;
     private readonly object stopGate = new();
     private TaskCompletionSource stopBoundary = NewStopBoundary();
@@ -26,7 +26,7 @@ internal sealed partial class YarnDialoguePresenterAdapter : Node, DialoguePrese
     public YarnDialoguePresenterAdapter(
         IReadOnlyList<IDialoguePresenter> presenters,
         DialogueRunner runner,
-        Action<DialogueLine> linePresented,
+        Action<DialogueLine, IReadOnlyList<string>> linePresented,
         Action<IReadOnlyList<MajoDialogueOption>> optionsPresented)
     {
         this.presenters = presenters ?? throw new ArgumentNullException(nameof(presenters));
@@ -95,7 +95,7 @@ internal sealed partial class YarnDialoguePresenterAdapter : Node, DialoguePrese
         var converted = YarnLineConverter.Convert(line);
         try
         {
-            linePresented(converted);
+            linePresented(converted, Array.AsReadOnly(line.Substitutions.ToArray()));
             var context = new DialoguePresentationContext(
                 token.HurryUpToken,
                 token.NextLineToken,

@@ -1,17 +1,38 @@
 using System.Runtime.CompilerServices;
+using System.Reflection;
 using Yarn;
 
 namespace Majo.YarnBridge;
 
 public sealed class YarnVmStateBridge
 {
-    public YarnVmLineSnapshot CaptureAtLine(Dialogue dialogue, string lineId)
+    public static void ValidateRuntimeLayout()
+    {
+        ValidateField(typeof(Dialogue), "vm", typeof(VirtualMachine));
+        ValidateField(typeof(VirtualMachine), "isContinuing", typeof(bool));
+        ValidateField(
+            typeof(VirtualMachine.State),
+            "callStack",
+            typeof(Stack<VirtualMachine.State.CallSite>));
+    }
+
+    public YarnVmLineSnapshot CaptureAtLine(
+        Dialogue dialogue,
+        string lineId,
+        IReadOnlyList<string>? resolvedSubstitutions = null)
     {
         ArgumentNullException.ThrowIfNull(dialogue);
         ArgumentException.ThrowIfNullOrWhiteSpace(lineId);
 
         ref var vm = ref YarnPrivateAccess.GetVirtualMachine(dialogue);
-        EnsureSafeLineBoundary(vm, lineId);
+        var delivered = EnsureSafeLineBoundary(vm, lineId);
+        resolvedSubstitutions ??= Array.Empty<string>();
+        if (resolvedSubstitutions.Count != delivered.RunLine.SubstitutionCount)
+        {
+            throw new InvalidOperationException(
+                $"Line '{lineId}' requires {delivered.RunLine.SubstitutionCount} substitutions, " +
+                $"but {resolvedSubstitutions.Count} were provided.");
+        }
 
         ref var callStack = ref YarnPrivateAccess.GetCallStack(vm.state);
         return new YarnVmLineSnapshot(
@@ -21,7 +42,8 @@ public sealed class YarnVmStateBridge
             vm.CurrentExecutionState.ToString(),
             vm.state.stack.Count,
             callStack.Count,
-            vm.state.currentOptions.Count);
+            vm.state.currentOptions.Count,
+            Array.AsReadOnly(resolvedSubstitutions.ToArray()));
     }
 
     public void PrepareReplay(
@@ -58,10 +80,12 @@ public sealed class YarnVmStateBridge
 
         var anchor = FindUniqueLine(program, snapshot.LineId);
         var instruction = anchor.Node.Instructions[anchor.InstructionIndex];
-        if (instruction.RunLine.SubstitutionCount != 0)
+        if (instruction.RunLine.SubstitutionCount != snapshot.ResolvedSubstitutions.Count)
         {
-            throw new NotSupportedException(
-                "The proof-of-concept bridge does not yet restore line substitution operands.");
+            throw new InvalidOperationException(
+                $"Line '{snapshot.LineId}' now requires " +
+                $"{instruction.RunLine.SubstitutionCount} substitutions, but the checkpoint " +
+                $"contains {snapshot.ResolvedSubstitutions.Count}.");
         }
 
         ref var vm = ref YarnPrivateAccess.GetVirtualMachine(dialogue);
@@ -85,13 +109,18 @@ public sealed class YarnVmStateBridge
         vm.state.currentOptions.Clear();
         ref var callStack = ref YarnPrivateAccess.GetCallStack(vm.state);
         callStack.Clear();
+        foreach (var substitution in snapshot.ResolvedSubstitutions)
+        {
+            vm.state.PushValue(new Value(substitution));
+        }
+
         vm.state.currentNodeName = anchor.NodeName;
         vm.state.programCounter = anchor.InstructionIndex;
         vm.currentNode = anchor.Node;
         vm._executionState = VirtualMachine.ExecutionState.WaitingForContinue;
     }
 
-    private static void EnsureSafeLineBoundary(VirtualMachine vm, string lineId)
+    private static Instruction EnsureSafeLineBoundary(VirtualMachine vm, string lineId)
     {
         if (YarnPrivateAccess.GetIsContinuing(vm))
         {
@@ -126,6 +155,8 @@ public sealed class YarnVmStateBridge
             throw new InvalidOperationException(
                 $"Yarn VM is not waiting after line '{lineId}'.");
         }
+
+        return delivered;
     }
 
     private static LineAnchor FindUniqueLine(Program program, string lineId)
@@ -164,6 +195,19 @@ public sealed class YarnVmStateBridge
         string NodeName,
         Node Node,
         int InstructionIndex);
+
+    private static void ValidateField(Type owner, string name, Type expectedType)
+    {
+        var field = owner.GetField(
+            name,
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        if (field is null || field.FieldType != expectedType)
+        {
+            throw new InvalidOperationException(
+                $"Yarn Spinner runtime layout is incompatible: expected field " +
+                $"'{owner.FullName}.{name}' of type '{expectedType.FullName}'.");
+        }
+    }
 
     private static class YarnPrivateAccess
     {

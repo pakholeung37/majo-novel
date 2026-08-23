@@ -64,6 +64,8 @@ public interface IAudioPlayback
 
     float Volume { get; }
 
+    float BaseVolume => Volume;
+
     AudioPlaybackState State { get; }
 
     Task Completion { get; }
