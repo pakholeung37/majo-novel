@@ -43,6 +43,12 @@ public partial class MajoProjectConfiguration : Resource
     [Export]
     public StateConfiguration? State { get; set; }
 
+    [Export]
+    public AutoConfiguration? Auto { get; set; }
+
+    [Export]
+    public HistoryConfiguration? History { get; set; }
+
     public static MajoProjectConfiguration CreateDefault() => new()
     {
         Runtime = new RuntimeConfiguration(),
@@ -55,6 +61,8 @@ public partial class MajoProjectConfiguration : Resource
         Audio = new AudioConfiguration(),
         Script = new ScriptConfiguration(),
         State = new StateConfiguration(),
+        Auto = new AutoConfiguration(),
+        History = new HistoryConfiguration(),
     };
 
     public ConfigurationValidationResult Validate(Func<string, bool>? resourceExists = null)
@@ -72,6 +80,8 @@ public partial class MajoProjectConfiguration : Resource
         ValidateAudio(issues);
         ValidateScript(issues);
         ValidateState(issues);
+        ValidateAuto(issues);
+        ValidateHistory(issues);
 
         return new ConfigurationValidationResult(issues);
     }
@@ -97,6 +107,38 @@ public partial class MajoProjectConfiguration : Resource
         if (State is null)
         {
             issues.Add(new ConfigurationIssue(nameof(State), "Configuration is required."));
+        }
+    }
+
+    private void ValidateAuto(ICollection<ConfigurationIssue> issues)
+    {
+        if (Auto is null)
+        {
+            issues.Add(new ConfigurationIssue(nameof(Auto), "Configuration is required."));
+            return;
+        }
+
+        if (!double.IsFinite(Auto.ExtraDelaySeconds) || Auto.ExtraDelaySeconds < 0)
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Auto)}.{nameof(Auto.ExtraDelaySeconds)}",
+                "Extra delay must be finite and non-negative."));
+        }
+    }
+
+    private void ValidateHistory(ICollection<ConfigurationIssue> issues)
+    {
+        if (History is null)
+        {
+            issues.Add(new ConfigurationIssue(nameof(History), "Configuration is required."));
+            return;
+        }
+
+        if (History.Capacity <= 0)
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(History)}.{nameof(History.Capacity)}",
+                "Capacity must be greater than zero."));
         }
     }
 

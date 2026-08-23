@@ -95,7 +95,10 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation
 
         ConfigureView(root, linePresenter);
         linePresenter.dialogueRunner = backend.Runner;
-        markupBridge = new MajoActionMarkupBridge(backend.Runner, markupHandlers)
+        markupBridge = new MajoActionMarkupBridge(
+            backend.RequestHurryUp,
+            backend.RequestNextLine,
+            markupHandlers)
         {
             Name = "MajoMarkupBridge",
         };

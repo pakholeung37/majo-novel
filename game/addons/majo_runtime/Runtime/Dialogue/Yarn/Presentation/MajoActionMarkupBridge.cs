@@ -12,15 +12,20 @@ namespace Majo.Runtime.Dialogue.Yarn.Presentation;
 
 internal sealed partial class MajoActionMarkupBridge : ActionMarkupHandler
 {
-    private readonly DialogueRunner runner;
+    private readonly Action requestHurryUp;
+    private readonly Action requestNextLine;
     private readonly IReadOnlyList<IDialogueMarkupHandler> handlers;
     private DialogueText? currentText;
 
     public MajoActionMarkupBridge(
-        DialogueRunner runner,
+        Action requestHurryUp,
+        Action requestNextLine,
         IReadOnlyList<IDialogueMarkupHandler> handlers)
     {
-        this.runner = runner ?? throw new ArgumentNullException(nameof(runner));
+        this.requestHurryUp = requestHurryUp ??
+            throw new ArgumentNullException(nameof(requestHurryUp));
+        this.requestNextLine = requestNextLine ??
+            throw new ArgumentNullException(nameof(requestNextLine));
         this.handlers = handlers ?? throw new ArgumentNullException(nameof(handlers));
     }
 
@@ -106,11 +111,11 @@ internal sealed partial class MajoActionMarkupBridge : ActionMarkupHandler
 
         if (IsDisplayComplete)
         {
-            runner.RequestNextLine();
+            requestNextLine();
         }
         else
         {
-            runner.RequestHurryUpLine();
+            requestHurryUp();
         }
     }
 

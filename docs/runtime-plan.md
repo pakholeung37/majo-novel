@@ -1156,7 +1156,7 @@ Runtime 进入明确 Faulted 状态、保留输入阻断且不自动继续脚本
 - Rollback 快照栈、玩家回退输入、脚本变更后的 recovery rollback。
 - 恢复待选选项、非空 Yarn call/value stack 或任意 VM 指令中间态。
 
-### 11.9 M10：Auto 与 History
+### 11.9 M10：Auto 与 History（已完成）
 
 目标：补齐普通视觉小说的自动阅读和当前 Session 回看能力。
 
@@ -1188,7 +1188,27 @@ History 交付：
 - History 容量、顺序、重复 line ID、markup 最终文本和 Voice 重播行为确定。
 - 完整可视 Demo 与真实 Yarn/Godot headless 覆盖 Manual、Auto 和 History 闭环。
 
-### 11.10 第二阶段完成定义
+实施记录（2026-08-23）：
+
+- 已新增 Yarn-free `IAutoManager`，只消费 `IScriptPlayback` 阶段；deadline 只在
+  `AwaitingAdvance` 创建，先等待捕获到的 Voice 完成，再使用 unscaled Frame Clock
+  执行配置停留时间。Manual、Auto、Pause 和失败均有明确状态或事件。
+- History 和 Options 分别暂停 Auto；关闭/选择后重新开始完整 deadline。手动 Advance
+  会取消待执行 deadline，Yarn Backend 对同一展示边界的 NextLine 请求再做一次原子
+  去重，因此同帧 Manual/Auto 竞争只推进一次。
+- 已新增 `IHistoryManager` 和默认 History Overlay；仅在 `LineDisplayCompleted` 记录 stable
+  line ID、speaker、最终可见文本和实际可用 Voice ID，按 sequence/FIFO 确定淘汰，并支持
+  重复 line ID 与 Voice 重播。
+- History 以稳定 key `majo.session.history` 注册为 State `Session` Contributor；Reset
+  关闭并清空 History、将 Auto 恢复为 Manual，并在 Input Reset 后重新绑定两项常驻输入。
+  `CaptureGameAsync` 的 record 集合不含 History。
+- 可视 Demo 已改用默认 Presenter 并提供 Auto/History HUD；真实 Yarn/Godot fixture 覆盖
+  Manual、History 暂停、Voice 等待、Options 暂停、容量淘汰、Voice 重播、Reset 与节点
+  清理闭环。
+- 全量门禁通过：136 个纯 C# 单元测试、Godot import/编译、可见场景 smoke、三轮连续
+  headless 集成测试和失败探针均通过；仅保留 YarnSpinner-Godot 既有 `SYSLIB1220` 警告。
+
+### 11.10 第二阶段完成定义（已完成）
 
 M6-M10 只有同时满足以下条件才算完成：
 

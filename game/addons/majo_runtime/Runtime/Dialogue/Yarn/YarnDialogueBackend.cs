@@ -43,6 +43,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
     private Exception? pendingFailure;
     private bool isStopping;
     private bool isInitialized;
+    private int nextLineRequested;
 
     public YarnDialogueBackend(
         Node owner,
@@ -97,7 +98,8 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
         };
         presenterAdapter = new YarnDialoguePresenterAdapter(
             presenters,
-            runner,
+            RequestHurryUp,
+            RequestNextLine,
             HandleLinePresented,
             options => OptionsPresented?.Invoke(options))
         {
@@ -293,7 +295,8 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
 
     public void RequestNextLine()
     {
-        if (isInitialized)
+        if (isInitialized && Runner.IsDialogueRunning &&
+            Interlocked.Exchange(ref nextLineRequested, 1) == 0)
         {
             Runner.RequestNextLine();
         }
@@ -513,6 +516,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
     {
         currentLineId = line.Id;
         currentSubstitutions = substitutions;
+        Volatile.Write(ref nextLineRequested, 0);
         LinePresented?.Invoke(line);
     }
 

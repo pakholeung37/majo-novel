@@ -1,4 +1,6 @@
 using System.Reflection;
+using Majo.Runtime.Auto;
+using Majo.Runtime.History;
 using Majo.Runtime.Script;
 using Majo.Runtime.State;
 using Xunit;
@@ -36,12 +38,14 @@ public sealed class ScriptRuntimeTests
     }
 
     [Fact]
-    public void ScriptAndStatePublicContractsDoNotExposeYarnOrGodotTypes()
+    public void ScriptStateAutoAndHistoryPublicContractsDoNotExposeBackendTypes()
     {
         var stableNamespaces = new HashSet<string>(StringComparer.Ordinal)
         {
             typeof(IScriptPlayback).Namespace!,
             typeof(IStateManager).Namespace!,
+            typeof(IAutoManager).Namespace!,
+            typeof(IHistoryManager).Namespace!,
         };
         var types = typeof(IScriptPlayback).Assembly.GetExportedTypes()
             .Where(type => type.Namespace is not null &&

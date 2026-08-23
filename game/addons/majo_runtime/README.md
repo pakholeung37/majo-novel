@@ -10,9 +10,9 @@ Compatibility baseline:
 
 Yarn Spinner is an external prerequisite and is not bundled with this plugin.
 
-Current implementation status: M9 audio runtime, M8 default VN presentation and
-Yarn markup bridge, M7 input ownership, M6 dialogue sessions, and the M5 playable
-loop on the stable Runtime API.
+Current implementation status: M10 Auto and Session History, M9 audio runtime,
+M8 default VN presentation and Yarn markup bridge, M7 input ownership, M6 dialogue
+sessions, and the playable loop on the stable Runtime API.
 
 ## Installation
 
@@ -365,6 +365,43 @@ handlers remain an advanced integration under `Majo.Runtime.Dialogue.Yarn`.
 game-specific Presenters. `IDialoguePresentation` exposes only the default view's
 line-complete and option-phase state for later Auto/History composition.
 
+## Auto and Session History
+
+Runtime registers Yarn-free `IAutoManager` and `IHistoryManager` services. Auto
+starts its unscaled deadline only after the default Presenter completes the line
+and `IScriptPlayback` reaches `AwaitingAdvance`. It can optionally wait for the
+current Voice playback before applying the configured extra delay:
+
+```csharp
+var configuration = MajoProjectConfiguration.CreateDefault();
+configuration.Auto!.WaitForVoice = true;
+configuration.Auto.ExtraDelaySeconds = 1;
+configuration.History!.Capacity = 100;
+configuration.History.ShowDefaultUi = true;
+
+var auto = runtime.Host!.Services.Get<IAutoManager>();
+auto.SetMode(AutoMode.Auto);
+
+var history = runtime.Host.Services.Get<IHistoryManager>();
+history.Open();
+await history.ReplayVoiceAsync(history.Entries[0].Sequence);
+```
+
+Options and the History modal pause Auto and closing them restarts a full
+deadline. Manual Advance cancels the pending deadline; the Yarn backend also
+deduplicates same-boundary NextLine requests so a manual/deadline race advances
+exactly once. The default bindings are `A` for Auto and `H` for History.
+
+History records only `LineDisplayCompleted` boundaries, retaining the stable line
+ID, speaker, final visible text, and resolved Voice ID. Capacity eviction is FIFO
+and duplicate line IDs remain separate ordered entries. The built-in overlay
+lists entries and enables Voice replay only when a localized clip exists.
+
+History is registered as a `Session` State contributor. Runtime Reset closes and
+clears it, returns Auto to Manual, and rebinds both global input scopes after the
+Input service resets. History is deliberately excluded from Game snapshots and
+future disk saves.
+
 ## Yarn commands
 
 During initialization Runtime registers every entry in the immutable command
@@ -448,19 +485,20 @@ the context are cancelled when the current Yarn dialogue stops. Command
 failures emit `RuntimeCommandFailed`, abort the current dialogue and remain
 available through `IYarnCommandAdapter.LastFailure`.
 
-## M5 playable demo
+## Playable M10 demo
 
-Run the project or open `res://demo/M5Demo.tscn`. The demo uses one Yarn script
-to exercise parallel background/character animation, group join, a waiting
+Run the project or open `res://demo/M5Demo.tscn`. The visible scene uses the
+default dialogue Presenter and an M10 HUD for Manual/Auto and History. It also
+exercises parallel background/character animation, group join, a waiting
 animation, dialogue, options, branching, a custom command, and clean Runtime
-shutdown.
+shutdown. Use the HUD buttons or the `A`/`H` shortcuts.
 
 All extension code lives outside the plugin under `res://demo`:
 
 - `M5CaseService` demonstrates a service with Runtime lifetime dependency.
 - `M5PortraitActorFactory` demonstrates a custom Actor factory ID.
 - `demo_route` demonstrates a custom Yarn command resolving the service.
-- `M5DemoPresenter` supplies the visible line and option UI.
+- `M10DemoHud` exposes Auto state and History controls over the default Presenter.
 - `M5DialogueProbe` runs the same content without graphics for deterministic
   integration tests.
 

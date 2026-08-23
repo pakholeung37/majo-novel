@@ -10,12 +10,14 @@ using Majo.Runtime;
 using Majo.Runtime.Audio;
 using Majo.Runtime.Audio.Godot;
 using Majo.Runtime.Actors;
+using Majo.Runtime.Auto;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Dialogue.Presentation;
 using Majo.Runtime.Dialogue.Yarn;
+using Majo.Runtime.History;
 using Majo.Runtime.Input;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Operations.Godot;
@@ -69,6 +71,7 @@ public partial class HeadlessTestRunner : Node
         await ValidateInputRuntimeAsync();
         await ValidateYarnVmStateBridgeAsync();
         await ValidateScriptAndStateRuntimeAsync();
+        await ValidateAutoAndHistoryRuntimeAsync();
         await ValidateDefaultPresentationAsync();
         await ValidateSuccessfulRuntimeLifecycleAsync();
         await ValidateLifecycleTimeoutAsync();
@@ -157,7 +160,10 @@ public partial class HeadlessTestRunner : Node
                 audio.SfxInstances.Count == 0 &&
                 audio.CurrentVoice is null &&
                 operations.ActiveOperations.Count == 0,
-            "M9 Reset left audio players or Operations alive.");
+            $"M9 Reset left audio players or Operations alive: nodes=" +
+            $"{audioHost.GetChildCount()}, bgm={audio.BgmTracks.Count}, " +
+            $"sfx={audio.SfxInstances.Count}, voice={audio.CurrentVoice is not null}, " +
+            $"operations={operations.ActiveOperations.Count}.");
 
         await bootstrap.RequestShutdownAsync();
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -380,7 +386,7 @@ public partial class HeadlessTestRunner : Node
                 lineProbe.Lines[1].Text.Text.Contains("Maya", StringComparison.Ordinal) &&
                 dialogue.CurrentLineId == "line:m95-state-current" &&
                 script.Phase == ScriptPlaybackPhase.AwaitingAdvance &&
-                input.ActiveHandleCount == 1,
+                input.ActiveHandleCount == 3,
             "M9.5 restore did not replay the captured resolved line exactly once.");
 
         dialogue.RequestNextLine();
@@ -392,8 +398,8 @@ public partial class HeadlessTestRunner : Node
         await WaitForConditionAsync(() => presentation.IsLineDisplayComplete, 2);
         dialogue.RequestNextLine();
         await dialogue.Completion.WaitAsync(TimeSpan.FromSeconds(2));
-        Assert(operations.ActiveOperations.Count == 0 && input.ActiveHandleCount == 0,
-            "M9.5/M9.6 completion left active Operations or input ownership.");
+        Assert(operations.ActiveOperations.Count == 0 && input.ActiveHandleCount == 2,
+            "M9.5/M9.6 completion left active Operations or transient input ownership.");
 
         var actorRoot = bootstrap.GetNode<CanvasLayer>("MajoActors");
         var audioHost = bootstrap.GetNode("MajoAudioHost");
@@ -404,6 +410,164 @@ public partial class HeadlessTestRunner : Node
                 !IsInstanceValid(actorRoot) &&
                 !IsInstanceValid(audioHost),
             "M9.5/M9.6 Runtime nodes leaked after shutdown.");
+    }
+
+    private async Task ValidateAutoAndHistoryRuntimeAsync()
+    {
+        var configuration = MajoProjectConfiguration.CreateDefault();
+        configuration.Resources!.RootPath = "res://tests";
+        configuration.Resources.ScriptsPath = "headless";
+        configuration.Dialogue!.DefaultProjectId = "M10AutoHistory";
+        configuration.Presentation!.Enabled = true;
+        configuration.Presentation.LettersPerSecond = 10_000;
+        configuration.Presentation.UseFadeEffect = false;
+        configuration.Auto!.ExtraDelaySeconds = 0.03;
+        configuration.History!.Capacity = 2;
+        configuration.History.ShowDefaultUi = true;
+
+        var audioBackend = new FakeAudioBackend();
+        var audioLoader = new FakeAudioClipLoader("headless/audio")
+            .Register("en/m10-voice");
+        var bootstrap = new MajoRuntimeBootstrap
+        {
+            Name = "AutoHistoryRuntime",
+            Configuration = configuration,
+        };
+        bootstrap.ConfigureServices = services => services.ReplaceSingleton<IAudioManager>(
+            resolver => new AudioManager(
+                audioBackend,
+                resolver.Get<IOperationScheduler>(),
+                audioLoader,
+                audioLoader,
+                audioLoader,
+                new AudioSettings()),
+            typeof(IOperationScheduler));
+        AddChild(bootstrap);
+        await bootstrap.InitializationCompletion;
+
+        var services = bootstrap.Host!.Services;
+        var dialogue = services.Get<IDialoguePlayer>();
+        var presentation = services.Get<IDialoguePresentation>();
+        var script = services.Get<IScriptPlayback>();
+        var auto = services.Get<IAutoManager>();
+        var history = services.Get<IHistoryManager>();
+        var audio = services.Get<IAudioManager>();
+        var clock = services.Get<IFrameClock>();
+        var input = services.Get<IInputManager>();
+        var operations = services.Get<IOperationScheduler>();
+        var historyOverlay = bootstrap.FindChild(
+            "MajoHistoryOverlay",
+            recursive: true,
+            owned: false) as Control;
+        Assert(historyOverlay is not null && !historyOverlay.Visible,
+            "M10 did not create the configured default History overlay.");
+        Assert(input.ActiveHandleCount == 2,
+            "M10 did not establish exactly the Auto and History global input scopes.");
+
+        await dialogue.StartAsync();
+        var completion = dialogue.Completion;
+        await WaitForConditionAsync(
+            () => dialogue.CurrentLineId == "line:m10-first" &&
+                presentation.IsLineDisplayComplete,
+            2);
+        Assert(script.Phase == ScriptPlaybackPhase.AwaitingAdvance &&
+                history.Entries.Count == 1 &&
+                history.Entries[0].LineId == "line:m10-first",
+            "M10 did not record the first line at its completed display boundary.");
+        await clock.DelayAsync(TimeSpan.FromSeconds(0.08), FrameTimeMode.Unscaled);
+        Assert(dialogue.CurrentLineId == "line:m10-first",
+            "M10 Manual mode advanced without player input.");
+
+        auto.SetMode(AutoMode.Auto);
+        history.Open();
+        Assert(auto.IsPaused && historyOverlay.Visible,
+            "M10 History modal did not pause Auto and reveal the default overlay.");
+        await clock.DelayAsync(TimeSpan.FromSeconds(0.08), FrameTimeMode.Unscaled);
+        Assert(dialogue.CurrentLineId == "line:m10-first",
+            "M10 Auto deadline advanced while History was open.");
+        history.Close();
+        await WaitForConditionAsync(
+            () => dialogue.CurrentLineId == "line:m10-second" &&
+                presentation.IsLineDisplayComplete &&
+                audio.CurrentVoice?.State == AudioPlaybackState.Playing,
+            2);
+        Assert(!auto.IsPaused &&
+                history.Entries.Count == 2 &&
+                history.Entries[1].VoiceId == "m10-voice",
+            "M10 did not resume Auto or retain the resolved Voice ID in History.");
+
+        await clock.DelayAsync(TimeSpan.FromSeconds(0.08), FrameTimeMode.Unscaled);
+        Assert(dialogue.CurrentLineId == "line:m10-second",
+            "M10 advanced before the active Voice completed.");
+        audioBackend.Players.Last(player =>
+            player.Category == AudioCategory.Voice && player.IsPlaying).CompletePlayback();
+        await WaitForConditionAsync(
+            () => script.Phase == ScriptPlaybackPhase.PresentingOptions &&
+                presentation.IsPresentingOptions,
+            2);
+        Assert(auto.IsPaused,
+            "M10 Auto did not pause while Yarn options were presented.");
+
+        await InjectKeyAsync(Key.Enter);
+        await WaitForConditionAsync(
+            () => dialogue.CurrentLineId == "line:m10-final" &&
+                presentation.IsLineDisplayComplete,
+            2);
+        Assert(!auto.IsPaused,
+            "M10 Auto did not resume after the option was selected.");
+        var result = await completion.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert(result.Kind == DialogueCompletionKind.Completed &&
+                history.Entries.Select(entry => entry.LineId).SequenceEqual(
+                    ["line:m10-second", "line:m10-final"]) &&
+                history.Entries[0].VoiceId == "m10-voice" &&
+                history.Entries[1].Text == "Final visible line.",
+            "M10 History capacity/order or final visible text was incorrect.");
+
+        history.Open();
+        var replayButton = historyOverlay.FindChildren(
+                "*",
+                "Button",
+                recursive: true,
+                owned: false)
+            .OfType<Button>()
+            .Single(button => button.TooltipText == "Replay voice: m10-voice");
+        replayButton.EmitSignal(BaseButton.SignalName.Pressed);
+        await WaitForConditionAsync(
+            () => audio.CurrentVoice?.ClipId == "m10-voice",
+            2);
+        Assert(audio.CurrentVoice?.State == AudioPlaybackState.Playing,
+            "M10 default History UI could not replay the retained Voice entry.");
+        await bootstrap.ResetRuntimeAsync();
+        Assert(history.Entries.Count == 0 &&
+                !history.IsOpen &&
+                !historyOverlay.Visible &&
+                auto.Mode == AutoMode.Manual &&
+                !auto.IsPaused &&
+                input.ActiveHandleCount == 2 &&
+                operations.ActiveOperations.Count == 0,
+            "M10 Reset did not clear Session History, restore Manual mode, or rebind input.");
+
+        var overlayNode = historyOverlay;
+        await bootstrap.RequestShutdownAsync();
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Assert(!IsInstanceValid(overlayNode) && !IsInstanceValid(bootstrap),
+            "M10 Auto/History Runtime nodes leaked after shutdown.");
+
+        async Task InjectKeyAsync(Key key)
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Godot.Input.ParseInputEvent(new InputEventKey
+            {
+                PhysicalKeycode = key,
+                Pressed = true,
+            });
+            Godot.Input.ParseInputEvent(new InputEventKey
+            {
+                PhysicalKeycode = key,
+                Pressed = false,
+            });
+        }
     }
 
     private async Task ValidateInputRuntimeAsync()
@@ -590,13 +754,13 @@ public partial class HeadlessTestRunner : Node
         owner.QueueFree();
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        Assert(scope.IsDisposed && manager.ActiveHandleCount == 0,
+        Assert(scope.IsDisposed && manager.ActiveHandleCount == 2,
             "M7 did not release an input Scope when its Node owner exited the tree.");
 
         var resetHandle = manager.AcquireMuter(new object());
         await bootstrap.ResetRuntimeAsync();
-        Assert(resetHandle.IsDisposed && manager.ActiveHandleCount == 0,
-            "M7 Reset left an input Muter active.");
+        Assert(resetHandle.IsDisposed && manager.ActiveHandleCount == 2,
+            "M7 Reset left an input Muter active or failed to rebind M10 controls.");
 
         await bootstrap.RequestShutdownAsync();
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -733,7 +897,7 @@ public partial class HeadlessTestRunner : Node
             "M8 input-driven dialogue did not complete naturally.");
         Assert(!presentation.IsLineActive && !presentation.IsPresentingOptions,
             "M8 retained active Presentation state after dialogue completion.");
-        Assert(input.ActiveHandleCount == 0,
+        Assert(input.ActiveHandleCount == 2,
             "M8 retained line or modal option input ownership after completion.");
         Assert(handlerOrder.Take(2).SequenceEqual(new[]
             {
@@ -758,7 +922,7 @@ public partial class HeadlessTestRunner : Node
         var stoppedLineCompletion = dialogue.Completion;
         await dialogue.StopAsync();
         Assert((await stoppedLineCompletion).Kind == DialogueCompletionKind.Stopped &&
-                !presentation.IsLineActive && input.ActiveHandleCount == 0,
+                !presentation.IsLineActive && input.ActiveHandleCount == 2,
             "M8 did not cancel and release an active native line Presenter.");
 
         await dialogue.StartAsync();
@@ -770,7 +934,7 @@ public partial class HeadlessTestRunner : Node
         var stoppedOptionsCompletion = dialogue.Completion;
         await dialogue.StopAsync();
         Assert((await stoppedOptionsCompletion).Kind == DialogueCompletionKind.Stopped &&
-                !presentation.IsPresentingOptions && input.ActiveHandleCount == 0,
+                !presentation.IsPresentingOptions && input.ActiveHandleCount == 2,
             "M8 did not cancel and release modal option Presentation.");
 
         var presentationNode = presentationRoot;
@@ -1591,6 +1755,8 @@ public partial class HeadlessTestRunner : Node
         configuration.Audio.DefaultFadeDurationSeconds = double.NaN;
         configuration.Audio.VoiceLocale = string.Empty;
         configuration.Audio.BgmPath = "..";
+        configuration.Auto!.ExtraDelaySeconds = double.NaN;
+        configuration.History!.Capacity = 0;
 
         var validation = configuration.Validate(_ => false);
 
@@ -1610,6 +1776,11 @@ public partial class HeadlessTestRunner : Node
         Assert(validation.Issues.Count(issue =>
                 issue.Path.StartsWith("Audio", StringComparison.Ordinal)) == 4,
             "Invalid M9 Audio values were not diagnosed together.");
+        Assert(validation.Issues.Count(issue =>
+                issue.Path.StartsWith("Auto", StringComparison.Ordinal)) == 1 &&
+                validation.Issues.Count(issue =>
+                    issue.Path.StartsWith("History", StringComparison.Ordinal)) == 1,
+            "Invalid M10 Auto/History values were not diagnosed together.");
 
         var customActorConfiguration = MajoProjectConfiguration.CreateDefault();
         customActorConfiguration.Actors!.Actors.Add(new ActorDefinitionConfiguration

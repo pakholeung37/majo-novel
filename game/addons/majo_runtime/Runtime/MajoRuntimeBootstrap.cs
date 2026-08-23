@@ -9,6 +9,7 @@ using Majo.Runtime.Audio;
 using Majo.Runtime.Audio.Godot;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Actors.Godot;
+using Majo.Runtime.Auto;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue;
@@ -19,6 +20,8 @@ using Majo.Runtime.Dialogue.Yarn;
 using Majo.Runtime.Dialogue.Yarn.Presentation;
 using Majo.Runtime.Input;
 using Majo.Runtime.Input.Godot;
+using Majo.Runtime.History;
+using Majo.Runtime.History.Godot;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Operations.Godot;
 using Majo.Runtime.Resources;
@@ -288,7 +291,43 @@ public partial class MajoRuntimeBootstrap : Node
                     resolver.Get<IYarnDialogueBackend>()),
                 typeof(IDialoguePlayer),
                 typeof(IDialoguePresentation),
-                typeof(IYarnDialogueBackend));
+                typeof(IYarnDialogueBackend))
+            .AddSingleton<IHistoryManager>(
+                resolver => new HistoryManager(
+                    resolver.Get<IDialoguePlayer>(),
+                    resolver.Get<IDialoguePresentation>(),
+                    resolver.Get<IAudioManager>(),
+                    resolver.Get<IInputManager>(),
+                    Configuration!.History!.Capacity),
+                typeof(IDialoguePlayer),
+                typeof(IDialoguePresentation),
+                typeof(IAudioManager),
+                typeof(IInputManager))
+            .AddSingleton<IAutoManager>(
+                resolver => new AutoManager(
+                    resolver.Get<IScriptPlayback>(),
+                    resolver.Get<IDialoguePlayer>(),
+                    resolver.Get<IAudioManager>(),
+                    resolver.Get<IFrameClock>(),
+                    resolver.Get<IInputManager>(),
+                    resolver.Get<IHistoryManager>(),
+                    TimeSpan.FromSeconds(Configuration!.Auto!.ExtraDelaySeconds),
+                    Configuration.Auto.WaitForVoice),
+                typeof(IScriptPlayback),
+                typeof(IDialoguePlayer),
+                typeof(IAudioManager),
+                typeof(IFrameClock),
+                typeof(IInputManager),
+                typeof(IHistoryManager));
+
+        if (Configuration!.History!.ShowDefaultUi)
+        {
+            services.AddSingleton<DefaultHistoryOverlay>(
+                resolver => new DefaultHistoryOverlay(
+                    this,
+                    resolver.Get<IHistoryManager>()),
+                typeof(IHistoryManager));
+        }
 
         if (Configuration!.State!.Enabled)
         {
@@ -297,6 +336,7 @@ public partial class MajoRuntimeBootstrap : Node
                     resolver.Get<IDialogueVariables>(),
                     resolver.Get<IActorManager>(),
                     resolver.Get<IAudioManager>(),
+                    resolver.Get<IHistoryManager>(),
                     resolver.Get<IScriptPlayback>(),
                     resolver.Get<IDialoguePlayer>(),
                     resolver.Get<IInputManager>(),
@@ -304,6 +344,7 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(IDialogueVariables),
                 typeof(IActorManager),
                 typeof(IAudioManager),
+                typeof(IHistoryManager),
                 typeof(IScriptPlayback),
                 typeof(IDialoguePlayer),
                 typeof(IInputManager),
@@ -315,6 +356,7 @@ public partial class MajoRuntimeBootstrap : Node
         IDialogueVariables variables,
         IActorManager actors,
         IAudioManager audio,
+        IHistoryManager history,
         IScriptPlayback scriptPlayback,
         IDialoguePlayer dialogue,
         IInputManager input,
@@ -323,7 +365,8 @@ public partial class MajoRuntimeBootstrap : Node
         var contributors = new StateContributorRegistry()
             .Register(new DialogueVariablesStateContributor(variables))
             .Register(new ActorStateContributor(actors))
-            .Register(new AudioStateContributor(audio));
+            .Register(new AudioStateContributor(audio))
+            .Register(new SessionHistoryStateContributor(history));
         ConfigureStateContributors?.Invoke(contributors);
         contributors.Register(new ScriptStateContributor(scriptPlayback));
         return new StateManager(contributors.Build(), dialogue, input, operations);

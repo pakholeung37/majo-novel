@@ -9,6 +9,7 @@ using Godot;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Audio;
 using Majo.Runtime.Dialogue;
+using Majo.Runtime.History;
 using Majo.Runtime.Script;
 
 namespace Majo.Runtime.State;
@@ -19,6 +20,53 @@ public static class BuiltInStateKeys
     public const string Actors = "majo.actors";
     public const string AudioBgm = "majo.audio.bgm";
     public const string ScriptPlayback = "majo.script.playback";
+    public const string SessionHistory = "majo.session.history";
+}
+
+public sealed class SessionHistoryStateContributor : IStateContributor
+{
+    private readonly IHistoryManager history;
+
+    public SessionHistoryStateContributor(IHistoryManager history)
+    {
+        this.history = history ?? throw new ArgumentNullException(nameof(history));
+    }
+
+    public string Key => BuiltInStateKeys.SessionHistory;
+
+    public StateScope Scope => StateScope.Session;
+
+    public int SchemaVersion => 1;
+
+    public ValueTask<StateRecord> CaptureAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult(new StateRecord(
+            Key,
+            Scope,
+            SchemaVersion,
+            StateJson.Serialize(Array.Empty<object>())));
+    }
+
+    public ValueTask PreflightAsync(StateRecord record, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.CompletedTask;
+    }
+
+    public ValueTask RestoreAsync(StateRecord record, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        history.Clear();
+        return ValueTask.CompletedTask;
+    }
+
+    public ValueTask ResetAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        history.Clear();
+        return ValueTask.CompletedTask;
+    }
 }
 
 public sealed class DialogueVariablesStateContributor : IStateContributor

@@ -15,7 +15,8 @@ namespace Majo.Runtime.Dialogue.Yarn;
 internal sealed partial class YarnDialoguePresenterAdapter : Node, DialoguePresenterBase
 {
     private readonly IReadOnlyList<IDialoguePresenter> presenters;
-    private readonly DialogueRunner runner;
+    private readonly Action requestHurryUp;
+    private readonly Action requestNextLine;
     private readonly Action<DialogueLine, IReadOnlyList<string>> linePresented;
     private readonly Action<IReadOnlyList<MajoDialogueOption>> optionsPresented;
     private readonly object stopGate = new();
@@ -25,12 +26,16 @@ internal sealed partial class YarnDialoguePresenterAdapter : Node, DialoguePrese
 
     public YarnDialoguePresenterAdapter(
         IReadOnlyList<IDialoguePresenter> presenters,
-        DialogueRunner runner,
+        Action requestHurryUp,
+        Action requestNextLine,
         Action<DialogueLine, IReadOnlyList<string>> linePresented,
         Action<IReadOnlyList<MajoDialogueOption>> optionsPresented)
     {
         this.presenters = presenters ?? throw new ArgumentNullException(nameof(presenters));
-        this.runner = runner ?? throw new ArgumentNullException(nameof(runner));
+        this.requestHurryUp = requestHurryUp ??
+            throw new ArgumentNullException(nameof(requestHurryUp));
+        this.requestNextLine = requestNextLine ??
+            throw new ArgumentNullException(nameof(requestNextLine));
         this.linePresented = linePresented ??
             throw new ArgumentNullException(nameof(linePresented));
         this.optionsPresented = optionsPresented ??
@@ -99,8 +104,8 @@ internal sealed partial class YarnDialoguePresenterAdapter : Node, DialoguePrese
             var context = new DialoguePresentationContext(
                 token.HurryUpToken,
                 token.NextLineToken,
-                runner.RequestHurryUpLine,
-                runner.RequestNextLine);
+                requestHurryUp,
+                requestNextLine);
             var presentation = Task.WhenAll(presenters.Select(
                 presenter => presenter.PresentLineAsync(converted, context)));
             try
