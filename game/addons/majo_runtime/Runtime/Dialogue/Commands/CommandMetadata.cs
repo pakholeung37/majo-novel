@@ -67,6 +67,7 @@ public enum CommandDefaultSource
 {
     None,
     AnimationDuration,
+    AudioFadeDuration,
 }
 
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]

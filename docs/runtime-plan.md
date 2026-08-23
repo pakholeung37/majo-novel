@@ -860,6 +860,8 @@ confirm
 
 ### 11.5 M9：Audio Runtime
 
+状态：已完成。
+
 目标：建立独立、可替换、符合 Operation 时序的 BGM、SFX 和 Voice 服务。
 
 确认的播放模型：
@@ -890,6 +892,27 @@ res://assets/audio/voice/<locale>/<line-id>
 - BGM 交叉淡化、SFX 重叠、Voice 抢占、取消和强制完成的终态准确。
 - Reset/Shutdown 释放全部 AudioStreamPlayer 和 Operation。
 - Headless 不依赖物理音频设备，通过 Backend、Node 和事件状态验证。
+
+实施记录（2026-08-23）：
+
+- 新增 Yarn/Godot 无关的 `IAudioManager`、`IAudioBackend`、`IAudioClipLoader`、播放
+  DTO 和事件；默认 Godot Backend 只在隔离层持有 `AudioStreamPlayer`。
+- BGM 以命名 Track 管理，同 Track 换曲执行双 Player 交叉淡化；SFX 以命名 Instance
+  支持同资源重叠；Voice 保持单通道并在新语音开始前确定停止旧语音。
+- Master、BGM、SFX、Voice 音量和静音即时投影到所有活跃 Player；音频配置同时提供
+  默认淡化时长、Voice Locale 及三类资源前缀。
+- 所有淡入、淡出和交叉淡化均由 `OperationScheduler` 持有，支持 ID、Group、Yarn
+  `await`、`cancel` 和强制 `complete`；取消交叉淡化恢复旧 Track，强制完成准确释放旧
+  Player 并应用目标 Track。
+- 自动 Voice Presenter 按 `audio/voice/<locale>/<line-id>` 约定解析；
+  `voice:<clip-id>` metadata 是严格 override，`voice:none` 显式禁用当前行语音。
+- `bgm`、`stopBgm`、`sfx`、`stopSfx`、`voice`、`stopVoice` 的参数和 Handler colocate，
+  由独立 `AudioCommandModule` 原子注册；普通 Command Catalog 和 Yarn Adapter 未增加
+  音频分支。
+- `FakeAudioBackend` 和 `FakeAudioClipLoader` 支持无真实睡眠的确定性淡化与播放完成测试；
+  114 个纯 C# 单元测试全部通过。
+- 真实 Godot headless 使用生成式 AudioStream（不依赖物理音频设备）验证 Player 节点、
+  BGM 交叉淡化、SFX 重叠、Voice 抢占、取消、强制完成以及 Reset/Shutdown 零残留。
 
 ### 11.6 M10：Auto 与 History
 

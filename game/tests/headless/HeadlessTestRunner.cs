@@ -6,6 +6,8 @@ using System.Threading.Tasks;
 using Godot;
 using Majo.Demo;
 using Majo.Runtime;
+using Majo.Runtime.Audio;
+using Majo.Runtime.Audio.Godot;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
@@ -60,6 +62,7 @@ public partial class HeadlessTestRunner : Node
         Assert(dependencyStatus.IsCompatible, dependencyStatus.Message);
 
         ValidateConfigurationDiagnostics();
+        await ValidateAudioRuntimeAsync();
         await ValidateInputRuntimeAsync();
         await ValidateDefaultPresentationAsync();
         await ValidateSuccessfulRuntimeLifecycleAsync();
@@ -69,6 +72,93 @@ public partial class HeadlessTestRunner : Node
         await ValidateYarnCommandAdapterAsync();
         await ValidateM5PlayableLoopAsync();
         await ValidateFailedConfigurationCleanupAsync();
+    }
+
+    private async Task ValidateAudioRuntimeAsync()
+    {
+        var configuration = MajoProjectConfiguration.CreateDefault();
+        var loader = new HeadlessAudioClipLoader()
+            .Register("calm")
+            .Register("battle")
+            .Register("hit")
+            .Register("en/line-1")
+            .Register("en/line-2");
+        var bootstrap = new MajoRuntimeBootstrap
+        {
+            Name = "AudioRuntime",
+            Configuration = configuration,
+        };
+        bootstrap.ConfigureServices = services => services.ReplaceSingleton<IAudioManager>(
+            resolver => new AudioManager(
+                new GodotAudioBackend(bootstrap),
+                resolver.Get<IOperationScheduler>(),
+                loader,
+                loader,
+                loader,
+                new AudioSettings()),
+            typeof(IOperationScheduler));
+        AddChild(bootstrap);
+        await bootstrap.InitializationCompletion;
+
+        var audio = bootstrap.Host!.Services.Get<IAudioManager>();
+        var operations = bootstrap.Host.Services.Get<IOperationScheduler>();
+        var audioHost = bootstrap.GetNode("MajoAudioHost");
+        await audio.PlayBgmAsync("calm", "music");
+        var crossfade = await audio.PlayBgmAsync(
+            "battle",
+            "music",
+            fade: new AudioFade(0.08, "headless-crossfade", "headless-audio"));
+        Assert(audioHost.GetChildCount() == 2,
+            "M9 BGM crossfade did not keep old and new Godot players concurrently.");
+        await crossfade.FadeOperation.Completion;
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Assert(audioHost.GetChildCount() == 1 &&
+                audio.BgmTracks.Single().ClipId == "battle",
+            "M9 BGM crossfade did not release the old Godot player.");
+
+        await audio.PlaySfxAsync("hit", "left");
+        await audio.PlaySfxAsync("hit", "right");
+        Assert(audio.SfxInstances.Count == 2 && audioHost.GetChildCount() == 3,
+            "M9 named SFX instances did not overlap in the Godot backend.");
+
+        var firstVoice = await audio.PlayVoiceAsync("line-1");
+        var secondVoice = await audio.PlayVoiceAsync("line-2");
+        Assert(firstVoice.Playback.State == AudioPlaybackState.Stopped &&
+                ReferenceEquals(audio.CurrentVoice, secondVoice.Playback),
+            "M9 single-channel Voice did not preempt the previous voice.");
+
+        var cancelled = await audio.PlayBgmAsync(
+            "calm",
+            "music",
+            fade: new AudioFade(1, "headless-cancel"));
+        await operations.CancelAsync(OperationTarget.ForId("headless-cancel"));
+        Assert(cancelled.Playback.State == AudioPlaybackState.Stopped &&
+                audio.BgmTracks.Single().ClipId == "battle",
+            "M9 cancel did not restore the pre-crossfade BGM terminal state.");
+
+        var completed = await audio.PlayBgmAsync(
+            "calm",
+            "music",
+            fade: new AudioFade(1, "headless-complete"));
+        await operations.CompleteAsync(OperationTarget.ForId("headless-complete"));
+        Assert(completed.Playback.State == AudioPlaybackState.Playing &&
+                audio.BgmTracks.Single().ClipId == "calm",
+            "M9 complete did not force the BGM crossfade target state.");
+
+        await bootstrap.ResetRuntimeAsync();
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Assert(audioHost.GetChildCount() == 0 &&
+                audio.BgmTracks.Count == 0 &&
+                audio.SfxInstances.Count == 0 &&
+                audio.CurrentVoice is null &&
+                operations.ActiveOperations.Count == 0,
+            "M9 Reset left audio players or Operations alive.");
+
+        await bootstrap.RequestShutdownAsync();
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Assert(!IsInstanceValid(bootstrap),
+            "M9 shutdown left the Runtime or audio host in the scene tree.");
     }
 
     private async Task ValidateInputRuntimeAsync()
@@ -1252,6 +1342,10 @@ public partial class HeadlessTestRunner : Node
         configuration.Presentation!.FontSize = 0;
         configuration.Presentation.LettersPerSecond = 0;
         configuration.Presentation.FadeUpDurationSeconds = double.NaN;
+        configuration.Audio!.MasterVolume = 2;
+        configuration.Audio.DefaultFadeDurationSeconds = double.NaN;
+        configuration.Audio.VoiceLocale = string.Empty;
+        configuration.Audio.BgmPath = "..";
 
         var validation = configuration.Validate(_ => false);
 
@@ -1268,6 +1362,9 @@ public partial class HeadlessTestRunner : Node
         Assert(validation.Issues.Count(issue =>
                 issue.Path.StartsWith("Presentation", StringComparison.Ordinal)) == 3,
             "Invalid M8 Presentation values were not diagnosed together.");
+        Assert(validation.Issues.Count(issue =>
+                issue.Path.StartsWith("Audio", StringComparison.Ordinal)) == 4,
+            "Invalid M9 Audio values were not diagnosed together.");
 
         var customActorConfiguration = MajoProjectConfiguration.CreateDefault();
         customActorConfiguration.Actors!.Actors.Add(new ActorDefinitionConfiguration
@@ -1400,6 +1497,41 @@ public partial class HeadlessTestRunner : Node
         {
             await Task.Yield();
             ShutdownCount++;
+        }
+    }
+
+    private sealed class HeadlessAudioClipLoader : IAudioClipLoader
+    {
+        private readonly Dictionary<string, IAudioClip> clips =
+            new(StringComparer.Ordinal);
+
+        public string PathPrefix => "headless/audio";
+
+        public HeadlessAudioClipLoader Register(string clipId)
+        {
+            clips.Add(clipId, new GodotAudioClip(
+                clipId,
+                new AudioStreamGenerator
+                {
+                    MixRate = 22_050,
+                    BufferLength = 0.5f,
+                }));
+            return this;
+        }
+
+        public bool Exists(string clipId, string overridePath = null) =>
+            clips.ContainsKey(overridePath ?? clipId);
+
+        public Task<IAudioClip> LoadAsync(
+            string clipId,
+            string overridePath = null,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return clips.TryGetValue(overridePath ?? clipId, out var clip)
+                ? Task.FromResult(clip)
+                : Task.FromException<IAudioClip>(
+                    new AudioException($"Headless audio clip '{clipId}' is missing."));
         }
     }
 

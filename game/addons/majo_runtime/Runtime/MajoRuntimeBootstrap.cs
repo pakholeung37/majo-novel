@@ -1,15 +1,19 @@
 #nullable enable
 
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
+using Majo.Runtime.Audio;
+using Majo.Runtime.Audio.Godot;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Actors.Godot;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Commands;
+using Majo.Runtime.Dialogue.Commands.Audio;
 using Majo.Runtime.Dialogue.Presentation;
 using Majo.Runtime.Dialogue.Yarn;
 using Majo.Runtime.Dialogue.Yarn.Presentation;
@@ -64,6 +68,8 @@ public partial class MajoRuntimeBootstrap : Node
     public Action<DialoguePresenterRegistry>? ConfigureDialoguePresenters { get; set; }
 
     public Action<DialogueMarkupHandlerRegistry>? ConfigureDialogueMarkupHandlers { get; set; }
+
+    public Func<Node, IAudioBackend>? AudioBackendFactory { get; set; }
 
     public RuntimeHost? Host { get; private set; }
 
@@ -201,6 +207,12 @@ public partial class MajoRuntimeBootstrap : Node
                     new GodotRuntimeLogger()),
                 typeof(IFrameClock),
                 typeof(IRuntimeLifetime))
+            .AddSingleton<IAudioManager>(
+                resolver => CreateAudioManager(
+                    resolver.Get<IResourceManager>(),
+                    resolver.Get<IOperationScheduler>()),
+                typeof(IResourceManager),
+                typeof(IOperationScheduler))
             .AddSingleton<GodotActorHost>(_ => new GodotActorHost(this))
             .AddSingleton<IActorManager>(
                 resolver => CreateActorManager(
@@ -221,8 +233,12 @@ public partial class MajoRuntimeBootstrap : Node
                     this,
                     resolver.Get<IResourceManager>(),
                     Configuration!.Resources!.ScriptsPath,
-                    presenterRegistry.Presenters),
-                typeof(IResourceManager))
+                    presenterRegistry.Presenters
+                        .Concat<IDialoguePresenter>(
+                            [new VoiceDialoguePresenter(resolver.Get<IAudioManager>())])
+                        .ToArray()),
+                typeof(IResourceManager),
+                typeof(IAudioManager))
             .AddSingleton<IDialoguePresentation>(
                 resolver => new YarnDefaultDialoguePresentation(
                     resolver.Get<IYarnDialogueBackend>(),
@@ -241,10 +257,12 @@ public partial class MajoRuntimeBootstrap : Node
                 resolver => CreateYarnCommandAdapter(
                     resolver.Get<IYarnDialogueBackend>(),
                     resolver.Get<IActorManager>(),
-                    resolver.Get<IOperationScheduler>()),
+                    resolver.Get<IOperationScheduler>(),
+                    resolver.Get<IAudioManager>()),
                 typeof(IYarnDialogueBackend),
                 typeof(IActorManager),
-                typeof(IOperationScheduler))
+                typeof(IOperationScheduler),
+                typeof(IAudioManager))
             .AddSingleton<IDialoguePlayer>(
                 resolver => new DialoguePlayer(
                     resolver.Get<IYarnDialogueBackend>(),
@@ -258,17 +276,20 @@ public partial class MajoRuntimeBootstrap : Node
     private IYarnCommandAdapter CreateYarnCommandAdapter(
         IYarnDialogueBackend backend,
         IActorManager actors,
-        IOperationScheduler operations)
+        IOperationScheduler operations,
+        IAudioManager audio)
     {
         var commands = new RuntimeCommandRegistry();
         BuiltInRuntimeCommands.Register(commands, new ActorCommandService(actors));
+        commands.RegisterModule(new AudioCommandModule(audio));
         ConfigureCommands?.Invoke(commands);
         var catalog = commands.BuildCatalog();
         var converters = new CommandValueConverterRegistry();
         ConfigureCommandConverters?.Invoke(converters);
         var binder = new CommandBinder(
             new CommandBindingContext(
-                Configuration!.Operations!.DefaultAnimationDurationSeconds),
+                Configuration!.Operations!.DefaultAnimationDurationSeconds,
+                Configuration.Audio!.DefaultFadeDurationSeconds),
             converters);
         var dispatcher = new RuntimeCommandDispatcher(
             binder,
@@ -315,10 +336,34 @@ public partial class MajoRuntimeBootstrap : Node
         var godotProvider = new GodotProjectResourceProvider(
                 Configuration!.Resources!.RootPath,
                 frameClock)
-            .RegisterSourceExtensions<YarnProject>(YarnProject.YARN_PROJECT_EXTENSION);
+            .RegisterSourceExtensions<YarnProject>(YarnProject.YARN_PROJECT_EXTENSION)
+            .RegisterSourceExtensions<AudioStream>("wav", "ogg", "mp3");
         var providers = new ResourceProviderRegistry().Register(godotProvider);
         ConfigureResourceProviders?.Invoke(providers);
         return new ResourceManager(providers.Providers, lifetime);
+    }
+
+    private IAudioManager CreateAudioManager(
+        IResourceManager resources,
+        IOperationScheduler operations)
+    {
+        var configuration = Configuration!.Audio!;
+        return new AudioManager(
+            AudioBackendFactory?.Invoke(this) ?? new GodotAudioBackend(this),
+            operations,
+            new GodotAudioClipLoader(resources, configuration.BgmPath),
+            new GodotAudioClipLoader(resources, configuration.SfxPath),
+            new GodotAudioClipLoader(resources, configuration.VoicePath),
+            new AudioSettings(
+                configuration.MasterVolume,
+                configuration.BgmVolume,
+                configuration.SfxVolume,
+                configuration.VoiceVolume,
+                configuration.MasterMuted,
+                configuration.BgmMuted,
+                configuration.SfxMuted,
+                configuration.VoiceMuted,
+                configuration.VoiceLocale));
     }
 
     private async Task ShutdownHostAsync(CancellationToken cancellationToken = default)

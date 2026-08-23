@@ -7,7 +7,9 @@ using System.Linq;
 
 namespace Majo.Runtime.Dialogue.Commands;
 
-public sealed record CommandBindingContext(double DefaultAnimationDurationSeconds)
+public sealed record CommandBindingContext(
+    double DefaultAnimationDurationSeconds,
+    double DefaultAudioFadeDurationSeconds = 0.35)
 {
     public CommandBindingContext Validate()
     {
@@ -17,6 +19,14 @@ public sealed record CommandBindingContext(double DefaultAnimationDurationSecond
             throw new ArgumentOutOfRangeException(
                 nameof(DefaultAnimationDurationSeconds),
                 "Default animation duration must be finite and non-negative.");
+        }
+
+        if (!double.IsFinite(DefaultAudioFadeDurationSeconds) ||
+            DefaultAudioFadeDurationSeconds < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(DefaultAudioFadeDurationSeconds),
+                "Default audio fade duration must be finite and non-negative.");
         }
 
         return this;
@@ -126,6 +136,12 @@ public sealed class CommandBinder
                         "R",
                         CultureInfo.InvariantCulture);
                 }
+                else if (parameter.DefaultSource == CommandDefaultSource.AudioFadeDuration)
+                {
+                    value = context.DefaultAudioFadeDurationSeconds.ToString(
+                        "R",
+                        CultureInfo.InvariantCulture);
+                }
                 else if (parameter.DefaultValue is not null)
                 {
                     value = parameter.DefaultValue;
@@ -209,12 +225,13 @@ public sealed class CommandBinder
                 }
             }
 
-            if (parameter.DefaultSource == CommandDefaultSource.AnimationDuration &&
+            if (parameter.DefaultSource is CommandDefaultSource.AnimationDuration or
+                    CommandDefaultSource.AudioFadeDuration &&
                 parameter.ValueType != typeof(double))
             {
                 throw new RuntimeCommandException(
                     descriptor.Name,
-                    $"Parameter '{parameter.Name}' uses the animation-duration default " +
+                    $"Parameter '{parameter.Name}' uses a duration default " +
                     "but is not a double.");
             }
 

@@ -34,6 +34,9 @@ public partial class MajoProjectConfiguration : Resource
     [Export]
     public DialoguePresentationConfiguration? Presentation { get; set; }
 
+    [Export]
+    public AudioConfiguration? Audio { get; set; }
+
     public static MajoProjectConfiguration CreateDefault() => new()
     {
         Runtime = new RuntimeConfiguration(),
@@ -43,6 +46,7 @@ public partial class MajoProjectConfiguration : Resource
         Dialogue = new DialogueConfiguration(),
         Input = new InputConfiguration(),
         Presentation = new DialoguePresentationConfiguration(),
+        Audio = new AudioConfiguration(),
     };
 
     public ConfigurationValidationResult Validate(Func<string, bool>? resourceExists = null)
@@ -57,6 +61,7 @@ public partial class MajoProjectConfiguration : Resource
         ValidateDialogue(issues);
         ValidateInput(issues);
         ValidatePresentation(issues);
+        ValidateAudio(issues);
 
         return new ConfigurationValidationResult(issues);
     }
@@ -373,6 +378,67 @@ public partial class MajoProjectConfiguration : Resource
             issues.Add(new ConfigurationIssue(
                 $"{nameof(Presentation)}.{property}",
                 "Value must be finite and non-negative."));
+        }
+    }
+
+    private void ValidateAudio(ICollection<ConfigurationIssue> issues)
+    {
+        if (Audio is null)
+        {
+            issues.Add(new ConfigurationIssue(nameof(Audio), "Configuration is required."));
+            return;
+        }
+
+        ValidateVolume(Audio.MasterVolume, nameof(Audio.MasterVolume), issues);
+        ValidateVolume(Audio.BgmVolume, nameof(Audio.BgmVolume), issues);
+        ValidateVolume(Audio.SfxVolume, nameof(Audio.SfxVolume), issues);
+        ValidateVolume(Audio.VoiceVolume, nameof(Audio.VoiceVolume), issues);
+        if (!double.IsFinite(Audio.DefaultFadeDurationSeconds) ||
+            Audio.DefaultFadeDurationSeconds < 0)
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Audio)}.{nameof(Audio.DefaultFadeDurationSeconds)}",
+                "Value must be finite and non-negative."));
+        }
+
+        if (string.IsNullOrWhiteSpace(Audio.VoiceLocale))
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Audio)}.{nameof(Audio.VoiceLocale)}",
+                "Voice locale is required."));
+        }
+
+        ValidateAudioPath(Audio.BgmPath, nameof(Audio.BgmPath), issues);
+        ValidateAudioPath(Audio.SfxPath, nameof(Audio.SfxPath), issues);
+        ValidateAudioPath(Audio.VoicePath, nameof(Audio.VoicePath), issues);
+    }
+
+    private static void ValidateVolume(
+        float value,
+        string property,
+        ICollection<ConfigurationIssue> issues)
+    {
+        if (!float.IsFinite(value) || value is < 0 or > 1)
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Audio)}.{property}",
+                "Value must be finite and between zero and one."));
+        }
+    }
+
+    private static void ValidateAudioPath(
+        string value,
+        string property,
+        ICollection<ConfigurationIssue> issues)
+    {
+        try
+        {
+            _ = new ResourceKey(value);
+        }
+        catch (ArgumentException exception)
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Audio)}.{property}", exception.Message));
         }
     }
 }

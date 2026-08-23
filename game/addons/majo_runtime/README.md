@@ -10,9 +10,9 @@ Compatibility baseline:
 
 Yarn Spinner is an external prerequisite and is not bundled with this plugin.
 
-Current implementation status: M8 default VN presentation and Yarn markup bridge,
-M7 input ownership, M6 dialogue sessions, and the M5 playable loop on the stable
-Runtime API.
+Current implementation status: M9 audio runtime, M8 default VN presentation and
+Yarn markup bridge, M7 input ownership, M6 dialogue sessions, and the M5 playable
+loop on the stable Runtime API.
 
 ## Installation
 
@@ -208,6 +208,9 @@ Default conventions:
 res://assets/characters/<actor-id>/<appearance>.<texture-extension>
 res://assets/backgrounds/<actor-id>/<appearance>.<texture-extension>
 res://assets/scripts/<project-id>.yarnproject
+res://assets/audio/bgm/<clip-id>.<audio-extension>
+res://assets/audio/sfx/<clip-id>.<audio-extension>
+res://assets/audio/voice/<locale>/<line-id>.<audio-extension>
 ```
 
 An Actor therefore needs no physical texture paths:
@@ -235,6 +238,45 @@ var texture = await resources
 that path only and reports all attempted candidates if it is missing. Custom
 resource providers register through `ConfigureResourceProviders`; higher
 priority providers can replace project assets without changing logical IDs.
+
+## Audio
+
+`IAudioManager` owns BGM, SFX, and Voice playback without exposing Godot audio
+types. BGM uses named tracks and crossfades when a track changes, SFX uses named
+instances so the same clip can overlap, and Voice is a single channel where a new
+clip stops the previous one:
+
+```csharp
+var audio = runtime.Host!.Services.Get<IAudioManager>();
+await audio.PlayBgmAsync("courtroom", "music", fade: new AudioFade(0.5));
+await audio.PlaySfxAsync("gavel", instanceId: "first-hit");
+var voice = await audio.PlayVoiceAsync("line-00042");
+await voice.Playback.Completion;
+```
+
+Master and per-category volume/mute properties update active players immediately.
+Every fade is an `IOperationHandle`; its optional ID and group participate in the
+same `await`, `cancel`, and forced `complete` semantics as Actor animation. A
+cancelled crossfade restores the old track, while forced completion selects the
+new track and releases the old player.
+
+Yarn audio commands use one positional resource ID and named parameters:
+
+```yarn
+<<bgm courtroom track:music duration:0.5 operation:music-in>>
+<<sfx gavel instance:first-hit>>
+<<voice objection wait:true>>
+<<stopSfx instance:first-hit duration:0.2 wait:true>>
+<<stopBgm track:music duration:0.5 wait:true>>
+```
+
+The automatic Voice Presenter first checks line metadata in the exact
+`voice:<clip-id>` form, then falls back to the line ID. A metadata override is
+strict and fails when the localized resource is missing; `voice:none` disables
+voice for that line. Convention-based missing voice is allowed. Replace the
+complete manager through `ConfigureServices`, or set `AudioBackendFactory` to use
+a custom playback backend. `FakeAudioBackend` and `FakeAudioClipLoader` provide
+deterministic tests without an audio device.
 
 ## Dialogue sessions
 
