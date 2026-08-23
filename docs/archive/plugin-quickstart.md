@@ -78,7 +78,7 @@ Command 创建的 Operation。Yarn Stop 会取消当前对话通过 Context 追�
 
 ## 扩展
 
-M5 示例位于 `game/demo/M5DemoExtensions.cs`，演示三条公共扩展路径：
+持续验证 Demo 的组合代码位于 `game/demo/RuntimeDemoComposition.cs`，演示三条公共扩展路径：
 
 ```csharp
 runtime.ConfigureServices += services => services.AddSingleton<MyService>(
@@ -119,7 +119,7 @@ Command 的 `Runtime/Dialogue/Commands/BuiltIn` 目录可作为结构参考。
 
 ## 运行演示
 
-在 Godot 中运行项目，或直接打开 `res://demo/M5Demo.tscn`。演示包括：
+在 Godot 中运行项目，或直接打开 `res://demo/RuntimeDemo.tscn`。演示包括：
 
 - 背景和角色并行动画及 Group 汇合。
 - `wait=true` 单动画。
@@ -130,7 +130,7 @@ Command 的 `Runtime/Dialogue/Commands/BuiltIn` 目录可作为结构参考。
 无交互 smoke test：
 
 ```sh
-/path/to/godot --headless --path game -- --m5-auto
+/path/to/godot --headless --path game -- --demo-auto
 ```
 
 ## 测试
@@ -142,7 +142,7 @@ Command 的 `Runtime/Dialogue/Commands/BuiltIn` 目录可作为结构参考。
 ```
 
 门禁依次执行限定范围的格式/静态检查、Godot C# 编译、纯 C# 单元测试、
-Godot 资源导入、M5 主场景 smoke test、三轮完整 Godot/Yarn headless suite，
+Godot 资源导入、Runtime Demo 主场景 smoke test、三轮完整 Godot/Yarn headless suite，
 以及确认失败断言返回非零退出码的反向探针。
 
 如果 Godot Mono 不在默认 macOS 路径：

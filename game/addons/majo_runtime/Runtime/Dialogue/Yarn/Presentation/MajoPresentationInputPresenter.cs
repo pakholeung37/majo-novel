@@ -66,7 +66,6 @@ internal sealed partial class MajoPresentationInputPresenter : Node, DialoguePre
                 isModal: true,
                 name: "default-vn-options"));
         optionScope.Activated += HandleOptionInput;
-        DisableNativeOptionSubmission();
 
         try
         {
@@ -113,7 +112,8 @@ internal sealed partial class MajoPresentationInputPresenter : Node, DialoguePre
             MoveSelection(1);
         }
         else if (activation.Action == MajoInputActions.Confirm ||
-            activation.Action == MajoInputActions.Advance)
+            (activation.Action == MajoInputActions.Advance &&
+                activation.Device != InputDeviceKind.Mouse))
         {
             SelectCurrentOption();
         }
@@ -150,36 +150,6 @@ internal sealed partial class MajoPresentationInputPresenter : Node, DialoguePre
             option.Visible &&
             option.Option is { IsAvailable: true })
         .ToArray();
-
-    private void DisableNativeOptionSubmission()
-    {
-        foreach (var option in GetAvailableOptions())
-        {
-            var button = Descendants(option).OfType<BaseButton>().FirstOrDefault();
-            if (button is null)
-            {
-                continue;
-            }
-
-            var nativeSubmission = Callable.From(option.InvokeOptionSelected);
-            if (button.IsConnected(BaseButton.SignalName.Pressed, nativeSubmission))
-            {
-                button.Disconnect(BaseButton.SignalName.Pressed, nativeSubmission);
-            }
-        }
-    }
-
-    private static IEnumerable<Node> Descendants(Node owner)
-    {
-        foreach (var child in owner.GetChildren())
-        {
-            yield return child;
-            foreach (var descendant in Descendants(child))
-            {
-                yield return descendant;
-            }
-        }
-    }
 
     private void ReleaseInput()
     {

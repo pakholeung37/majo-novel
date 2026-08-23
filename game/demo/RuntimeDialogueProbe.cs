@@ -10,19 +10,19 @@ using Majo.Runtime.Dialogue;
 
 namespace Majo.Demo;
 
-public sealed record M5DialogueProbeEvent(
+public sealed record RuntimeDialogueProbeEvent(
     string Kind,
     string Value,
     ulong TimestampMilliseconds);
 
-public partial class M5DialogueProbe : Node, IDialoguePresenter
+public partial class RuntimeDialogueProbe : Node, IDialoguePresenter
 {
-    private readonly List<M5DialogueProbeEvent> events = new();
+    private readonly List<RuntimeDialogueProbeEvent> events = new();
     private readonly List<DialogueLine> lines = new();
 
     public event Action<DialogueLine>? LinePresented;
 
-    public IReadOnlyList<M5DialogueProbeEvent> Events => events;
+    public IReadOnlyList<RuntimeDialogueProbeEvent> Events => events;
 
     public IReadOnlyList<DialogueLine> Lines => lines;
 
@@ -77,5 +77,5 @@ public partial class M5DialogueProbe : Node, IDialoguePresenter
     public void OnNodeExited(string nodeName) => Record("node-exit", nodeName);
 
     private void Record(string kind, string value) => events.Add(
-        new M5DialogueProbeEvent(kind, value, Time.GetTicksMsec()));
+        new RuntimeDialogueProbeEvent(kind, value, Time.GetTicksMsec()));
 }

@@ -1,22 +1,60 @@
 title: Start
-tags: m5 demo
+tags: runtime validation demo
 ---
+<<declare $visitor = "调查员">>
+
+<<bgm demo-theme track:music duration:0.35 operation:demo-music-in>>
+Narrator: 欢迎来到持续扩展的 Majo Runtime 验证场景，{$visitor}。这条流程会依次展示生命周期、资源、动画、命令、对话、输入、音频、状态、Auto 与 History。 #line:demo-welcome #voice:narrator-welcome
+
 <<await>>
-<<back backdrop appearance:courtroom duration:0.18 operation:backdrop-opening>>
-<<char hero appearance:calm position:left duration:0.18 operation:hero-opening>>
+<<back backdrop appearance:courtroom duration:0.45 operation:demo-backdrop-opening>>
+<<char hero appearance:calm position:left duration:0.45 operation:demo-hero-opening>>
 <<endAwait>>
+Maya: 背景和角色由两个并行 Operation 驱动，并在两者都到达确定终态后才显示这句话。 #line:demo-parallel-ready #voice:maya-ready
 
-Narrator: 法庭与角色已经并行动画，并在这里完成汇合。 #line:m5-after-join
+<<sfx demo-chime instance:checkpoint-chime>>
+Narrator: 刚才的提示音、循环背景音与角色语音分别走 SFX、BGM 和单通道 Voice。 #line:demo-audio-ready
 
-<<back backdrop appearance:spotlight duration:0.12 operation:backdrop-focus>>
-<<char hero appearance:determined position:center duration:0.12 wait:true operation:hero-focus>>
+<<char hero appearance:determined position:center duration:0.35 wait:true operation:demo-hero-center>>
+Maya: `wait:true` 会阻止脚本越过动画；现在我已经移动到中央并切换立绘。 #line:demo-operation-wait
 
-Maya: 等待型角色动画完成，现在请选择调查策略。 #line:m5-after-wait
--> 追问证词 #line:m5-option-press
+<<hide hero duration:2 operation:demo-cancelled-hide>>
+<<cancel operation:demo-cancelled-hide>>
+Narrator: 这个隐藏 Operation 被取消，因此角色保持可见，取消路径不会偷偷应用终态。 #line:demo-operation-cancel
+
+<<hide hero duration:2 operation:demo-completed-hide>>
+<<await operation:demo-completed-hide complete:true>>
+Narrator: 第二个隐藏 Operation 被强制完成，因此立即应用隐藏终态。 #line:demo-operation-complete
+
+<<char hero appearance:calm position:left duration:0.3 wait:true operation:demo-hero-return>>
+Narrator: `IDialoguePlayer` 负责这个 Yarn Session；角色名与正文已经投影为不含 Yarn 类型的稳定对话模型。 #line:demo-dialogue-facade
+
+Maya: 用 Space 或鼠标左键先完成打字、再推进；方向键与 Enter 操作选项。每个物理输入在一帧内最多分发一次。 #line:demo-input-guide
+
+Narrator: [b]默认 Dialogue Panel 已回到角色层之上[/b]，这段粗体同时验证原生 Yarn markup 与可替换 Presenter。 #line:demo-markup
+
+Maya: 右上角可切换 Auto，History 会以模态层暂停 Auto。History 只收录完整显示的台词，还能重播前面两条带 Voice 的记录。 #line:demo-auto-history-guide
+
+Narrator: 在这行完整显示后点击右上角“Capture State”。快照会保存 Script、变量、角色、背景与 BGM，但不会保存 Session History。 #line:demo-state-checkpoint
+
+<<back backdrop appearance:spotlight duration:0.35 operation:demo-state-background>>
+<<char hero appearance:determined position:right duration:0.35 operation:demo-state-hero>>
+<<bgm demo-tension track:music duration:0.35 operation:demo-state-music>>
+<<await operation:demo-state-background>>
+<<await operation:demo-state-hero>>
+<<await operation:demo-state-music>>
+Narrator: Game State 已被明显改变。现在可点击“Restore State”，验证背景、角色、BGM 和当前脚本行一起回到快照，History 则继续保留。 #line:demo-state-mutated
+
+Maya: 进入选项时 Auto 会暂停；选择后恢复原来的 Auto 模式。请选择一条验证路线。 #line:demo-option-guide
+-> 追问证词 #line:demo-option-press
     <<demo_route press>>
-    Maya: 我会继续追问证人的时间线。 #line:m5-branch-press
--> 出示证物 #line:m5-option-evidence
+    Maya: 自定义 `demo_route` Command 已通过 Catalog 绑定参数，并把“追问证词”写入 Demo Session Service。 #line:demo-branch-press
+-> 出示证物 #line:demo-option-evidence
     <<demo_route evidence>>
-    Maya: 这份证物足以推翻刚才的陈述。 #line:m5-branch-evidence
-Narrator: M5 最小可玩闭环完成。 #line:m5-finished
+    Maya: 自定义 `demo_route` Command 已通过 Catalog 绑定参数，并把“出示证物”写入 Demo Session Service。 #line:demo-branch-evidence
+
+Narrator: 脚本、SVG 立绘和背景都由约定式 Resource Manager 加载；同一流程也能由无图形 Probe 自动执行。 #line:demo-resource-summary
+
+<<stopBgm track:music duration:0.35 wait:true operation:demo-music-out>>
+Narrator: 当前 Runtime 验证流程完成。后续能力会继续追加到这个 Demo，而不会再创建按里程碑命名的新 Demo。 #line:demo-finished
 ===

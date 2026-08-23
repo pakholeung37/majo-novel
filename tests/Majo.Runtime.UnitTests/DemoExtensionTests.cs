@@ -4,13 +4,13 @@ using Xunit;
 
 namespace Majo.Runtime.UnitTests;
 
-public sealed class M5ExtensionTests
+public sealed class DemoExtensionTests
 {
     [Fact]
     public async Task CaseServiceTracksLifecycleAndClearsRouteOnReset()
     {
         using var lifetime = new TestRuntimeLifetime();
-        var service = new M5CaseService(lifetime);
+        var service = new DemoSessionService(lifetime);
 
         await service.InitializeAsync(CancellationToken.None);
         service.SelectRoute("evidence");
@@ -36,7 +36,7 @@ public sealed class M5ExtensionTests
     public void CaseServiceRejectsEmptyRoute(string route)
     {
         using var lifetime = new TestRuntimeLifetime();
-        var service = new M5CaseService(lifetime);
+        var service = new DemoSessionService(lifetime);
 
         Assert.Throws<ArgumentException>(() => service.SelectRoute(route));
     }

@@ -596,12 +596,12 @@ Headless 验收：
 
 实施记录（2026-08-22）：
 
-- 新增 `demo/M5Demo.tscn` 可见主场景及可点击台词/选项 Presenter；项目默认启动场景已指向该演示。
+- 新增可见主场景；现已稳定命名为 `demo/RuntimeDemo.tscn`，项目默认启动场景指向该演示。
 - 新增独立的 M5 Yarn 项目，单一剧本覆盖背景和角色并行动画、组汇合、等待型动画、台词、选项、分支与正常结束；资源层完成后迁至 `assets/scripts/main.yarnproject`。
-- 所有扩展均位于插件目录外的 `Majo.Demo`：`M5CaseService`、`M5PortraitActorFactory` 和 `demo_route` Command 未修改 Runtime Core。
-- `M5DialogueProbe` 记录对话、Node、Line 和 Option 事件，并能确定性选择分支；真实 Yarn VM headless 同时断言 Actor 最终状态和事件顺序。
+- 所有扩展均位于插件目录外的 `Majo.Demo`：`DemoSessionService`、`DemoPortraitActorFactory` 和 `demo_route` Command 未修改 Runtime Core。
+- `RuntimeDialogueProbe` 记录对话、Node、Line 和 Option 事件，并能确定性选择分支；真实 Yarn VM headless 同时断言 Actor 最终状态和事件顺序。
 - 关闭验收会检查自定义 Service 接收到 Runtime cancellation、Actor Node 被释放、Operation 为零以及 Runtime/Runner/外部 Host 无残留。
-- 主场景支持 `--m5-auto`，严格门禁会额外运行一次主场景装配 smoke test，再连续运行三轮完整 headless suite 与失败探针。
+- 主场景支持 `--demo-auto`，严格门禁会额外运行一次主场景装配 smoke test，再连续运行三轮完整 headless suite 与失败探针。
 - 56 个纯 C# 单元测试全部通过；M5 Service 的生命周期、状态重置和输入验证具有独立单测。
 - 新增插件安装、配置、运行、扩展和测试快速指南；M0-M5 首阶段闭环已形成可复用插件基线。
 
@@ -1207,6 +1207,20 @@ History 交付：
   清理闭环。
 - 全量门禁通过：136 个纯 C# 单元测试、Godot import/编译、可见场景 smoke、三轮连续
   headless 集成测试和失败探针均通过；仅保留 YarnSpinner-Godot 既有 `SYSLIB1220` 警告。
+
+持续验证 Demo 重构（2026-08-24）：
+
+- Demo 不再随 milestone 新建或命名；唯一入口固定为 `demo/RuntimeDemo.tscn`，后续能力继续
+  追加到同一长流程。
+- 当前 16 条台词流程覆盖 M1-M10 已交付能力：Service 生命周期、资源约定、Operation
+  并行/等待/取消/强制完成、Actor/Background、自定义 Command、Dialogue/变量/Input、
+  原生 Markup、BGM/SFX/Voice、Script 阶段、Game State 捕获恢复、Auto 与 Session History。
+- 验证 HUD 显示播放阶段、line ID 和活跃 Operation，并提供 Capture/Restore、Auto 与
+  History 控件；`assets/audio` 提供柔和循环 BGM、提示 SFX 和本地化 Narrator/Maya Voice。
+- 人工场景使用实际 Ogg 音频资源；headless 与 `--demo-auto` 使用 Fake Audio，避免验证
+  结果依赖音频设备或 Dummy driver 的退出时序。
+- 修复默认 Dialogue Panel 被 Actor CanvasLayer 覆盖的问题：Actor/自定义角色位于低层，
+  Dialogue、HUD、History 明确使用 CanvasLayer 20/30/40；headless 对层级建立结构断言。
 
 ### 11.10 第二阶段完成定义（已完成）
 

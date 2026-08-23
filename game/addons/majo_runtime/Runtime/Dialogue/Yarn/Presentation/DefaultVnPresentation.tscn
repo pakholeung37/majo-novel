@@ -51,8 +51,8 @@ mouse_filter = 1
 script = ExtResource("1_line")
 presenterControl = NodePath("PresenterControl")
 lineText = NodePath("PresenterControl/Margin/VBox/LineText")
-characterNameText = NodePath("PresenterControl/CharacterNamePanel/CharacterNameText")
-characterNameContainer = NodePath("PresenterControl/CharacterNamePanel")
+characterNameText = NodePath("CharacterNamePanel/CharacterNameText")
+characterNameContainer = NodePath("CharacterNamePanel")
 useFadeEffect = false
 lettersPerSecond = 32
 typewriterStyle = 1
@@ -69,10 +69,12 @@ offset_right = -48.0
 offset_bottom = -36.0
 grow_horizontal = 2
 grow_vertical = 0
+mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleBox_dialogue")
 
 [node name="Margin" type="MarginContainer" parent="LinePresenter/PresenterControl"]
 layout_mode = 2
+z_index = 1
 
 [node name="VBox" type="VBoxContainer" parent="LinePresenter/PresenterControl/Margin"]
 layout_mode = 2
@@ -93,15 +95,21 @@ size_flags_horizontal = 8
 mouse_filter = 2
 text = "Click or press Space to continue"
 
-[node name="CharacterNamePanel" type="PanelContainer" parent="LinePresenter/PresenterControl"]
-layout_mode = 0
-offset_left = 18.0
-offset_top = -48.0
-offset_right = 420.0
-offset_bottom = 4.0
+[node name="CharacterNamePanel" type="PanelContainer" parent="LinePresenter"]
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+z_index = 2
+offset_left = 66.0
+offset_top = -308.0
+offset_right = 468.0
+offset_bottom = -256.0
+grow_vertical = 0
+mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleBox_name")
 
-[node name="CharacterNameText" type="RichTextLabel" parent="LinePresenter/PresenterControl/CharacterNamePanel"]
+[node name="CharacterNameText" type="RichTextLabel" parent="LinePresenter/CharacterNamePanel"]
 custom_minimum_size = Vector2(360, 34)
 layout_mode = 2
 mouse_filter = 2
@@ -136,8 +144,10 @@ offset_right = 420.0
 offset_bottom = 220.0
 grow_horizontal = 2
 grow_vertical = 2
+mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleBox_dialogue")
 
 [node name="OptionContainer" type="VBoxContainer" parent="OptionsPresenter/PresenterControl"]
 layout_mode = 2
+z_index = 1
 theme_override_constants/separation = 12

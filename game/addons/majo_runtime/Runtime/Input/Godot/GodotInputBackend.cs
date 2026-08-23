@@ -41,7 +41,7 @@ public sealed class GodotInputBackend : IInputBackend
         }
 
         owner.AddChild(receiver);
-        receiver.SetProcessInput(true);
+        receiver.SetProcessUnhandledInput(true);
         isInitialized = true;
         return Task.CompletedTask;
     }
@@ -50,7 +50,7 @@ public sealed class GodotInputBackend : IInputBackend
     {
         cancellationToken.ThrowIfCancellationRequested();
         EnsureInitialized();
-        receiver.SetProcessInput(true);
+        receiver.SetProcessUnhandledInput(true);
         return Task.CompletedTask;
     }
 
@@ -59,7 +59,7 @@ public sealed class GodotInputBackend : IInputBackend
         cancellationToken.ThrowIfCancellationRequested();
         if (isInitialized && GodotObject.IsInstanceValid(receiver))
         {
-            receiver.SetProcessInput(false);
+            receiver.SetProcessUnhandledInput(false);
             receiver.QueueFree();
         }
 
@@ -99,7 +99,7 @@ internal partial class GodotInputReceiver : Node
 {
     public event Action<InputActivation>? Activated;
 
-    public override void _Input(InputEvent inputEvent)
+    public override void _UnhandledInput(InputEvent inputEvent)
     {
         foreach (var definition in GodotInputDefaults.Definitions)
         {

@@ -21,6 +21,7 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation
     private readonly IFrameClock frameClock;
     private readonly DialoguePresentationConfiguration configuration;
     private readonly IReadOnlyList<IDialogueMarkupHandler> markupHandlers;
+    private CanvasLayer? presentationLayer;
     private Control? root;
     private LinePresenter? linePresenter;
     private OptionsPresenter? optionsPresenter;
@@ -89,6 +90,13 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation
 
         root = control;
         root.Name = "MajoDefaultDialoguePresentation";
+        presentationLayer = new CanvasLayer
+        {
+            Name = "MajoDialoguePresentationLayer",
+            Layer = 20,
+        };
+        backend.Runner.AddChild(presentationLayer);
+        presentationLayer.AddChild(root);
         linePresenter = FindRequired<LinePresenter>(root, "LinePresenter");
         optionsPresenter = FindRequired<OptionsPresenter>(root, "OptionsPresenter");
         var optionParent = FindRequired<Node>(root, "OptionContainer");
@@ -111,7 +119,7 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation
         };
         root.AddChild(inputPresenter);
 
-        backend.Runner.AddChild(root);
+        linePresenter.ActionMarkupHandlers.Add(new MajoBbCodeMarkupHandler());
         linePresenter.ActionMarkupHandlers.Add(markupBridge);
         backend.RegisterNativePresenter(linePresenter);
         backend.RegisterNativePresenter(optionsPresenter);
@@ -166,9 +174,18 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation
             // The presentation root is created and exclusively owned by this
             // service. Free it synchronously so no native presenter or markup
             // handler survives until a later SceneTree frame.
-            root.Free();
+            if (presentationLayer is not null &&
+                GodotObject.IsInstanceValid(presentationLayer))
+            {
+                presentationLayer.Free();
+            }
+            else
+            {
+                root.Free();
+            }
         }
 
+        presentationLayer = null;
         root = null;
         linePresenter = null;
         optionsPresenter = null;

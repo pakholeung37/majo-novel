@@ -243,6 +243,10 @@ internal sealed class GodotAudioBackendPlayer : IAudioBackendPlayer
         player.Finished -= HandleFinished;
         if (GodotObject.IsInstanceValid(player))
         {
+            // Release the native playback/stream reference synchronously. Waiting
+            // for QueueFree alone can leave a WAV playback alive when the scene
+            // exits in the same frame as natural audio completion.
+            player.Stream = null;
             player.QueueFree();
         }
 

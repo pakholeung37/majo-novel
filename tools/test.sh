@@ -39,8 +39,8 @@ run_with_timeout 180 dotnet test "$UNIT_TEST_PROJECT" --nologo
 printf 'Checking Godot headless import and C# compilation...\n'
 run_with_timeout 180 "$GODOT_EXECUTABLE" --headless --path "$GAME_PROJECT" --editor --quit
 
-printf 'Running M5 visible-scene headless smoke test...\n'
-run_with_timeout 60 "$GODOT_EXECUTABLE" --headless --path "$GAME_PROJECT" -- --m5-auto
+printf 'Running visible Runtime Demo headless smoke test...\n'
+run_with_timeout 60 "$GODOT_EXECUTABLE" --headless --path "$GAME_PROJECT" -- --demo-auto
 
 for headless_run in 1 2 3; do
     printf 'Running Godot headless integration tests (%s/3)...\n' "$headless_run"

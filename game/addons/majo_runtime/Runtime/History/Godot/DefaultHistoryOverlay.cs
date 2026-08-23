@@ -12,6 +12,7 @@ public sealed class DefaultHistoryOverlay : IRuntimeService
 {
     private readonly Node owner;
     private readonly IHistoryManager history;
+    private CanvasLayer? layer;
     private Control? root;
     private VBoxContainer? entries;
     private Label? emptyLabel;
@@ -32,7 +33,13 @@ public sealed class DefaultHistoryOverlay : IRuntimeService
         }
 
         root = BuildView();
-        owner.AddChild(root);
+        layer = new CanvasLayer
+        {
+            Name = "MajoHistoryLayer",
+            Layer = 40,
+        };
+        owner.AddChild(layer);
+        layer.AddChild(root);
         history.OpenStateChanged += HandleOpenStateChanged;
         history.EntriesChanged += HandleEntriesChanged;
         isInitialized = true;
@@ -62,11 +69,16 @@ public sealed class DefaultHistoryOverlay : IRuntimeService
 
         history.OpenStateChanged -= HandleOpenStateChanged;
         history.EntriesChanged -= HandleEntriesChanged;
-        if (root is not null && GodotObject.IsInstanceValid(root))
+        if (layer is not null && GodotObject.IsInstanceValid(layer))
+        {
+            layer.Free();
+        }
+        else if (root is not null && GodotObject.IsInstanceValid(root))
         {
             root.Free();
         }
 
+        layer = null;
         root = null;
         entries = null;
         emptyLabel = null;

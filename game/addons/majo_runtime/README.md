@@ -130,6 +130,10 @@ Handles are bound to their Owner. Runtime disposes them on Reset and Shutdown;
 handles owned by a Godot `Node` are also released when that Node exits the tree.
 One logical action is dispatched at most once per Godot frame, and one physical
 event resolves to at most one logical action even when host bindings overlap.
+The Godot backend dispatches from `_UnhandledInput`, after GUI Controls have had
+the opportunity to consume an event. HUD and menu controls should keep
+`MouseFilter = Stop`; non-interactive dialogue surfaces use `Ignore` so clicking
+the dialogue panel can still produce `Advance`.
 
 The default Godot backend installs only missing InputMap actions and never changes
 an action already defined by the host project:
@@ -344,11 +348,14 @@ nodes. Set `Presentation.Enabled = false` when a project supplies a completely
 independent Presenter.
 
 Options acquire an M7 modal Scope. Their focus navigation and submission route
-through `IInputManager`; the native `OptionItem` Button submission signal is
-disabled so it cannot bypass a newer menu or gameplay modal owner.
+through `IInputManager` for keyboard and gamepad. Native `OptionItem` buttons
+retain their pressed signal for pointer selection, while unrelated left clicks
+are ignored during the modal option phase instead of confirming the focused item.
 
 Yarn markup is projected into immutable `DialogueText` and
-`DialogueMarkupAttribute` values. Register ordinary handlers without importing
+`DialogueMarkupAttribute` values. The default Presenter maps Yarn's `[b]`, `[i]`,
+`[u]`, and `[s]` spans to `RichTextLabel` BBCode while preserving visible-character
+positions for the native typewriter. Register ordinary handlers without importing
 Yarn types:
 
 ```csharp
@@ -485,27 +492,38 @@ the context are cancelled when the current Yarn dialogue stops. Command
 failures emit `RuntimeCommandFailed`, abort the current dialogue and remain
 available through `IYarnCommandAdapter.LastFailure`.
 
-## Playable M10 demo
+## Runtime validation demo
 
-Run the project or open `res://demo/M5Demo.tscn`. The visible scene uses the
-default dialogue Presenter and an M10 HUD for Manual/Auto and History. It also
-exercises parallel background/character animation, group join, a waiting
-animation, dialogue, options, branching, a custom command, and clean Runtime
-shutdown. Use the HUD buttons or the `A`/`H` shortcuts.
+Run the project or open `res://demo/RuntimeDemo.tscn`. This is the single,
+long-lived validation scene; new Runtime capabilities are appended here instead
+of creating milestone-named demos. Its current long-form Yarn flow covers service
+lifecycle, resources, parallel/wait/cancel/complete Operations, Actors, built-in
+and custom commands, dialogue sessions and variables, input, native markup,
+BGM/SFX/Voice, Script playback, Game State capture/restore, Auto, and Session
+History.
+
+The Dialogue Panel is hosted on CanvasLayer 20, above Actor layers. The validation
+HUD is on layer 30 and History is modal on layer 40. Use Space/mouse for dialogue,
+arrow keys/Enter for options, `A` for Auto, and `H` for History. At a completed
+line boundary the HUD also enables Game State capture and restore buttons.
 
 All extension code lives outside the plugin under `res://demo`:
 
-- `M5CaseService` demonstrates a service with Runtime lifetime dependency.
-- `M5PortraitActorFactory` demonstrates a custom Actor factory ID.
+- `DemoSessionService` demonstrates a service with Runtime lifetime dependency.
+- `DemoPortraitActorFactory` demonstrates a custom Actor factory ID.
+- `assets/audio` contains the Demo's loopable ambient BGM, soft notification SFX,
+  and localized Narrator/Maya Voice assets. Headless and `--demo-auto` runs
+  substitute `FakeAudioClipLoader`/`FakeAudioBackend` so validation does not
+  depend on an audio device or its shutdown timing.
 - `demo_route` demonstrates a custom Yarn command resolving the service.
-- `M10DemoHud` exposes Auto state and History controls over the default Presenter.
-- `M5DialogueProbe` runs the same content without graphics for deterministic
+- `RuntimeDemoHud` exposes playback, State, Auto, and History controls.
+- `RuntimeDialogueProbe` runs the same content without graphics for deterministic
   integration tests.
 
 The main scene also has a non-interactive smoke mode:
 
 ```sh
-/path/to/godot --headless --path game -- --m5-auto
+/path/to/godot --headless --path game -- --demo-auto
 ```
 
 ## Testing

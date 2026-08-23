@@ -8,6 +8,7 @@ using Godot;
 using Majo.Runtime;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Actors.Godot;
+using Majo.Runtime.Audio;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue.Commands;
@@ -16,11 +17,11 @@ using Majo.Runtime.Resources;
 
 namespace Majo.Demo;
 
-public sealed class M5CaseService : IRuntimeService
+public sealed class DemoSessionService : IRuntimeService
 {
     private readonly IRuntimeLifetime lifetime;
 
-    public M5CaseService(IRuntimeLifetime lifetime)
+    public DemoSessionService(IRuntimeLifetime lifetime)
     {
         this.lifetime = lifetime ?? throw new ArgumentNullException(nameof(lifetime));
     }
@@ -65,16 +66,16 @@ public sealed class M5CaseService : IRuntimeService
     }
 }
 
-public sealed class M5PortraitActorFactory : IActorFactory
+public sealed class DemoPortraitActorFactory : IActorFactory
 {
-    public const string Id = "m5-portrait";
+    public const string Id = "demo-portrait";
 
     private readonly Node2D host;
     private readonly Func<IOperationScheduler> scheduler;
     private readonly Func<IActorTextureLoader> textureLoader;
     private readonly CharacterPositionMap positions;
 
-    public M5PortraitActorFactory(
+    public DemoPortraitActorFactory(
         Node2D host,
         Func<IOperationScheduler> scheduler,
         Func<IActorTextureLoader> textureLoader,
@@ -97,7 +98,7 @@ public sealed class M5PortraitActorFactory : IActorFactory
     {
         var view = new Sprite2D
         {
-            Name = $"{definition.Id}-M5Portrait",
+            Name = $"{definition.Id}-DemoPortrait",
             Centered = true,
         };
         host.AddChild(view);
@@ -120,14 +121,14 @@ public sealed class M5PortraitActorFactory : IActorFactory
     }
 }
 
-public static class M5DemoComposition
+public static class RuntimeDemoComposition
 {
     public const string DialogueProjectId = "main";
 
     public static MajoProjectConfiguration CreateConfiguration()
     {
         var configuration = MajoProjectConfiguration.CreateDefault();
-        configuration.Presentation!.Enabled = false;
+        configuration.Presentation!.Enabled = true;
         configuration.Presentation.LettersPerSecond = 36;
         configuration.Auto!.ExtraDelaySeconds = 1;
         configuration.Operations!.DefaultAnimationDurationSeconds = 0.2;
@@ -141,32 +142,55 @@ public static class M5DemoComposition
             CharacterPositionPreset.Center));
         configuration.Actors.Actors.Add(CreateActorDefinition(
             "hero",
-            M5PortraitActorFactory.Id,
+            DemoPortraitActorFactory.Id,
             "calm",
             CharacterPositionPreset.Right,
             configuration.Resources!.CharactersPath));
         return configuration;
     }
 
-    public static M5PortraitActorFactory ConfigureRuntime(
+    public static DemoPortraitActorFactory ConfigureRuntime(
         MajoRuntimeBootstrap runtime,
         Node2D portraitHost,
-        ActorConfiguration actorConfiguration)
+        ActorConfiguration actorConfiguration,
+        bool useFakeAudio = false)
     {
         ArgumentNullException.ThrowIfNull(runtime);
         ArgumentNullException.ThrowIfNull(portraitHost);
         ArgumentNullException.ThrowIfNull(actorConfiguration);
 
-        var factory = new M5PortraitActorFactory(
+        var factory = new DemoPortraitActorFactory(
             portraitHost,
             () => runtime.Host!.Services.Get<IOperationScheduler>(),
             () => new ResourceActorTextureLoader(
                 runtime.Host!.Services.Get<IResourceManager>()),
             new CharacterPositionMap(actorConfiguration));
+        runtime.ConfigureServices += services =>
+        {
+            services.AddSingleton<DemoSessionService>(
+                resolver => new DemoSessionService(resolver.Get<IRuntimeLifetime>()),
+                typeof(IRuntimeLifetime));
+            if (!useFakeAudio)
+            {
+                return;
+            }
 
-        runtime.ConfigureServices += services => services.AddSingleton<M5CaseService>(
-            resolver => new M5CaseService(resolver.Get<IRuntimeLifetime>()),
-            typeof(IRuntimeLifetime));
+            var audio = new FakeAudioClipLoader("generated://runtime-demo")
+                .Register("demo-theme")
+                .Register("demo-tension")
+                .Register("demo-chime")
+                .Register("en/narrator-welcome")
+                .Register("en/maya-ready");
+            services.ReplaceSingleton<IAudioManager>(
+                resolver => new AudioManager(
+                    new FakeAudioBackend(),
+                    resolver.Get<IOperationScheduler>(),
+                    audio,
+                    audio,
+                    audio,
+                    new AudioSettings()),
+                typeof(IOperationScheduler));
+        };
         runtime.ConfigureActorFactories += actors => actors.RegisterFactory(factory);
         runtime.ConfigureCommands += RegisterCommands;
         return factory;
@@ -189,7 +213,7 @@ public static class M5DemoComposition
         }
 
         var services = context.Require(context.Services, "ServiceResolver");
-        services.Get<M5CaseService>().SelectRoute(arguments.Route);
+        services.Get<DemoSessionService>().SelectRoute(arguments.Route);
         return Task.CompletedTask;
     }
 
