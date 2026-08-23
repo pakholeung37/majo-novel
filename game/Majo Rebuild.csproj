@@ -6,5 +6,9 @@
     <WarningsNotAsErrors>$(WarningsNotAsErrors);SYSLIB1220</WarningsNotAsErrors>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="../bridges/YarnSpinnerStateBridge/YarnSpinnerStateBridge.csproj" />
+  </ItemGroup>
+
   <Import Project="addons\YarnSpinner-Godot\YarnSpinner-Godot.props" />
 </Project>

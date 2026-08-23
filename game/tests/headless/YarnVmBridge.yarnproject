@@ -1,0 +1,8 @@
+{
+    "projectFileVersion": 3,
+    "sourceFiles": [
+        "YarnVmBridge.yarn"
+    ],
+    "excludeFiles": [],
+    "baseLanguage": "en"
+}

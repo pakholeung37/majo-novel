@@ -5,5 +5,76 @@
         "**/*.uid": true,
         "**/.godot/**": true,
         "**/.import/**": true
-    }
+    },
+    "cSpell.enableFiletypes": [
+        "naniscript",
+        "yarnspinner"
+    ],
+    "cSpell.ignorePaths": [
+        "package-lock.json",
+        "node_modules",
+        "vscode-extension",
+        ".git/{info,lfs,logs,refs,objects}/**",
+        ".git/{index,*refs,*HEAD}",
+        ".vscode",
+        ".vscode-insiders",
+        "**/*.yarnproject",
+        "**/*.ysls",
+        "**/*.ysls.json",
+        "**/*.debuginfo.json"
+    ],
+    "cSpell.languageSettings": [
+        {
+            "languageId": "yarnspinner",
+            "patterns": [
+                {
+                    "name": "yarn-commands",
+                    "pattern": "/<<[^>]*>>/g"
+                },
+                {
+                    "name": "yarn-expressions",
+                    "pattern": "/\\{[^}]*\\}/g"
+                },
+                {
+                    "name": "yarn-variables",
+                    "pattern": "/\\$[\\p{L}\\p{M}_][\\p{L}\\p{M}\\p{N}_]*/gu"
+                },
+                {
+                    "name": "yarn-markup",
+                    "pattern": "/\\[[^\\]]*\\]/g"
+                },
+                {
+                    "name": "yarn-hashtags",
+                    "pattern": "/#[\\p{L}\\p{M}_][\\p{L}\\p{M}\\p{N}_:-]*/gu"
+                },
+                {
+                    "name": "yarn-node-markers",
+                    "pattern": "/^(---|===)$/gm"
+                },
+                {
+                    "name": "yarn-headers",
+                    "pattern": "/^(title|tags|position|color|colorID|tracking|custom|style):.*/gm"
+                },
+                {
+                    "name": "yarn-character-names",
+                    "pattern": "/^\\s*[\\p{L}\\p{M}_][\\p{L}\\p{M}\\p{N}_]*(?=:)/gmu"
+                },
+                {
+                    "name": "yarn-comments",
+                    "pattern": "/\\/\\/.*$/gm"
+                }
+            ],
+            "ignoreRegExpList": [
+                "yarn-commands",
+                "yarn-expressions",
+                "yarn-variables",
+                "yarn-markup",
+                "yarn-hashtags",
+                "yarn-node-markers",
+                "yarn-headers",
+                "yarn-character-names",
+                "yarn-comments"
+            ]
+        }
+    ]
 }
