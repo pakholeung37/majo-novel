@@ -10,7 +10,9 @@ using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Commands;
+using Majo.Runtime.Dialogue.Presentation;
 using Majo.Runtime.Dialogue.Yarn;
+using Majo.Runtime.Dialogue.Yarn.Presentation;
 using Majo.Runtime.Input;
 using Majo.Runtime.Input.Godot;
 using Majo.Runtime.Operations;
@@ -60,6 +62,8 @@ public partial class MajoRuntimeBootstrap : Node
     public Action<ResourceProviderRegistry>? ConfigureResourceProviders { get; set; }
 
     public Action<DialoguePresenterRegistry>? ConfigureDialoguePresenters { get; set; }
+
+    public Action<DialogueMarkupHandlerRegistry>? ConfigureDialogueMarkupHandlers { get; set; }
 
     public RuntimeHost? Host { get; private set; }
 
@@ -209,6 +213,8 @@ public partial class MajoRuntimeBootstrap : Node
 
         var presenterRegistry = new DialoguePresenterRegistry();
         ConfigureDialoguePresenters?.Invoke(presenterRegistry);
+        var markupHandlerRegistry = new DialogueMarkupHandlerRegistry();
+        ConfigureDialogueMarkupHandlers?.Invoke(markupHandlerRegistry);
         services
             .AddSingleton<IYarnDialogueBackend>(
                 resolver => new YarnDialogueBackend(
@@ -217,6 +223,16 @@ public partial class MajoRuntimeBootstrap : Node
                     Configuration!.Resources!.ScriptsPath,
                     presenterRegistry.Presenters),
                 typeof(IResourceManager))
+            .AddSingleton<IDialoguePresentation>(
+                resolver => new YarnDefaultDialoguePresentation(
+                    resolver.Get<IYarnDialogueBackend>(),
+                    resolver.Get<IInputManager>(),
+                    resolver.Get<IFrameClock>(),
+                    Configuration!.Presentation!,
+                    markupHandlerRegistry.Handlers),
+                typeof(IYarnDialogueBackend),
+                typeof(IInputManager),
+                typeof(IFrameClock))
             .AddSingleton<IDialogueVariables>(
                 resolver => new DialogueVariables(
                     resolver.Get<IYarnDialogueBackend>().VariableStore),
@@ -235,7 +251,8 @@ public partial class MajoRuntimeBootstrap : Node
                     Configuration!.Dialogue!.DefaultProjectId,
                     Configuration.Dialogue.DefaultStartNode),
                 typeof(IYarnDialogueBackend),
-                typeof(IYarnCommandAdapter));
+                typeof(IYarnCommandAdapter),
+                typeof(IDialoguePresentation));
     }
 
     private IYarnCommandAdapter CreateYarnCommandAdapter(

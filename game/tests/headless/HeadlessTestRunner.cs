@@ -11,6 +11,7 @@ using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Commands;
+using Majo.Runtime.Dialogue.Presentation;
 using Majo.Runtime.Dialogue.Yarn;
 using Majo.Runtime.Input;
 using Majo.Runtime.Operations;
@@ -35,12 +36,14 @@ public partial class HeadlessTestRunner : Node
         try
         {
             await RunWithTimeoutAsync(RunSuiteAsync(), SuiteTimeoutSeconds);
+            await FinalizeEngineObjectsAsync();
             GD.Print("Majo Runtime headless tests passed.");
             GetTree().Quit(0);
         }
         catch (Exception exception)
         {
             GD.PushError($"Majo Runtime headless tests failed: {exception}");
+            await FinalizeEngineObjectsAsync();
             GetTree().Quit(1);
         }
     }
@@ -58,6 +61,7 @@ public partial class HeadlessTestRunner : Node
 
         ValidateConfigurationDiagnostics();
         await ValidateInputRuntimeAsync();
+        await ValidateDefaultPresentationAsync();
         await ValidateSuccessfulRuntimeLifecycleAsync();
         await ValidateLifecycleTimeoutAsync();
         await ValidateOperationKernelAsync();
@@ -117,6 +121,11 @@ public partial class HeadlessTestRunner : Node
         {
             PhysicalKeycode = Key.Space,
             Pressed = true,
+        });
+        Godot.Input.ParseInputEvent(new InputEventKey
+        {
+            PhysicalKeycode = Key.Space,
+            Pressed = false,
         });
         Godot.Input.ParseInputEvent(new InputEventKey
         {
@@ -217,10 +226,11 @@ public partial class HeadlessTestRunner : Node
 
         var advanceAction = new StringName(
             MajoInputActions.ToGodotAction(MajoInputActions.Advance));
-        InputMap.ActionAddEvent(advanceAction, new InputEventKey
+        var overlappingEnterEvent = new InputEventKey
         {
             PhysicalKeycode = Key.Enter,
-        });
+        };
+        InputMap.ActionAddEvent(advanceAction, overlappingEnterEvent);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         Godot.Input.ParseInputEvent(new InputEventKey
         {
@@ -260,6 +270,198 @@ public partial class HeadlessTestRunner : Node
             "M7 Runtime shutdown left the Godot input receiver behind.");
         Assert(!IsInstanceValid(bootstrap), "M7 Input Runtime node leaked after shutdown.");
         Assert(!IsInstanceValid(owner), "M7 input owner node leaked after cleanup.");
+        InputMap.ActionEraseEvent(advanceAction, overlappingEnterEvent);
+        InputMap.EraseAction(existingMenuAction);
+    }
+
+    private async Task ValidateDefaultPresentationAsync()
+    {
+        var customScene = new PackedScene();
+        var defaultScene = ResourceLoader.Load<PackedScene>(
+            DialoguePresentationConfiguration.DefaultScenePath);
+        Assert(defaultScene is not null, "M8 default Presenter scene could not be loaded.");
+        var templateRoot = defaultScene!.Instantiate<Control>();
+        templateRoot.SetMeta("m8_custom_scene", true);
+        var packResult = customScene.Pack(templateRoot);
+        templateRoot.Free();
+        Assert(packResult == Error.Ok, "M8 custom Presenter scene could not be packed.");
+
+        var configuration = MajoProjectConfiguration.CreateDefault();
+        configuration.Resources!.RootPath = "res://tests";
+        configuration.Resources.ScriptsPath = "headless";
+        configuration.Dialogue!.DefaultProjectId = "M8Presentation";
+        configuration.Presentation!.Enabled = true;
+        configuration.Presentation.PresenterScene = customScene;
+        configuration.Presentation.LettersPerSecond = 1;
+        configuration.Presentation.UseFadeEffect = false;
+
+        var handlerOrder = new List<string>();
+        var firstHandler = new M8MarkupProbe("first", handlerOrder);
+        var secondHandler = new M8MarkupProbe("second", handlerOrder);
+        var bootstrap = new MajoRuntimeBootstrap
+        {
+            Name = "M8Runtime",
+            Configuration = configuration,
+        };
+        bootstrap.ConfigureDialogueMarkupHandlers += handlers => handlers
+            .Register(firstHandler)
+            .Register(secondHandler);
+        AddChild(bootstrap);
+        await bootstrap.InitializationCompletion;
+
+        var dialogue = bootstrap.Host!.Services.Get<IDialoguePlayer>();
+        var presentation = bootstrap.Host.Services.Get<IDialoguePresentation>();
+        var input = bootstrap.Host.Services.Get<IInputManager>();
+        var backend = bootstrap.Host.Services.Get<IYarnDialogueBackend>();
+        var presentationRoot = bootstrap.FindChild(
+            "MajoDefaultDialoguePresentation",
+            recursive: true,
+            owned: false) as Control;
+        Assert(presentationRoot is not null &&
+                presentationRoot.HasMeta("m8_custom_scene") &&
+                presentationRoot.GetMeta("m8_custom_scene").AsBool(),
+            "M8 ignored the configured Presenter PackedScene override.");
+        var nativeLinePresenter = presentationRoot!.FindChild(
+            "LinePresenter",
+            recursive: true,
+            owned: false) as LinePresenter;
+        Assert(nativeLinePresenter?.Typewriter is LetterTypewriter,
+            "M8 did not reuse Yarn's native letter Typewriter.");
+        Assert(backend.Runner.dialoguePresenters is not null &&
+                backend.Runner.dialoguePresenters.OfType<LineAdvancer>().Count() == 0,
+            "M8 registered Yarn LineAdvancer and bypassed M7 input ownership.");
+
+        await dialogue.StartAsync();
+        await WaitForConditionAsync(
+            () => presentation.IsLineActive && !presentation.IsLineDisplayComplete,
+            2);
+        Assert(dialogue.CurrentLineId == "line:m8-first",
+            "M8 did not publish the first line through the M6 facade.");
+
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Godot.Input.ParseInputEvent(new InputEventKey
+        {
+            PhysicalKeycode = Key.Space,
+            Pressed = true,
+        });
+        Godot.Input.ParseInputEvent(new InputEventKey
+        {
+            PhysicalKeycode = Key.Space,
+            Pressed = true,
+        });
+        Godot.Input.ParseInputEvent(new InputEventKey
+        {
+            PhysicalKeycode = Key.Space,
+            Pressed = false,
+        });
+        await WaitForConditionAsync(() => presentation.IsLineDisplayComplete, 2);
+        Assert(dialogue.CurrentLineId == "line:m8-first" &&
+                !dialogue.IsPresentingOptions,
+            "M8 allowed one same-frame Advance to both hurry and dismiss a line.");
+        Assert(firstHandler.SawCancelledCharacterToken,
+            "M8 markup handler did not receive Yarn's hurried-line cancellation token.");
+
+        await InjectKeyAsync(Key.Space);
+        await WaitForConditionAsync(
+            () => dialogue.IsPresentingOptions && presentation.IsPresentingOptions,
+            2);
+        var visibleOptionItems = presentationRoot.FindChild(
+                "OptionContainer",
+                recursive: true,
+                owned: false)
+            .GetChildren()
+            .OfType<OptionItem>()
+            .Where(option => option.Visible)
+            .ToArray();
+        Assert(visibleOptionItems.Length == 2 && visibleOptionItems.All(option =>
+            {
+                var button = option.FindChild("Button", recursive: true, owned: false)
+                    as BaseButton;
+                return button is not null && !button.IsConnected(
+                    BaseButton.SignalName.Pressed,
+                    Callable.From(option.InvokeOptionSelected));
+            }),
+            "M8 native OptionItem buttons bypassed M7 modal input ownership.");
+        await InjectKeyAsync(Key.Down);
+        await InjectKeyAsync(Key.Enter);
+        await WaitForConditionAsync(
+            () => dialogue.CurrentLineId == "line:m8-second-option" &&
+                presentation.IsLineActive,
+            2);
+
+        await InjectKeyAsync(Key.Space);
+        await WaitForConditionAsync(() => presentation.IsLineDisplayComplete, 2);
+        await InjectKeyAsync(Key.Space);
+        var completion = await dialogue.Completion.WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert(completion.Kind == DialogueCompletionKind.Completed,
+            "M8 input-driven dialogue did not complete naturally.");
+        Assert(!presentation.IsLineActive && !presentation.IsPresentingOptions,
+            "M8 retained active Presentation state after dialogue completion.");
+        Assert(input.ActiveHandleCount == 0,
+            "M8 retained line or modal option input ownership after completion.");
+        Assert(handlerOrder.Take(2).SequenceEqual(new[]
+            {
+                "first:prepared",
+                "second:prepared",
+            }),
+            "M8 markup handlers did not run in registration order.");
+        Assert(firstHandler.PreparedTexts.Count >= 2,
+            "M8 did not project Yarn markup for every displayed line.");
+        var firstText = firstHandler.PreparedTexts[0];
+        var unknownMarkup = firstText.Attributes.SingleOrDefault(
+            attribute => attribute.Name == "mystery");
+        Assert(unknownMarkup is not null &&
+                unknownMarkup.Properties["count"].IntegerValue == 3 &&
+                unknownMarkup.Properties["enabled"].BooleanValue &&
+                unknownMarkup.Properties["label"].StringValue == "alpha" &&
+                !firstText.Text.Contains("mystery", StringComparison.Ordinal),
+            "M8 failed to preserve unknown Yarn markup information in its facade.");
+
+        await dialogue.StartAsync();
+        await WaitForConditionAsync(() => presentation.IsLineActive, 2);
+        var stoppedLineCompletion = dialogue.Completion;
+        await dialogue.StopAsync();
+        Assert((await stoppedLineCompletion).Kind == DialogueCompletionKind.Stopped &&
+                !presentation.IsLineActive && input.ActiveHandleCount == 0,
+            "M8 did not cancel and release an active native line Presenter.");
+
+        await dialogue.StartAsync();
+        await WaitForConditionAsync(() => presentation.IsLineActive, 2);
+        backend.RequestHurryUp();
+        await WaitForConditionAsync(() => presentation.IsLineDisplayComplete, 2);
+        backend.RequestNextLine();
+        await WaitForConditionAsync(() => presentation.IsPresentingOptions, 2);
+        var stoppedOptionsCompletion = dialogue.Completion;
+        await dialogue.StopAsync();
+        Assert((await stoppedOptionsCompletion).Kind == DialogueCompletionKind.Stopped &&
+                !presentation.IsPresentingOptions && input.ActiveHandleCount == 0,
+            "M8 did not cancel and release modal option Presentation.");
+
+        var presentationNode = presentationRoot;
+        await bootstrap.RequestShutdownAsync();
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Assert(!IsInstanceValid(presentationNode),
+            "M8 Presenter PackedScene survived Runtime shutdown.");
+        Assert(!IsInstanceValid(bootstrap), "M8 Runtime node leaked after shutdown.");
+        configuration.Presentation.PresenterScene = null;
+        customScene.Dispose();
+
+        async Task InjectKeyAsync(Key key)
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Godot.Input.ParseInputEvent(new InputEventKey
+            {
+                PhysicalKeycode = key,
+                Pressed = true,
+            });
+            Godot.Input.ParseInputEvent(new InputEventKey
+            {
+                PhysicalKeycode = key,
+                Pressed = false,
+            });
+        }
     }
 
     private async Task ValidateM5PlayableLoopAsync()
@@ -438,6 +640,7 @@ public partial class HeadlessTestRunner : Node
         configuration.Resources!.RootPath = "res://tests";
         configuration.Resources.ScriptsPath = "headless";
         configuration.Dialogue!.DefaultProjectId = "M4Commands";
+        configuration.Presentation!.Enabled = false;
         configuration.Actors!.LeftPosition = new Vector2(100, 200);
         configuration.Actors.CenterPosition = new Vector2(200, 200);
         configuration.Actors.RightPosition = new Vector2(300, 200);
@@ -1046,6 +1249,9 @@ public partial class HeadlessTestRunner : Node
             },
         });
         configuration.Dialogue!.RequiredYarnRuntimeVersion = "99.0.0";
+        configuration.Presentation!.FontSize = 0;
+        configuration.Presentation.LettersPerSecond = 0;
+        configuration.Presentation.FadeUpDurationSeconds = double.NaN;
 
         var validation = configuration.Validate(_ => false);
 
@@ -1059,6 +1265,9 @@ public partial class HeadlessTestRunner : Node
         Assert(validation.Issues.Any(issue =>
                 issue.Path.Contains("RequiredYarnRuntimeVersion", StringComparison.Ordinal)),
             "Invalid Yarn runtime version was not diagnosed.");
+        Assert(validation.Issues.Count(issue =>
+                issue.Path.StartsWith("Presentation", StringComparison.Ordinal)) == 3,
+            "Invalid M8 Presentation values were not diagnosed together.");
 
         var customActorConfiguration = MajoProjectConfiguration.CreateDefault();
         customActorConfiguration.Actors!.Actors.Add(new ActorDefinitionConfiguration
@@ -1069,6 +1278,16 @@ public partial class HeadlessTestRunner : Node
         });
         Assert(customActorConfiguration.Validate(_ => false).IsValid,
             "Factory-owned Actor configuration was incorrectly validated as a texture Actor.");
+    }
+
+    private async Task FinalizeEngineObjectsAsync()
+    {
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
     }
 
     private async Task RunWithTimeoutAsync(Task suite, double timeoutSeconds)
@@ -1182,6 +1401,44 @@ public partial class HeadlessTestRunner : Node
             await Task.Yield();
             ShutdownCount++;
         }
+    }
+
+    private sealed class M8MarkupProbe : IDialogueMarkupHandler
+    {
+        private readonly string id;
+        private readonly IList<string> order;
+
+        public M8MarkupProbe(string id, IList<string> order)
+        {
+            this.id = id;
+            this.order = order;
+        }
+
+        public List<DialogueText> PreparedTexts { get; } = new();
+
+        public bool SawCancelledCharacterToken { get; private set; }
+
+        public void OnLinePrepared(DialogueText text)
+        {
+            PreparedTexts.Add(text);
+            order.Add($"{id}:prepared");
+        }
+
+        public void OnLineDisplayBegan(DialogueText text) =>
+            order.Add($"{id}:began");
+
+        public Task OnCharacterWillAppearAsync(
+            int characterIndex,
+            DialogueText text,
+            CancellationToken cancellationToken)
+        {
+            SawCancelledCharacterToken |= cancellationToken.IsCancellationRequested;
+            return Task.CompletedTask;
+        }
+
+        public void OnLineDisplayCompleted() => order.Add($"{id}:completed");
+
+        public void OnLineWillDismiss() => order.Add($"{id}:dismissed");
     }
 
     private sealed class NonCooperativeInitializationService : IRuntimeService

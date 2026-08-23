@@ -794,6 +794,8 @@ confirm
 
 ### 11.4 M8：Default VN Presenter 与 Yarn Markup Bridge
 
+状态：已完成。
+
 目标：提供可直接使用、同时可以通过 PackedScene 整体替换的传统单文本框视觉小说 UI。
 
 架构决策：
@@ -835,6 +837,26 @@ confirm
 - 默认 PackedScene 可直接运行，自定义 PackedScene 可以替换而不修改 Runtime 源码。
 - 架构测试保证默认 Presenter 组合复用 Yarn Typewriter/Markup 实现，Majo Runtime 中不出现
   第二套逐字计时器或 Markup parser。
+
+实施记录（2026-08-23）：
+
+- 新增可直接运行的传统单文本框 PackedScene，组合 Yarn 原生 `LinePresenter`、
+  `LetterTypewriter`、`OptionsPresenter` 与 `OptionItem`；默认开启并支持整体 PackedScene、
+  Theme、Font、字号、打字速度和淡入淡出配置。
+- 默认组合不注册 `LineAdvancer`。M7 line Scope 将同一逻辑 Advance 严格映射为
+  `HurryUp -> NextLine` 两阶段；同帧去重保证一次物理输入不能同时触发两阶段。
+- 选项使用 M7 Modal Scope 管理上下、下移、确认与取消边界；原生 Button 的直接提交信号
+  被断开，焦点与最终 `InvokeOptionSelected` 均由输入所有权层驱动。
+- 新增 Yarn-free `IDialoguePresentation`、`IDialogueMarkupHandler` 和确定顺序 Registry；
+  Yarn `MarkupParseResult` 直接投影为不可变 Majo DTO，保留未知 attribute、位置、长度和
+  typed properties，不重新解析 markup。
+- Runtime 可以安全并存 Yarn-free observer Presenter 与原生 Yarn Presenter；原生注册入口
+  只位于 `Majo.Runtime.Dialogue.Yarn`，普通 API 的反射测试保证不暴露 Godot/Yarn 类型。
+- 真实 Godot/Yarn headless 覆盖自定义 PackedScene、原生 LetterTypewriter、HurryUp token、
+  同帧双输入、键盘选项分支、line/options Stop 取消、markup 顺序以及同步 UI 释放；verbose
+  退出无 ObjectDB/Resource 泄漏。
+- 门禁通过：105 个纯 C# 单元测试，完整 headless 测试正文通过；仅保留 Yarn 插件既有的
+  `SYSLIB1220` 编译警告。
 
 ### 11.5 M9：Audio Runtime
 

@@ -1,0 +1,143 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://addons/YarnSpinner-Godot/Runtime/Async/LinePresenter.cs" id="1_line"]
+[ext_resource type="Script" path="res://addons/YarnSpinner-Godot/Runtime/Async/OptionsPresenter.cs" id="2_options"]
+[ext_resource type="PackedScene" path="res://addons/YarnSpinner-Godot/Scenes/OptionItem.tscn" id="3_option_item"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_dialogue"]
+bg_color = Color(0.035, 0.045, 0.075, 0.94)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.45, 0.55, 0.82, 0.85)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+content_margin_left = 28.0
+content_margin_top = 22.0
+content_margin_right = 28.0
+content_margin_bottom = 22.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_name"]
+bg_color = Color(0.12, 0.16, 0.3, 0.98)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+content_margin_left = 18.0
+content_margin_top = 8.0
+content_margin_right = 18.0
+content_margin_bottom = 8.0
+
+[node name="DefaultVnPresentation" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 1
+
+[node name="LinePresenter" type="Control" parent="." node_paths=PackedStringArray("presenterControl", "lineText", "characterNameText", "characterNameContainer")]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 1
+script = ExtResource("1_line")
+presenterControl = NodePath("PresenterControl")
+lineText = NodePath("PresenterControl/Margin/VBox/LineText")
+characterNameText = NodePath("PresenterControl/CharacterNamePanel/CharacterNameText")
+characterNameContainer = NodePath("PresenterControl/CharacterNamePanel")
+useFadeEffect = false
+lettersPerSecond = 32
+typewriterStyle = 1
+ConvertHTMLToBBCode = false
+
+[node name="PresenterControl" type="PanelContainer" parent="LinePresenter"]
+layout_mode = 1
+anchors_preset = 12
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 48.0
+offset_top = -260.0
+offset_right = -48.0
+offset_bottom = -36.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_styles/panel = SubResource("StyleBox_dialogue")
+
+[node name="Margin" type="MarginContainer" parent="LinePresenter/PresenterControl"]
+layout_mode = 2
+
+[node name="VBox" type="VBoxContainer" parent="LinePresenter/PresenterControl/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="LineText" type="RichTextLabel" parent="LinePresenter/PresenterControl/Margin/VBox"]
+custom_minimum_size = Vector2(0, 112)
+layout_mode = 2
+mouse_filter = 2
+bbcode_enabled = true
+fit_content = false
+scroll_active = false
+autowrap_mode = 2
+
+[node name="ContinueHint" type="Label" parent="LinePresenter/PresenterControl/Margin/VBox"]
+layout_mode = 2
+size_flags_horizontal = 8
+mouse_filter = 2
+text = "Click or press Space to continue"
+
+[node name="CharacterNamePanel" type="PanelContainer" parent="LinePresenter/PresenterControl"]
+layout_mode = 0
+offset_left = 18.0
+offset_top = -48.0
+offset_right = 420.0
+offset_bottom = 4.0
+theme_override_styles/panel = SubResource("StyleBox_name")
+
+[node name="CharacterNameText" type="RichTextLabel" parent="LinePresenter/PresenterControl/CharacterNamePanel"]
+custom_minimum_size = Vector2(360, 34)
+layout_mode = 2
+mouse_filter = 2
+bbcode_enabled = true
+fit_content = true
+scroll_active = false
+
+[node name="OptionsPresenter" type="Control" parent="." node_paths=PackedStringArray("presenterControl", "optionParent")]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 1
+script = ExtResource("2_options")
+presenterControl = NodePath("PresenterControl")
+optionItemPrefab = ExtResource("3_option_item")
+optionParent = NodePath("PresenterControl/OptionContainer")
+useFadeEffect = false
+
+[node name="PresenterControl" type="PanelContainer" parent="OptionsPresenter"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -420.0
+offset_top = -180.0
+offset_right = 420.0
+offset_bottom = 220.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBox_dialogue")
+
+[node name="OptionContainer" type="VBoxContainer" parent="OptionsPresenter/PresenterControl"]
+layout_mode = 2
+theme_override_constants/separation = 12

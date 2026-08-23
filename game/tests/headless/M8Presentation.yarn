@@ -1,0 +1,9 @@
+title: Start
+tags: headless m8
+---
+Narrator: [mystery count=3 enabled=true label="alpha"]A deliberately long first line for the native typewriter.[/mystery] #line:m8-first
+-> First route
+    Narrator: first route selected #line:m8-first-option
+-> Second route
+    Narrator: second route selected #line:m8-second-option
+===

@@ -12,6 +12,14 @@ namespace Majo.Runtime.Dialogue.Yarn;
 
 public static class YarnLineConverter
 {
+    public static DialogueText Convert(MarkupParseResult text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        return new DialogueText(
+            text.Text,
+            text.Attributes.Select(Convert).ToArray());
+    }
+
     public static DialogueLine Convert(YarnLocalizedLine line)
     {
         ArgumentNullException.ThrowIfNull(line);
@@ -19,9 +27,7 @@ public static class YarnLineConverter
         return new DialogueLine(
             line.TextID,
             line.CharacterName,
-            new DialogueText(
-                text.Text,
-                text.Attributes.Select(Convert).ToArray()),
+            Convert(text),
             (line.Metadata ?? Array.Empty<string>()).ToArray());
     }
 

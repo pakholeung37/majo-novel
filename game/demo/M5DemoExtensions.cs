@@ -127,6 +127,7 @@ public static class M5DemoComposition
     public static MajoProjectConfiguration CreateConfiguration()
     {
         var configuration = MajoProjectConfiguration.CreateDefault();
+        configuration.Presentation!.Enabled = false;
         configuration.Operations!.DefaultAnimationDurationSeconds = 0.2;
         configuration.Actors!.LeftPosition = new Vector2(560, 610);
         configuration.Actors.CenterPosition = new Vector2(960, 610);

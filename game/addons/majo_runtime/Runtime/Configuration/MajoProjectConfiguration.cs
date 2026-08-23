@@ -31,6 +31,9 @@ public partial class MajoProjectConfiguration : Resource
     [Export]
     public InputConfiguration? Input { get; set; }
 
+    [Export]
+    public DialoguePresentationConfiguration? Presentation { get; set; }
+
     public static MajoProjectConfiguration CreateDefault() => new()
     {
         Runtime = new RuntimeConfiguration(),
@@ -39,6 +42,7 @@ public partial class MajoProjectConfiguration : Resource
         Actors = new ActorConfiguration(),
         Dialogue = new DialogueConfiguration(),
         Input = new InputConfiguration(),
+        Presentation = new DialoguePresentationConfiguration(),
     };
 
     public ConfigurationValidationResult Validate(Func<string, bool>? resourceExists = null)
@@ -52,6 +56,7 @@ public partial class MajoProjectConfiguration : Resource
         ValidateActors(issues, resourceExists);
         ValidateDialogue(issues);
         ValidateInput(issues);
+        ValidatePresentation(issues);
 
         return new ConfigurationValidationResult(issues);
     }
@@ -321,6 +326,53 @@ public partial class MajoProjectConfiguration : Resource
         if (Input is null)
         {
             issues.Add(new ConfigurationIssue(nameof(Input), "Configuration is required."));
+        }
+    }
+
+    private void ValidatePresentation(ICollection<ConfigurationIssue> issues)
+    {
+        if (Presentation is null)
+        {
+            issues.Add(new ConfigurationIssue(
+                nameof(Presentation),
+                "Configuration is required."));
+            return;
+        }
+
+        if (Presentation.FontSize <= 0)
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Presentation)}.{nameof(Presentation.FontSize)}",
+                "Value must be greater than zero."));
+        }
+
+        if (Presentation.LettersPerSecond <= 0)
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Presentation)}.{nameof(Presentation.LettersPerSecond)}",
+                "Value must be greater than zero."));
+        }
+
+        ValidateNonNegativeDuration(
+            Presentation.FadeUpDurationSeconds,
+            nameof(Presentation.FadeUpDurationSeconds),
+            issues);
+        ValidateNonNegativeDuration(
+            Presentation.FadeDownDurationSeconds,
+            nameof(Presentation.FadeDownDurationSeconds),
+            issues);
+    }
+
+    private static void ValidateNonNegativeDuration(
+        double value,
+        string property,
+        ICollection<ConfigurationIssue> issues)
+    {
+        if (!double.IsFinite(value) || value < 0)
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Presentation)}.{property}",
+                "Value must be finite and non-negative."));
         }
     }
 }

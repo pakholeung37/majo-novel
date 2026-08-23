@@ -10,8 +10,9 @@ Compatibility baseline:
 
 Yarn Spinner is an external prerequisite and is not bundled with this plugin.
 
-Current implementation status: M7 input ownership, M6 dialogue sessions, Yarn
-isolation, and the M5 playable loop on the stable Runtime API.
+Current implementation status: M8 default VN presentation and Yarn markup bridge,
+M7 input ownership, M6 dialogue sessions, and the M5 playable loop on the stable
+Runtime API.
 
 ## Installation
 
@@ -272,11 +273,55 @@ should reference `Majo.Runtime.Dialogue.Yarn` and resolve `IYarnDialogueBackend`
 Normal playback and stopping must still go through `IDialoguePlayer` so Runtime can
 enforce Command, Operation, Presenter, and Runner cleanup ordering.
 
-The default visual Presenter planned for M8 will internally compose Yarn's native
-`LinePresenter`, Typewriter, and markup handlers instead of duplicating them.
-`IDialoguePresenter` remains the Yarn-free extension boundary for game-specific
-observers and Presenters. Input will be supplied by `IInputManager`; Yarn's polling
-`LineAdvancer` is deliberately not part of the default composition.
+## Default dialogue presentation
+
+`MajoProjectConfiguration.CreateDefault()` enables a traditional single-text-box
+Presenter. It composes Yarn's native `LinePresenter`, `LetterTypewriter`,
+`OptionsPresenter`, `OptionItem`, cancellation tokens, and markup parser; Majo does
+not maintain a second typewriter or markup grammar. The first `advance` while text
+is appearing requests Yarn HurryUp, and a later frame's `advance` requests
+NextLine. Yarn's polling `LineAdvancer` is deliberately not registered.
+
+Presentation settings are centralized under `Presentation`:
+
+```csharp
+var configuration = MajoProjectConfiguration.CreateDefault();
+configuration.Presentation!.LettersPerSecond = 36;
+configuration.Presentation.FontSize = 30;
+configuration.Presentation.UseFadeEffect = true;
+configuration.Presentation.FadeUpDurationSeconds = 0.15;
+configuration.Presentation.Theme = myTheme;
+configuration.Presentation.Font = myFont;
+configuration.Presentation.PresenterScene = myPresenterScene;
+```
+
+A replacement PackedScene must have a `Control` root and descendants named
+`LinePresenter`, `OptionsPresenter`, and `OptionContainer` with the corresponding
+Yarn/native node types. Runtime configures, registers, resets, and releases those
+nodes. Set `Presentation.Enabled = false` when a project supplies a completely
+independent Presenter.
+
+Options acquire an M7 modal Scope. Their focus navigation and submission route
+through `IInputManager`; the native `OptionItem` Button submission signal is
+disabled so it cannot bypass a newer menu or gameplay modal owner.
+
+Yarn markup is projected into immutable `DialogueText` and
+`DialogueMarkupAttribute` values. Register ordinary handlers without importing
+Yarn types:
+
+```csharp
+runtime.ConfigureDialogueMarkupHandlers += handlers =>
+    handlers.Register(myMarkupHandler);
+```
+
+Handlers execute sequentially in registration order and receive the original
+Yarn typewriter cancellation token for per-character asynchronous work. Unknown
+attributes and their typed properties remain available in the facade. Native Yarn
+handlers remain an advanced integration under `Majo.Runtime.Dialogue.Yarn`.
+
+`IDialoguePresenter` remains the Yarn-free extension boundary for observers and
+game-specific Presenters. `IDialoguePresentation` exposes only the default view's
+line-complete and option-phase state for later Auto/History composition.
 
 ## Yarn commands
 

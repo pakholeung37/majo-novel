@@ -291,6 +291,38 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend
         adapter.CommandFailed += HandleCommandFailed;
     }
 
+    public void RegisterNativePresenter(Node presenter)
+    {
+        ArgumentNullException.ThrowIfNull(presenter);
+        EnsureInitialized();
+        if (presenter is not DialoguePresenterBase)
+        {
+            throw new DialogueException(
+                $"Native presenter '{presenter.GetType().FullName}' does not implement " +
+                $"{nameof(DialoguePresenterBase)}.");
+        }
+
+        Runner.dialoguePresenters ??= new Godot.Collections.Array<Node?>();
+        if (Runner.dialoguePresenters.Contains(presenter))
+        {
+            throw new DialogueException(
+                $"Native presenter '{presenter.Name}' is already registered.");
+        }
+
+        Runner.dialoguePresenters.Add(presenter);
+    }
+
+    public void UnregisterNativePresenter(Node presenter)
+    {
+        ArgumentNullException.ThrowIfNull(presenter);
+        if (!isInitialized || Runner.dialoguePresenters is null)
+        {
+            return;
+        }
+
+        Runner.dialoguePresenters.Remove(presenter);
+    }
+
     private void HandleNodeStarted(string nodeName) => NodeEntered?.Invoke(nodeName);
 
     private void HandleNodeCompleted(string nodeName) => NodeExited?.Invoke(nodeName);
