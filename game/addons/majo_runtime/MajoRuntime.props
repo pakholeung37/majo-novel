@@ -1,0 +1,6 @@
+<Project>
+    <ItemGroup>
+        <Compile Remove="addons\majo_runtime\Bridges\**" />
+        <ProjectReference Include="$(MSBuildThisFileDirectory)Bridges\YarnSpinnerStateBridge\YarnSpinnerStateBridge.csproj" />
+    </ItemGroup>
+</Project>

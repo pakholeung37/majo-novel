@@ -1,0 +1,12 @@
+<Project Sdk="Godot.NET.Sdk/4.7.2">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);SYSLIB1220</WarningsNotAsErrors>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <Import Project="addons\YarnSpinner-Godot\YarnSpinner-Godot.props" />
+  <Import Project="addons\majo_runtime\MajoRuntime.props" />
+</Project>

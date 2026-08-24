@@ -63,6 +63,39 @@ public sealed class DialoguePlayerTests
     }
 
     [Fact]
+    public async Task CompletionSubscriberCanStartNextSessionWithoutReplacingCompletionTarget()
+    {
+        var backend = new FakeDialogueBackend();
+        var player = new DialoguePlayer(backend, "main", "Start");
+        await player.InitializeAsync(CancellationToken.None);
+        await player.StartAsync(new DialogueStartRequest("chapter-one", "Opening"));
+        var firstCompletion = player.Completion;
+        Task? secondStart = null;
+        Task<DialogueCompletion>? secondCompletion = null;
+        player.Completed += _ =>
+        {
+            secondStart = player.StartAsync(
+                new DialogueStartRequest("chapter-two", "Arrival"));
+            secondCompletion = player.Completion;
+        };
+
+        backend.Complete(DialogueCompletionKind.Completed);
+        var firstResult = await firstCompletion.WaitAsync(TimeSpan.FromSeconds(1));
+        await secondStart!.WaitAsync(TimeSpan.FromSeconds(1));
+
+        Assert.Equal("chapter-one", firstResult.ProjectId);
+        Assert.NotNull(secondCompletion);
+        Assert.False(secondCompletion.IsCompleted);
+        Assert.Equal("chapter-two", player.CurrentProjectId);
+
+        backend.Complete(DialogueCompletionKind.Completed);
+        var secondResult = await secondCompletion.WaitAsync(TimeSpan.FromSeconds(1));
+
+        Assert.Equal("chapter-two", secondResult.ProjectId);
+        Assert.Equal("Arrival", secondResult.StartNode);
+    }
+
+    [Fact]
     public async Task StartingWhileRunningIsRejected()
     {
         var backend = new FakeDialogueBackend();

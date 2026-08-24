@@ -10,18 +10,27 @@ Compatibility baseline:
 
 Yarn Spinner is an external prerequisite and is not bundled with this plugin.
 
-Current implementation status: M10 Auto and Session History, M9 audio runtime,
-M8 default VN presentation and Yarn markup bridge, M7 input ownership, M6 dialogue
-sessions, and the playable loop on the stable Runtime API.
+Current implementation status: M10.5 Distributability Gate, M10 Auto and Session
+History, M9 audio runtime, M8 default VN presentation and Yarn markup bridge,
+M7 input ownership, M6 dialogue sessions, and the playable loop on the stable
+Runtime API.
 
 ## Installation
 
-Copy `addons/majo_runtime` into the target Godot C# project's `addons`
-directory, install the compatible YarnSpinner-Godot plugin separately, and
-enable both plugins under **Project Settings > Plugins**. The complete local
-installation, configuration, run, and test walkthrough from the M5 baseline is
-archived under `docs/archive/plugin-quickstart.md`; the current dialogue API is
-documented below.
+1. Copy `addons/majo_runtime` into the target Godot C# project's `addons` directory.
+2. Install the compatible YarnSpinner-Godot plugin separately into `addons/YarnSpinner-Godot`.
+3. In your project's `.csproj` file, import both plugins' MSBuild properties:
+
+```xml
+<Import Project="addons\YarnSpinner-Godot\YarnSpinner-Godot.props" />
+<Import Project="addons\majo_runtime\MajoRuntime.props" />
+```
+
+4. In Godot, enable both plugins under **Project Settings > Plugins**.
+5. Build the C# solution (`dotnet build`) and perform an initial Godot editor import.
+
+The complete local installation, configuration, run, and test walkthrough is
+available under `docs/plugin-quickstart.md`; the current runtime API is documented below.
 
 ## Runtime setup
 
@@ -526,6 +535,23 @@ The main scene also has a non-interactive smoke mode:
 /path/to/godot --headless --path game -- --demo-auto
 ```
 
+## Versioning strategy & contracts
+
+- **Runtime API**: Semantic Versioning (`0.1.0` baseline, stable public contracts across services, descriptors, and commands).
+- **State checkpoints**: `ScriptCheckpoint` format version `1`. Checkpoint restoration uses SHA-256 `ProgramFingerprint` and stable Yarn line IDs. Checkpoint restoration is strictly validated before mutating active runtime state and never guesses line positions.
+- **Yarn dependency baseline**: Locked to `YarnSpinner-Godot 0.3.22` and `Yarn Spinner 3.2.0`. The internal VM bridge accesses Yarn internals via `[InternalsVisibleTo("YarnSpinner.Tests")]` and validates runtime memory layout on bootstrap initialization, failing fast if an incompatible version is installed.
+
+## Troubleshooting
+
+- **Build error: CS0246: The type or namespace name 'YarnBridge' / 'YarnSpinnerGodot' could not be found**:
+  Ensure both `<Import Project="addons\YarnSpinner-Godot\YarnSpinner-Godot.props" />` and `<Import Project="addons\majo_runtime\MajoRuntime.props" />` are present in your game `.csproj`.
+- **RuntimeLifecycleException: Yarn dependency check failed**:
+  Verify `addons/YarnSpinner-Godot` is installed and has version `0.3.22` in `plugin.cfg` and `3.2.0` in `YarnSpinner-Godot.props`.
+- **InvalidOperationException: Yarn VM state cannot be captured**:
+  State snapshots can only be captured at safe `AwaitingAdvance` line boundaries with empty VM operand and call stacks.
+- **ResourceNotFoundException: Resource 'scripts/<project-id>' was not found**:
+  Ensure your `.yarnproject` file is located under `res://assets/scripts/<project-id>.yarnproject` and has been imported by Godot.
+
 ## Testing
 
 Run the complete local gate from the repository root:
@@ -534,13 +560,23 @@ Run the complete local gate from the repository root:
 ./tools/test.sh
 ```
 
-The gate performs scoped formatting/static checks, a non-incremental C# build,
-xUnit tests, Godot headless import/compilation, three consecutive runtime/Yarn
-integration runs, and a negative probe that confirms failed headless assertions
-return a non-zero exit code.
+The gate performs:
+1. Scoped C# formatting and static diagnostics across all projects (`game`, unit tests, and clean-consumer fixture).
+2. Plugin distribution staging and file cleanliness verification (no test/demo/build-cache leakage or repository-specific paths).
+3. Non-incremental C# build of the main game project.
+4. Pure C# xUnit unit tests.
+5. Clean-consumer fixture verification from a fresh staged installation (no external bridge references, full round-trip execution, typed missing/incompatible dependency probes, and negative assertion probe).
+6. Godot headless import and C# compilation for the main project.
+7. Visible Runtime Demo headless smoke test (`--demo-auto`).
+8. Three consecutive Godot headless integration test runs.
+9. Negative probe verification (confirming failed assertions return non-zero exit codes).
+10. Release build configuration smoke tests for both projects and a real Godot export smoke for the host target platform.
 
 Set `GODOT_BIN` when Godot Mono is installed outside the default macOS path:
 
 ```sh
 GODOT_BIN=/path/to/godot ./tools/test.sh
 ```
+
+The host-platform Godot 4.7.2 Mono export templates must be installed for the
+final export smoke. A missing template is a gate failure, not a skipped check.

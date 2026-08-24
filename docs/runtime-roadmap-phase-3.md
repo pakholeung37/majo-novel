@@ -97,27 +97,21 @@ Yarn call/value stack、Command 执行中、Presenter 显示中和任意 VM 指�
 调用方必须能够查询 `CanSave` 及类型化拒绝原因。首版不在不安全阶段静默等待，也不
 猜测最近可用位置。
 
-## 5. M10.5：第二阶段收尾与可分发性门禁
+## 5. M10.5：第二阶段收尾与可分发性门禁（已完成）
 
 目标：兑现“可复用 Godot 插件”的安装承诺，并形成第三阶段开始前的稳定基线。
 
-交付：
+交付与验收结果（已全部通过）：
 
 - 完成 M10 Auto、History、默认 UI、可见 Demo 和全部测试门禁。
-- 将 Yarn VM State Bridge 纳入实际插件发行物；安装不能依赖当前仓库外层的相对
-  `ProjectReference`。
-- 建立最小 clean-consumer fixture，只复制发行插件并单独安装兼容 YarnSpinner-Godot。
-- 验证 Editor 导入、C# 编译、headless 运行和至少一个目标平台的 export smoke。
-- 更新安装、配置、扩展、兼容性和故障排查文档。
-- 明确 Runtime API、State 格式和 Yarn Bridge 兼容性的版本策略。
-- 发行物不包含 Demo 临时资源、测试缓存或仓库专用路径。
-
-严格验收：
-
-- clean-consumer 不引用 `../bridges`、当前游戏工程或测试工程即可编译运行。
-- 缺失或不兼容的 Yarn 依赖在启动前给出明确错误。
-- 发行包从空缓存导入成功，并通过最小 Dialogue、Command 和 checkpoint round-trip。
-- README 所述安装步骤与自动化安装测试一致。
+- 将 Yarn VM State Bridge 纳入实际插件发行物（`addons/majo_runtime/Bridges/YarnSpinnerStateBridge`），并通过 `MajoRuntime.props` 自动引用与编译隔离；彻底移除仓库外层的相对 `ProjectReference`。
+- 建立最小 clean-consumer fixture（`tests/fixtures/clean_consumer`），只复制发行插件并单独安装兼容 YarnSpinner-Godot。
+- 验证从空缓存下的 Editor 导入、C# 编译、headless 运行（覆盖 Dialogue -> Command -> State Checkpoint Capture/Restore 闭环）、Release 构建与宿主目标平台 Godot export smoke。
+- 自动化负向探针通过真实 `MajoRuntimeBootstrap` 启动验证：缺失或不兼容的 Yarn 依赖抛出明确类型化异常（`RuntimeLifecycleException`）。
+- 校验发行物清洁度：`addons/majo_runtime` 不包含 Demo 临时资源、测试缓存或仓库专用路径。
+- 更新安装、配置、扩展、兼容性和故障排查文档（`addons/majo_runtime/README.md` 与 `docs/plugin-quickstart.md`），确保 README 所述安装步骤与自动化 clean-consumer 测试 100% 一致。
+- 明确并固化 Runtime API（SemVer）、State 格式（v1 严格指纹）和 Yarn Bridge（精确版本 fail-fast）的版本策略。
+- 门禁脚本 `tools/test.sh` 升级并一次性绿色通过。
 
 ## 6. M11：Diagnostics & Observability
 

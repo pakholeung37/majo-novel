@@ -560,7 +560,16 @@ public sealed class AudioManager : IAudioManager
 
     private async Task ObservePlaybackAsync(AudioPlayback playback)
     {
-        await playback.Backend.Completion;
+        try
+        {
+            await playback.Backend.Completion;
+        }
+        catch (Exception exception)
+        {
+            playback.Fail(exception);
+            return;
+        }
+
         lock (gate)
         {
             if (playback.State == AudioPlaybackState.Playing)
@@ -584,6 +593,7 @@ public sealed class AudioManager : IAudioManager
             }
         }
 
+        playback.Complete();
         PlaybackStopped?.Invoke(playback);
     }
 
@@ -615,6 +625,7 @@ public sealed class AudioManager : IAudioManager
 
         playback.Backend.Stop();
         playback.Backend.Dispose();
+        playback.Complete();
     }
 
     private void StopEveryPlayback()
@@ -934,6 +945,9 @@ public sealed class AudioManager : IAudioManager
 
     private sealed class AudioPlayback : IAudioPlayback
     {
+        private readonly TaskCompletionSource completion = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
         public AudioPlayback(
             AudioCategory category,
             string clipId,
@@ -962,11 +976,15 @@ public sealed class AudioManager : IAudioManager
 
         public AudioPlaybackState State { get; set; } = AudioPlaybackState.Playing;
 
-        public Task Completion => Backend.Completion;
+        public Task Completion => completion.Task;
 
         public float BaseVolume { get; set; }
 
         public IAudioBackendPlayer Backend { get; }
+
+        public void Complete() => completion.TrySetResult();
+
+        public void Fail(Exception exception) => completion.TrySetException(exception);
     }
 
     private sealed record FadeTarget(AudioPlayback Playback, float Volume);

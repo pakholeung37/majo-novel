@@ -52,19 +52,19 @@ public partial class YarnDialogueVariableStore : InMemoryVariableStorage,
             return false;
         }
 
-        if (TryGetValue<float>(yarnName, out var number))
+        if (TryGetFromStorage<float>(yarnName, out var number))
         {
             value = DialogueValue.FromNumber(number);
             return true;
         }
 
-        if (TryGetValue<string>(yarnName, out var text))
+        if (TryGetFromStorage<string>(yarnName, out var text) && text is not null)
         {
             value = DialogueValue.FromString(text);
             return true;
         }
 
-        if (TryGetValue<bool>(yarnName, out var boolean))
+        if (TryGetFromStorage<bool>(yarnName, out var boolean))
         {
             value = DialogueValue.FromBoolean(boolean);
             return true;
@@ -72,6 +72,19 @@ public partial class YarnDialogueVariableStore : InMemoryVariableStorage,
 
         value = default;
         return false;
+    }
+
+    private bool TryGetFromStorage<T>(string yarnName, out T? result)
+    {
+        try
+        {
+            return TryGetValue<T>(yarnName, out result);
+        }
+        catch (Exception exception) when (exception is FormatException or InvalidCastException)
+        {
+            result = default;
+            return false;
+        }
     }
 
     void IDialogueVariableStore.Set(string name, DialogueValue value)

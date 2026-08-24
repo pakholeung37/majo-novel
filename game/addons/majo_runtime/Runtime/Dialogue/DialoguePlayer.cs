@@ -330,6 +330,7 @@ public sealed class DialoguePlayer : IDialoguePlayer
         {
             var result = await backend.Completion;
             DialogueStateChanged? stateChange;
+            TaskCompletionSource<DialogueCompletion> sessionCompletion;
             lock (sync)
             {
                 if (version != sessionVersion || State == DialogueSessionState.Stopping)
@@ -337,7 +338,7 @@ public sealed class DialoguePlayer : IDialoguePlayer
                     return;
                 }
 
-                completion.TrySetResult(result);
+                sessionCompletion = completion;
                 IsPresentingOptions = false;
                 CurrentOptions = Array.Empty<DialogueOption>();
                 stateChange = SetStateLocked(DialogueSessionState.Idle);
@@ -352,6 +353,8 @@ public sealed class DialoguePlayer : IDialoguePlayer
             {
                 Completed?.Invoke(result);
             }
+
+            sessionCompletion.TrySetResult(result);
         }
         catch (Exception exception)
         {
