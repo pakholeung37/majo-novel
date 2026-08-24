@@ -19,6 +19,7 @@ using Majo.Runtime.History;
 using Majo.Runtime.Input;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Resources;
+using Majo.Runtime.Save;
 using Majo.Runtime.State;
 
 namespace Majo.Runtime.Diagnostics;
@@ -305,6 +306,24 @@ public sealed class RuntimeDiagnosticsService : IRuntimeDiagnostics
             auto?.ExtraDelay.TotalSeconds ?? 0,
             auto?.WaitForVoice ?? false);
 
+        SaveSlotDiagnostics? saveSlotDiag = null;
+        if (services.TryGet<ISaveSlotManager>(out var saveSlots) && saveSlots is not null)
+        {
+            initializedServicesList.Add(nameof(ISaveSlotManager));
+            var concreteSlots = saveSlots as SaveSlotManager;
+            services.TryGet<ISaveProductManager>(out var saveProduct);
+            saveSlotDiag = new SaveSlotDiagnostics(
+                saveSlots.Status,
+                saveSlots.CurrentOperation?.TransactionId,
+                saveSlots.CurrentOperation?.Slot.ToString(),
+                saveSlots.CurrentOperation?.Phase,
+                saveSlots.CurrentSlot?.ToString(),
+                concreteSlots?.LastFailurePhase?.ToString(),
+                concreteSlots?.LastFailureMessage,
+                saveProduct?.PendingAutoSave?.BoundaryId,
+                saveProduct?.LastCommittedAutoSaveBoundary);
+        }
+
         MissingResourceDiagnostics? missingResourceDiag = null;
         if (services.TryGet<IMissingResourceReporter>(out var missingReporter) &&
             missingReporter is not null)
@@ -354,7 +373,8 @@ public sealed class RuntimeDiagnosticsService : IRuntimeDiagnostics
             playbackDiag,
             customSections,
             RecentEvents,
-            missingResourceDiag);
+            missingResourceDiag,
+            saveSlotDiag);
     }
 
     public async Task<string> ExportReportAsync(
@@ -487,6 +507,26 @@ public sealed class RuntimeDiagnosticsService : IRuntimeDiagnostics
             builder.AppendLine("## Playback");
             builder.AppendLine($"- Mode: `{snapshot.Playback.Mode}` (Paused: `{snapshot.Playback.IsPaused}`)");
             builder.AppendLine($"- History: Open=`{snapshot.Playback.HistoryIsOpen}`, Entries={snapshot.Playback.HistoryItemCount}/{snapshot.Playback.HistoryCapacity}");
+            builder.AppendLine();
+        }
+
+        if (snapshot.SaveSlots is not null)
+        {
+            builder.AppendLine("## Save Slots");
+            builder.AppendLine($"- Status: `{snapshot.SaveSlots.Status}`");
+            builder.AppendLine($"- Current Slot: `{snapshot.SaveSlots.CurrentSlot ?? "<none>"}`");
+            if (snapshot.SaveSlots.TransactionId is not null)
+            {
+                builder.AppendLine(
+                    $"- Transaction: `{snapshot.SaveSlots.TransactionId}` " +
+                    $"slot=`{snapshot.SaveSlots.Slot}`, phase=`{snapshot.SaveSlots.Phase}`");
+            }
+            if (snapshot.SaveSlots.LastFailureMessage is not null)
+            {
+                builder.AppendLine(
+                    $"- Last Failure: phase=`{snapshot.SaveSlots.LastFailurePhase}`, " +
+                    $"message=`{snapshot.SaveSlots.LastFailureMessage}`");
+            }
             builder.AppendLine();
         }
 

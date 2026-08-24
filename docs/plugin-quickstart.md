@@ -127,8 +127,7 @@ Narrator: 等待型动画执行完毕。 #line:intro-line-2
 
 ### Durable State（M12 基础层）
 
-M12 提供 Snapshot、规范 Envelope、迁移、原子 `user://` Storage、统一保存资格和底层恢复事务；
-Manual/Quick/Auto Slot 与默认 Save/Load UI 属于 M13，当前不会自动创建。
+M12 提供 Snapshot、规范 Envelope、迁移、原子 `user://` Storage、统一保存资格和底层恢复事务。
 
 ```csharp
 using Majo.Runtime.Core;
@@ -156,6 +155,43 @@ if (eligibility.Check(StateOperationKind.Save).IsAllowed)
 使用 `runtime.ConfigureStateMigrations` 注册 schema/key migration 或明确移除的旧 key。宿主玩法在
 不可保存的外部阶段使用 `IStateEligibility.AcquireBarrier`，不要在保存请求中强制完成动画或停止
 Dialogue。默认 Serializer 与 Storage 都可通过 `ConfigureServices.ReplaceSingleton` 替换。
+
+### Save / Load Slot（M13）
+
+Slot 默认关闭，启用后才会创建玩家文件以及 Quick Save、Save/Load UI 的输入 Scope：
+
+```csharp
+using Majo.Runtime.Save;
+
+var configuration = MajoProjectConfiguration.CreateDefault();
+configuration.Save!.Enabled = true;
+configuration.Save.ManualSlotCapacity = 20;
+configuration.Save.QuickSlotCapacity = 3;
+configuration.Save.AutoSlotCapacity = 5;
+configuration.Save.ShowDefaultUi = true;
+configuration.Save.CaptureThumbnails = true;
+
+var slots = runtime.Host!.Services.Get<ISaveSlotManager>();
+var slot = new SaveSlotId(SaveSlotKind.Manual, 1);
+if (slots.CanSave(slot).IsAllowed)
+{
+    await slots.SaveAsync(slot, new SaveSlotSaveRequest("第一章"));
+}
+
+if ((await slots.CanLoadAsync(slot)).IsAllowed)
+{
+    await slots.LoadAsync(slot);
+}
+```
+
+Manual、Quick、Auto 是类型化 Slot，不依赖字符串前缀。Quick/Auto 各自按配置容量确定性轮换；
+`F5` 触发 Quick Save，`M` 打开默认 Save/Load UI。`RenameAsync` 只修改玩家可见名称，不改变
+Slot ID、类型、保存时间或 Snapshot 身份。
+
+Auto Save 可配置 `AutoSaveNodeIds`、`AutoSaveLineIds`、`AutoSaveMetadata`，宿主也可调用
+`ISaveProductManager.RequestAutoSaveCandidate`。候选条件本身不会立即保存；只有关联台词进入
+`AwaitingAdvance` 且统一 Eligibility 仍允许时才提交，同一安全边界最多一次。缩略图捕获或编码
+失败只记录降级原因，不影响主存档写入和加载。
 
 ### 自定义 Yarn Command
 ```csharp

@@ -162,6 +162,10 @@ internal static class GodotInputDefaults
             KeyEvent(Key.M),
             JoyEvent(JoyButton.Start),
         ]),
+        new(MajoInputActions.QuickSave,
+        [
+            KeyEvent(Key.F5),
+        ]),
         new(MajoInputActions.OptionUp,
         [
             KeyEvent(Key.Up),

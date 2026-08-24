@@ -10,7 +10,8 @@ Compatibility baseline:
 
 Yarn Spinner is an external prerequisite and is not bundled with this plugin.
 
-Current implementation status: M12 Durable State foundation, M11 Diagnostics,
+Current implementation status: M13 Save/Load product loop, M12 Durable State
+foundation, M11 Diagnostics,
 M10.5 Distributability Gate, M10 Auto and Session History, M9 audio runtime,
 M8 default VN presentation and Yarn markup bridge, M7 input ownership, M6
 dialogue sessions, and the playable loop on the stable Runtime API.
@@ -418,11 +419,10 @@ clears it, returns Auto to Manual, and rebinds both global input scopes after th
 Input service resets. History is deliberately excluded from Game snapshots and
 future disk saves.
 
-## Durable State foundation
+## Durable State and Save Slots
 
 M12 separates state capture, canonical serialization, storage, and destructive
-restore. It intentionally does not provide save slots or Save/Load UI; those
-product behaviors compose these services in M13.
+restore. M13 composes those layers into typed Manual, Quick, and Auto slots.
 
 ```csharp
 var state = runtime.Host!.Services.Get<IStateManager>();
@@ -470,6 +470,41 @@ Session, clears History, and returns playback to Manual; Rollback preserves the
 Session and History. `IPlaybackModeManager` is the single Manual/Auto owner, while
 `IAutoManager` remains a compatibility facade with no second input scope,
 deadline, or pause state.
+
+Save slots are opt-in so installing Runtime does not silently create player files
+or menu input ownership:
+
+```csharp
+var configuration = MajoProjectConfiguration.CreateDefault();
+configuration.Save!.Enabled = true;
+configuration.Save.ManualSlotCapacity = 20;
+configuration.Save.QuickSlotCapacity = 3;
+configuration.Save.AutoSlotCapacity = 5;
+configuration.Save.ShowDefaultUi = true;
+
+var slots = runtime.Host!.Services.Get<ISaveSlotManager>();
+var manual = new SaveSlotId(SaveSlotKind.Manual, 1);
+if (slots.CanSave(manual).IsAllowed)
+{
+    await slots.SaveAsync(manual, new SaveSlotSaveRequest("Chapter One"));
+}
+await slots.LoadAsync(manual);
+```
+
+`ISaveSlotManager` exposes typed availability reasons, metadata, transaction IDs,
+progress phases, and started/completed/failed events. Load completes read,
+checksum, migration, shape validation, and Contributor preflight before beginning
+a new Game Session. Rename changes only the player-facing name; Slot ID, type,
+capture time, and snapshot identity remain unchanged.
+
+Quick Save is bound to `F5` and uses an independent deterministic rotation chain.
+Auto Save candidates can be configured by Yarn node, stable line ID, or line
+metadata, or requested through `ISaveProductManager.RequestAutoSaveCandidate`.
+A candidate commits only when its associated line reaches `AwaitingAdvance`, and
+the same boundary commits at most once. The default Save/Load overlay opens with
+`M`, owns one modal input scope, supports keyboard/gamepad focus, and can be
+replaced through the service registry. Thumbnail failure is recorded as metadata
+degradation and never invalidates the primary save.
 
 ## Yarn commands
 

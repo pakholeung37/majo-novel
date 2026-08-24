@@ -30,6 +30,8 @@ using Majo.Runtime.Operations.Godot;
 using Majo.Runtime.Resources;
 using Majo.Runtime.Resources.Godot;
 using Majo.Runtime.Script;
+using Majo.Runtime.Save;
+using Majo.Runtime.Save.Godot;
 using Majo.Runtime.State;
 using Majo.YarnBridge;
 using YarnSpinnerGodot;
@@ -461,6 +463,74 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(IHistoryManager),
                 typeof(IPlaybackModeManager),
                 typeof(IStateEligibility));
+
+            if (Configuration.Save?.Enabled == true)
+            {
+                services.AddSingleton<ISaveThumbnailProvider>(
+                    _ => Configuration.Save.CaptureThumbnails
+                        ? new GodotSaveThumbnailProvider(
+                            this,
+                            Configuration.State.StorageNamespace,
+                            Configuration.Save.ThumbnailWidth,
+                            Configuration.Save.ThumbnailHeight)
+                        : NullSaveThumbnailProvider.Instance);
+                services.AddSingleton<ISaveSlotManager>(
+                    resolver => new SaveSlotManager(
+                        resolver.Get<IStateManager>(),
+                        resolver.Get<IStateSerializer>(),
+                        resolver.Get<IStateStorage>(),
+                        resolver.Get<IStateEligibility>(),
+                        resolver.Get<IGameSessionCoordinator>(),
+                        resolver.Get<IHistoryManager>(),
+                        new Dictionary<SaveSlotKind, int>
+                        {
+                            [SaveSlotKind.Manual] = Configuration.Save.ManualSlotCapacity,
+                            [SaveSlotKind.Quick] = Configuration.Save.QuickSlotCapacity,
+                            [SaveSlotKind.Auto] = Configuration.Save.AutoSlotCapacity,
+                        },
+                        MajoRuntimeMetadata.PackageVersion,
+                        Configuration.State.GameBuildId,
+                        Configuration.State.StorageNamespace,
+                        resolver.Get<ISaveThumbnailProvider>(),
+                        Logger),
+                    typeof(IStateManager),
+                    typeof(IStateSerializer),
+                    typeof(IStateStorage),
+                    typeof(IStateEligibility),
+                    typeof(IGameSessionCoordinator),
+                    typeof(IHistoryManager),
+                    typeof(ISaveThumbnailProvider));
+                services.AddSingleton<ISaveProductManager>(
+                    resolver => new SaveProductManager(
+                        resolver.Get<ISaveSlotManager>(),
+                        resolver.Get<IDialoguePlayer>(),
+                        resolver.Get<IDialoguePresentation>(),
+                        resolver.Get<IScriptPlayback>(),
+                        resolver.Get<IInputManager>(),
+                        Configuration.Save.AutoSaveNodeIds,
+                        Configuration.Save.AutoSaveLineIds,
+                        Configuration.Save.AutoSaveMetadata,
+                        Logger),
+                    typeof(ISaveSlotManager),
+                    typeof(IDialoguePlayer),
+                    typeof(IDialoguePresentation),
+                    typeof(IScriptPlayback),
+                    typeof(IInputManager));
+
+                if (Configuration.Save.ShowDefaultUi)
+                {
+                    services.AddSingleton<ISaveLoadOverlay>(
+                        resolver => new DefaultSaveLoadOverlay(
+                            this,
+                            resolver.Get<ISaveSlotManager>(),
+                            resolver.Get<IInputManager>(),
+                            Configuration.Save.DefaultUiScene ??
+                                GD.Load<PackedScene>(
+                                    "res://addons/majo_runtime/Runtime/Save/Godot/DefaultSaveLoadOverlay.tscn")),
+                        typeof(ISaveSlotManager),
+                        typeof(IInputManager));
+                }
+            }
         }
     }
 

@@ -1,0 +1,49 @@
+[gd_scene format=3]
+
+[node name="MajoSaveLoadOverlay" type="PanelContainer"]
+visible = false
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+z_index = 1000
+
+[node name="Margin" type="MarginContainer" parent="."]
+layout_mode = 2
+theme_override_constants/margin_left = 40
+theme_override_constants/margin_top = 40
+theme_override_constants/margin_right = 40
+theme_override_constants/margin_bottom = 40
+
+[node name="Layout" type="VBoxContainer" parent="Margin"]
+layout_mode = 2
+
+[node name="Header" type="HBoxContainer" parent="Margin/Layout"]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="Margin/Layout/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Save / Load"
+
+[node name="QuickSaveButton" type="Button" parent="Margin/Layout/Header"]
+layout_mode = 2
+text = "Quick Save"
+
+[node name="CloseButton" type="Button" parent="Margin/Layout/Header"]
+layout_mode = 2
+text = "Close"
+
+[node name="StatusLabel" type="Label" parent="Margin/Layout"]
+layout_mode = 2
+text = "Ready"
+
+[node name="Scroll" type="ScrollContainer" parent="Margin/Layout"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Entries" type="VBoxContainer" parent="Margin/Layout/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3

@@ -14,6 +14,8 @@ using Majo.Runtime.Dialogue.Presentation;
 using Majo.Runtime.Input;
 using Majo.Runtime.History;
 using Majo.Runtime.Operations;
+using Majo.Runtime.Save;
+using Majo.Runtime.Save.Godot;
 using Majo.Runtime.Script;
 using Majo.Runtime.State;
 
@@ -30,6 +32,10 @@ public partial class HeadlessTestRunner
         configuration.Presentation!.Enabled = true;
         configuration.Presentation.LettersPerSecond = 10_000;
         configuration.Presentation.UseFadeEffect = false;
+        configuration.Save!.Enabled = true;
+        configuration.Save.CaptureThumbnails = false;
+        configuration.Save.ShowDefaultUi = true;
+        configuration.Save.ManualSlotCapacity = 3;
         configuration.Actors!.Actors.Add(CreateActorDefinition(
             "state-hero",
             ActorFactoryIds.Character,
@@ -82,6 +88,26 @@ public partial class HeadlessTestRunner
         var sessions = services.Get<IGameSessionCoordinator>();
         var playback = services.Get<IPlaybackModeManager>();
         var history = services.Get<IHistoryManager>();
+        var slots = services.Get<ISaveSlotManager>();
+        var saveLoadOverlay = services.Get<ISaveLoadOverlay>();
+
+        foreach (var existingSlot in await slots.ListAsync())
+        {
+            await slots.DeleteAsync(existingSlot.Id);
+        }
+
+        var baseInputHandles = input.ActiveHandleCount;
+        Assert(bootstrap.FindChild(
+                "MajoSaveLoadOverlay",
+                recursive: true,
+                owned: false) is Control { Visible: false },
+            "M13 did not create the configured default Save/Load overlay.");
+        saveLoadOverlay.Open();
+        Assert(saveLoadOverlay.IsOpen && input.ActiveHandleCount == baseInputHandles + 1,
+            "M13 Save/Load UI did not acquire exactly one modal input scope.");
+        saveLoadOverlay.Close();
+        Assert(!saveLoadOverlay.IsOpen && input.ActiveHandleCount == baseInputHandles,
+            "M13 Save/Load UI did not release its modal input scope.");
 
         var descriptor = await scriptManager.ResolveAsync(
             new ScriptId("M95State", "Start"));
@@ -92,7 +118,6 @@ public partial class HeadlessTestRunner
 
         await dialogue.StartAsync();
         await WaitForConditionAsync(() => presentation.IsLineActive, 2);
-        dialogue.RequestHurryUp();
         await WaitForConditionAsync(() => presentation.IsLineDisplayComplete, 2);
         Assert(script.Phase == ScriptPlaybackPhase.AwaitingAdvance &&
                 script.CanCaptureCheckpoint &&
@@ -148,7 +173,6 @@ public partial class HeadlessTestRunner
         await audio.PlayVoiceAsync("voice");
 
         var previousSessionId = bootstrap.Host.SessionId;
-        playback.SetMode(PlaybackMode.Auto);
         await sessions.LoadGameAsync(durableEnvelope.Snapshot);
         Assert(bootstrap.Host.SessionId != previousSessionId &&
                 playback.Mode == PlaybackMode.Manual &&
@@ -157,8 +181,15 @@ public partial class HeadlessTestRunner
         await WaitForConditionAsync(
             () => lineProbe.Lines.Count >= 2 && presentation.IsLineActive,
             2);
-        dialogue.RequestHurryUp();
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await WaitForConditionAsync(() => presentation.IsLineDisplayComplete, 2);
+        await WaitForConditionAsync(
+            () => script.Phase == ScriptPlaybackPhase.AwaitingAdvance,
+            2);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Assert(script.Phase == ScriptPlaybackPhase.AwaitingAdvance,
+            "M12 restored checkpoint did not settle at a stable save boundary.");
 
         var restoredHero = actors.Get<IActor>("state-hero");
         var restoredRoom = actors.Get<IActor>("state-room");
@@ -180,26 +211,97 @@ public partial class HeadlessTestRunner
                 audio.SfxInstances.Count == 0 &&
                 audio.CurrentVoice is null,
             "M9.6 BGM restore or transient SFX/Voice exclusion was incorrect.");
-        Assert(lineProbe.Lines[0].Id == "line:m95-state-current" &&
+        Assert(lineProbe.Lines.Count >= 2 &&
+                lineProbe.Lines[0].Id == "line:m95-state-current" &&
                 lineProbe.Lines[1].Id == "line:m95-state-current" &&
                 lineProbe.Lines[0].Text.Text == lineProbe.Lines[1].Text.Text &&
                 lineProbe.Lines[1].Text.Text.Contains("Maya", StringComparison.Ordinal) &&
-                dialogue.CurrentLineId == "line:m95-state-current" &&
                 script.Phase == ScriptPlaybackPhase.AwaitingAdvance &&
-                input.ActiveHandleCount == 3,
-            "M9.5 restore did not replay the captured resolved line exactly once.");
+                input.ActiveHandleCount == baseInputHandles + 1,
+            "M9.5 restore did not replay the captured resolved line exactly once: " +
+            $"lines={lineProbe.Lines.Count}, current={dialogue.CurrentLineId}, " +
+            $"phase={script.Phase}, handles={input.ActiveHandleCount}/{baseInputHandles}, " +
+            $"text0={lineProbe.Lines[0].Text.Text}, text1={lineProbe.Lines[1].Text.Text}.");
 
-        dialogue.RequestNextLine();
-        await WaitForConditionAsync(
-            () => dialogue.CurrentLineId == "line:m95-state-after" &&
-                lineProbe.Lines.Count == 3,
-            2);
-        dialogue.RequestHurryUp();
-        await WaitForConditionAsync(() => presentation.IsLineDisplayComplete, 2);
-        dialogue.RequestNextLine();
-        await dialogue.Completion.WaitAsync(TimeSpan.FromSeconds(2));
-        Assert(operations.ActiveOperations.Count == 0 && input.ActiveHandleCount == 2,
-            "M9.5/M9.6 completion left active Operations or transient input ownership.");
+        for (var round = 1; round <= 3; round++)
+        {
+            await dialogue.StopAsync();
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            var linesBeforeStart = lineProbe.Lines.Count;
+            await dialogue.StartAsync();
+            await WaitForConditionAsync(
+                () => lineProbe.Lines.Count == linesBeforeStart + 1 &&
+                    dialogue.CurrentLineId == "line:m95-state-current" &&
+                    presentation.IsLineDisplayComplete &&
+                    script.Phase == ScriptPlaybackPhase.AwaitingAdvance,
+                2);
+
+            variables.SetNumber("round", round);
+            var roundHero = actors.Get<IActor>("state-hero");
+            roundHero.SetAppearance("red");
+            await audio.PlayBgmAsync("calm", "music", volume: 0.7f);
+            var savedLineId = script.CurrentSpot?.LineId;
+            var slot = new SaveSlotId(SaveSlotKind.Manual, round);
+            var saved = await slots.SaveAsync(
+                slot,
+                new SaveSlotSaveRequest($"Round {round}", CaptureThumbnail: false));
+            Assert(saved.Id == slot &&
+                    saved.ProjectId == "M95State" &&
+                    saved.NodeName == "Start" &&
+                    saved.LineId == savedLineId &&
+                    !string.IsNullOrWhiteSpace(saved.TextSummary),
+                $"M13 slot metadata was incomplete in round {round}: " +
+                $"project={saved.ProjectId}, node={saved.NodeName}, line={saved.LineId}, " +
+                $"text={saved.TextSummary ?? "<null>"}.");
+
+            variables.SetNumber("round", -round);
+            roundHero.SetAppearance("blue");
+            await audio.PlayBgmAsync("battle", "music", volume: 0.2f);
+            await audio.PlaySfxAsync("hit", $"round-sfx-{round}");
+            await audio.PlayVoiceAsync("voice");
+            await WaitForConditionAsync(
+                () => script.Phase == ScriptPlaybackPhase.AwaitingAdvance,
+                2);
+            var sessionBeforeLoad = bootstrap.Host.SessionId;
+            var linesBeforeLoad = lineProbe.Lines.Count;
+
+            await slots.LoadAsync(slot);
+            Assert(bootstrap.Host.SessionId != sessionBeforeLoad &&
+                    playback.Mode == PlaybackMode.Manual &&
+                    history.Entries.Count == 0,
+                $"M13 Load did not apply Session/History/Playback policy in round {round}.");
+            await WaitForConditionAsync(
+                () => lineProbe.Lines.Count == linesBeforeLoad + 1 &&
+                    dialogue.CurrentLineId == savedLineId,
+                2);
+            Assert(Mathf.IsEqualApprox(
+                        (float)variables.Get("round").NumberValue,
+                        round) &&
+                    actors.Get<IActor>("state-hero").Appearance == "red" &&
+                    audio.BgmTracks.Single().ClipId == "calm" &&
+                    audio.SfxInstances.Count == 0 &&
+                    audio.CurrentVoice is null &&
+                    operations.ActiveOperations.Count == 0,
+                $"M13 Save -> mutate -> Load round {round} did not restore durable state cleanly.");
+        }
+
+        var slotMetadata = await slots.ListAsync(SaveSlotKind.Manual);
+        Assert(slotMetadata.Count == 3 &&
+                slotMetadata.All(item => item.Compatibility == SaveSlotCompatibility.Compatible),
+            "M13 did not list the three committed Manual slots deterministically.");
+
+        await dialogue.StopAsync();
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Assert(operations.ActiveOperations.Count == 0 &&
+                input.ActiveHandleCount == baseInputHandles,
+            "M13 headless cycles left active Operations or transient input ownership.");
+
+        foreach (var slot in await slots.ListAsync())
+        {
+            await slots.DeleteAsync(slot.Id);
+        }
 
         var actorRoot = bootstrap.GetNode<CanvasLayer>("MajoActors");
         var audioHost = bootstrap.GetNode("MajoAudioHost");

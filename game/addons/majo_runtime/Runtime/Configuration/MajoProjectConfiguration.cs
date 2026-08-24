@@ -44,6 +44,9 @@ public partial class MajoProjectConfiguration : Resource
     public StateConfiguration? State { get; set; }
 
     [Export]
+    public SaveConfiguration? Save { get; set; }
+
+    [Export]
     public AutoConfiguration? Auto { get; set; }
 
     [Export]
@@ -64,6 +67,7 @@ public partial class MajoProjectConfiguration : Resource
         Audio = new AudioConfiguration(),
         Script = new ScriptConfiguration(),
         State = new StateConfiguration(),
+        Save = new SaveConfiguration(),
         Auto = new AutoConfiguration(),
         History = new HistoryConfiguration(),
         Diagnostics = new DiagnosticsConfiguration(),
@@ -84,6 +88,7 @@ public partial class MajoProjectConfiguration : Resource
         ValidateAudio(issues);
         ValidateScript(issues);
         ValidateState(issues);
+        ValidateSave(issues);
         ValidateAuto(issues);
         ValidateHistory(issues);
         ValidateDiagnostics(issues);
@@ -145,6 +150,40 @@ public partial class MajoProjectConfiguration : Resource
             issues.Add(new ConfigurationIssue(
                 $"{nameof(Auto)}.{nameof(Auto.ExtraDelaySeconds)}",
                 "Extra delay must be finite and non-negative."));
+        }
+    }
+
+    private void ValidateSave(ICollection<ConfigurationIssue> issues)
+    {
+        if (Save is null)
+        {
+            issues.Add(new ConfigurationIssue(nameof(Save), "Configuration is required."));
+            return;
+        }
+
+        if (Save.Enabled && State?.Enabled != true)
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Save)}.{nameof(Save.Enabled)}",
+                "Save slots require durable state to be enabled."));
+        }
+        ValidatePositive(Save.ManualSlotCapacity, nameof(Save.ManualSlotCapacity), issues);
+        ValidatePositive(Save.QuickSlotCapacity, nameof(Save.QuickSlotCapacity), issues);
+        ValidatePositive(Save.AutoSlotCapacity, nameof(Save.AutoSlotCapacity), issues);
+        ValidatePositive(Save.ThumbnailWidth, nameof(Save.ThumbnailWidth), issues);
+        ValidatePositive(Save.ThumbnailHeight, nameof(Save.ThumbnailHeight), issues);
+
+        static void ValidatePositive(
+            int value,
+            string property,
+            ICollection<ConfigurationIssue> target)
+        {
+            if (value <= 0)
+            {
+                target.Add(new ConfigurationIssue(
+                    $"{nameof(Save)}.{property}",
+                    "Value must be greater than zero."));
+            }
         }
     }
 

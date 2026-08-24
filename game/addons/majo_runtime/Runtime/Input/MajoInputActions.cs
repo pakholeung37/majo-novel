@@ -17,6 +17,8 @@ public static class MajoInputActions
 
     public static readonly InputActionId Menu = new("menu");
 
+    public static readonly InputActionId QuickSave = new("quickSave");
+
     public static readonly InputActionId OptionUp = new("optionUp");
 
     public static readonly InputActionId OptionDown = new("optionDown");
@@ -32,6 +34,7 @@ public static class MajoInputActions
         Auto,
         History,
         Menu,
+        QuickSave,
         OptionUp,
         OptionDown,
         Confirm,

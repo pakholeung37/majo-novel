@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Operations;
+using Majo.Runtime.Save;
 using Majo.Runtime.State;
 
 namespace Majo.Runtime.Diagnostics;
@@ -25,7 +26,8 @@ public sealed record RuntimeDiagnosticsSnapshot(
     PlaybackDiagnostics? Playback = null,
     IReadOnlyDictionary<string, DiagnosticSection>? CustomSections = null,
     IReadOnlyList<RuntimeLogEvent>? RecentLogs = null,
-    MissingResourceDiagnostics? MissingResources = null);
+    MissingResourceDiagnostics? MissingResources = null,
+    SaveSlotDiagnostics? SaveSlots = null);
 
 public sealed record MissingResourceDiagnostics(
     int UniqueCount,
@@ -144,3 +146,14 @@ public sealed record PlaybackDiagnostics(
     bool AutoActive,
     double AutoExtraDelaySeconds,
     bool AutoWaitForVoice);
+
+public sealed record SaveSlotDiagnostics(
+    SaveSlotManagerStatus Status,
+    string? TransactionId,
+    string? Slot,
+    SaveSlotOperationPhase? Phase,
+    string? CurrentSlot,
+    string? LastFailurePhase,
+    string? LastFailureMessage,
+    long? PendingAutoSaveBoundary,
+    long? LastCommittedAutoSaveBoundary);

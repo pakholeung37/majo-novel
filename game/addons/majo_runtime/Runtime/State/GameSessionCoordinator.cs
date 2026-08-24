@@ -30,6 +30,9 @@ public interface IGameSessionCoordinator : IRuntimeService
     Task LoadGameAsync(
         StateSnapshot snapshot,
         CancellationToken cancellationToken = default);
+    Task LoadGameAsync(
+        StateRestorePlan plan,
+        CancellationToken cancellationToken = default);
     Task ReturnToTitleAsync(CancellationToken cancellationToken = default);
     Task RollbackAsync(
         StateSnapshot snapshot,
@@ -102,12 +105,29 @@ public sealed class GameSessionCoordinator : IGameSessionCoordinator
                 StateScope.Game,
                 StateOperationKind.Restore,
                 cancellationToken);
-            var sessionId = BeginCleanSession();
-            await state.RestoreTransaction.ExecuteAsync(plan, cancellationToken);
-            SessionChanged?.Invoke(new GameSessionChanged(
-                GameSessionTransition.LoadGame,
-                sessionId,
-                true));
+            await ExecuteLoadPlanAsync(plan, cancellationToken);
+        }
+        finally
+        {
+            transitions.Release();
+        }
+    }
+
+    public async Task LoadGameAsync(
+        StateRestorePlan plan,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        EnsureInitialized();
+        if (plan.Scope != StateScope.Game || plan.Operation != StateOperationKind.Restore)
+        {
+            throw new StateCompatibilityException(
+                "Game load requires a Game-scope Restore plan.");
+        }
+        await transitions.WaitAsync(cancellationToken);
+        try
+        {
+            await ExecuteLoadPlanAsync(plan, cancellationToken);
         }
         finally
         {
@@ -172,6 +192,18 @@ public sealed class GameSessionCoordinator : IGameSessionCoordinator
         history.Clear();
         playback.SetMode(PlaybackMode.Manual);
         return sessions.BeginSession();
+    }
+
+    private async Task ExecuteLoadPlanAsync(
+        StateRestorePlan plan,
+        CancellationToken cancellationToken)
+    {
+        var sessionId = BeginCleanSession();
+        await state.RestoreTransaction.ExecuteAsync(plan, cancellationToken);
+        SessionChanged?.Invoke(new GameSessionChanged(
+            GameSessionTransition.LoadGame,
+            sessionId,
+            true));
     }
 
     private void EnsureInitialized()
