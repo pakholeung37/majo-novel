@@ -5,8 +5,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Core;
+using Majo.Runtime.History;
 
-namespace Majo.Runtime.History.Godot;
+namespace Majo.Runtime.UI.History;
 
 public sealed class DefaultHistoryOverlay : IRuntimeService
 {

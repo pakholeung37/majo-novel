@@ -18,6 +18,7 @@ using Majo.Runtime.Save;
 using Majo.Runtime.Save.Godot;
 using Majo.Runtime.Script;
 using Majo.Runtime.State;
+using Majo.Runtime.UI.SaveLoad;
 
 namespace Majo.Runtime.HeadlessTests;
 

@@ -9,6 +9,7 @@ using Majo.Runtime.History;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Script;
 using Majo.Runtime.State;
+using Majo.Runtime.UI.Diagnostics;
 
 namespace Majo.Demo;
 
@@ -20,7 +21,7 @@ public partial class RuntimeDemoHud : CanvasLayer
     private IScriptPlayback? script;
     private IDialoguePlayer? dialogue;
     private IOperationScheduler? operations;
-    private Majo.Runtime.Diagnostics.Godot.DefaultDebugOverlay? debugOverlay;
+    private DefaultDebugOverlay? debugOverlay;
     private Label status = null!;
     private Label playback = null!;
     private Label feedback = null!;
@@ -46,7 +47,7 @@ public partial class RuntimeDemoHud : CanvasLayer
         IScriptPlayback scriptPlayback,
         IDialoguePlayer dialoguePlayer,
         IOperationScheduler operationScheduler,
-        Majo.Runtime.Diagnostics.Godot.DefaultDebugOverlay? debugOverlay = null)
+        DefaultDebugOverlay? debugOverlay = null)
     {
         ArgumentNullException.ThrowIfNull(autoManager);
         ArgumentNullException.ThrowIfNull(historyManager);

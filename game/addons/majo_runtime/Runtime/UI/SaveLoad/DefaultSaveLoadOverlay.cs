@@ -8,8 +8,9 @@ using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Core;
 using Majo.Runtime.Input;
+using Majo.Runtime.Save;
 
-namespace Majo.Runtime.Save.Godot;
+namespace Majo.Runtime.UI.SaveLoad;
 
 public interface ISaveLoadOverlay : IRuntimeService
 {

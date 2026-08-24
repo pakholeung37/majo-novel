@@ -4,9 +4,10 @@ using System;
 using Godot;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
+using Majo.Runtime.Diagnostics;
 using Majo.Runtime.Input;
 
-namespace Majo.Runtime.Diagnostics.Godot;
+namespace Majo.Runtime.UI.Diagnostics;
 
 public partial class DefaultDebugOverlay : CanvasLayer, IDisposable
 {

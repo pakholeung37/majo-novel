@@ -14,7 +14,6 @@ using Majo.Runtime.Auto;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
 using Majo.Runtime.Diagnostics;
-using Majo.Runtime.Diagnostics.Godot;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Dialogue.Commands.Audio;
@@ -24,7 +23,6 @@ using Majo.Runtime.Dialogue.Yarn.Presentation;
 using Majo.Runtime.Input;
 using Majo.Runtime.Input.Godot;
 using Majo.Runtime.History;
-using Majo.Runtime.History.Godot;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Operations.Godot;
 using Majo.Runtime.Resources;
@@ -33,6 +31,9 @@ using Majo.Runtime.Script;
 using Majo.Runtime.Save;
 using Majo.Runtime.Save.Godot;
 using Majo.Runtime.State;
+using Majo.Runtime.UI.Diagnostics;
+using Majo.Runtime.UI.History;
+using Majo.Runtime.UI.SaveLoad;
 using Majo.YarnBridge;
 using YarnSpinnerGodot;
 
@@ -526,7 +527,7 @@ public partial class MajoRuntimeBootstrap : Node
                             resolver.Get<IInputManager>(),
                             Configuration.Save.DefaultUiScene ??
                                 GD.Load<PackedScene>(
-                                    "res://addons/majo_runtime/Runtime/Save/Godot/DefaultSaveLoadOverlay.tscn")),
+                                    "res://addons/majo_runtime/Runtime/UI/SaveLoad/DefaultSaveLoadOverlay.tscn")),
                         typeof(ISaveSlotManager),
                         typeof(IInputManager));
                 }

@@ -8,7 +8,7 @@ namespace Majo.Runtime.Configuration;
 public partial class DialoguePresentationConfiguration : Resource
 {
     public const string DefaultScenePath =
-        "res://addons/majo_runtime/Runtime/Dialogue/Yarn/Presentation/DefaultVnPresentation.tscn";
+        "res://addons/majo_runtime/Runtime/UI/Dialogue/DefaultVnPresentation.tscn";
 
     [Export]
     public bool Enabled { get; set; } = true;
