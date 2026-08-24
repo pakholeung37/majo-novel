@@ -4,6 +4,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Majo.Runtime.Audio;
+using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.History;
 using Majo.Runtime.Input;
@@ -21,6 +22,7 @@ public sealed class AutoManager : IAutoManager
     private readonly IFrameClock clock;
     private readonly IInputManager input;
     private readonly IHistoryManager history;
+    private readonly IRuntimeLogger logger;
     private readonly TimeSpan extraDelay;
     private readonly bool waitForVoice;
     private CancellationTokenSource? lifetime;
@@ -37,7 +39,8 @@ public sealed class AutoManager : IAutoManager
         IInputManager input,
         IHistoryManager history,
         TimeSpan extraDelay,
-        bool waitForVoice)
+        bool waitForVoice,
+        IRuntimeLogger? logger = null)
     {
         this.script = script ?? throw new ArgumentNullException(nameof(script));
         this.dialogue = dialogue ?? throw new ArgumentNullException(nameof(dialogue));
@@ -45,6 +48,7 @@ public sealed class AutoManager : IAutoManager
         this.clock = clock ?? throw new ArgumentNullException(nameof(clock));
         this.input = input ?? throw new ArgumentNullException(nameof(input));
         this.history = history ?? throw new ArgumentNullException(nameof(history));
+        this.logger = logger ?? NullRuntimeLogger.Instance;
         if (extraDelay < TimeSpan.Zero)
         {
             throw new ArgumentOutOfRangeException(nameof(extraDelay));
@@ -63,6 +67,15 @@ public sealed class AutoManager : IAutoManager
     public AutoMode Mode { get; private set; } = AutoMode.Manual;
 
     public bool IsPaused { get; private set; }
+
+    public TimeSpan ExtraDelay => extraDelay;
+
+    public bool WaitForVoice => waitForVoice;
+
+    public bool HasPendingDeadline
+    {
+        get { lock (sync) { return deadline is not null; } }
+    }
 
     public Task InitializeAsync(CancellationToken cancellationToken)
     {
@@ -149,6 +162,10 @@ public sealed class AutoManager : IAutoManager
         }
 
         ModeChanged?.Invoke(change);
+        logger.Info(
+            "auto",
+            "auto.mode_changed",
+            $"Playback mode changed from '{change.Previous}' to '{change.Current}'.");
         Reconcile();
     }
 
@@ -215,6 +232,10 @@ public sealed class AutoManager : IAutoManager
             version = ++deadlineVersion;
             token = deadline.Token;
             voice = waitForVoice ? audio.CurrentVoice : null;
+            logger.Debug(
+                "auto",
+                "auto.deadline_scheduled",
+                $"Auto advance scheduled after {extraDelay.TotalSeconds:0.###} seconds (waitForVoice: {waitForVoice}).");
         }
 
         _ = RunDeadlineAsync(version, voice, token);
@@ -247,6 +268,10 @@ public sealed class AutoManager : IAutoManager
 
                 CancelDeadlineLocked();
                 dialogue.RequestNextLine();
+                logger.Debug(
+                    "auto",
+                    "auto.deadline_elapsed",
+                    "Auto advance deadline elapsed; requested the next line.");
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -259,6 +284,11 @@ public sealed class AutoManager : IAutoManager
                 CancelDeadlineLocked();
             }
 
+            logger.Error(
+                "auto",
+                "auto.deadline_failed",
+                $"Auto advance failed: {exception.Message}",
+                exception);
             Failed?.Invoke(exception);
         }
     }
@@ -284,6 +314,10 @@ public sealed class AutoManager : IAutoManager
         }
 
         IsPaused = paused;
+        logger.Debug(
+            "auto",
+            "auto.pause_changed",
+            $"Auto pause state changed to '{paused}'.");
         PauseChanged?.Invoke(new AutoPauseChanged(paused));
     }
 }

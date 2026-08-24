@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
 using Majo.Runtime.Core;
 
 namespace Majo.Runtime.Input;
@@ -29,6 +30,8 @@ public interface IInputManager : IRuntimeService
     bool Enabled { get; set; }
 
     int ActiveHandleCount { get; }
+
+    IReadOnlyList<InputHandleSnapshot> ActiveHandles => Array.Empty<InputHandleSnapshot>();
 
     IInputHandle AcquireScope(object owner, InputScopeOptions? options = null);
 

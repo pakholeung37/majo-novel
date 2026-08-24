@@ -29,7 +29,8 @@ public sealed record AudioSettings(
     bool BgmMuted = false,
     bool SfxMuted = false,
     bool VoiceMuted = false,
-    string VoiceLocale = "en");
+    string VoiceLocale = "en",
+    bool FailOnMissingClips = false);
 
 public readonly record struct AudioFade(
     double DurationSeconds = 0,
@@ -50,7 +51,62 @@ public readonly record struct AudioFade(
 
 public sealed record AudioPlaybackResult(
     IAudioPlayback Playback,
-    IOperationHandle FadeOperation);
+    IOperationHandle FadeOperation,
+    bool IsSkipped = false)
+{
+    internal static AudioPlaybackResult Skipped(
+        AudioCategory category,
+        string clipId,
+        string instanceId) => new(
+            new SkippedAudioPlayback(category, clipId, instanceId),
+            CompletedAudioOperation.Instance,
+            true);
+}
+
+internal sealed class SkippedAudioPlayback : IAudioPlayback
+{
+    public SkippedAudioPlayback(AudioCategory category, string clipId, string instanceId)
+    {
+        Category = category;
+        ClipId = clipId;
+        InstanceId = instanceId;
+    }
+
+    public AudioCategory Category { get; }
+
+    public string ClipId { get; }
+
+    public string InstanceId { get; }
+
+    public bool Loop => false;
+
+    public float Volume => 0;
+
+    public AudioPlaybackState State => AudioPlaybackState.Finished;
+
+    public Task Completion => Task.CompletedTask;
+}
+
+internal sealed class CompletedAudioOperation : IOperationHandle
+{
+    public static CompletedAudioOperation Instance { get; } = new();
+
+    public string? Id => null;
+
+    public string? GroupId => null;
+
+    public OperationState State => OperationState.Completed;
+
+    public Task Completion => Task.CompletedTask;
+
+    public void Cancel()
+    {
+    }
+
+    public void Complete()
+    {
+    }
+}
 
 public interface IAudioPlayback
 {

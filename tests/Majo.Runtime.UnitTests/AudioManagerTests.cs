@@ -4,6 +4,7 @@ using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Dialogue.Commands.Audio;
 using Majo.Runtime.Operations;
+using Majo.Runtime.Resources;
 using Xunit;
 
 namespace Majo.Runtime.UnitTests;
@@ -120,6 +121,41 @@ public sealed class AudioManagerTests
     }
 
     [Fact(Timeout = 5_000)]
+    public async Task MissingClipsAreSkippedWithoutMutatingPlaybackAndAreCounted()
+    {
+        var harness = await AudioHarness.CreateAsync();
+        var original = (await harness.Audio.PlayBgmAsync("calm", "music")).Playback;
+
+        var first = await harness.Audio.PlayBgmAsync("missing", "music");
+        var second = await harness.Audio.PlayBgmAsync("missing", "music");
+
+        Assert.True(first.IsSkipped);
+        Assert.True(second.IsSkipped);
+        Assert.Equal(AudioPlaybackState.Finished, first.Playback.State);
+        Assert.Same(original, Assert.Single(harness.Audio.BgmTracks));
+        Assert.Single(harness.Backend.ActivePlayers);
+        var occurrence = Assert.Single(harness.MissingResources.Occurrences);
+        Assert.Equal("Bgm", occurrence.ResourceType);
+        Assert.Equal("missing", occurrence.ResourceId);
+        Assert.Equal("skip", occurrence.Fallback);
+        Assert.Equal(2, occurrence.Count);
+
+        await harness.Host.ShutdownAsync();
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task StrictMissingClipModeStillThrows()
+    {
+        var harness = await AudioHarness.CreateAsync(failOnMissingClips: true);
+
+        await Assert.ThrowsAsync<AudioException>(() =>
+            harness.Audio.PlaySfxAsync("missing"));
+        Assert.Empty(harness.MissingResources.Occurrences);
+
+        await harness.Host.ShutdownAsync();
+    }
+
+    [Fact(Timeout = 5_000)]
     public async Task MixerChangeDuringFadeCannotBeOverwrittenByTheOldTweenTarget()
     {
         var harness = await AudioHarness.CreateAsync(autoCompleteFades: false);
@@ -160,7 +196,7 @@ public sealed class AudioManagerTests
     }
 
     [Fact(Timeout = 5_000)]
-    public async Task VoicePresenterUsesConventionAndStrictMetadataOverride()
+    public async Task VoicePresenterUsesConventionAndSkipsMissingMetadataOverride()
     {
         var harness = await AudioHarness.CreateAsync();
         var presenter = new VoiceDialoguePresenter(harness.Audio);
@@ -175,9 +211,10 @@ public sealed class AudioManagerTests
         Assert.Equal("line-2", presenter.LastVoiceId);
         Assert.Equal("line-2", harness.Audio.CurrentVoice?.ClipId);
 
-        var failure = await Assert.ThrowsAsync<AudioException>(() =>
-            presenter.PresentLineAsync(Line("line-x", "voice:missing"), context));
-        Assert.Contains("strict", failure.Message, StringComparison.OrdinalIgnoreCase);
+        await presenter.PresentLineAsync(Line("line-x", "voice:missing"), context);
+        Assert.Null(presenter.LastVoiceId);
+        Assert.Null(harness.Audio.CurrentVoice);
+        Assert.Empty(harness.MissingResources.Occurrences);
         await harness.Host.ShutdownAsync();
     }
 
@@ -222,12 +259,14 @@ public sealed class AudioManagerTests
             RuntimeHost host,
             FakeAudioBackend backend,
             IAudioManager audio,
-            IOperationScheduler operations)
+            IOperationScheduler operations,
+            IMissingResourceReporter missingResources)
         {
             Host = host;
             Backend = backend;
             Audio = audio;
             Operations = operations;
+            MissingResources = missingResources;
         }
 
         public RuntimeHost Host { get; }
@@ -238,7 +277,11 @@ public sealed class AudioManagerTests
 
         public IOperationScheduler Operations { get; }
 
-        public static async Task<AudioHarness> CreateAsync(bool autoCompleteFades = true)
+        public IMissingResourceReporter MissingResources { get; }
+
+        public static async Task<AudioHarness> CreateAsync(
+            bool autoCompleteFades = true,
+            bool failOnMissingClips = false)
         {
             var backend = new FakeAudioBackend { AutoCompleteFades = autoCompleteFades };
             var bgm = new FakeAudioClipLoader("audio/bgm")
@@ -249,8 +292,10 @@ public sealed class AudioManagerTests
                 .Register("en/line-1")
                 .Register("en/line-2");
             var frameClock = new ImmediateFrameClock();
+            var missingResources = new MissingResourceReporter();
             var registry = new RuntimeServiceRegistry()
                 .AddSingleton<IFrameClock>(_ => frameClock)
+                .AddSingleton<IMissingResourceReporter>(_ => missingResources)
                 .AddSingleton<IOperationScheduler>(
                     resolver => new OperationScheduler(
                         resolver.Get<IFrameClock>(),
@@ -264,15 +309,18 @@ public sealed class AudioManagerTests
                         bgm,
                         sfx,
                         voice,
-                        new AudioSettings()),
-                    typeof(IOperationScheduler));
+                        new AudioSettings(FailOnMissingClips: failOnMissingClips),
+                        missingResources: resolver.Get<IMissingResourceReporter>()),
+                    typeof(IOperationScheduler),
+                    typeof(IMissingResourceReporter));
             var host = registry.Build();
             await host.InitializeAsync();
             return new AudioHarness(
                 host,
                 backend,
                 host.Services.Get<IAudioManager>(),
-                host.Services.Get<IOperationScheduler>());
+                host.Services.Get<IOperationScheduler>(),
+                host.Services.Get<IMissingResourceReporter>());
         }
     }
 

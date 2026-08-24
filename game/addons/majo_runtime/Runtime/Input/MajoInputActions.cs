@@ -23,6 +23,8 @@ public static class MajoInputActions
 
     public static readonly InputActionId Confirm = new("confirm");
 
+    public static readonly InputActionId Debug = new("debug");
+
     public static IReadOnlyList<InputActionId> All { get; } = new List<InputActionId>
     {
         Advance,
@@ -33,6 +35,7 @@ public static class MajoInputActions
         OptionUp,
         OptionDown,
         Confirm,
+        Debug,
     }.AsReadOnly();
 
     public static string ToGodotAction(InputActionId action)
@@ -43,5 +46,23 @@ public static class MajoInputActions
             : action == OptionDown
                 ? "majo_option_down"
                 : $"majo_{action.Value}";
+    }
+
+    public static InputActionId FromGodotAction(string action)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(action);
+        if (!action.StartsWith("majo_", StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                "Majo Godot actions must start with 'majo_'.",
+                nameof(action));
+        }
+
+        return action switch
+        {
+            "majo_option_up" => OptionUp,
+            "majo_option_down" => OptionDown,
+            _ => new InputActionId(action["majo_".Length..]),
+        };
     }
 }

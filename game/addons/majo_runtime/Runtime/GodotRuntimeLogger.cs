@@ -3,27 +3,19 @@
 using System;
 using Godot;
 using Majo.Runtime.Core;
+using Majo.Runtime.Diagnostics;
 
 namespace Majo.Runtime;
 
-internal sealed class GodotRuntimeLogger : IRuntimeLogger
+public sealed class GodotRuntimeLogger : IRuntimeLogger
 {
-    public void Log(RuntimeLogLevel level, string message, Exception? exception = null)
+    private readonly GodotConsoleSink consoleSink = new();
+
+    public bool IsEnabled(string category, RuntimeLogLevel level) => true;
+
+    public void Log(RuntimeLogEvent logEvent)
     {
-        var formatted = exception is null
-            ? message
-            : $"{message}{System.Environment.NewLine}{exception}";
-        switch (level)
-        {
-            case RuntimeLogLevel.Warning:
-                GD.PushWarning(formatted);
-                break;
-            case RuntimeLogLevel.Error:
-                GD.PushError(formatted);
-                break;
-            default:
-                GD.Print(formatted);
-                break;
-        }
+        ArgumentNullException.ThrowIfNull(logEvent);
+        consoleSink.Emit(logEvent);
     }
 }

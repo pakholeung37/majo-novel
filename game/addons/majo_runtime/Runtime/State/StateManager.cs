@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Input;
 using Majo.Runtime.Operations;
@@ -18,20 +19,28 @@ public sealed class StateManager : IStateManager
     private readonly IDialoguePlayer dialogue;
     private readonly IInputManager input;
     private readonly IOperationScheduler operations;
+    private readonly IRuntimeLogger logger;
     private IInputHandle? faultInputMuter;
     private bool isInitialized;
+
+    public IReadOnlyList<string> RegisteredContributorKeys =>
+        contributors.Select(contributor => contributor.Key).ToArray();
+
+    public string? LastFailureMessage { get; private set; }
 
     public StateManager(
         IReadOnlyList<IStateContributor> contributors,
         IDialoguePlayer dialogue,
         IInputManager input,
-        IOperationScheduler operations)
+        IOperationScheduler operations,
+        IRuntimeLogger? logger = null)
     {
         this.contributors = contributors ??
             throw new ArgumentNullException(nameof(contributors));
         this.dialogue = dialogue ?? throw new ArgumentNullException(nameof(dialogue));
         this.input = input ?? throw new ArgumentNullException(nameof(input));
         this.operations = operations ?? throw new ArgumentNullException(nameof(operations));
+        this.logger = logger ?? NullRuntimeLogger.Instance;
     }
 
     public event Action<StateStatusChanged>? StatusChanged;
@@ -112,6 +121,7 @@ public sealed class StateManager : IStateManager
         {
             EnsureReadyForTransaction("capture");
             SetStatus(StateManagerStatus.Capturing);
+            logger.Info("state", "state.capture_started", "State capture started.");
             await CompleteActiveOperationsAsync(cancellationToken);
             var records = new List<StateRecord>();
             foreach (var contributor in contributors.Where(
@@ -127,13 +137,17 @@ public sealed class StateManager : IStateManager
                 DateTimeOffset.UtcNow,
                 records);
             CurrentSnapshot = snapshot;
+            LastFailureMessage = null;
             SetStatus(StateManagerStatus.Idle);
+            logger.Info("state", "state.capture_completed", $"State capture completed with {records.Count} records.");
             Captured?.Invoke(snapshot);
             return snapshot;
         }
         catch (Exception exception)
         {
             SetStatus(StateManagerStatus.Faulted);
+            LastFailureMessage = exception.Message;
+            logger.Error("state", "state.capture_failed", $"State capture failed: {exception.Message}", exception);
             Failed?.Invoke(exception);
             throw;
         }
@@ -156,6 +170,7 @@ public sealed class StateManager : IStateManager
         {
             EnsureReadyForTransaction("restore");
             ValidateSnapshotShape(snapshot);
+            logger.Info("state", "state.restore_started", $"State restore started with format v{snapshot.FormatVersion}.");
             var gameContributors = contributors.Where(
                 contributor => contributor.Scope == StateScope.Game).ToArray();
             foreach (var contributor in gameContributors)
@@ -185,7 +200,9 @@ public sealed class StateManager : IStateManager
             }
 
             CurrentSnapshot = snapshot;
+            LastFailureMessage = null;
             SetStatus(StateManagerStatus.Idle);
+            logger.Info("state", "state.restore_completed", "State restore completed successfully.");
             Restored?.Invoke(snapshot);
         }
         catch (Exception exception)
@@ -197,6 +214,8 @@ public sealed class StateManager : IStateManager
             }
 
             SetStatus(StateManagerStatus.Faulted);
+            LastFailureMessage = exception.Message;
+            logger.Error("state", "state.restore_failed", $"State restore failed: {exception.Message}", exception);
             Failed?.Invoke(exception);
             throw;
         }

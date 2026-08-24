@@ -17,6 +17,12 @@ public interface IAutoManager : IRuntimeService
 
     bool IsPaused { get; }
 
+    TimeSpan ExtraDelay => TimeSpan.Zero;
+
+    bool WaitForVoice => false;
+
+    bool HasPendingDeadline => false;
+
     void SetMode(AutoMode mode);
 
     void Toggle();

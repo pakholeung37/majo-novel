@@ -449,11 +449,13 @@ public sealed class OperationSchedulerTests
     {
         public List<Exception> Exceptions { get; } = new();
 
-        public void Log(RuntimeLogLevel level, string message, Exception? exception = null)
+        public bool IsEnabled(string category, RuntimeLogLevel level) => true;
+
+        public void Log(RuntimeLogEvent logEvent)
         {
-            if (exception is not null)
+            if (logEvent.Exception is not null)
             {
-                Exceptions.Add(exception);
+                Exceptions.Add(logEvent.Exception);
             }
         }
     }

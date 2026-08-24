@@ -53,6 +53,13 @@ public enum InputHandleKind
     Muter,
 }
 
+public sealed record InputHandleSnapshot(
+    InputHandleKind Kind,
+    string? Name,
+    bool IsModal,
+    string OwnerName,
+    IReadOnlyList<string> Actions);
+
 public sealed class InputScopeOptions
 {
     private readonly HashSet<InputActionId>? actions;

@@ -1,5 +1,7 @@
 #nullable enable
 
+using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Majo.Runtime.Core;
@@ -14,6 +16,9 @@ public interface IYarnCommandAdapter : IRuntimeService
     RuntimeCommandException? LastFailure { get; }
 
     bool HasActiveCommands { get; }
+
+    IReadOnlyList<RuntimeCommandActivity> ActiveCommands =>
+        Array.Empty<RuntimeCommandActivity>();
 
     void CancelDialogue();
 

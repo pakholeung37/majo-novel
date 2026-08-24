@@ -14,6 +14,19 @@ internal static class DialogueVoiceResolver
     {
         ArgumentNullException.ThrowIfNull(line);
         ArgumentNullException.ThrowIfNull(audio);
+        var voiceId = ResolveVoiceId(line);
+        if (voiceId is null)
+        {
+            return null;
+        }
+
+        var localizedId = $"{audio.VoiceLocale}/{voiceId}";
+        return audio.VoiceLoader.Exists(localizedId) ? voiceId : null;
+    }
+
+    public static string? ResolveVoiceId(DialogueLine line)
+    {
+        ArgumentNullException.ThrowIfNull(line);
         var overrideIds = line.Metadata
             .Where(metadata => metadata.StartsWith(
                 VoiceDialoguePresenter.MetadataPrefix,
@@ -32,19 +45,6 @@ internal static class DialogueVoiceResolver
             return null;
         }
 
-        var localizedId = $"{audio.VoiceLocale}/{voiceId}";
-        if (audio.VoiceLoader.Exists(localizedId))
-        {
-            return voiceId;
-        }
-
-        if (overrideIds.Length == 1)
-        {
-            throw new AudioException(
-                $"Strict voice override '{voiceId}' for line '{line.Id}' does not exist " +
-                $"for locale '{audio.VoiceLocale}'.");
-        }
-
-        return null;
+        return voiceId;
     }
 }

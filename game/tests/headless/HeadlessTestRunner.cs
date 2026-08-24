@@ -83,6 +83,7 @@ public partial class HeadlessTestRunner : Node
 		await ValidateYarnCommandAdapterAsync();
 		await ValidatePlayableDemoAsync();
 		await ValidateFailedConfigurationCleanupAsync();
+		await ValidateDiagnosticsRuntimeAsync();
 	}
 
 	private static ActorDefinitionConfiguration CreateActorDefinition(

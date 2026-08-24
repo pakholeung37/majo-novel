@@ -197,9 +197,9 @@ public sealed class DefaultHistoryOverlay : IRuntimeService
         {
             await history.ReplayVoiceAsync(sequence);
         }
-        catch (Exception exception)
+        catch (Exception)
         {
-            GD.PushError($"History voice replay failed: {exception}");
+            // HistoryManager owns diagnostic logging for replay failures.
         }
     }
 }

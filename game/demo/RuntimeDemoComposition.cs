@@ -162,8 +162,7 @@ public static class RuntimeDemoComposition
         var factory = new DemoPortraitActorFactory(
             portraitHost,
             () => runtime.Host!.Services.Get<IOperationScheduler>(),
-            () => new ResourceActorTextureLoader(
-                runtime.Host!.Services.Get<IResourceManager>()),
+            () => runtime.Host!.Services.Get<IActorTextureLoader>(),
             new CharacterPositionMap(actorConfiguration));
         runtime.ConfigureServices += services =>
         {
@@ -188,8 +187,11 @@ public static class RuntimeDemoComposition
                     audio,
                     audio,
                     audio,
-                    new AudioSettings()),
-                typeof(IOperationScheduler));
+                    new AudioSettings(),
+                    runtime.Logger,
+                    resolver.Get<IMissingResourceReporter>()),
+                typeof(IOperationScheduler),
+                typeof(IMissingResourceReporter));
         };
         runtime.ConfigureActorFactories += actors => actors.RegisterFactory(factory);
         runtime.ConfigureCommands += RegisterCommands;

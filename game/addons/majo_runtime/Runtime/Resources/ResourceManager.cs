@@ -14,17 +14,20 @@ public sealed class ResourceManager : IResourceManager
     private readonly object gate = new();
     private readonly IReadOnlyList<IResourceProvider> providers;
     private readonly IRuntimeLifetime lifetime;
+    private readonly IRuntimeLogger logger;
     private readonly Dictionary<CacheKey, object> loaded = new();
     private readonly Dictionary<CacheKey, Task<object>> pending = new();
     private bool isInitialized;
 
     public ResourceManager(
         IEnumerable<IResourceProvider> providers,
-        IRuntimeLifetime lifetime)
+        IRuntimeLifetime lifetime,
+        IRuntimeLogger? logger = null)
     {
         ArgumentNullException.ThrowIfNull(providers);
         this.providers = providers.ToArray();
         this.lifetime = lifetime ?? throw new ArgumentNullException(nameof(lifetime));
+        this.logger = logger ?? NullRuntimeLogger.Instance;
         if (this.providers.Count == 0)
         {
             throw new MajoResourceException("At least one resource provider is required.");
@@ -167,6 +170,10 @@ public sealed class ResourceManager : IResourceManager
         var (provider, location, candidates) = Resolve<TResource>(key, overridePath);
         if (location is null)
         {
+            logger.Warning(
+                "resource",
+                "resource.resolve_failed",
+                $"Resource '{key.Path}' of type '{typeof(TResource).Name}' could not be resolved.");
             throw new ResourceNotFoundException(key, typeof(TResource), candidates);
         }
 
@@ -175,6 +182,10 @@ public sealed class ResourceManager : IResourceManager
         {
             if (loaded.TryGetValue(cacheKey, out var cached))
             {
+                logger.Debug(
+                    "resource",
+                    "resource.cache_hit",
+                    $"Resource '{key.Path}' was served from cache.");
                 return Cast<TResource>(cached, location.Path);
             }
 
@@ -184,10 +195,30 @@ public sealed class ResourceManager : IResourceManager
                     $"Resource '{location.Path}' is loading asynchronously; await the existing load.");
             }
 
-            var resource = provider.Load(location, typeof(TResource));
-            var typed = Cast<TResource>(resource, location.Path);
-            loaded.Add(cacheKey, typed);
-            return typed;
+            try
+            {
+                logger.Debug(
+                    "resource",
+                    "resource.cache_miss",
+                    $"Loading resource '{key.Path}' with provider '{provider.Id}'.");
+                var resource = provider.Load(location, typeof(TResource));
+                var typed = Cast<TResource>(resource, location.Path);
+                loaded.Add(cacheKey, typed);
+                logger.Debug(
+                    "resource",
+                    "resource.load_completed",
+                    $"Resource '{key.Path}' loaded with provider '{provider.Id}'.");
+                return typed;
+            }
+            catch (Exception exception)
+            {
+                logger.Error(
+                    "resource",
+                    "resource.load_failed",
+                    $"Resource '{key.Path}' failed to load with provider '{provider.Id}'.",
+                    exception);
+                throw;
+            }
         }
     }
 
@@ -202,6 +233,10 @@ public sealed class ResourceManager : IResourceManager
         var (provider, location, candidates) = Resolve<TResource>(key, overridePath);
         if (location is null)
         {
+            logger.Warning(
+                "resource",
+                "resource.resolve_failed",
+                $"Resource '{key.Path}' of type '{typeof(TResource).Name}' could not be resolved.");
             throw new ResourceNotFoundException(key, typeof(TResource), candidates);
         }
 
@@ -211,11 +246,19 @@ public sealed class ResourceManager : IResourceManager
         {
             if (loaded.TryGetValue(cacheKey, out var cached))
             {
+                logger.Debug(
+                    "resource",
+                    "resource.cache_hit",
+                    $"Resource '{key.Path}' was served from cache.");
                 return Task.FromResult(Cast<TResource>(cached, location.Path));
             }
 
             if (!pending.TryGetValue(cacheKey, out loading!))
             {
+                logger.Debug(
+                    "resource",
+                    "resource.cache_miss",
+                    $"Loading resource '{key.Path}' with provider '{provider.Id}'.");
                 var completion = new TaskCompletionSource<object>(
                     TaskCreationOptions.RunContinuationsAsynchronously);
                 loading = completion.Task;
@@ -225,6 +268,7 @@ public sealed class ResourceManager : IResourceManager
                     location,
                     typeof(TResource),
                     cacheKey,
+                    key.Path,
                     completion,
                     lifetime.SessionCancellationToken);
             }
@@ -272,6 +316,7 @@ public sealed class ResourceManager : IResourceManager
         ResourceLocation location,
         Type resourceType,
         CacheKey cacheKey,
+        string resourceId,
         TaskCompletionSource<object> completion,
         CancellationToken cancellationToken)
     {
@@ -287,6 +332,10 @@ public sealed class ResourceManager : IResourceManager
             }
 
             completion.TrySetResult(resource);
+            logger.Debug(
+                "resource",
+                "resource.load_completed",
+                $"Resource '{resourceId}' loaded with provider '{provider.Id}'.");
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -294,6 +343,11 @@ public sealed class ResourceManager : IResourceManager
         }
         catch (Exception exception)
         {
+            logger.Error(
+                "resource",
+                "resource.load_failed",
+                $"Resource '{resourceId}' failed to load with provider '{provider.Id}'.",
+                exception);
             completion.TrySetException(exception);
             _ = completion.Task.Exception;
         }

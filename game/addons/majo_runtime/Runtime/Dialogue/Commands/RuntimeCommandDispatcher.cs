@@ -18,9 +18,12 @@ public sealed class RuntimeCommandDispatcher : IDisposable
     private readonly IActorManager? actors;
     private readonly IOperationScheduler? operations;
     private readonly IServiceResolver? services;
+    private readonly IRuntimeLogger logger;
     private readonly AwaitScopeCoordinator awaitScopes = new();
     private readonly HashSet<IOperationHandle> dialogueOperations =
         new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<string, RuntimeCommandActivity> activeCommands =
+        new(StringComparer.Ordinal);
     private TaskCompletionSource commandQuiescence = CompletedQuiescence();
     private int activeCommandCount;
 
@@ -28,12 +31,14 @@ public sealed class RuntimeCommandDispatcher : IDisposable
         CommandBinder binder,
         IActorManager? actors = null,
         IOperationScheduler? operations = null,
-        IServiceResolver? services = null)
+        IServiceResolver? services = null,
+        IRuntimeLogger? logger = null)
     {
         this.binder = binder ?? throw new ArgumentNullException(nameof(binder));
         this.actors = actors;
         this.operations = operations;
         this.services = services;
+        this.logger = logger ?? NullRuntimeLogger.Instance;
     }
 
     public event Action<RuntimeCommandException>? CommandFailed;
@@ -47,6 +52,17 @@ public sealed class RuntimeCommandDispatcher : IDisposable
             lock (operationGate)
             {
                 return activeCommandCount > 0 || dialogueOperations.Count > 0;
+            }
+        }
+    }
+
+    public IReadOnlyList<RuntimeCommandActivity> ActiveCommands
+    {
+        get
+        {
+            lock (operationGate)
+            {
+                return activeCommands.Values.ToArray();
             }
         }
     }
@@ -67,7 +83,34 @@ public sealed class RuntimeCommandDispatcher : IDisposable
     {
         ArgumentNullException.ThrowIfNull(registration);
         ArgumentNullException.ThrowIfNull(arguments);
-        BeginCommand();
+        IRuntimeLifetime? lifetime = null;
+        IDialoguePlayer? dialogue = null;
+        services?.TryGet(out lifetime);
+        services?.TryGet(out dialogue);
+        var host = lifetime as RuntimeHost;
+        var executionId = Guid.NewGuid().ToString("N");
+        BeginCommand(new RuntimeCommandActivity(
+            registration.Name,
+            executionId,
+            dialogue?.CurrentLineId,
+            DateTimeOffset.UtcNow));
+        var correlation = new RuntimeLogCorrelation(
+            host?.RuntimeId ?? string.Empty,
+            host?.SessionId,
+            (dialogue as DialoguePlayer)?.CurrentDialogueSessionId,
+            executionId);
+        using var correlationScope = logger.BeginCorrelationScope(correlation);
+        var properties = new Dictionary<string, object?>
+        {
+            ["commandName"] = registration.Name,
+            ["sourceLineId"] = dialogue?.CurrentLineId,
+        };
+        logger.Debug(
+            "command",
+            "command.started",
+            $"Command '{registration.Name}' started with {arguments.Count} arguments.",
+            correlation,
+            properties);
         var context = new RuntimeCommandContext(
             actors,
             operations,
@@ -79,13 +122,29 @@ public sealed class RuntimeCommandDispatcher : IDisposable
         {
             cancellationToken.ThrowIfCancellationRequested();
             await registration.BindAndExecuteAsync(binder, arguments, context);
+            logger.Debug(
+                "command",
+                "command.completed",
+                $"Command '{registration.Name}' completed successfully.",
+                correlation);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            logger.Debug(
+                "command",
+                "command.cancelled",
+                $"Command '{registration.Name}' cancelled.",
+                correlation);
             // DialogueRunner owns dialogue cancellation; it is not a command failure.
         }
         catch (RuntimeCommandException exception)
         {
+            logger.Error(
+                "command",
+                "command.faulted",
+                $"Command '{registration.Name}' failed: {exception.Message}",
+                exception,
+                correlation);
             ReportFailure(exception);
             throw;
         }
@@ -95,12 +154,18 @@ public sealed class RuntimeCommandDispatcher : IDisposable
                 registration.Name,
                 exception.Message,
                 exception);
+            logger.Error(
+                "command",
+                "command.faulted",
+                $"Command '{registration.Name}' failed: {exception.Message}",
+                exception,
+                correlation);
             ReportFailure(failure);
             throw failure;
         }
         finally
         {
-            EndCommand();
+            EndCommand(executionId);
         }
     }
 
@@ -111,6 +176,7 @@ public sealed class RuntimeCommandDispatcher : IDisposable
         lock (operationGate)
         {
             dialogueOperations.Clear();
+            activeCommands.Clear();
         }
     }
 
@@ -158,10 +224,11 @@ public sealed class RuntimeCommandDispatcher : IDisposable
         _ = RemoveCompletedOperationAsync(operation);
     }
 
-    private void BeginCommand()
+    private void BeginCommand(RuntimeCommandActivity activity)
     {
         lock (operationGate)
         {
+            activeCommands.Add(activity.ExecutionId, activity);
             if (activeCommandCount++ == 0)
             {
                 commandQuiescence = new TaskCompletionSource(
@@ -170,10 +237,11 @@ public sealed class RuntimeCommandDispatcher : IDisposable
         }
     }
 
-    private void EndCommand()
+    private void EndCommand(string executionId)
     {
         lock (operationGate)
         {
+            activeCommands.Remove(executionId);
             activeCommandCount--;
             if (activeCommandCount == 0)
             {

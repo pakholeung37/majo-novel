@@ -49,6 +49,9 @@ public partial class MajoProjectConfiguration : Resource
     [Export]
     public HistoryConfiguration? History { get; set; }
 
+    [Export]
+    public DiagnosticsConfiguration? Diagnostics { get; set; }
+
     public static MajoProjectConfiguration CreateDefault() => new()
     {
         Runtime = new RuntimeConfiguration(),
@@ -63,6 +66,7 @@ public partial class MajoProjectConfiguration : Resource
         State = new StateConfiguration(),
         Auto = new AutoConfiguration(),
         History = new HistoryConfiguration(),
+        Diagnostics = new DiagnosticsConfiguration(),
     };
 
     public ConfigurationValidationResult Validate(Func<string, bool>? resourceExists = null)
@@ -82,6 +86,7 @@ public partial class MajoProjectConfiguration : Resource
         ValidateState(issues);
         ValidateAuto(issues);
         ValidateHistory(issues);
+        ValidateDiagnostics(issues);
 
         return new ConfigurationValidationResult(issues);
     }
@@ -334,7 +339,8 @@ public partial class MajoProjectConfiguration : Resource
                         : RuntimeResourcePath.Combine(
                             Resources?.RootPath ?? ResourceConfiguration.DefaultRootPath,
                             appearance.TexturePath);
-                    if (!resourceExists(resolvedPath))
+                    if (Resources?.FailOnMissingAssets == true &&
+                        !resourceExists(resolvedPath))
                     {
                         issues.Add(new ConfigurationIssue(
                             $"{appearancePath}.{nameof(appearance.TexturePath)}",
@@ -515,6 +521,36 @@ public partial class MajoProjectConfiguration : Resource
         {
             issues.Add(new ConfigurationIssue(
                 $"{nameof(Audio)}.{property}", exception.Message));
+        }
+    }
+
+    private void ValidateDiagnostics(ICollection<ConfigurationIssue> issues)
+    {
+        if (Diagnostics is null)
+        {
+            issues.Add(new ConfigurationIssue(nameof(Diagnostics), "Configuration is required."));
+            return;
+        }
+
+        if (Diagnostics.RingBufferCapacity <= 0)
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Diagnostics)}.{nameof(Diagnostics.RingBufferCapacity)}",
+                "Ring buffer capacity must be greater than zero."));
+        }
+
+        if (Diagnostics.MaxFileSizeBytes <= 0)
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Diagnostics)}.{nameof(Diagnostics.MaxFileSizeBytes)}",
+                "Max file size must be greater than zero."));
+        }
+
+        if (Diagnostics.MaxFileCount <= 0)
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Diagnostics)}.{nameof(Diagnostics.MaxFileCount)}",
+                "Max file count must be greater than zero."));
         }
     }
 }

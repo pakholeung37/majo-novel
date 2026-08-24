@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
+using Majo.Runtime.Core;
 
 namespace Majo.Runtime.Input;
 
@@ -13,6 +14,7 @@ public sealed class InputManager : IInputManager
 {
     private readonly object sync = new();
     private readonly IInputBackend backend;
+    private readonly IRuntimeLogger logger;
     private readonly bool defaultEnabled;
     private readonly List<InputHandle> handles = new();
     private readonly Dictionary<object, OwnerRegistration> owners =
@@ -24,11 +26,15 @@ public sealed class InputManager : IInputManager
     private bool isInitialized;
     private bool enabled;
 
-    public InputManager(IInputBackend backend, bool enabled = true)
+    public InputManager(
+        IInputBackend backend,
+        bool enabled = true,
+        IRuntimeLogger? logger = null)
     {
         this.backend = backend ?? throw new ArgumentNullException(nameof(backend));
         defaultEnabled = enabled;
         this.enabled = enabled;
+        this.logger = logger ?? NullRuntimeLogger.Instance;
     }
 
     public event Action<InputActivation>? Dispatched;
@@ -58,6 +64,20 @@ public sealed class InputManager : IInputManager
             lock (sync)
             {
                 return handles.Count(handle => !handle.IsDisposed);
+            }
+        }
+    }
+
+    public IReadOnlyList<InputHandleSnapshot> ActiveHandles
+    {
+        get
+        {
+            lock (sync)
+            {
+                return handles
+                    .Where(handle => !handle.IsDisposed)
+                    .Select(handle => handle.CaptureSnapshot())
+                    .ToArray();
             }
         }
     }
@@ -127,6 +147,10 @@ public sealed class InputManager : IInputManager
                 ++nextOrder,
                 options);
             handles.Add(handle);
+            logger.Debug(
+                "input",
+                "input.scope_acquired",
+                $"Input scope '{handle.Name ?? "<anon>"}' acquired (modal: {handle.IsModal}).");
             return handle;
         }
     }
@@ -145,6 +169,10 @@ public sealed class InputManager : IInputManager
                 ++nextOrder,
                 options);
             handles.Add(handle);
+            logger.Debug(
+                "input",
+                "input.muter_acquired",
+                $"Input muter '{handle.Name ?? "<anon>"}' acquired.");
             return handle;
         }
     }
@@ -250,6 +278,12 @@ public sealed class InputManager : IInputManager
         }
 
         ownerToDetach?.Detach();
+        logger.Debug(
+            "input",
+            handle.Kind == InputHandleKind.Scope
+                ? "input.scope_released"
+                : "input.muter_released",
+            $"Input {handle.Kind.ToString().ToLowerInvariant()} '{handle.Name ?? "<anon>"}' released.");
     }
 
     private void ReleaseAllHandles()
@@ -373,6 +407,17 @@ public sealed class InputManager : IInputManager
                     return isDisposed;
                 }
             }
+        }
+
+        public InputHandleSnapshot CaptureSnapshot()
+        {
+            var actions = scopeOptions?.Actions ?? muteOptions?.Actions;
+            return new InputHandleSnapshot(
+                Kind,
+                Name,
+                IsModal,
+                Owner.GetType().Name,
+                actions?.Select(action => action.Value).ToArray() ?? Array.Empty<string>());
         }
 
         public void Dispose() => manager.Release(this);

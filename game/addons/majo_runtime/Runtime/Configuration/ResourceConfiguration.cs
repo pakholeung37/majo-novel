@@ -21,4 +21,7 @@ public partial class ResourceConfiguration : Resource
 
     [Export]
     public string ScriptsPath { get; set; } = DefaultScriptsPath;
+
+    [Export]
+    public bool FailOnMissingAssets { get; set; }
 }

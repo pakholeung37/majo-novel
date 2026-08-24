@@ -33,6 +33,9 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
 
     public bool HasActiveCommands => dispatcher.HasActiveCommands;
 
+    public IReadOnlyList<RuntimeCommandActivity> ActiveCommands =>
+        dispatcher.ActiveCommands;
+
     public void CancelDialogue() => registry.CancelDialogue();
 
     public Task DrainDialogueOperationsAsync(CancellationToken cancellationToken) =>

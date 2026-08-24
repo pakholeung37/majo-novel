@@ -3,6 +3,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Presentation;
 
@@ -13,18 +14,21 @@ public sealed class ScriptPlayback : IScriptPlayback
     private readonly IDialoguePlayer dialogue;
     private readonly IDialoguePresentation presentation;
     private readonly IScriptCheckpointBackend checkpointBackend;
+    private readonly IRuntimeLogger logger;
     private bool isInitialized;
 
     public ScriptPlayback(
         IDialoguePlayer dialogue,
         IDialoguePresentation presentation,
-        IScriptCheckpointBackend checkpointBackend)
+        IScriptCheckpointBackend checkpointBackend,
+        IRuntimeLogger? logger = null)
     {
         this.dialogue = dialogue ?? throw new ArgumentNullException(nameof(dialogue));
         this.presentation = presentation ??
             throw new ArgumentNullException(nameof(presentation));
         this.checkpointBackend = checkpointBackend ??
             throw new ArgumentNullException(nameof(checkpointBackend));
+        this.logger = logger ?? NullRuntimeLogger.Instance;
     }
 
     public event Action<ScriptPlaybackPhaseChanged>? PhaseChanged;
@@ -70,16 +74,17 @@ public sealed class ScriptPlayback : IScriptPlayback
     public Task ShutdownAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (isInitialized)
+        if (!isInitialized)
         {
-            dialogue.StateChanged -= HandleDialogueStateChanged;
-            dialogue.LinePresented -= HandleLinePresented;
-            dialogue.OptionsPresented -= HandleOptionsPresented;
-            presentation.LineDisplayCompleted -= HandleLineDisplayCompleted;
-            presentation.LineDismissed -= HandleLineDismissed;
-            isInitialized = false;
+            return Task.CompletedTask;
         }
 
+        dialogue.StateChanged -= HandleDialogueStateChanged;
+        dialogue.LinePresented -= HandleLinePresented;
+        dialogue.OptionsPresented -= HandleOptionsPresented;
+        presentation.LineDisplayCompleted -= HandleLineDisplayCompleted;
+        presentation.LineDismissed -= HandleLineDismissed;
+        isInitialized = false;
         SetPhase(ScriptPlaybackPhase.Idle);
         return Task.CompletedTask;
     }
@@ -89,18 +94,37 @@ public sealed class ScriptPlayback : IScriptPlayback
         if (!CanCaptureCheckpoint)
         {
             throw new ScriptCheckpointException(
-                $"A script checkpoint cannot be captured while playback is '{Phase}'.");
+                $"Cannot capture script checkpoint while script is in phase '{Phase}'.");
         }
 
-        return checkpointBackend.CaptureCheckpoint();
+        var checkpoint = checkpointBackend.CaptureCheckpoint();
+        logger.Debug(
+            "script",
+            "script.checkpoint_captured",
+            $"Script checkpoint captured for spot '{checkpoint.Spot.Script.ProjectId}:{checkpoint.Spot.Script.NodeName}#{checkpoint.Spot.LineId}'.");
+        return checkpoint;
     }
 
-    public Task ValidateCheckpointAsync(
+    public async Task ValidateCheckpointAsync(
         ScriptCheckpoint checkpoint,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(checkpoint);
-        return checkpointBackend.ValidateCheckpointAsync(checkpoint, cancellationToken);
+        try
+        {
+            await checkpointBackend.ValidateCheckpointAsync(
+                checkpoint,
+                cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            logger.Warning(
+                "script",
+                "script.checkpoint_preflight_failed",
+                $"Script checkpoint preflight validation failed for spot '{checkpoint.Spot.Script.ProjectId}:{checkpoint.Spot.Script.NodeName}#{checkpoint.Spot.LineId}': {exception.Message}",
+                exception);
+            throw;
+        }
     }
 
     public async Task RestoreCheckpointAsync(
@@ -108,6 +132,11 @@ public sealed class ScriptPlayback : IScriptPlayback
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(checkpoint);
+        logger.Info(
+            "script",
+            "script.checkpoint_restore_started",
+            $"Restoring script checkpoint for spot '{checkpoint.Spot.Script.ProjectId}:{checkpoint.Spot.Script.NodeName}#{checkpoint.Spot.LineId}'.");
+
         await ValidateCheckpointAsync(checkpoint, cancellationToken);
         await dialogue.StopAsync(cancellationToken);
         checkpointBackend.PrepareRestore(checkpoint);
@@ -118,6 +147,10 @@ public sealed class ScriptPlayback : IScriptPlayback
                     checkpoint.Spot.Script.ProjectId,
                     checkpoint.Spot.Script.NodeName),
                 cancellationToken);
+            logger.Info(
+                "script",
+                "script.checkpoint_restore_completed",
+                $"Script checkpoint restored successfully for spot '{checkpoint.Spot.Script.ProjectId}:{checkpoint.Spot.Script.NodeName}#{checkpoint.Spot.LineId}'.");
         }
         catch
         {
@@ -167,6 +200,10 @@ public sealed class ScriptPlayback : IScriptPlayback
 
         var previous = Phase;
         Phase = phase;
+        logger.Debug(
+            "script",
+            "script.phase_changed",
+            $"Script playback phase changed: {previous} -> {phase}.");
         PhaseChanged?.Invoke(new ScriptPlaybackPhaseChanged(previous, phase));
     }
 }

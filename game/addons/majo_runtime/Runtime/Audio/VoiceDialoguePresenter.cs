@@ -33,10 +33,10 @@ public sealed class VoiceDialoguePresenter : IDialoguePresenter
             return;
         }
 
-        await audio.PlayVoiceAsync(
+        var result = await audio.PlayVoiceAsync(
             voiceId,
             cancellationToken: context.NextLineToken);
-        LastVoiceId = voiceId;
+        LastVoiceId = result.IsSkipped ? null : voiceId;
     }
 
     public async Task OnDialogueCompletedAsync(CancellationToken cancellationToken)

@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Majo.Runtime.Core;
 
 namespace Majo.Runtime.Dialogue;
 
@@ -13,22 +14,26 @@ public sealed class DialoguePlayer : IDialoguePlayer
     private readonly IDialogueBackend backend;
     private readonly string defaultProjectId;
     private readonly string defaultStartNode;
+    private readonly IRuntimeLogger logger;
     private TaskCompletionSource<DialogueCompletion> completion = CompletedSource();
     private CancellationTokenSource? startCancellation;
     private Task? startTask;
     private Task? stopTask;
     private long sessionVersion;
     private string? currentStartNode;
+    private string? currentDialogueSessionId;
     private bool isInitialized;
 
     public DialoguePlayer(
         IDialogueBackend backend,
         string defaultProjectId,
-        string defaultStartNode)
+        string defaultStartNode,
+        IRuntimeLogger? logger = null)
     {
         this.backend = backend ?? throw new ArgumentNullException(nameof(backend));
         this.defaultProjectId = RequireId(defaultProjectId, nameof(defaultProjectId));
         this.defaultStartNode = RequireId(defaultStartNode, nameof(defaultStartNode));
+        this.logger = logger ?? NullRuntimeLogger.Instance;
     }
 
     public event Action<DialogueStateChanged>? StateChanged;
@@ -52,6 +57,11 @@ public sealed class DialoguePlayer : IDialoguePlayer
     public string? CurrentNode { get; private set; }
 
     public string? CurrentLineId { get; private set; }
+
+    public string? CurrentDialogueSessionId
+    {
+        get { lock (sync) { return currentDialogueSessionId; } }
+    }
 
     public bool IsPresentingOptions { get; private set; }
 
@@ -99,6 +109,7 @@ public sealed class DialoguePlayer : IDialoguePlayer
             CurrentNode = null;
             CurrentLineId = null;
             currentStartNode = null;
+            currentDialogueSessionId = null;
             IsPresentingOptions = false;
             CurrentOptions = Array.Empty<DialogueOption>();
             if (State == DialogueSessionState.Faulted)
@@ -167,6 +178,7 @@ public sealed class DialoguePlayer : IDialoguePlayer
             CurrentNode = null;
             CurrentLineId = null;
             currentStartNode = startNode;
+            currentDialogueSessionId = Guid.NewGuid().ToString("N");
             IsPresentingOptions = false;
             CurrentOptions = Array.Empty<DialogueOption>();
             stateChange = SetStateLocked(DialogueSessionState.Loading);
@@ -179,6 +191,18 @@ public sealed class DialoguePlayer : IDialoguePlayer
             starting = startTask;
         }
 
+        logger.Info(
+            "dialogue",
+            "dialogue.session_start_requested",
+            $"Dialogue start requested for project '{projectId}', node '{startNode}'.",
+            new RuntimeLogCorrelation(
+                string.Empty,
+                dialogueSessionId: CurrentDialogueSessionId),
+            new Dictionary<string, object?>
+            {
+                ["projectId"] = projectId,
+                ["node"] = startNode,
+            });
 
         NotifyStateChanged(stateChange);
         publication.TrySetResult();
@@ -212,6 +236,14 @@ public sealed class DialoguePlayer : IDialoguePlayer
                 cancellationToken);
             stopping = stopTask;
         }
+
+        logger.Info(
+            "dialogue",
+            "dialogue.session_stop_requested",
+            $"Dialogue stop requested for project '{CurrentProjectId ?? defaultProjectId}'.",
+            new RuntimeLogCorrelation(
+                string.Empty,
+                dialogueSessionId: CurrentDialogueSessionId));
 
         NotifyStateChanged(stateChange);
         publication.TrySetResult();
@@ -261,6 +293,14 @@ public sealed class DialoguePlayer : IDialoguePlayer
 
                 stateChange = SetStateLocked(DialogueSessionState.Running);
             }
+
+            logger.Info(
+                "dialogue",
+                "dialogue.session_started",
+                $"Dialogue running for project '{projectId}', node '{startNode}'.",
+                new RuntimeLogCorrelation(
+                    string.Empty,
+                    dialogueSessionId: CurrentDialogueSessionId));
 
             NotifyStateChanged(stateChange);
             Started?.Invoke(new DialogueStartRequest(projectId, startNode));
@@ -314,6 +354,14 @@ public sealed class DialoguePlayer : IDialoguePlayer
                 stateChange = SetStateLocked(DialogueSessionState.Idle);
             }
 
+            logger.Info(
+                "dialogue",
+                "dialogue.session_stopped",
+                $"Dialogue stopped for project '{stopped.ProjectId}'.",
+                new RuntimeLogCorrelation(
+                    string.Empty,
+                    dialogueSessionId: CurrentDialogueSessionId));
+
             NotifyStateChanged(stateChange);
             Stopped?.Invoke(stopped);
         }
@@ -347,10 +395,24 @@ public sealed class DialoguePlayer : IDialoguePlayer
             NotifyStateChanged(stateChange);
             if (result.Kind == DialogueCompletionKind.Stopped)
             {
+                logger.Info(
+                    "dialogue",
+                    "dialogue.session_stopped",
+                    $"Dialogue stopped for project '{result.ProjectId}'.",
+                    new RuntimeLogCorrelation(
+                        string.Empty,
+                        dialogueSessionId: CurrentDialogueSessionId));
                 Stopped?.Invoke(result);
             }
             else
             {
+                logger.Info(
+                    "dialogue",
+                    "dialogue.session_completed",
+                    $"Dialogue completed for project '{result.ProjectId}', node '{result.StartNode}'.",
+                    new RuntimeLogCorrelation(
+                        string.Empty,
+                        dialogueSessionId: CurrentDialogueSessionId));
                 Completed?.Invoke(result);
             }
 
@@ -368,6 +430,14 @@ public sealed class DialoguePlayer : IDialoguePlayer
         {
             CurrentNode = nodeName;
         }
+
+        logger.Debug(
+            "dialogue",
+            "dialogue.node_entered",
+            $"Entered dialogue node '{nodeName}'.",
+            new RuntimeLogCorrelation(
+                string.Empty,
+                dialogueSessionId: CurrentDialogueSessionId));
     }
 
     private void HandleLinePresented(DialogueLine line)
@@ -378,6 +448,15 @@ public sealed class DialoguePlayer : IDialoguePlayer
             IsPresentingOptions = false;
             CurrentOptions = Array.Empty<DialogueOption>();
         }
+
+        logger.Debug(
+            "dialogue",
+            "dialogue.line_presented",
+            $"Presented dialogue line '{line.Id}' (Speaker: '{line.Speaker ?? "<narrator>"}').",
+            new RuntimeLogCorrelation(
+                string.Empty,
+                dialogueSessionId: CurrentDialogueSessionId),
+            new Dictionary<string, object?> { ["lineId"] = line.Id });
 
         LinePresented?.Invoke(line);
     }
@@ -393,6 +472,14 @@ public sealed class DialoguePlayer : IDialoguePlayer
             IsPresentingOptions = true;
             CurrentOptions = snapshot;
         }
+
+        logger.Debug(
+            "dialogue",
+            "dialogue.options_presented",
+            $"Presented {snapshot.Count} dialogue options.",
+            new RuntimeLogCorrelation(
+                string.Empty,
+                dialogueSessionId: CurrentDialogueSessionId));
 
         OptionsPresented?.Invoke(snapshot);
     }
@@ -439,6 +526,14 @@ public sealed class DialoguePlayer : IDialoguePlayer
             stateChange = SetStateLocked(DialogueSessionState.Faulted);
             notify = true;
         }
+
+        logger.Error(
+            "dialogue",
+            "dialogue.session_faulted",
+            $"Dialogue faulted: {exception.Message}",
+            correlation: new RuntimeLogCorrelation(
+                string.Empty,
+                dialogueSessionId: CurrentDialogueSessionId));
 
         if (notify)
         {

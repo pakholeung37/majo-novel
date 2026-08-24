@@ -101,16 +101,17 @@ internal partial class GodotInputReceiver : Node
 
     public override void _UnhandledInput(InputEvent inputEvent)
     {
-        foreach (var definition in GodotInputDefaults.Definitions)
+        foreach (StringName godotAction in InputMap.GetActions())
         {
-            var godotAction = new StringName(MajoInputActions.ToGodotAction(definition.Action));
-            if (!inputEvent.IsActionPressed(godotAction, allowEcho: false))
+            var actionName = godotAction.ToString();
+            if (!actionName.StartsWith("majo_", StringComparison.Ordinal) ||
+                !inputEvent.IsActionPressed(godotAction, allowEcho: false))
             {
                 continue;
             }
 
             Activated?.Invoke(new InputActivation(
-                definition.Action,
+                MajoInputActions.FromGodotAction(actionName),
                 Engine.GetProcessFrames(),
                 ResolveDevice(inputEvent)));
             return;
@@ -178,6 +179,10 @@ internal static class GodotInputDefaults
             KeyEvent(Key.Enter),
             MouseEvent(MouseButton.Middle),
             JoyEvent(JoyButton.X),
+        ]),
+        new(MajoInputActions.Debug,
+        [
+            KeyEvent(Key.F3),
         ]),
     ];
 

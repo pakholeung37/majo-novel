@@ -32,7 +32,9 @@ public sealed class InputManagerTests
         Assert.Equal(
             "majo_option_up",
             MajoInputActions.ToGodotAction(MajoInputActions.OptionUp));
-        Assert.Equal(8, MajoInputActions.All.Count);
+        Assert.Equal("majo_debug", MajoInputActions.ToGodotAction(MajoInputActions.Debug));
+        Assert.Equal(MajoInputActions.Debug, MajoInputActions.FromGodotAction("majo_debug"));
+        Assert.Equal(9, MajoInputActions.All.Count);
     }
 
     [Fact(Timeout = 5_000)]

@@ -49,4 +49,7 @@ public partial class AudioConfiguration : Resource
 
     [Export]
     public string VoicePath { get; set; } = DefaultVoicePath;
+
+    [Export]
+    public bool FailOnMissingClips { get; set; }
 }

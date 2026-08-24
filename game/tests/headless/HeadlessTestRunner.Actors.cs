@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Actors;
+using Majo.Runtime.Actors.Godot;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Resources;
@@ -68,12 +69,25 @@ public partial class HeadlessTestRunner
         Assert(character.Appearance == "blue", "Immediate appearance state was not updated.");
         Assert(!ReferenceEquals(initialTexture, character.View.Texture),
             "Character appearance did not replace its Texture2D.");
-        var missingAppearance = AssertThrows<ResourceNotFoundException>(() =>
-            character.SetAppearance("missing"));
-        Assert(missingAppearance.Candidates.Any(path => path.StartsWith(
-                "res://assets/characters/hero/missing.",
-                StringComparison.Ordinal)),
-            "Missing conventional appearance did not report resolved candidates.");
+        character.SetAppearance("missing");
+        Assert(character.Appearance == "missing",
+            "Missing appearance did not preserve the requested logical state.");
+        Assert(character.View.Texture is PlaceholderTexture2D,
+            "Missing appearance did not use the development placeholder texture.");
+        var missingResources = bootstrap.Host.Services.Get<IMissingResourceReporter>();
+        var missingOccurrence = missingResources.Occurrences.Single();
+        Assert(missingOccurrence.ResourceId == "characters/hero/missing" &&
+            missingOccurrence.Fallback == "placeholder",
+            "Missing appearance was not reported with its placeholder fallback.");
+        var snapshot = bootstrap.Diagnostics!.CaptureSnapshot();
+        Assert(snapshot.MissingResources?.UniqueCount == 1,
+            "Diagnostics did not expose the missing appearance.");
+
+        var strictLoader = new ResourceActorTextureLoader(
+            bootstrap.Host.Services.Get<IResourceManager>(),
+            failOnMissingAssets: true);
+        _ = AssertThrows<ResourceNotFoundException>(() => strictLoader.Load(
+            new ResourceKey("characters/hero/strict-missing")));
 
         character.SetPosition(configuration.Actors.LeftPosition);
         var firstMove = character.ChangePosition(

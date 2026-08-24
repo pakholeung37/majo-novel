@@ -17,6 +17,8 @@ public sealed class RuntimeHost : IRuntimeLifetime, IAsyncDisposable
     private readonly List<RuntimeServiceDescriptor> initializedServices = new();
     private readonly CancellationTokenSource runtimeCancellation = new();
     private CancellationTokenSource sessionCancellation = new();
+    private readonly string runtimeId = Guid.NewGuid().ToString("N");
+    private string sessionId = Guid.NewGuid().ToString("N");
     private bool isDisposed;
 
     internal RuntimeHost(RuntimeServiceGraph graph, IRuntimeLogger logger)
@@ -26,13 +28,24 @@ public sealed class RuntimeHost : IRuntimeLifetime, IAsyncDisposable
         resolver = new RuntimeServiceResolver(graph, this);
     }
 
+    public string RuntimeId => runtimeId;
+
+    public string SessionId => sessionId;
+
     public RuntimeHostState State { get; private set; } = RuntimeHostState.Created;
 
     public IServiceResolver Services => resolver;
 
+    public IReadOnlyList<string> InitializedServiceNames =>
+        initializedServices
+            .Select(descriptor => descriptor.ServiceType.Name)
+            .ToArray();
+
     public CancellationToken RuntimeCancellationToken => runtimeCancellation.Token;
 
     public CancellationToken SessionCancellationToken => sessionCancellation.Token;
+
+    private RuntimeLogCorrelation RootCorrelation => new(runtimeId, sessionId);
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
@@ -46,7 +59,7 @@ public sealed class RuntimeHost : IRuntimeLifetime, IAsyncDisposable
 
             EnsureState(RuntimeHostState.Created, "initialize");
             State = RuntimeHostState.Initializing;
-            logger.Log(RuntimeLogLevel.Information, "Majo Runtime initialization started.");
+            logger.Info("core.lifecycle", "core.lifecycle.initialize_started", "Majo Runtime initialization started.", RootCorrelation);
 
             try
             {
@@ -58,6 +71,7 @@ public sealed class RuntimeHost : IRuntimeLifetime, IAsyncDisposable
                     try
                     {
                         await service.InitializeAsync(cancellationToken);
+                        logger.Debug("core.lifecycle", "core.lifecycle.service_initialized", $"Service '{descriptor.ServiceType.Name}' initialized.", RootCorrelation);
                     }
                     catch (Exception exception)
                     {
@@ -68,7 +82,7 @@ public sealed class RuntimeHost : IRuntimeLifetime, IAsyncDisposable
                 }
 
                 State = RuntimeHostState.Initialized;
-                logger.Log(RuntimeLogLevel.Information, "Majo Runtime initialization completed.");
+                logger.Info("core.lifecycle", "core.lifecycle.initialize_completed", "Majo Runtime initialization completed.", RootCorrelation);
             }
             catch (Exception initializationException)
             {
@@ -81,7 +95,7 @@ public sealed class RuntimeHost : IRuntimeLifetime, IAsyncDisposable
                 var exception = CreateInitializationException(
                     initializationException,
                     cleanupExceptions);
-                logger.Log(RuntimeLogLevel.Error, exception.Message, exception);
+                logger.Error("core.lifecycle", "core.lifecycle.initialize_failed", exception.Message, exception, RootCorrelation);
                 throw exception;
             }
         }
@@ -98,12 +112,17 @@ public sealed class RuntimeHost : IRuntimeLifetime, IAsyncDisposable
         {
             EnsureState(RuntimeHostState.Initialized, "reset");
             State = RuntimeHostState.Resetting;
-            logger.Log(RuntimeLogLevel.Information, "Majo Runtime reset started.");
+            logger.Info("core.lifecycle", "core.lifecycle.reset_started", "Majo Runtime reset started.", RootCorrelation);
 
             var previousSessionCancellation = sessionCancellation;
             var exceptions = new List<Exception>();
             TryCancel(previousSessionCancellation, "previous session", exceptions);
             sessionCancellation = new CancellationTokenSource();
+            sessionId = Guid.NewGuid().ToString("N");
+            if (logger is IRuntimeLogScopeProvider scopeProvider)
+            {
+                scopeProvider.SetRootCorrelation(RootCorrelation);
+            }
             previousSessionCancellation.Dispose();
 
             foreach (var descriptor in initializedServices)
@@ -112,6 +131,7 @@ public sealed class RuntimeHost : IRuntimeLifetime, IAsyncDisposable
                 {
                     await resolver.GetRuntimeService(descriptor.ServiceType)
                         .ResetAsync(cancellationToken);
+                    logger.Debug("core.lifecycle", "core.lifecycle.service_reset", $"Service '{descriptor.ServiceType.Name}' reset.", RootCorrelation);
                 }
                 catch (Exception exception)
                 {
@@ -124,7 +144,7 @@ public sealed class RuntimeHost : IRuntimeLifetime, IAsyncDisposable
             if (exceptions.Count == 0)
             {
                 State = RuntimeHostState.Initialized;
-                logger.Log(RuntimeLogLevel.Information, "Majo Runtime reset completed.");
+                logger.Info("core.lifecycle", "core.lifecycle.reset_completed", "Majo Runtime reset completed.", RootCorrelation);
                 return;
             }
 
@@ -133,7 +153,7 @@ public sealed class RuntimeHost : IRuntimeLifetime, IAsyncDisposable
             var wrapped = new RuntimeLifecycleException(
                 "One or more Majo Runtime services failed to reset.",
                 new AggregateException(exceptions));
-            logger.Log(RuntimeLogLevel.Error, wrapped.Message, wrapped);
+            logger.Error("core.lifecycle", "core.lifecycle.reset_failed", wrapped.Message, wrapped, RootCorrelation);
             throw wrapped;
         }
         finally
@@ -168,7 +188,7 @@ public sealed class RuntimeHost : IRuntimeLifetime, IAsyncDisposable
             }
 
             State = RuntimeHostState.ShuttingDown;
-            logger.Log(RuntimeLogLevel.Information, "Majo Runtime shutdown started.");
+            logger.Info("core.lifecycle", "core.lifecycle.shutdown_started", "Majo Runtime shutdown started.", RootCorrelation);
             var exceptions = new List<Exception>();
             CancelLifetimes(exceptions);
 
@@ -179,7 +199,7 @@ public sealed class RuntimeHost : IRuntimeLifetime, IAsyncDisposable
 
             ThrowIfShutdownFailed(exceptions);
 
-            logger.Log(RuntimeLogLevel.Information, "Majo Runtime shutdown completed.");
+            logger.Info("core.lifecycle", "core.lifecycle.shutdown_completed", "Majo Runtime shutdown completed.", RootCorrelation);
         }
         finally
         {
@@ -248,7 +268,7 @@ public sealed class RuntimeHost : IRuntimeLifetime, IAsyncDisposable
         var aggregate = new AggregateException(exceptions);
         var wrapped = new RuntimeLifecycleException(
             "One or more Majo Runtime services failed to shut down.", aggregate);
-        logger.Log(RuntimeLogLevel.Error, wrapped.Message, wrapped);
+        logger.Error("core.lifecycle", "core.lifecycle.shutdown_failed", wrapped.Message, wrapped, RootCorrelation);
         throw wrapped;
     }
 

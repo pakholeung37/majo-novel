@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Majo.Runtime.Audio;
+using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Presentation;
 using Majo.Runtime.Input;
@@ -18,6 +19,7 @@ public sealed class HistoryManager : IHistoryManager
     private readonly IDialoguePresentation presentation;
     private readonly IAudioManager audio;
     private readonly IInputManager input;
+    private readonly IRuntimeLogger logger;
     private readonly List<HistoryEntry> entries = new();
     private IInputHandle? toggleInput;
     private IInputHandle? modalInput;
@@ -30,13 +32,15 @@ public sealed class HistoryManager : IHistoryManager
         IDialoguePresentation presentation,
         IAudioManager audio,
         IInputManager input,
-        int capacity)
+        int capacity,
+        IRuntimeLogger? logger = null)
     {
         this.dialogue = dialogue ?? throw new ArgumentNullException(nameof(dialogue));
         this.presentation = presentation ??
             throw new ArgumentNullException(nameof(presentation));
         this.audio = audio ?? throw new ArgumentNullException(nameof(audio));
         this.input = input ?? throw new ArgumentNullException(nameof(input));
+        this.logger = logger ?? NullRuntimeLogger.Instance;
         if (capacity <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(capacity));
@@ -124,6 +128,7 @@ public sealed class HistoryManager : IHistoryManager
                 name: "history-modal"));
         modalInput.Activated += HandleModalInput;
         IsOpen = true;
+        logger.Info("history", "history.opened", "Dialogue history opened.");
         OpenStateChanged?.Invoke(new HistoryOpenStateChanged(true));
     }
 
@@ -142,6 +147,7 @@ public sealed class HistoryManager : IHistoryManager
         }
 
         IsOpen = false;
+        logger.Info("history", "history.closed", "Dialogue history closed.");
         OpenStateChanged?.Invoke(new HistoryOpenStateChanged(false));
     }
 
@@ -179,8 +185,34 @@ public sealed class HistoryManager : IHistoryManager
             return false;
         }
 
-        await audio.PlayVoiceAsync(entry.VoiceId, cancellationToken: cancellationToken);
-        return true;
+        try
+        {
+            var result = await audio.PlayVoiceAsync(
+                entry.VoiceId,
+                cancellationToken: cancellationToken);
+            if (result.IsSkipped)
+            {
+                return false;
+            }
+            logger.Debug(
+                "history",
+                "history.voice_replayed",
+                $"Replayed history voice for line '{entry.LineId}'.");
+            return true;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            logger.Warning(
+                "history",
+                "history.voice_replay_failed",
+                $"History voice replay failed for line '{entry.LineId}': {exception.Message}",
+                exception);
+            throw;
+        }
     }
 
     private void HandleLinePresented(DialogueLine line) => pendingLine = line;

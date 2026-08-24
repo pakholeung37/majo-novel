@@ -5,7 +5,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Majo.Runtime.Core;
 using Majo.Runtime.Operations;
+using Majo.Runtime.Resources;
 
 namespace Majo.Runtime.Audio;
 
@@ -21,6 +23,9 @@ public sealed class AudioManager : IAudioManager
         new(StringComparer.Ordinal);
     private readonly Dictionary<string, IOperationHandle> sfxTransitions =
         new(StringComparer.Ordinal);
+    private readonly IRuntimeLogger logger;
+    private readonly IMissingResourceReporter? missingResources;
+    private readonly bool failOnMissingClips;
     private AudioPlayback? voice;
     private IOperationHandle? voiceTransition;
     private long generatedSfxId;
@@ -42,13 +47,17 @@ public sealed class AudioManager : IAudioManager
         IAudioClipLoader bgmLoader,
         IAudioClipLoader sfxLoader,
         IAudioClipLoader voiceLoader,
-        AudioSettings settings)
+        AudioSettings settings,
+        IRuntimeLogger? logger = null,
+        IMissingResourceReporter? missingResources = null)
     {
         this.backend = backend ?? throw new ArgumentNullException(nameof(backend));
         this.operations = operations ?? throw new ArgumentNullException(nameof(operations));
         BgmLoader = bgmLoader ?? throw new ArgumentNullException(nameof(bgmLoader));
         SfxLoader = sfxLoader ?? throw new ArgumentNullException(nameof(sfxLoader));
         VoiceLoader = voiceLoader ?? throw new ArgumentNullException(nameof(voiceLoader));
+        this.logger = logger ?? NullRuntimeLogger.Instance;
+        this.missingResources = missingResources;
         ArgumentNullException.ThrowIfNull(settings);
         masterVolume = ValidateVolume(settings.MasterVolume);
         bgmVolume = ValidateVolume(settings.BgmVolume);
@@ -59,6 +68,7 @@ public sealed class AudioManager : IAudioManager
         sfxMuted = settings.SfxMuted;
         voiceMuted = settings.VoiceMuted;
         voiceLocale = RequireName(settings.VoiceLocale, nameof(settings.VoiceLocale));
+        failOnMissingClips = settings.FailOnMissingClips;
     }
 
     public event Action<IAudioPlayback>? PlaybackStarted;
@@ -140,6 +150,16 @@ public sealed class AudioManager : IAudioManager
         get { lock (gate) { return voice; } }
     }
 
+    public bool IsFading(string instanceId)
+    {
+        lock (gate)
+        {
+            return bgmTransitions.ContainsKey(instanceId) ||
+                sfxTransitions.ContainsKey(instanceId) ||
+                (instanceId == "voice" && voiceTransition is not null);
+        }
+    }
+
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
         if (isInitialized)
@@ -204,6 +224,12 @@ public sealed class AudioManager : IAudioManager
         trackId = string.IsNullOrWhiteSpace(trackId) ? clipId : trackId.Trim();
         volume = ValidateVolume(volume);
         fade = fade.Validate();
+        if (ShouldSkipMissing(BgmLoader, clipId))
+        {
+            ReportMissingAudio(AudioCategory.Bgm, clipId, BgmLoader);
+            return AudioPlaybackResult.Skipped(AudioCategory.Bgm, clipId, trackId);
+        }
+
         var clip = await BgmLoader.LoadAsync(clipId, cancellationToken: cancellationToken);
 
         await mutations.WaitAsync(cancellationToken);
@@ -332,13 +358,19 @@ public sealed class AudioManager : IAudioManager
         clipId = RequireName(clipId, nameof(clipId));
         volume = ValidateVolume(volume);
         fade = fade.Validate();
+        instanceId = string.IsNullOrWhiteSpace(instanceId)
+            ? $"sfx-{Interlocked.Increment(ref generatedSfxId)}"
+            : instanceId.Trim();
+        if (ShouldSkipMissing(SfxLoader, clipId))
+        {
+            ReportMissingAudio(AudioCategory.Sfx, clipId, SfxLoader);
+            return AudioPlaybackResult.Skipped(AudioCategory.Sfx, clipId, instanceId);
+        }
+
         var clip = await SfxLoader.LoadAsync(clipId, cancellationToken: cancellationToken);
         await mutations.WaitAsync(cancellationToken);
         try
         {
-            instanceId = string.IsNullOrWhiteSpace(instanceId)
-                ? $"sfx-{Interlocked.Increment(ref generatedSfxId)}"
-                : instanceId.Trim();
             lock (gate)
             {
                 if (sfx.ContainsKey(instanceId))
@@ -417,6 +449,16 @@ public sealed class AudioManager : IAudioManager
         volume = ValidateVolume(volume);
         fade = fade.Validate();
         var localizedId = $"{voiceLocale}/{clipId}";
+        if (ShouldSkipMissing(VoiceLoader, localizedId, overridePath))
+        {
+            ReportMissingAudio(
+                AudioCategory.Voice,
+                localizedId,
+                VoiceLoader,
+                overridePath);
+            return AudioPlaybackResult.Skipped(AudioCategory.Voice, clipId, "voice");
+        }
+
         var clip = await VoiceLoader.LoadAsync(
             localizedId, overridePath, cancellationToken);
         await mutations.WaitAsync(cancellationToken);
@@ -432,6 +474,10 @@ public sealed class AudioManager : IAudioManager
 
             if (previous is not null)
             {
+                logger.Info(
+                    "audio",
+                    "audio.voice_preempted",
+                    $"Voice '{previous.ClipId}' was preempted by '{clipId}'.");
                 StopPlayback(previous);
             }
 
@@ -485,6 +531,22 @@ public sealed class AudioManager : IAudioManager
             mutations.Release();
         }
     }
+
+    private bool ShouldSkipMissing(
+        IAudioClipLoader loader,
+        string clipId,
+        string? overridePath = null) =>
+        !failOnMissingClips && !loader.Exists(clipId, overridePath);
+
+    private void ReportMissingAudio(
+        AudioCategory category,
+        string clipId,
+        IAudioClipLoader loader,
+        string? overridePath = null) => missingResources?.Report(
+            category.ToString(),
+            clipId,
+            "skip",
+            overridePath ?? $"{loader.PathPrefix}/{clipId}");
 
     private IOperationHandle StartFade(
         IReadOnlyList<FadeTarget> targets,
@@ -553,6 +615,10 @@ public sealed class AudioManager : IAudioManager
         var playback = new AudioPlayback(
             category, clipId, instanceId, loop, baseVolume, backendPlayer);
         backendPlayer.Play();
+        logger.Debug(
+            "audio",
+            $"audio.{category.ToString().ToLowerInvariant()}_started",
+            $"{category} playback '{clipId}' started as '{instanceId}'.");
         PlaybackStarted?.Invoke(playback);
         _ = ObservePlaybackAsync(playback);
         return playback;
@@ -567,6 +633,11 @@ public sealed class AudioManager : IAudioManager
         catch (Exception exception)
         {
             playback.Fail(exception);
+            logger.Error(
+                "audio",
+                "audio.playback_failed",
+                $"{playback.Category} playback '{playback.ClipId}' failed.",
+                exception);
             return;
         }
 
@@ -594,6 +665,10 @@ public sealed class AudioManager : IAudioManager
         }
 
         playback.Complete();
+        logger.Debug(
+            "audio",
+            $"audio.{playback.Category.ToString().ToLowerInvariant()}_finished",
+            $"{playback.Category} playback '{playback.ClipId}' reached its terminal state.");
         PlaybackStopped?.Invoke(playback);
     }
 
@@ -626,6 +701,10 @@ public sealed class AudioManager : IAudioManager
         playback.Backend.Stop();
         playback.Backend.Dispose();
         playback.Complete();
+        logger.Debug(
+            "audio",
+            $"audio.{playback.Category.ToString().ToLowerInvariant()}_stopped",
+            $"{playback.Category} playback '{playback.ClipId}' stopped.");
     }
 
     private void StopEveryPlayback()

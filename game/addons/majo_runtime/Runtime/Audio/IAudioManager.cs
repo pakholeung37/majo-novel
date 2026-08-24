@@ -44,6 +44,8 @@ public interface IAudioManager : IRuntimeService
 
     IAudioPlayback? CurrentVoice { get; }
 
+    bool IsFading(string instanceId) => false;
+
     Task<AudioPlaybackResult> PlayBgmAsync(
         string clipId,
         string? trackId = null,

@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -12,6 +13,8 @@ using Majo.Runtime.Actors.Godot;
 using Majo.Runtime.Auto;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
+using Majo.Runtime.Diagnostics;
+using Majo.Runtime.Diagnostics.Godot;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Dialogue.Commands.Audio;
@@ -63,6 +66,8 @@ public partial class MajoRuntimeBootstrap : Node
 
     public Action<RuntimeServiceRegistry>? ConfigureServices { get; set; }
 
+    public Action<DiagnosticContributorRegistry>? ConfigureDiagnosticContributors { get; set; }
+
     public Action<ActorManager>? ConfigureActorFactories { get; set; }
 
     public Action<RuntimeCommandRegistry>? ConfigureCommands { get; set; }
@@ -79,7 +84,16 @@ public partial class MajoRuntimeBootstrap : Node
 
     public Func<Node, IAudioBackend>? AudioBackendFactory { get; set; }
 
+    public StructuredRuntimeLogger? Logger { get; private set; }
+
+    public RingBufferLogSink? RingBuffer { get; private set; }
+
+    public DefaultDebugOverlay? DebugOverlay { get; private set; }
+
     public RuntimeHost? Host { get; private set; }
+
+    public IRuntimeDiagnostics? Diagnostics =>
+        Host?.Services.TryGet<IRuntimeDiagnostics>(out var d) == true ? d : null;
 
     public bool IsInitialized => Host?.State == RuntimeHostState.Initialized;
 
@@ -114,6 +128,9 @@ public partial class MajoRuntimeBootstrap : Node
             token => Host.ResetAsync(token),
             cancellationToken,
             "reset");
+        Logger?.SetRootCorrelation(new RuntimeLogCorrelation(
+            Host.RuntimeId,
+            Host.SessionId));
     }
 
     public async Task RequestShutdownAsync(CancellationToken cancellationToken = default)
@@ -155,10 +172,36 @@ public partial class MajoRuntimeBootstrap : Node
             var validation = Configuration.Validate();
             validation.ThrowIfInvalid();
 
+            var sinks = new List<IRuntimeLogSink>();
+            var ringCapacity = Configuration.Diagnostics?.RingBufferCapacity ?? 500;
+            RingBuffer = new RingBufferLogSink(ringCapacity);
+            sinks.Add(RingBuffer);
+            sinks.Add(new GodotConsoleSink());
+
+            if (Configuration.Diagnostics?.EnableFileLogging == true)
+            {
+                var rawDir = Configuration.Diagnostics.FileLogDirectory;
+                var logDir = rawDir.StartsWith("user://", StringComparison.Ordinal) || rawDir.StartsWith("res://", StringComparison.Ordinal)
+                    ? ProjectSettings.GlobalizePath(rawDir)
+                    : rawDir;
+                sinks.Add(new JsonLinesFileSink(
+                    logDir,
+                    "majo_runtime",
+                    Configuration.Diagnostics.MaxFileSizeBytes,
+                    Configuration.Diagnostics.MaxFileCount));
+            }
+
+            var compositeSink = new CompositeRuntimeLogSink(sinks);
+            var minLevel = Configuration.Diagnostics?.MinimumLevel ?? RuntimeLogLevel.Information;
+            Logger = new StructuredRuntimeLogger(compositeSink, minLevel);
+
             var services = new RuntimeServiceRegistry();
             RegisterDefaultServices(services);
             ConfigureServices?.Invoke(services);
-            Host = services.Build(new GodotRuntimeLogger());
+            Host = services.Build(Logger);
+            Logger.SetRootCorrelation(new RuntimeLogCorrelation(
+                Host.RuntimeId,
+                Host.SessionId));
             await ExecuteWithLifecycleTimeoutAsync(
                 token => Host.InitializeAsync(token),
                 bootstrapLifetime.Token,
@@ -168,6 +211,13 @@ public partial class MajoRuntimeBootstrap : Node
             {
                 yarnCommandAdapter = adapter!;
                 adapter!.CommandFailed += HandleCommandFailed;
+            }
+
+            if (Configuration.Diagnostics?.EnableOverlay == true &&
+                Host.Services.TryGet<IRuntimeDiagnostics>(out var diagnostics) &&
+                Host.Services.TryGet<IInputManager>(out var inputManager))
+            {
+                DebugOverlay = new DefaultDebugOverlay(this, diagnostics!, inputManager!, Configuration.Diagnostics);
             }
 
             if (isExitingTree)
@@ -196,42 +246,64 @@ public partial class MajoRuntimeBootstrap : Node
     private void RegisterDefaultServices(RuntimeServiceRegistry services)
     {
         services
+            .AddSingleton<IRuntimeDiagnostics>(
+                resolver =>
+                {
+                    var contributors = new DiagnosticContributorRegistry();
+                    ConfigureDiagnosticContributors?.Invoke(contributors);
+                    return new RuntimeDiagnosticsService(
+                        () => Host?.Services ?? resolver,
+                        RingBuffer,
+                        contributors,
+                        Host?.RuntimeId);
+                })
             .AddSingleton<IInputBackend>(
                 _ => new GodotInputBackend(this, Configuration!.Input!))
             .AddSingleton<IInputManager>(
                 resolver => new InputManager(
                     resolver.Get<IInputBackend>(),
-                    Configuration!.Input!.Enabled),
+                    Configuration!.Input!.Enabled,
+                    Logger),
                 typeof(IInputBackend))
             .AddSingleton<IFrameClock>(_ => new GodotFrameClock(GetTree()))
+            .AddSingleton<IMissingResourceReporter>(_ => new MissingResourceReporter(Logger))
             .AddSingleton<IResourceManager>(
                 resolver => CreateResourceManager(
                     resolver.Get<IFrameClock>(),
                     resolver.Get<IRuntimeLifetime>()),
                 typeof(IFrameClock),
                 typeof(IRuntimeLifetime))
+            .AddSingleton<IActorTextureLoader>(
+                resolver => new ResourceActorTextureLoader(
+                    resolver.Get<IResourceManager>(),
+                    Configuration!.Resources!.FailOnMissingAssets,
+                    resolver.Get<IMissingResourceReporter>()),
+                typeof(IResourceManager),
+                typeof(IMissingResourceReporter))
             .AddSingleton<IOperationScheduler>(
                 resolver => new OperationScheduler(
                     resolver.Get<IFrameClock>(),
                     resolver.Get<IRuntimeLifetime>(),
-                    new GodotRuntimeLogger()),
+                    Logger),
                 typeof(IFrameClock),
                 typeof(IRuntimeLifetime))
             .AddSingleton<IAudioManager>(
                 resolver => CreateAudioManager(
                     resolver.Get<IResourceManager>(),
-                    resolver.Get<IOperationScheduler>()),
+                    resolver.Get<IOperationScheduler>(),
+                    resolver.Get<IMissingResourceReporter>()),
                 typeof(IResourceManager),
-                typeof(IOperationScheduler))
+                typeof(IOperationScheduler),
+                typeof(IMissingResourceReporter))
             .AddSingleton<GodotActorHost>(_ => new GodotActorHost(this))
             .AddSingleton<IActorManager>(
                 resolver => CreateActorManager(
                     resolver.Get<GodotActorHost>(),
                     resolver.Get<IOperationScheduler>(),
-                    resolver.Get<IResourceManager>()),
+                    resolver.Get<IActorTextureLoader>()),
                 typeof(GodotActorHost),
                 typeof(IOperationScheduler),
-                typeof(IResourceManager));
+                typeof(IActorTextureLoader));
 
         var presenterRegistry = new DialoguePresenterRegistry();
         ConfigureDialoguePresenters?.Invoke(presenterRegistry);
@@ -277,7 +349,8 @@ public partial class MajoRuntimeBootstrap : Node
                 resolver => new DialoguePlayer(
                     resolver.Get<IYarnDialogueBackend>(),
                     Configuration!.Dialogue!.DefaultProjectId,
-                    Configuration.Dialogue.DefaultStartNode),
+                    Configuration.Dialogue.DefaultStartNode,
+                    Logger),
                 typeof(IYarnDialogueBackend),
                 typeof(IYarnCommandAdapter),
                 typeof(IDialoguePresentation))
@@ -288,7 +361,8 @@ public partial class MajoRuntimeBootstrap : Node
                 resolver => new ScriptPlayback(
                     resolver.Get<IDialoguePlayer>(),
                     resolver.Get<IDialoguePresentation>(),
-                    resolver.Get<IYarnDialogueBackend>()),
+                    resolver.Get<IYarnDialogueBackend>(),
+                    Logger),
                 typeof(IDialoguePlayer),
                 typeof(IDialoguePresentation),
                 typeof(IYarnDialogueBackend))
@@ -298,7 +372,8 @@ public partial class MajoRuntimeBootstrap : Node
                     resolver.Get<IDialoguePresentation>(),
                     resolver.Get<IAudioManager>(),
                     resolver.Get<IInputManager>(),
-                    Configuration!.History!.Capacity),
+                    Configuration!.History!.Capacity,
+                    Logger),
                 typeof(IDialoguePlayer),
                 typeof(IDialoguePresentation),
                 typeof(IAudioManager),
@@ -312,7 +387,8 @@ public partial class MajoRuntimeBootstrap : Node
                     resolver.Get<IInputManager>(),
                     resolver.Get<IHistoryManager>(),
                     TimeSpan.FromSeconds(Configuration!.Auto!.ExtraDelaySeconds),
-                    Configuration.Auto.WaitForVoice),
+                    Configuration.Auto.WaitForVoice,
+                    Logger),
                 typeof(IScriptPlayback),
                 typeof(IDialoguePlayer),
                 typeof(IAudioManager),
@@ -369,7 +445,7 @@ public partial class MajoRuntimeBootstrap : Node
             .Register(new SessionHistoryStateContributor(history));
         ConfigureStateContributors?.Invoke(contributors);
         contributors.Register(new ScriptStateContributor(scriptPlayback));
-        return new StateManager(contributors.Build(), dialogue, input, operations);
+        return new StateManager(contributors.Build(), dialogue, input, operations, Logger);
     }
 
     private IYarnCommandAdapter CreateYarnCommandAdapter(
@@ -394,7 +470,8 @@ public partial class MajoRuntimeBootstrap : Node
             binder,
             actors,
             operations,
-            Host!.Services);
+            Host!.Services,
+            Logger);
         var adapter = new YarnCommandAdapter(
             new DialogueRunnerCommandRegistry(backend.Runner),
             catalog,
@@ -406,10 +483,9 @@ public partial class MajoRuntimeBootstrap : Node
     private ActorManager CreateActorManager(
         GodotActorHost host,
         IOperationScheduler scheduler,
-        IResourceManager resources)
+        IActorTextureLoader textureLoader)
     {
         var actorConfiguration = Configuration!.Actors!;
-        var textureLoader = new ResourceActorTextureLoader(resources);
         var manager = new ActorManager(
             ActorConfigurationCompiler.Compile(actorConfiguration, Configuration.Resources!),
             new IActorFactory[]
@@ -439,12 +515,13 @@ public partial class MajoRuntimeBootstrap : Node
             .RegisterSourceExtensions<AudioStream>("wav", "ogg", "mp3");
         var providers = new ResourceProviderRegistry().Register(godotProvider);
         ConfigureResourceProviders?.Invoke(providers);
-        return new ResourceManager(providers.Providers, lifetime);
+        return new ResourceManager(providers.Providers, lifetime, Logger);
     }
 
     private IAudioManager CreateAudioManager(
         IResourceManager resources,
-        IOperationScheduler operations)
+        IOperationScheduler operations,
+        IMissingResourceReporter missingResources)
     {
         var configuration = Configuration!.Audio!;
         return new AudioManager(
@@ -462,7 +539,10 @@ public partial class MajoRuntimeBootstrap : Node
                 configuration.BgmMuted,
                 configuration.SfxMuted,
                 configuration.VoiceMuted,
-                configuration.VoiceLocale));
+                configuration.VoiceLocale,
+                configuration.FailOnMissingClips),
+            Logger,
+            missingResources);
     }
 
     private async Task ShutdownHostAsync(CancellationToken cancellationToken = default)
@@ -482,6 +562,11 @@ public partial class MajoRuntimeBootstrap : Node
                     cancellationToken,
                     "shutdown");
             }
+
+            DebugOverlay?.Dispose();
+            DebugOverlay = null;
+            Logger?.Dispose();
+            Logger = null;
 
             shutdownCompletion.TrySetResult();
             if (!isExitingTree && IsInsideTree())

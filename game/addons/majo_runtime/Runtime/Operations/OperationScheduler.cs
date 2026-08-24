@@ -159,6 +159,11 @@ public sealed class OperationScheduler : IOperationScheduler
         }
 
         handle.Start();
+        logger.Debug(
+            "operation",
+            "operation.started",
+            $"Operation '{handle.Id ?? "<anonymous>"}' (Group: '{handle.GroupId ?? "<none>"}') started.",
+            new RuntimeLogCorrelation(string.Empty, operationId: handle.DiagnosticId));
         _ = ObserveCompletionAsync(handle);
         return handle;
     }
@@ -168,6 +173,10 @@ public sealed class OperationScheduler : IOperationScheduler
         CancellationToken cancellationToken = default)
     {
         var handles = ResolveTarget(target);
+        logger.Debug(
+            "operation",
+            "operation.wait_started",
+            $"Waiting for operation target '{target.Kind}:{target.Name}'.");
         return WaitForHandlesAsync(handles, cancellationToken);
     }
 
@@ -176,6 +185,10 @@ public sealed class OperationScheduler : IOperationScheduler
         CancellationToken cancellationToken = default)
     {
         var handles = ResolveTarget(target);
+        logger.Debug(
+            "operation",
+            "operation.cancel_requested",
+            $"Cancelling operation target '{target.Kind}:{target.Name}'.");
         return CancelHandlesAsync(handles, cancellationToken);
     }
 
@@ -184,6 +197,10 @@ public sealed class OperationScheduler : IOperationScheduler
         CancellationToken cancellationToken = default)
     {
         var handles = ResolveTarget(target);
+        logger.Debug(
+            "operation",
+            "operation.complete_requested",
+            $"Completing operation target '{target.Kind}:{target.Name}'.");
         foreach (var handle in handles)
         {
             handle.Complete();
@@ -283,16 +300,28 @@ public sealed class OperationScheduler : IOperationScheduler
         try
         {
             await handle.Completion;
+            logger.Debug(
+                "operation",
+                "operation.completed",
+                $"Operation '{handle.Id ?? "<anonymous>"}' completed with state '{handle.State}'.",
+                new RuntimeLogCorrelation(string.Empty, operationId: handle.DiagnosticId));
         }
         catch (OperationCanceledException)
         {
+            logger.Debug(
+                "operation",
+                "operation.cancelled",
+                $"Operation '{handle.Id ?? "<anonymous>"}' cancelled.",
+                new RuntimeLogCorrelation(string.Empty, operationId: handle.DiagnosticId));
         }
         catch (Exception exception)
         {
-            logger.Log(
-                RuntimeLogLevel.Error,
+            logger.Error(
+                "operation",
+                "operation.faulted",
                 $"Operation '{handle.Id ?? "<anonymous>"}' faulted.",
-                exception);
+                exception,
+                new RuntimeLogCorrelation(string.Empty, operationId: handle.DiagnosticId));
         }
     }
 

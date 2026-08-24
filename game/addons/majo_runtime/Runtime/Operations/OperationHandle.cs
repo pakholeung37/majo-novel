@@ -22,6 +22,9 @@ internal sealed class OperationHandle : IOperationHandle
     private OperationState state = OperationState.Created;
     private Exception? cancellationCallbackException;
     private bool started;
+    private readonly string diagnosticId = Guid.NewGuid().ToString("N");
+    private DateTimeOffset? startedAt;
+    private DateTimeOffset? finishedAt;
 
     public OperationHandle(
         OperationDefinition definition,
@@ -44,6 +47,8 @@ internal sealed class OperationHandle : IOperationHandle
 
     public string? GroupId => definition.GroupId;
 
+    public string DiagnosticId => definition.Id ?? diagnosticId;
+
     public OperationState State
     {
         get
@@ -57,6 +62,19 @@ internal sealed class OperationHandle : IOperationHandle
 
     public Task Completion => completion.Task;
 
+    public TimeSpan Elapsed
+    {
+        get
+        {
+            lock (gate)
+            {
+                return startedAt is null
+                    ? TimeSpan.Zero
+                    : (finishedAt ?? DateTimeOffset.UtcNow) - startedAt.Value;
+            }
+        }
+    }
+
     public void Start()
     {
         lock (gate)
@@ -67,6 +85,7 @@ internal sealed class OperationHandle : IOperationHandle
             }
 
             started = true;
+            startedAt = DateTimeOffset.UtcNow;
             if (state == OperationState.Created)
             {
                 state = OperationState.Running;
@@ -191,6 +210,7 @@ internal sealed class OperationHandle : IOperationHandle
         lock (gate)
         {
             state = OperationState.Completed;
+            finishedAt = DateTimeOffset.UtcNow;
         }
 
         onTerminated(this);
@@ -202,6 +222,7 @@ internal sealed class OperationHandle : IOperationHandle
         lock (gate)
         {
             state = OperationState.Cancelled;
+            finishedAt = DateTimeOffset.UtcNow;
         }
 
         onTerminated(this);
@@ -213,6 +234,7 @@ internal sealed class OperationHandle : IOperationHandle
         lock (gate)
         {
             state = OperationState.Faulted;
+            finishedAt = DateTimeOffset.UtcNow;
         }
 
         onTerminated(this);
