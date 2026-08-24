@@ -82,6 +82,8 @@ public partial class MajoRuntimeBootstrap : Node
 
     public Action<StateContributorRegistry>? ConfigureStateContributors { get; set; }
 
+    public Action<StateMigrationRegistry>? ConfigureStateMigrations { get; set; }
+
     public Func<Node, IAudioBackend>? AudioBackendFactory { get; set; }
 
     public StructuredRuntimeLogger? Logger { get; private set; }
@@ -378,8 +380,8 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(IDialoguePresentation),
                 typeof(IAudioManager),
                 typeof(IInputManager))
-            .AddSingleton<IAutoManager>(
-                resolver => new AutoManager(
+            .AddSingleton<IPlaybackModeManager>(
+                resolver => new PlaybackModeManager(
                     resolver.Get<IScriptPlayback>(),
                     resolver.Get<IDialoguePlayer>(),
                     resolver.Get<IAudioManager>(),
@@ -394,7 +396,10 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(IAudioManager),
                 typeof(IFrameClock),
                 typeof(IInputManager),
-                typeof(IHistoryManager));
+                typeof(IHistoryManager))
+            .AddSingleton<IAutoManager>(
+                resolver => new AutoManager(resolver.Get<IPlaybackModeManager>()),
+                typeof(IPlaybackModeManager));
 
         if (Configuration!.History!.ShowDefaultUi)
         {
@@ -407,6 +412,22 @@ public partial class MajoRuntimeBootstrap : Node
 
         if (Configuration!.State!.Enabled)
         {
+            var stateMigrations = new StateMigrationRegistry();
+            ConfigureStateMigrations?.Invoke(stateMigrations);
+            services.AddSingleton<IStateSerializer>(
+                _ => new CanonicalJsonStateSerializer(stateMigrations));
+            services.AddSingleton<IStateStorage>(
+                _ => new GodotUserStateStorage(Configuration.State!.StorageNamespace));
+            services.AddSingleton<IStateEligibility>(
+                resolver => new StateEligibility(
+                    resolver.Get<IScriptPlayback>(),
+                    resolver.Get<IOperationScheduler>(),
+                    resolver.Get<IInputManager>(),
+                    resolver.Get<IYarnCommandAdapter>()),
+                typeof(IScriptPlayback),
+                typeof(IOperationScheduler),
+                typeof(IInputManager),
+                typeof(IYarnCommandAdapter));
             services.AddSingleton<IStateManager>(
                 resolver => CreateStateManager(
                     resolver.Get<IDialogueVariables>(),
@@ -416,7 +437,9 @@ public partial class MajoRuntimeBootstrap : Node
                     resolver.Get<IScriptPlayback>(),
                     resolver.Get<IDialoguePlayer>(),
                     resolver.Get<IInputManager>(),
-                    resolver.Get<IOperationScheduler>()),
+                    resolver.Get<IOperationScheduler>(),
+                    resolver.Get<IStateEligibility>(),
+                    stateMigrations),
                 typeof(IDialogueVariables),
                 typeof(IActorManager),
                 typeof(IAudioManager),
@@ -424,7 +447,20 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(IScriptPlayback),
                 typeof(IDialoguePlayer),
                 typeof(IInputManager),
-                typeof(IOperationScheduler));
+                typeof(IOperationScheduler),
+                typeof(IStateEligibility));
+            services.AddSingleton<IGameSessionCoordinator>(
+                resolver => new GameSessionCoordinator(
+                    resolver.Get<IRuntimeSessionController>(),
+                    resolver.Get<IStateManager>(),
+                    resolver.Get<IHistoryManager>(),
+                    resolver.Get<IPlaybackModeManager>(),
+                    resolver.Get<IStateEligibility>()),
+                typeof(IRuntimeSessionController),
+                typeof(IStateManager),
+                typeof(IHistoryManager),
+                typeof(IPlaybackModeManager),
+                typeof(IStateEligibility));
         }
     }
 
@@ -436,7 +472,9 @@ public partial class MajoRuntimeBootstrap : Node
         IScriptPlayback scriptPlayback,
         IDialoguePlayer dialogue,
         IInputManager input,
-        IOperationScheduler operations)
+        IOperationScheduler operations,
+        IStateEligibility eligibility,
+        StateMigrationRegistry migrations)
     {
         var contributors = new StateContributorRegistry()
             .Register(new DialogueVariablesStateContributor(variables))
@@ -445,7 +483,14 @@ public partial class MajoRuntimeBootstrap : Node
             .Register(new SessionHistoryStateContributor(history));
         ConfigureStateContributors?.Invoke(contributors);
         contributors.Register(new ScriptStateContributor(scriptPlayback));
-        return new StateManager(contributors.Build(), dialogue, input, operations, Logger);
+        return new StateManager(
+            contributors.Build(),
+            dialogue,
+            input,
+            operations,
+            eligibility,
+            migrations,
+            Logger);
     }
 
     private IYarnCommandAdapter CreateYarnCommandAdapter(

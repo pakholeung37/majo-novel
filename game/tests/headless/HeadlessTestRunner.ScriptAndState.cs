@@ -6,10 +6,13 @@ using Godot;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Audio;
 using Majo.Runtime.Audio.Godot;
+using Majo.Runtime.Auto;
 using Majo.Runtime.Configuration;
+using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Presentation;
 using Majo.Runtime.Input;
+using Majo.Runtime.History;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Script;
 using Majo.Runtime.State;
@@ -74,6 +77,11 @@ public partial class HeadlessTestRunner
         var audio = services.Get<IAudioManager>();
         var input = services.Get<IInputManager>();
         var operations = services.Get<IOperationScheduler>();
+        var serializer = services.Get<IStateSerializer>();
+        var storage = services.Get<IStateStorage>();
+        var sessions = services.Get<IGameSessionCoordinator>();
+        var playback = services.Get<IPlaybackModeManager>();
+        var history = services.Get<IHistoryManager>();
 
         var descriptor = await scriptManager.ResolveAsync(
             new ScriptId("M95State", "Start"));
@@ -112,6 +120,22 @@ public partial class HeadlessTestRunner
                     BuiltInStateKeys.ScriptPlayback,
                 ]),
             "M9.6 StateManager did not capture all built-in Game contributors.");
+        var envelope = state.CreateEnvelope(
+            snapshot,
+            StateScope.Game,
+            MajoRuntimeMetadata.PackageVersion,
+            configuration.State!.GameBuildId,
+            configuration.State.StorageNamespace);
+        var canonicalBytes = serializer.Serialize(envelope);
+        Assert(canonicalBytes.SequenceEqual(serializer.Serialize(envelope)),
+            "M12 StateEnvelope serialization was not deterministic.");
+        await storage.WriteAsync("headless/m12-roundtrip", canonicalBytes);
+        var durableEnvelope = serializer.Deserialize(
+            await storage.ReadAsync("headless/m12-roundtrip"));
+        Assert(canonicalBytes.SequenceEqual(serializer.Serialize(durableEnvelope)) &&
+                durableEnvelope.Script?.LineId == "line:m95-state-current",
+            "M12 durable Envelope/Storage round-trip was not canonical.");
+        await storage.DeleteAsync("headless/m12-roundtrip");
 
         variables.SetString("name", "Changed");
         variables.SetBoolean("extra", true);
@@ -123,7 +147,13 @@ public partial class HeadlessTestRunner
         await audio.PlaySfxAsync("hit", "transient-sfx");
         await audio.PlayVoiceAsync("voice");
 
-        await state.RestoreGameAsync(snapshot);
+        var previousSessionId = bootstrap.Host.SessionId;
+        playback.SetMode(PlaybackMode.Auto);
+        await sessions.LoadGameAsync(durableEnvelope.Snapshot);
+        Assert(bootstrap.Host.SessionId != previousSessionId &&
+                playback.Mode == PlaybackMode.Manual &&
+                history.Entries.Count == 0,
+            "M12 Load Game did not apply its Session/History/Playback policy.");
         await WaitForConditionAsync(
             () => lineProbe.Lines.Count >= 2 && presentation.IsLineActive,
             2);

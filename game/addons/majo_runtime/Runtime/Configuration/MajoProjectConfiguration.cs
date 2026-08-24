@@ -112,6 +112,23 @@ public partial class MajoProjectConfiguration : Resource
         if (State is null)
         {
             issues.Add(new ConfigurationIssue(nameof(State), "Configuration is required."));
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(State.StorageNamespace) ||
+            State.StorageNamespace.Contains("..", StringComparison.Ordinal) ||
+            State.StorageNamespace.StartsWith("/", StringComparison.Ordinal))
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(State)}.{nameof(State.StorageNamespace)}",
+                "Storage namespace must be a safe relative logical path."));
+        }
+
+        if (string.IsNullOrWhiteSpace(State.GameBuildId))
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(State)}.{nameof(State.GameBuildId)}",
+                "Game build ID is required."));
         }
     }
 

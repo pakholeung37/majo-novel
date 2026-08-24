@@ -106,7 +106,7 @@ public sealed class StateManagerTests
         Assert.Equal(
             ["preflight:variables", "preflight:script"],
             events);
-        Assert.Equal(StateManagerStatus.Faulted, manager.Status);
+        Assert.Equal(StateManagerStatus.Idle, manager.Status);
     }
 
     [Fact]
@@ -146,7 +146,7 @@ public sealed class StateManagerTests
         await manager.InitializeAsync(CancellationToken.None);
         var missing = new StateSnapshot(StateSnapshot.CurrentFormatVersion, DateTimeOffset.UtcNow, []);
 
-        await Assert.ThrowsAsync<StateSnapshotException>(() =>
+        await Assert.ThrowsAsync<StateCompatibilityException>(() =>
             manager.RestoreGameAsync(missing));
         Assert.Empty(events);
 
@@ -164,7 +164,7 @@ public sealed class StateManagerTests
             ]);
         events.Clear();
 
-        await Assert.ThrowsAsync<StateSnapshotException>(() =>
+        await Assert.ThrowsAsync<StateCompatibilityException>(() =>
             manager.RestoreGameAsync(unknown));
         Assert.Empty(events);
     }
@@ -189,13 +189,129 @@ public sealed class StateManagerTests
         Assert.Equal(["reset:history"], events);
     }
 
+    [Fact]
+    public async Task OptionalContributorUsesDefaultWhenOldSnapshotHasNoRecord()
+    {
+        var events = new List<string>();
+        var optional = new RecordingContributor(
+            "optional",
+            [],
+            events,
+            capability: new StateContributorCapability(
+                true,
+                StateRollbackPolicy.Supported,
+                StateRestoreRecordPolicy.UseDefault));
+        var manager = CreateManager(
+            new StateContributorRegistry().Register(optional).Build(),
+            events);
+        await manager.InitializeAsync(CancellationToken.None);
+        var oldSnapshot = new StateSnapshot(
+            StateSnapshot.CurrentFormatVersion,
+            DateTimeOffset.UtcNow,
+            []);
+
+        await manager.RestoreGameAsync(oldSnapshot);
+
+        Assert.Equal(
+            ["input:acquire", "dialogue:stop", "reset:optional", "input:dispose"],
+            events);
+    }
+
+    [Fact]
+    public async Task ExplicitKeyMigrationAndRemovedContributorAreDeterministic()
+    {
+        var events = new List<string>();
+        var current = new RecordingContributor("current", [], events);
+        var migrations = new StateMigrationRegistry()
+            .RegisterContributor(new DelegateStateContributorMigration(
+                "rename-legacy-to-current",
+                "legacy",
+                1,
+                "current",
+                1,
+                payload => payload))
+            .RegisterRemovedContributor("removed");
+        var manager = CreateManager(
+            new StateContributorRegistry().Register(current).Build(),
+            events,
+            migrations);
+        await manager.InitializeAsync(CancellationToken.None);
+        var snapshot = new StateSnapshot(
+            StateSnapshot.CurrentFormatVersion,
+            DateTimeOffset.UtcNow,
+            [
+                new StateRecord(
+                    "legacy",
+                    StateScope.Game,
+                    1,
+                    JsonSerializer.SerializeToElement("legacy-value")),
+                new StateRecord(
+                    "removed",
+                    StateScope.Game,
+                    4,
+                    JsonSerializer.SerializeToElement("removed-value")),
+            ]);
+
+        await manager.RestoreGameAsync(snapshot);
+
+        Assert.Equal(
+            ["rename-legacy-to-current", "removed:removed@4"],
+            manager.LastMigrationChain);
+        Assert.Equal(
+            [
+                "preflight:current",
+                "input:acquire",
+                "dialogue:stop",
+                "reset:current",
+                "restore:current",
+                "input:dispose",
+            ],
+            events);
+    }
+
+    [Fact]
+    public async Task CaptureAndRestoreRecheckEligibilityAfterCallerPreflight()
+    {
+        var events = new List<string>();
+        var contributor = new RecordingContributor("game", [], events);
+        var eligibility = new RecordingEligibility();
+        var manager = CreateManager(
+            new StateContributorRegistry().Register(contributor).Build(),
+            events,
+            eligibility: eligibility);
+        await manager.InitializeAsync(CancellationToken.None);
+        var snapshot = await manager.CaptureGameAsync();
+        events.Clear();
+
+        Assert.True(eligibility.Check(StateOperationKind.Save).IsAllowed);
+        eligibility.Deny = true;
+        await Assert.ThrowsAsync<StateEligibilityException>(() =>
+            manager.CaptureGameAsync());
+        Assert.Empty(events);
+
+        eligibility.Deny = false;
+        var plan = await manager.RestoreTransaction.PreflightAsync(
+            snapshot,
+            StateScope.Game);
+        events.Clear();
+        eligibility.Deny = true;
+        await Assert.ThrowsAsync<StateEligibilityException>(() =>
+            manager.RestoreTransaction.ExecuteAsync(plan));
+        Assert.Empty(events);
+        Assert.Equal(StateManagerStatus.Idle, manager.Status);
+    }
+
     private static StateManager CreateManager(
         IReadOnlyList<IStateContributor> contributors,
-        IList<string> events) => new(
+        IList<string> events,
+        StateMigrationRegistry? migrations = null,
+        IStateEligibility? eligibility = null) => new(
         contributors,
         new StubDialoguePlayer(events),
         new StubInputManager(events),
-        new StubOperationScheduler());
+        new StubOperationScheduler(),
+        eligibility,
+        migrations: migrations);
 
     private sealed class RecordingContributor : IStateContributor
     {
@@ -205,19 +321,27 @@ public sealed class StateManagerTests
             string key,
             IReadOnlyCollection<string> dependencies,
             IList<string> events,
-            StateScope scope = StateScope.Game)
+            StateScope scope = StateScope.Game,
+            int schemaVersion = 1,
+            StateContributorCapability? capability = null)
         {
             Key = key;
             Dependencies = dependencies;
             this.events = events;
             Scope = scope;
+            SchemaVersion = schemaVersion;
+            Capability = capability ?? (scope == StateScope.Game
+                ? StateContributorCapability.DurableRollback
+                : StateContributorCapability.Transient);
         }
 
         public string Key { get; }
 
         public StateScope Scope { get; }
 
-        public int SchemaVersion => 1;
+        public int SchemaVersion { get; }
+
+        public StateContributorCapability Capability { get; }
 
         public IReadOnlyCollection<string> Dependencies { get; }
 
@@ -396,5 +520,26 @@ public sealed class StateManagerTests
             OperationTarget target,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
+    }
+
+    private sealed class RecordingEligibility : IStateEligibility
+    {
+        public bool Deny { get; set; }
+        public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public StateEligibilityResult Check(StateOperationKind operation) => new(
+            operation,
+            Deny
+                ? [new StateEligibilityReason(
+                    StateEligibilityReasonCode.ExternalBarrier,
+                    "State changed after the caller checked eligibility.")]
+                : []);
+        public IStateBarrierHandle AcquireBarrier(
+            object owner,
+            string reasonCode,
+            StateOperationMask operations = StateOperationMask.All,
+            string? diagnostic = null,
+            string? playerMessage = null) => throw new NotSupportedException();
     }
 }

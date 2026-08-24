@@ -38,6 +38,8 @@ public sealed class SessionHistoryStateContributor : IStateContributor
 
     public int SchemaVersion => 1;
 
+    public StateContributorCapability Capability => StateContributorCapability.Transient;
+
     public ValueTask<StateRecord> CaptureAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -83,6 +85,9 @@ public sealed class DialogueVariablesStateContributor : IStateContributor
     public StateScope Scope => StateScope.Game;
 
     public int SchemaVersion => 1;
+
+    public StateContributorCapability Capability =>
+        StateContributorCapability.DurableRollback;
 
     public ValueTask<StateRecord> CaptureAsync(CancellationToken cancellationToken)
     {
@@ -174,6 +179,9 @@ public sealed class ActorStateContributor : IStateContributor
     public StateScope Scope => StateScope.Game;
 
     public int SchemaVersion => 1;
+
+    public StateContributorCapability Capability =>
+        StateContributorCapability.DurableRollback;
 
     public ValueTask<StateRecord> CaptureAsync(CancellationToken cancellationToken)
     {
@@ -288,6 +296,9 @@ public sealed class AudioStateContributor : IStateContributor
 
     public int SchemaVersion => 1;
 
+    public StateContributorCapability Capability =>
+        StateContributorCapability.DurableRollback;
+
     public ValueTask<StateRecord> CaptureAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -382,6 +393,9 @@ public sealed class ScriptStateContributor : IStateContributor
     public StateScope Scope => StateScope.Game;
 
     public int SchemaVersion => 1;
+
+    public StateContributorCapability Capability =>
+        StateContributorCapability.DurableRollback;
 
     public IReadOnlyCollection<string> Dependencies => RequiredContributors;
 

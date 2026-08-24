@@ -125,6 +125,38 @@ Narrator: 等待型动画执行完毕。 #line:intro-line-2
 
 ## 6. 自定义扩展
 
+### Durable State（M12 基础层）
+
+M12 提供 Snapshot、规范 Envelope、迁移、原子 `user://` Storage、统一保存资格和底层恢复事务；
+Manual/Quick/Auto Slot 与默认 Save/Load UI 属于 M13，当前不会自动创建。
+
+```csharp
+using Majo.Runtime.Core;
+using Majo.Runtime.State;
+
+var state = runtime.Host!.Services.Get<IStateManager>();
+var eligibility = runtime.Host.Services.Get<IStateEligibility>();
+var serializer = runtime.Host.Services.Get<IStateSerializer>();
+var storage = runtime.Host.Services.Get<IStateStorage>();
+
+if (eligibility.Check(StateOperationKind.Save).IsAllowed)
+{
+    var snapshot = await state.CaptureGameAsync();
+    var envelope = state.CreateEnvelope(
+        snapshot,
+        StateScope.Game,
+        MajoRuntimeMetadata.PackageVersion,
+        configuration.State!.GameBuildId,
+        configuration.State.StorageNamespace);
+    await storage.WriteAsync("manual/example", serializer.Serialize(envelope));
+}
+```
+
+自定义 Contributor 必须显式声明 `StateContributorCapability`；默认能力是瞬态且不进入磁盘。
+使用 `runtime.ConfigureStateMigrations` 注册 schema/key migration 或明确移除的旧 key。宿主玩法在
+不可保存的外部阶段使用 `IStateEligibility.AcquireBarrier`，不要在保存请求中强制完成动画或停止
+Dialogue。默认 Serializer 与 Storage 都可通过 `ConfigureServices.ReplaceSingleton` 替换。
+
 ### 自定义 Yarn Command
 ```csharp
 [RuntimeCommand("setScore", Category = "Game")]

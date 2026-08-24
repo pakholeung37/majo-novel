@@ -9,4 +9,10 @@ public partial class StateConfiguration : Resource
 {
     [Export]
     public bool Enabled { get; set; } = true;
+
+    [Export]
+    public string StorageNamespace { get; set; } = "majo/state";
+
+    [Export]
+    public string GameBuildId { get; set; } = "development";
 }

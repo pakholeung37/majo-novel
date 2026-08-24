@@ -128,7 +128,12 @@ public sealed record StateDiagnostics(
     bool HasCurrentSnapshot,
     string? RecentCheckpointLineId,
     IReadOnlyList<string> RegisteredContributors,
-    string? LastFailureMessage = null);
+    string? LastFailureMessage = null,
+    IReadOnlyList<string>? LastMigrationChain = null,
+    IReadOnlyList<string>? LastEligibilityReasons = null,
+    string? StorageCommitStage = null,
+    string? StorageKey = null,
+    string? StorageFailureMessage = null);
 
 public sealed record PlaybackDiagnostics(
     string Mode,

@@ -14,6 +14,8 @@ public interface IStateContributor
 
     int SchemaVersion { get; }
 
+    StateContributorCapability Capability => StateContributorCapability.Transient;
+
     IReadOnlyCollection<string> Dependencies => System.Array.Empty<string>();
 
     ValueTask<StateRecord> CaptureAsync(CancellationToken cancellationToken);
@@ -23,4 +25,9 @@ public interface IStateContributor
     ValueTask RestoreAsync(StateRecord record, CancellationToken cancellationToken);
 
     ValueTask ResetAsync(CancellationToken cancellationToken);
+}
+
+public interface IStateContributorActivity
+{
+    bool IsActive { get; }
 }

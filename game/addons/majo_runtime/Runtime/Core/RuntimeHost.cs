@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace Majo.Runtime.Core;
 
-public sealed class RuntimeHost : IRuntimeLifetime, IAsyncDisposable
+public sealed class RuntimeHost : IRuntimeLifetime, IRuntimeSessionController, IAsyncDisposable
 {
     private readonly RuntimeServiceGraph graph;
     private readonly IRuntimeLogger logger;
@@ -44,6 +44,39 @@ public sealed class RuntimeHost : IRuntimeLifetime, IAsyncDisposable
     public CancellationToken RuntimeCancellationToken => runtimeCancellation.Token;
 
     public CancellationToken SessionCancellationToken => sessionCancellation.Token;
+
+    public string BeginSession()
+    {
+        if (State != RuntimeHostState.Initialized)
+        {
+            throw new RuntimeLifecycleException(
+                $"Cannot begin a game session while Runtime is '{State}'.");
+        }
+
+        var previous = sessionCancellation;
+        sessionCancellation = new CancellationTokenSource();
+        sessionId = Guid.NewGuid().ToString("N");
+        var exceptions = new List<Exception>();
+        TryCancel(previous, "previous game session", exceptions);
+        previous.Dispose();
+        if (logger is IRuntimeLogScopeProvider scopeProvider)
+        {
+            scopeProvider.SetRootCorrelation(RootCorrelation);
+        }
+        if (exceptions.Count > 0)
+        {
+            throw new RuntimeLifecycleException(
+                "The previous game session could not be cancelled cleanly.",
+                new AggregateException(exceptions));
+        }
+
+        logger.Info(
+            "core.lifecycle",
+            "core.lifecycle.session_started",
+            "A new game session started.",
+            RootCorrelation);
+        return sessionId;
+    }
 
     private RuntimeLogCorrelation RootCorrelation => new(runtimeId, sessionId);
 
@@ -326,6 +359,10 @@ public sealed class RuntimeHost : IRuntimeLifetime, IAsyncDisposable
         {
             this.graph = graph;
             instances.Add(typeof(IRuntimeLifetime), lifetime);
+            if (lifetime is IRuntimeSessionController sessionController)
+            {
+                instances.Add(typeof(IRuntimeSessionController), sessionController);
+            }
         }
 
         public TService Get<TService>() where TService : class =>

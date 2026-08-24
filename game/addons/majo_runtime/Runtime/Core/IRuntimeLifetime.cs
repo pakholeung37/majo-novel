@@ -8,3 +8,10 @@ public interface IRuntimeLifetime
 
     CancellationToken SessionCancellationToken { get; }
 }
+
+public interface IRuntimeSessionController
+{
+    string SessionId { get; }
+
+    string BeginSession();
+}

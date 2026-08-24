@@ -150,6 +150,28 @@ public sealed class AutoHistoryTests
     }
 
     [Fact(Timeout = 5_000)]
+    public async Task AutoFacadeProjectsTheSinglePlaybackOwner()
+    {
+        var harness = await AutoHarness.CreateAsync();
+
+        harness.Manager.SetMode(AutoMode.Auto);
+        Assert.Equal(PlaybackMode.Auto, harness.Playback.Mode);
+        Assert.Single(harness.Input.ActiveHandles, value =>
+            value.Name == "playback-auto-toggle");
+        Assert.DoesNotContain(harness.Input.ActiveHandles, value => value.Name == "auto-toggle");
+
+        using (harness.Playback.AcquirePause(PlaybackPauseReason.External))
+        {
+            Assert.True(harness.Manager.IsPaused);
+        }
+
+        Assert.False(harness.Manager.IsPaused);
+        harness.Playback.SetMode(PlaybackMode.Manual);
+        Assert.Equal(AutoMode.Manual, harness.Manager.Mode);
+        await harness.ShutdownAsync();
+    }
+
+    [Fact(Timeout = 5_000)]
     public async Task HistoryRecordsCompletedFinalLinesWithCapacityAndVoiceReplay()
     {
         var inputBackend = new FakeInputBackend();
@@ -237,6 +259,7 @@ public sealed class AutoHistoryTests
             FakeAudioManager audio,
             FakeFrameClock clock,
             FakeHistoryManager history,
+            PlaybackModeManager playback,
             AutoManager manager)
         {
             InputBackend = inputBackend;
@@ -246,6 +269,7 @@ public sealed class AutoHistoryTests
             Audio = audio;
             Clock = clock;
             History = history;
+            Playback = playback;
             Manager = manager;
         }
 
@@ -256,6 +280,7 @@ public sealed class AutoHistoryTests
         public FakeAudioManager Audio { get; }
         public FakeFrameClock Clock { get; }
         public FakeHistoryManager History { get; }
+        public PlaybackModeManager Playback { get; }
         public AutoManager Manager { get; }
 
         public static async Task<AutoHarness> CreateAsync()
@@ -269,7 +294,7 @@ public sealed class AutoHistoryTests
             var audio = new FakeAudioManager();
             var clock = new FakeFrameClock();
             var history = new FakeHistoryManager();
-            var manager = new AutoManager(
+            var playback = new PlaybackModeManager(
                 script,
                 dialogue,
                 audio,
@@ -278,6 +303,8 @@ public sealed class AutoHistoryTests
                 history,
                 TimeSpan.FromSeconds(1),
                 waitForVoice: true);
+            var manager = new AutoManager(playback);
+            await playback.InitializeAsync(CancellationToken.None);
             await manager.InitializeAsync(CancellationToken.None);
             return new AutoHarness(
                 inputBackend,
@@ -287,12 +314,14 @@ public sealed class AutoHistoryTests
                 audio,
                 clock,
                 history,
+                playback,
                 manager);
         }
 
         public async Task ShutdownAsync()
         {
             await Manager.ShutdownAsync(CancellationToken.None);
+            await Playback.ShutdownAsync(CancellationToken.None);
             await Input.ShutdownAsync(CancellationToken.None);
             await InputBackend.ShutdownAsync(CancellationToken.None);
         }

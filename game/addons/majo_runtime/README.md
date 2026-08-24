@@ -10,10 +10,10 @@ Compatibility baseline:
 
 Yarn Spinner is an external prerequisite and is not bundled with this plugin.
 
-Current implementation status: M10.5 Distributability Gate, M10 Auto and Session
-History, M9 audio runtime, M8 default VN presentation and Yarn markup bridge,
-M7 input ownership, M6 dialogue sessions, and the playable loop on the stable
-Runtime API.
+Current implementation status: M12 Durable State foundation, M11 Diagnostics,
+M10.5 Distributability Gate, M10 Auto and Session History, M9 audio runtime,
+M8 default VN presentation and Yarn markup bridge, M7 input ownership, M6
+dialogue sessions, and the playable loop on the stable Runtime API.
 
 ## Installation
 
@@ -417,6 +417,59 @@ History is registered as a `Session` State contributor. Runtime Reset closes and
 clears it, returns Auto to Manual, and rebinds both global input scopes after the
 Input service resets. History is deliberately excluded from Game snapshots and
 future disk saves.
+
+## Durable State foundation
+
+M12 separates state capture, canonical serialization, storage, and destructive
+restore. It intentionally does not provide save slots or Save/Load UI; those
+product behaviors compose these services in M13.
+
+```csharp
+var state = runtime.Host!.Services.Get<IStateManager>();
+var eligibility = runtime.Host.Services.Get<IStateEligibility>();
+var serializer = runtime.Host.Services.Get<IStateSerializer>();
+var storage = runtime.Host.Services.Get<IStateStorage>();
+
+if (eligibility.Check(StateOperationKind.Save).IsAllowed)
+{
+    var snapshot = await state.CaptureGameAsync(); // validates eligibility again
+    var envelope = state.CreateEnvelope(
+        snapshot,
+        StateScope.Game,
+        MajoRuntimeMetadata.PackageVersion,
+        configuration.State!.GameBuildId,
+        configuration.State.StorageNamespace);
+    await storage.WriteAsync("manual/example", serializer.Serialize(envelope));
+}
+```
+
+Game capture is allowed only at `AwaitingAdvance` with no active Command,
+Operation, modal input owner, state transaction, or host barrier. A host gameplay
+system can acquire an `IStateBarrierHandle` with a stable reason code and separate
+Save/Restore/Rollback mask. Checks are read-only and Capture/Restore always check
+again to close time-of-check/time-of-use races.
+
+Every `IStateContributor` declares a `StateContributorCapability`:
+`SupportsPersistence`, an independent `RollbackPolicy`, and whether a missing old
+record is `Required` or may `UseDefault`. Third-party contributors are transient
+by default. Register key/schema migrations and explicitly removed keys through
+`ConfigureStateMigrations`; unknown records and missing required records are never
+silently ignored.
+
+`CanonicalJsonStateSerializer` produces deterministic UTF-8 JSON with a SHA-256
+integrity checksum. `GodotUserStateStorage` writes beneath the validated
+`user://<StorageNamespace>` logical namespace using a flushed same-directory
+temporary file and atomic replacement. Cancellation is observed only before the
+commit point; after replacement the call reports success. Replace either default
+through `ConfigureServices.ReplaceSingleton<IStateSerializer>` or
+`ReplaceSingleton<IStateStorage>`.
+
+`IGameSessionCoordinator.LoadGameAsync` and `RollbackAsync` share
+`IStateRestoreTransaction` preflight and destructive execution. Load begins a new
+Session, clears History, and returns playback to Manual; Rollback preserves the
+Session and History. `IPlaybackModeManager` is the single Manual/Auto owner, while
+`IAutoManager` remains a compatibility facade with no second input scope,
+deadline, or pause state.
 
 ## Yarn commands
 

@@ -255,7 +255,23 @@ public sealed class RuntimeDiagnosticsService : IRuntimeDiagnostics
                 stateMgr.CurrentSnapshot is not null,
                 checkpointLineId,
                 contributorsList,
-                concreteStateManager?.LastFailureMessage);
+                concreteStateManager?.LastFailureMessage,
+                concreteStateManager?.LastMigrationChain,
+                services.TryGet<IStateEligibility>(out var stateEligibility) &&
+                    stateEligibility is StateEligibility concreteEligibility
+                    ? concreteEligibility.LastResult?.Reasons
+                        .Select(value => value.Code.ToString()).ToArray()
+                    : null,
+                services.TryGet<IStateStorage>(out var stateStorage) &&
+                    stateStorage is IStateStorageDiagnostics storageDiagnostics
+                    ? storageDiagnostics.LastCommitStage?.ToString()
+                    : null,
+                stateStorage is IStateStorageDiagnostics storageKeyDiagnostics
+                    ? storageKeyDiagnostics.LastKey
+                    : null,
+                stateStorage is IStateStorageDiagnostics storageFailureDiagnostics
+                    ? storageFailureDiagnostics.LastFailureMessage
+                    : null);
         }
 
         PlaybackDiagnostics? playbackDiag = null;
@@ -451,6 +467,18 @@ public sealed class RuntimeDiagnosticsService : IRuntimeDiagnostics
             builder.AppendLine($"- Format Version: {snapshot.StateDiagnostics.FormatVersion}");
             builder.AppendLine($"- Has Current Snapshot: `{snapshot.StateDiagnostics.HasCurrentSnapshot}`");
             builder.AppendLine($"- Contributors: {string.Join(", ", snapshot.StateDiagnostics.RegisteredContributors)}");
+            if (snapshot.StateDiagnostics.LastMigrationChain is { Count: > 0 } migrations)
+            {
+                builder.AppendLine($"- Migration Chain: {string.Join(" -> ", migrations)}");
+            }
+            if (snapshot.StateDiagnostics.LastEligibilityReasons is { Count: > 0 } reasons)
+            {
+                builder.AppendLine($"- Last Eligibility Rejection: {string.Join(", ", reasons)}");
+            }
+            if (snapshot.StateDiagnostics.StorageCommitStage is not null)
+            {
+                builder.AppendLine($"- Storage Commit: `{snapshot.StateDiagnostics.StorageCommitStage}` (`{snapshot.StateDiagnostics.StorageKey}`)");
+            }
             builder.AppendLine();
         }
 
