@@ -132,6 +132,7 @@ public static class RuntimeDemoComposition
         configuration.Presentation.LettersPerSecond = 36;
         configuration.Auto!.ExtraDelaySeconds = 1;
         configuration.Operations!.DefaultAnimationDurationSeconds = 0.2;
+        configuration.Diagnostics!.EnableOverlay = true;
         configuration.Actors!.LeftPosition = new Vector2(560, 610);
         configuration.Actors.CenterPosition = new Vector2(960, 610);
         configuration.Actors.RightPosition = new Vector2(1360, 610);

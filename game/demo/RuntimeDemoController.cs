@@ -84,7 +84,8 @@ public partial class RuntimeDemoController : Node
                     state,
                     services.Get<IScriptPlayback>(),
                     dialogue,
-                    scheduler);
+                    scheduler,
+                    runtime.DebugOverlay);
             }
 
             await dialogue.StartAsync();

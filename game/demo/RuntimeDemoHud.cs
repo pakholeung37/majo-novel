@@ -20,11 +20,13 @@ public partial class RuntimeDemoHud : CanvasLayer
     private IScriptPlayback? script;
     private IDialoguePlayer? dialogue;
     private IOperationScheduler? operations;
+    private Majo.Runtime.Diagnostics.Godot.DefaultDebugOverlay? debugOverlay;
     private Label status = null!;
     private Label playback = null!;
     private Label feedback = null!;
     private Button autoButton = null!;
     private Button historyButton = null!;
+    private Button debugButton = null!;
     private Button captureButton = null!;
     private Button restoreButton = null!;
 
@@ -43,7 +45,8 @@ public partial class RuntimeDemoHud : CanvasLayer
         IStateManager stateManager,
         IScriptPlayback scriptPlayback,
         IDialoguePlayer dialoguePlayer,
-        IOperationScheduler operationScheduler)
+        IOperationScheduler operationScheduler,
+        Majo.Runtime.Diagnostics.Godot.DefaultDebugOverlay? debugOverlay = null)
     {
         ArgumentNullException.ThrowIfNull(autoManager);
         ArgumentNullException.ThrowIfNull(historyManager);
@@ -58,6 +61,7 @@ public partial class RuntimeDemoHud : CanvasLayer
         script = scriptPlayback;
         dialogue = dialoguePlayer;
         operations = operationScheduler;
+        this.debugOverlay = debugOverlay;
         auto.ModeChanged += HandleModeChanged;
         auto.PauseChanged += HandlePauseChanged;
         history.OpenStateChanged += HandleHistoryChanged;
@@ -127,6 +131,13 @@ public partial class RuntimeDemoHud : CanvasLayer
         };
         historyButton.Pressed += () => history?.Toggle();
         actions.AddChild(historyButton);
+        debugButton = new Button
+        {
+            Text = "Debug (F3)",
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+        };
+        debugButton.Pressed += () => debugOverlay?.Toggle();
+        actions.AddChild(debugButton);
 
         var stateActions = new HBoxContainer();
         layout.AddChild(stateActions);
@@ -185,6 +196,7 @@ public partial class RuntimeDemoHud : CanvasLayer
         script = null;
         dialogue = null;
         operations = null;
+        debugOverlay = null;
     }
 
     private void HandleModeChanged(AutoModeChanged _) => Refresh();
