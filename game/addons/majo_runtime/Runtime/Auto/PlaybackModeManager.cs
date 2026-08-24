@@ -75,12 +75,32 @@ public sealed class PlaybackModeManager : IPlaybackModeManager
             }
         }
     }
-    public TimeSpan ExtraDelay { get; }
-    public bool WaitForVoice { get; }
+    public TimeSpan ExtraDelay
+    {
+        get { lock (sync) { return extraDelay; } }
+        set
+        {
+            if (value < TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(value));
+            lock (sync) { extraDelay = value; }
+            ReconcileDeadline();
+        }
+    }
+    public bool WaitForVoice
+    {
+        get { lock (sync) { return waitForVoice; } }
+        set
+        {
+            lock (sync) { waitForVoice = value; }
+            ReconcileDeadline();
+        }
+    }
     public bool HasPendingDeadline
     {
         get { lock (sync) { return deadline is not null; } }
     }
+
+    private TimeSpan extraDelay;
+    private bool waitForVoice;
 
     public Task InitializeAsync(CancellationToken cancellationToken)
     {
@@ -177,6 +197,20 @@ public sealed class PlaybackModeManager : IPlaybackModeManager
 
     public void ToggleAuto() => SetMode(
         Mode == PlaybackMode.Auto ? PlaybackMode.Manual : PlaybackMode.Auto);
+
+    public void ApplyAutoSettings(TimeSpan extraDelay, bool waitForVoice)
+    {
+        if (extraDelay < TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(extraDelay));
+        }
+        lock (sync)
+        {
+            this.extraDelay = extraDelay;
+            this.waitForVoice = waitForVoice;
+        }
+        ReconcileDeadline();
+    }
 
     public IPlaybackPauseHandle AcquirePause(PlaybackPauseReason reason)
     {

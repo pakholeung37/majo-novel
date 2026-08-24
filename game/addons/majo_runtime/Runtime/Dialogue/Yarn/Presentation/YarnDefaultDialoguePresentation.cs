@@ -14,7 +14,7 @@ using YarnSpinnerGodot;
 
 namespace Majo.Runtime.Dialogue.Yarn.Presentation;
 
-internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation
+internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, IDialoguePresentationSettings
 {
     private readonly IYarnDialogueBackend backend;
     private readonly IInputManager input;
@@ -50,6 +50,17 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation
     public bool IsLineDisplayComplete => markupBridge?.IsDisplayComplete == true;
 
     public bool IsPresentingOptions => inputPresenter?.IsPresentingOptions == true;
+
+    public int LettersPerSecond
+    {
+        get => configuration.LettersPerSecond;
+        set
+        {
+            if (value <= 0) throw new ArgumentOutOfRangeException(nameof(value));
+            configuration.LettersPerSecond = value;
+            if (linePresenter is not null) linePresenter.lettersPerSecond = value;
+        }
+    }
 
     public event Action? LineDisplayCompleted;
 

@@ -6,6 +6,7 @@ using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Save;
+using Majo.Runtime.Settings;
 using Majo.Runtime.State;
 
 namespace Majo.Runtime.Diagnostics;
@@ -27,7 +28,26 @@ public sealed record RuntimeDiagnosticsSnapshot(
     IReadOnlyDictionary<string, DiagnosticSection>? CustomSections = null,
     IReadOnlyList<RuntimeLogEvent>? RecentLogs = null,
     MissingResourceDiagnostics? MissingResources = null,
-    SaveSlotDiagnostics? SaveSlots = null);
+    SaveSlotDiagnostics? SaveSlots = null,
+    SettingsDiagnostics? Settings = null,
+    GlobalStateDiagnostics? GlobalState = null);
+
+public sealed record SettingsDiagnostics(
+    bool IsDirty,
+    string Language,
+    int LettersPerSecond,
+    double AutoExtraDelaySeconds,
+    ScopedStateRecoveryKind RecoveryKind,
+    string? LastPersistenceError,
+    string? QuarantineKey,
+    string? BackupKey);
+
+public sealed record GlobalStateDiagnostics(
+    bool IsDirty,
+    ScopedStateRecoveryKind RecoveryKind,
+    string? LastPersistenceError,
+    string? QuarantineKey,
+    string? BackupKey);
 
 public sealed record MissingResourceDiagnostics(
     int UniqueCount,

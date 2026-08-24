@@ -182,7 +182,7 @@ public partial class HeadlessTestRunner
             "M8 input-driven dialogue did not complete naturally.");
         Assert(!presentation.IsLineActive && !presentation.IsPresentingOptions,
             "M8 retained active Presentation state after dialogue completion.");
-        Assert(input.ActiveHandleCount == 2,
+        Assert(input.ActiveHandleCount == 3,
             "M8 retained line or modal option input ownership after completion.");
         Assert(handlerOrder.Take(2).SequenceEqual(new[]
             {
@@ -207,7 +207,7 @@ public partial class HeadlessTestRunner
         var stoppedLineCompletion = dialogue.Completion;
         await dialogue.StopAsync();
         Assert((await stoppedLineCompletion).Kind == DialogueCompletionKind.Stopped &&
-                !presentation.IsLineActive && input.ActiveHandleCount == 2,
+                !presentation.IsLineActive && input.ActiveHandleCount == 3,
             "M8 did not cancel and release an active native line Presenter.");
 
         await dialogue.StartAsync();
@@ -219,7 +219,7 @@ public partial class HeadlessTestRunner
         var stoppedOptionsCompletion = dialogue.Completion;
         await dialogue.StopAsync();
         Assert((await stoppedOptionsCompletion).Kind == DialogueCompletionKind.Stopped &&
-                !presentation.IsPresentingOptions && input.ActiveHandleCount == 2,
+                !presentation.IsPresentingOptions && input.ActiveHandleCount == 3,
             "M8 did not cancel and release modal option Presentation.");
 
         var presentationNode = presentationRoot;

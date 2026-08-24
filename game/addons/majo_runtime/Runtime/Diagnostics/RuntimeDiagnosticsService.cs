@@ -20,6 +20,7 @@ using Majo.Runtime.Input;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Resources;
 using Majo.Runtime.Save;
+using Majo.Runtime.Settings;
 using Majo.Runtime.State;
 
 namespace Majo.Runtime.Diagnostics;
@@ -342,6 +343,33 @@ public sealed class RuntimeDiagnosticsService : IRuntimeDiagnostics
                 missing);
         }
 
+        SettingsDiagnostics? settingsDiag = null;
+        if (services.TryGet<ISettingsManager>(out var settingsManager) &&
+            settingsManager is not null)
+        {
+            settingsDiag = new SettingsDiagnostics(
+                settingsManager.IsDirty,
+                settingsManager.Current.Language,
+                settingsManager.Current.LettersPerSecond,
+                settingsManager.Current.AutoExtraDelaySeconds,
+                settingsManager.RecoveryStatus.Kind,
+                settingsManager.LastPersistenceError,
+                settingsManager.RecoveryStatus.QuarantineKey,
+                settingsManager.RecoveryStatus.BackupKey);
+        }
+
+        GlobalStateDiagnostics? globalDiag = null;
+        if (services.TryGet<IGlobalStateManager>(out var globalManager) &&
+            globalManager is not null)
+        {
+            globalDiag = new GlobalStateDiagnostics(
+                globalManager.IsDirty,
+                globalManager.RecoveryStatus.Kind,
+                globalManager.LastPersistenceError,
+                globalManager.RecoveryStatus.QuarantineKey,
+                globalManager.RecoveryStatus.BackupKey);
+        }
+
         var customSections = new Dictionary<string, DiagnosticSection>(StringComparer.Ordinal);
         if (contributorRegistry is not null)
         {
@@ -374,7 +402,9 @@ public sealed class RuntimeDiagnosticsService : IRuntimeDiagnostics
             customSections,
             RecentEvents,
             missingResourceDiag,
-            saveSlotDiag);
+            saveSlotDiag,
+            settingsDiag,
+            globalDiag);
     }
 
     public async Task<string> ExportReportAsync(

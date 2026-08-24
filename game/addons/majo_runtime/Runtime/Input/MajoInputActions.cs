@@ -27,6 +27,8 @@ public static class MajoInputActions
 
     public static readonly InputActionId Debug = new("debug");
 
+    public static readonly InputActionId Settings = new("settings");
+
     public static IReadOnlyList<InputActionId> All { get; } = new List<InputActionId>
     {
         Advance,
@@ -39,6 +41,7 @@ public static class MajoInputActions
         OptionDown,
         Confirm,
         Debug,
+        Settings,
     }.AsReadOnly();
 
     public static string ToGodotAction(InputActionId action)

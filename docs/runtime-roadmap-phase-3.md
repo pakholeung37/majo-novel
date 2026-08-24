@@ -1,6 +1,6 @@
 # Majo Runtime 第三阶段 Roadmap
 
-状态：已确认；M10.5-M13 已完成
+状态：已确认；M10.5-M14 已完成
 承接范围：`runtime-plan.md` 的 M10 完成之后  
 目标阶段：M10.5、M11、M12-M16
 主题：可分发性、可观测性、持久化玩家循环
@@ -434,7 +434,7 @@ Slot 元数据：
 - 任意脚本版本自动兼容。
 - 存档加密、防作弊或 DRM。
 
-## 9. M14：Settings & Global State
+## 9. M14：Settings & Global State（已完成）
 
 ### 9.1 目标
 

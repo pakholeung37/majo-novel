@@ -11,7 +11,7 @@ using System.Threading.Tasks;
 
 namespace Majo.Runtime.State;
 
-public partial class FileStateStorage : IStateStorage, IStateStorageDiagnostics
+public partial class FileStateStorage : IStateStorage, IStateStorageDiagnostics, IRecoverableStateStorage
 {
     private const string Extension = ".state";
     private readonly string rootPath;
@@ -110,6 +110,10 @@ public partial class FileStateStorage : IStateStorage, IStateStorageDiagnostics
             }
 
             cancellationToken.ThrowIfCancellationRequested();
+            if (File.Exists(path))
+            {
+                File.Copy(path, path + ".bak", overwrite: true);
+            }
             File.Move(temporaryPath, path, overwrite: true);
             temporaryPath = null;
             SetDiagnostic(key, StateStorageCommitStage.Committed, null);
@@ -214,6 +218,50 @@ public partial class FileStateStorage : IStateStorage, IStateStorageDiagnostics
         {
             gate.Release();
         }
+    }
+
+    public async Task<StateStorageRecoveryResult> QuarantineAsync(
+        string key,
+        CancellationToken cancellationToken = default)
+    {
+        var path = Resolve(key);
+        await EnsureCleanupAsync(cancellationToken);
+        var gate = GetLock(key);
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!File.Exists(path))
+            {
+                throw new StateStorageNotFoundException(key);
+            }
+
+            var suffix = DateTimeOffset.UtcNow.ToString("yyyyMMddHHmmssfff");
+            var quarantinePath = path + $".corrupt-{suffix}";
+            File.Move(path, quarantinePath);
+            var quarantineKey = key + $".corrupt-{suffix}";
+            return new StateStorageRecoveryResult(key, quarantineKey, GetBackupKey(key));
+        }
+        catch (StateRuntimeException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            throw new StateStorageException(
+                $"Could not quarantine state object '{key}'.",
+                exception);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    public string? GetBackupKey(string key)
+    {
+        var path = Resolve(key);
+        return File.Exists(path + ".bak") ? key + ".bak" : null;
     }
 
     protected string StorageRootPath => rootPath;

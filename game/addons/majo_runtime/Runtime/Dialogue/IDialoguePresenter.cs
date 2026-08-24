@@ -60,6 +60,11 @@ public interface IDialoguePresenter
     }
 }
 
+public interface IDialoguePresentationSettings
+{
+    int LettersPerSecond { get; set; }
+}
+
 public sealed class DialoguePresenterRegistry
 {
     private readonly List<IDialoguePresenter> presenters = new();

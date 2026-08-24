@@ -34,6 +34,7 @@ public partial class HeadlessTestRunner
         await bootstrap.InitializationCompletion;
 
         var manager = bootstrap.Host!.Services.Get<IInputManager>();
+        var runtimeOwnedHandleCount = manager.ActiveHandleCount;
         var receiver = bootstrap.GetNode("MajoInput");
         Assert(InputMap.ActionGetEvents(existingMenuAction).Count == 1 &&
                 InputMap.ActionGetEvents(existingMenuAction)[0] is InputEventKey menuKey &&
@@ -212,12 +213,12 @@ public partial class HeadlessTestRunner
         owner.QueueFree();
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        Assert(scope.IsDisposed && manager.ActiveHandleCount == 2,
+        Assert(scope.IsDisposed && manager.ActiveHandleCount == runtimeOwnedHandleCount,
             "M7 did not release an input Scope when its Node owner exited the tree.");
 
         var resetHandle = manager.AcquireMuter(new object());
         await bootstrap.ResetRuntimeAsync();
-        Assert(resetHandle.IsDisposed && manager.ActiveHandleCount == 2,
+        Assert(resetHandle.IsDisposed && manager.ActiveHandleCount == runtimeOwnedHandleCount,
             "M7 Reset left an input Muter active or failed to rebind M10 controls.");
 
         await bootstrap.RequestShutdownAsync();

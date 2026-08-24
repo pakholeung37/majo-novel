@@ -75,6 +75,7 @@ public partial class HeadlessTestRunner : Node
 		await ValidateYarnVmStateBridgeAsync();
 		await ValidateScriptAndStateRuntimeAsync();
 		await ValidateAutoAndHistoryRuntimeAsync();
+		await ValidateSettingsRuntimeAsync();
 		await ValidateDefaultPresentationAsync();
 		await ValidateSuccessfulRuntimeLifecycleAsync();
 		await ValidateLifecycleTimeoutAsync();

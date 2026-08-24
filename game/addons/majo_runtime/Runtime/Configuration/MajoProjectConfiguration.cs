@@ -55,6 +55,12 @@ public partial class MajoProjectConfiguration : Resource
     [Export]
     public DiagnosticsConfiguration? Diagnostics { get; set; }
 
+    [Export]
+    public SettingsConfiguration? Settings { get; set; }
+
+    [Export]
+    public GlobalStateConfiguration? GlobalState { get; set; }
+
     public static MajoProjectConfiguration CreateDefault() => new()
     {
         Runtime = new RuntimeConfiguration(),
@@ -71,6 +77,8 @@ public partial class MajoProjectConfiguration : Resource
         Auto = new AutoConfiguration(),
         History = new HistoryConfiguration(),
         Diagnostics = new DiagnosticsConfiguration(),
+        Settings = new SettingsConfiguration(),
+        GlobalState = new GlobalStateConfiguration(),
     };
 
     public ConfigurationValidationResult Validate(Func<string, bool>? resourceExists = null)
@@ -92,8 +100,54 @@ public partial class MajoProjectConfiguration : Resource
         ValidateAuto(issues);
         ValidateHistory(issues);
         ValidateDiagnostics(issues);
+        ValidateSettings(issues);
+        ValidateGlobalState(issues);
 
         return new ConfigurationValidationResult(issues);
+    }
+
+    private void ValidateSettings(ICollection<ConfigurationIssue> issues)
+    {
+        if (Settings is null)
+        {
+            issues.Add(new ConfigurationIssue(nameof(Settings), "Configuration is required."));
+            return;
+        }
+        if (!double.IsFinite(Settings.FlushDebounceSeconds) ||
+            Settings.FlushDebounceSeconds < 0)
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Settings)}.{nameof(Settings.FlushDebounceSeconds)}",
+                "Flush debounce must be finite and non-negative."));
+        }
+        if (!double.IsFinite(Settings.SkipDelaySeconds) || Settings.SkipDelaySeconds < 0)
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Settings)}.{nameof(Settings.SkipDelaySeconds)}",
+                "Skip delay must be finite and non-negative."));
+        }
+        if (string.IsNullOrWhiteSpace(Settings.Language))
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Settings)}.{nameof(Settings.Language)}",
+                "Language identity is required."));
+        }
+    }
+
+    private void ValidateGlobalState(ICollection<ConfigurationIssue> issues)
+    {
+        if (GlobalState is null)
+        {
+            issues.Add(new ConfigurationIssue(nameof(GlobalState), "Configuration is required."));
+            return;
+        }
+        if (!double.IsFinite(GlobalState.FlushDebounceSeconds) ||
+            GlobalState.FlushDebounceSeconds < 0)
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(GlobalState)}.{nameof(GlobalState.FlushDebounceSeconds)}",
+                "Flush debounce must be finite and non-negative."));
+        }
     }
 
     private void ValidateScript(ICollection<ConfigurationIssue> issues)

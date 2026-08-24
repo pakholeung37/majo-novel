@@ -50,5 +50,8 @@ public interface IPlaybackModeManager : IRuntimeService
 
     void SetMode(PlaybackMode mode);
     void ToggleAuto();
+    void ApplyAutoSettings(TimeSpan extraDelay, bool waitForVoice)
+    {
+    }
     IPlaybackPauseHandle AcquirePause(PlaybackPauseReason reason);
 }

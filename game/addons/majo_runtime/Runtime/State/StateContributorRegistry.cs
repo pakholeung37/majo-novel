@@ -40,8 +40,11 @@ public sealed class StateContributorRegistry
         return this;
     }
 
-    public IReadOnlyList<IStateContributor> Build()
+    public IReadOnlyList<IStateContributor> Build() => Build(Array.Empty<string>());
+
+    public IReadOnlyList<IStateContributor> Build(IEnumerable<string> externalDependencies)
     {
+        ArgumentNullException.ThrowIfNull(externalDependencies);
         if (isBuilt)
         {
             throw new StateRuntimeException("State contributor registry is already built.");
@@ -50,9 +53,10 @@ public sealed class StateContributorRegistry
         var ordered = new List<IStateContributor>(contributors.Count);
         var states = new Dictionary<string, VisitState>(StringComparer.Ordinal);
         var path = new List<string>();
+        var external = externalDependencies.ToHashSet(StringComparer.Ordinal);
         foreach (var key in registrationOrder)
         {
-            Visit(key, states, path, ordered);
+            Visit(key, states, path, ordered, external);
         }
 
         isBuilt = true;
@@ -63,10 +67,15 @@ public sealed class StateContributorRegistry
         string key,
         IDictionary<string, VisitState> states,
         IList<string> path,
-        ICollection<IStateContributor> ordered)
+        ICollection<IStateContributor> ordered,
+        IReadOnlySet<string> externalDependencies)
     {
         if (!contributors.TryGetValue(key, out var contributor))
         {
+            if (externalDependencies.Contains(key))
+            {
+                return;
+            }
             var dependencyPath = string.Join(" -> ", path.Append(key));
             throw new StateRuntimeException(
                 $"State contributor dependency '{key}' is not registered. Path: {dependencyPath}.");
@@ -90,7 +99,7 @@ public sealed class StateContributorRegistry
         foreach (var dependency in contributor.Dependencies)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(dependency);
-            Visit(dependency, states, path, ordered);
+            Visit(dependency, states, path, ordered, externalDependencies);
         }
 
         path.RemoveAt(path.Count - 1);

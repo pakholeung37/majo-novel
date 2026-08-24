@@ -193,6 +193,31 @@ Auto Save 可配置 `AutoSaveNodeIds`、`AutoSaveLineIds`、`AutoSaveMetadata`�
 `AwaitingAdvance` 且统一 Eligibility 仍允许时才提交，同一安全边界最多一次。缩略图捕获或编码
 失败只记录降级原因，不影响主存档写入和加载。
 
+### Settings 与 Global State（M14）
+
+`Audio`、`Presentation`、`Auto` 和 `Settings` Resource 提供项目默认值；玩家值由
+`ISettingsManager` 持有，启动时从独立 Settings Scope 恢复。更新会立即投影到音量、打字速度
+和 Auto deadline，并在短 debounce 后原子落盘：
+
+```csharp
+using Majo.Runtime.Settings;
+
+var settings = runtime.Host!.Services.Get<ISettingsManager>();
+settings.Update(settings.Current with
+{
+    VoiceVolume = 0.8f,
+    LettersPerSecond = 48,
+    AutoWaitForVoice = false,
+});
+await settings.FlushAsync();
+```
+
+默认 `S` 打开 Settings UI；UI 获取 Modal Input Scope，并可通过
+`SettingsConfiguration.DefaultUiScene` 整体替换。损坏的 Settings 文件会被隔离后回退当前项目
+默认值，不阻止启动。`IGlobalStateManager` 为 Global Contributor 提供 `MarkDirty()`、debounce
+和 `FlushAsync()`；默认同样隔离损坏文件，也可设置 `GlobalState.StrictRecovery = true` 改为
+严格启动失败。Global 与 Settings 都不会进入 Game Slot，也不会被 New Game / Load Game 回退。
+
 ### 自定义 Yarn Command
 ```csharp
 [RuntimeCommand("setScore", Category = "Game")]

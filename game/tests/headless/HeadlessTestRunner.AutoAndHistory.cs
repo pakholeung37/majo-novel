@@ -69,8 +69,8 @@ public partial class HeadlessTestRunner
             "M10 did not create the configured default History overlay.");
         Assert(historyOverlay.GetParent() is CanvasLayer { Layer: 40 },
             "History overlay was not placed above the Demo HUD and dialogue layers.");
-        Assert(input.ActiveHandleCount == 2,
-            "M10 did not establish exactly the Auto and History global input scopes.");
+        Assert(input.ActiveHandleCount == 3,
+            "Runtime did not establish the Auto, History, and Settings global input scopes.");
 
         await dialogue.StartAsync();
         var completion = dialogue.Completion;
@@ -151,7 +151,7 @@ public partial class HeadlessTestRunner
                 !historyOverlay.Visible &&
                 auto.Mode == AutoMode.Manual &&
                 !auto.IsPaused &&
-                input.ActiveHandleCount == 2 &&
+                input.ActiveHandleCount == 3 &&
                 operations.ActiveOperations.Count == 0,
             "M10 Reset did not clear Session History, restore Manual mode, or rebind input.");
 

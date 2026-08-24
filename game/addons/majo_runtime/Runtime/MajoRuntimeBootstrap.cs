@@ -30,10 +30,12 @@ using Majo.Runtime.Resources.Godot;
 using Majo.Runtime.Script;
 using Majo.Runtime.Save;
 using Majo.Runtime.Save.Godot;
+using Majo.Runtime.Settings;
 using Majo.Runtime.State;
 using Majo.Runtime.UI.Diagnostics;
 using Majo.Runtime.UI.History;
 using Majo.Runtime.UI.SaveLoad;
+using Majo.Runtime.UI.Settings;
 using Majo.YarnBridge;
 using YarnSpinnerGodot;
 
@@ -417,10 +419,79 @@ public partial class MajoRuntimeBootstrap : Node
         {
             var stateMigrations = new StateMigrationRegistry();
             ConfigureStateMigrations?.Invoke(stateMigrations);
+            var customStateContributors = new StateContributorRegistry();
+            ConfigureStateContributors?.Invoke(customStateContributors);
+            var customContributors = customStateContributors.Build(
+            [
+                BuiltInStateKeys.DialogueVariables,
+                BuiltInStateKeys.Actors,
+                BuiltInStateKeys.AudioBgm,
+                BuiltInStateKeys.ScriptPlayback,
+                BuiltInStateKeys.SessionHistory,
+                "runtime.settings",
+            ]);
             services.AddSingleton<IStateSerializer>(
                 _ => new CanonicalJsonStateSerializer(stateMigrations));
             services.AddSingleton<IStateStorage>(
                 _ => new GodotUserStateStorage(Configuration.State!.StorageNamespace));
+
+            if (Configuration.Settings?.Enabled == true)
+            {
+                services.AddSingleton<ISettingsManager>(
+                    resolver => new SettingsManager(
+                        CreateSettingsDefaults(),
+                        customContributors.Where(value =>
+                            value.Scope == StateScope.Settings).ToArray(),
+                        [new RuntimeSettingsProjection(
+                            resolver.Get<IAudioManager>(),
+                            resolver.Get<IPlaybackModeManager>(),
+                            resolver.Get<IDialoguePresentation>())],
+                        resolver.Get<IStateSerializer>(),
+                        resolver.Get<IStateStorage>(),
+                        stateMigrations,
+                        MajoRuntimeMetadata.PackageVersion,
+                        Configuration.State.GameBuildId,
+                        Configuration.State.StorageNamespace,
+                        TimeSpan.FromSeconds(Configuration.Settings.FlushDebounceSeconds),
+                        Logger),
+                    typeof(IStateSerializer),
+                    typeof(IStateStorage),
+                    typeof(IAudioManager),
+                    typeof(IPlaybackModeManager),
+                    typeof(IDialoguePresentation));
+            }
+
+            if (Configuration.GlobalState?.Enabled == true)
+            {
+                services.AddSingleton<IGlobalStateManager>(
+                    resolver => new GlobalStateManager(
+                        customContributors.Where(value =>
+                            value.Scope == StateScope.Global).ToArray(),
+                        resolver.Get<IStateSerializer>(),
+                        resolver.Get<IStateStorage>(),
+                        stateMigrations,
+                        MajoRuntimeMetadata.PackageVersion,
+                        Configuration.State.GameBuildId,
+                        Configuration.State.StorageNamespace,
+                        TimeSpan.FromSeconds(Configuration.GlobalState.FlushDebounceSeconds),
+                        Configuration.GlobalState.StrictRecovery,
+                        Logger),
+                    typeof(IStateSerializer),
+                    typeof(IStateStorage));
+            }
+
+            if (Configuration.Settings?.Enabled == true &&
+                Configuration.Settings.ShowDefaultUi)
+            {
+                services.AddSingleton<ISettingsOverlay>(
+                    resolver => new DefaultSettingsOverlay(
+                        this,
+                        resolver.Get<ISettingsManager>(),
+                        resolver.Get<IInputManager>(),
+                        Configuration.Settings.DefaultUiScene),
+                    typeof(ISettingsManager),
+                    typeof(IInputManager));
+            }
             services.AddSingleton<IStateEligibility>(
                 resolver => new StateEligibility(
                     resolver.Get<IScriptPlayback>(),
@@ -442,7 +513,9 @@ public partial class MajoRuntimeBootstrap : Node
                     resolver.Get<IInputManager>(),
                     resolver.Get<IOperationScheduler>(),
                     resolver.Get<IStateEligibility>(),
-                    stateMigrations),
+                    stateMigrations,
+                    customContributors.Where(value =>
+                        value.Scope is StateScope.Game or StateScope.Session).ToArray()),
                 typeof(IDialogueVariables),
                 typeof(IActorManager),
                 typeof(IAudioManager),
@@ -545,14 +618,18 @@ public partial class MajoRuntimeBootstrap : Node
         IInputManager input,
         IOperationScheduler operations,
         IStateEligibility eligibility,
-        StateMigrationRegistry migrations)
+        StateMigrationRegistry migrations,
+        IReadOnlyList<IStateContributor> customContributors)
     {
         var contributors = new StateContributorRegistry()
             .Register(new DialogueVariablesStateContributor(variables))
             .Register(new ActorStateContributor(actors))
             .Register(new AudioStateContributor(audio))
             .Register(new SessionHistoryStateContributor(history));
-        ConfigureStateContributors?.Invoke(contributors);
+        foreach (var contributor in customContributors)
+        {
+            contributors.Register(contributor);
+        }
         contributors.Register(new ScriptStateContributor(scriptPlayback));
         return new StateManager(
             contributors.Build(),
@@ -562,6 +639,31 @@ public partial class MajoRuntimeBootstrap : Node
             eligibility,
             migrations,
             Logger);
+    }
+
+    private RuntimeSettings CreateSettingsDefaults()
+    {
+        var audio = Configuration!.Audio!;
+        var presentation = Configuration.Presentation!;
+        var auto = Configuration.Auto!;
+        var settings = Configuration.Settings!;
+        return new RuntimeSettings(
+            audio.MasterVolume,
+            audio.BgmVolume,
+            audio.SfxVolume,
+            audio.VoiceVolume,
+            audio.MasterMuted,
+            audio.BgmMuted,
+            audio.SfxMuted,
+            audio.VoiceMuted,
+            presentation.LettersPerSecond,
+            auto.ExtraDelaySeconds,
+            auto.WaitForVoice,
+            settings.SkipDefaultMode,
+            settings.SkipDelaySeconds,
+            settings.ShowSpeakerName,
+            settings.ShowTextBox,
+            settings.Language);
     }
 
     private IYarnCommandAdapter CreateYarnCommandAdapter(

@@ -45,3 +45,21 @@ public interface IStateStorageDiagnostics
     StateStorageCommitStage? LastCommitStage { get; }
     string? LastFailureMessage { get; }
 }
+
+public sealed record StateStorageRecoveryResult(
+    string OriginalKey,
+    string QuarantineKey,
+    string? BackupKey);
+
+/// <summary>
+/// Optional recovery capability used by soft-failure scopes. Implementations must move the
+/// corrupt object out of the live key instead of deleting or overwriting it.
+/// </summary>
+public interface IRecoverableStateStorage
+{
+    Task<StateStorageRecoveryResult> QuarantineAsync(
+        string key,
+        CancellationToken cancellationToken = default);
+
+    string? GetBackupKey(string key);
+}

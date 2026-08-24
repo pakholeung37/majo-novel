@@ -188,6 +188,10 @@ internal static class GodotInputDefaults
         [
             KeyEvent(Key.F3),
         ]),
+        new(MajoInputActions.Settings,
+        [
+            KeyEvent(Key.S),
+        ]),
     ];
 
     private static InputEventKey KeyEvent(Key key) => new()

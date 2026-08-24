@@ -10,7 +10,7 @@ Compatibility baseline:
 
 Yarn Spinner is an external prerequisite and is not bundled with this plugin.
 
-Current implementation status: M13 Save/Load product loop, M12 Durable State
+Current implementation status: M14 Settings and Global State, M13 Save/Load product loop, M12 Durable State
 foundation, M11 Diagnostics,
 M10.5 Distributability Gate, M10 Auto and Session History, M9 audio runtime,
 M8 default VN presentation and Yarn markup bridge, M7 input ownership, M6
@@ -157,6 +157,7 @@ majo_menu         M / gamepad Start
 majo_option_up    Up / wheel up / d-pad up
 majo_option_down  Down / wheel down / d-pad down
 majo_confirm      Enter / middle mouse / gamepad X
+majo_settings     S
 ```
 
 Set `InputConfiguration.InstallDefaultBindings` to `false` when the host owns the
@@ -505,6 +506,32 @@ the same boundary commits at most once. The default Save/Load overlay opens with
 `M`, owns one modal input scope, supports keyboard/gamepad focus, and can be
 replaced through the service registry. Thumbnail failure is recorded as metadata
 degradation and never invalidates the primary save.
+
+## Settings and Global State
+
+Project Resources remain defaults; player values live in `ISettingsManager` and
+are loaded from the dedicated Settings scope. Changes immediately update Audio,
+typewriter speed, and Auto timing, then coalesce into an atomic write. `S` opens
+the replaceable default Settings overlay under a modal input scope.
+
+```csharp
+var settings = runtime.Host!.Services.Get<ISettingsManager>();
+settings.Update(settings.Current with
+{
+    MasterVolume = 0.75f,
+    LettersPerSecond = 48,
+    AutoExtraDelaySeconds = 1.5,
+});
+await settings.FlushAsync();
+```
+
+Corrupt Settings files are moved to a diagnosable quarantine key and current
+project defaults are used without blocking startup. `IGlobalStateManager` uses
+the same Contributor, checksum, migration, dependency, debounce, and atomic
+storage core. Its default corruption policy also quarantines and starts empty;
+set `GlobalStateConfiguration.StrictRecovery` to fail initialization instead.
+Both managers retain dirty state after a failed write and flush during normal
+Runtime shutdown. Neither scope is captured by Game slots or reset by New Game.
 
 ## Yarn commands
 
