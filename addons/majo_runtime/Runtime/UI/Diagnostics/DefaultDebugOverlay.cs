@@ -65,8 +65,8 @@ public partial class DefaultDebugOverlay : CanvasLayer, IDisposable
                 this,
                 new InputScopeOptions(
                     [toggleAction ?? MajoInputActions.Debug],
-                    isModal: true,
-                    name: "debug-overlay-modal"));
+                    isModal: false,
+                    name: "debug-overlay-scope"));
             modalHandle.Activated += HandleToggleActivated;
         }
         Refresh();
@@ -189,22 +189,16 @@ public partial class DefaultDebugOverlay : CanvasLayer, IDisposable
             Name = "MajoDebugOverlayRoot",
             AnchorRight = 1.0f,
             AnchorBottom = 1.0f,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
             Visible = false,
         };
         AddChild(rootControl);
-
-        var backdrop = new ColorRect
-        {
-            AnchorRight = 1.0f,
-            AnchorBottom = 1.0f,
-            Color = new Color(0.05f, 0.05f, 0.08f, 0.92f),
-        };
-        rootControl.AddChild(backdrop);
 
         var margin = new MarginContainer
         {
             AnchorRight = 1.0f,
             AnchorBottom = 1.0f,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
         };
         margin.AddThemeConstantOverride("margin_left", 20);
         margin.AddThemeConstantOverride("margin_top", 20);
@@ -212,7 +206,10 @@ public partial class DefaultDebugOverlay : CanvasLayer, IDisposable
         margin.AddThemeConstantOverride("margin_bottom", 20);
         rootControl.AddChild(margin);
 
-        var vbox = new VBoxContainer();
+        var vbox = new VBoxContainer
+        {
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
         margin.AddChild(vbox);
 
         var headerBox = new HBoxContainer();
@@ -275,6 +272,7 @@ public partial class DefaultDebugOverlay : CanvasLayer, IDisposable
             SizeFlagsVertical = Control.SizeFlags.ExpandFill,
             ScrollFollowing = true,
             BbcodeEnabled = false,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
         };
         vbox.AddChild(logTextLabel);
     }
