@@ -3,12 +3,12 @@
 importer="yarnproject"
 type="Resource"
 uid="uid://bkqbo6204lij3"
-path="res://.godot/imported/main.yarnproject-8289684173688db77c62089fcd575c1b.tres"
+path="res://.godot/imported/main.yarnproject-d8bc126458c909a27933a0892fc7b729.tres"
 
 [deps]
 
-source_file="res://assets/scripts/main.yarnproject"
-dest_files=["res://.godot/imported/main.yarnproject-8289684173688db77c62089fcd575c1b.tres"]
+source_file="res://demos/demo-01/assets/scripts/main.yarnproject"
+dest_files=["res://.godot/imported/main.yarnproject-d8bc126458c909a27933a0892fc7b729.tres"]
 
 [params]
 

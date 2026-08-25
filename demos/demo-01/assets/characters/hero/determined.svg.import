@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://b0h18ntqw70cy"
-path="res://.godot/imported/determined.svg-f278d5ecfcf08d9950062df6834e240e.ctex"
+path="res://.godot/imported/determined.svg-0e045ab08036565d662284c07a754d92.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/characters/hero/determined.svg"
-dest_files=["res://.godot/imported/determined.svg-f278d5ecfcf08d9950062df6834e240e.ctex"]
+source_file="res://demos/demo-01/assets/characters/hero/determined.svg"
+dest_files=["res://.godot/imported/determined.svg-0e045ab08036565d662284c07a754d92.ctex"]
 
 [params]
 

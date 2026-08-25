@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://vegm4y6ncvhj"
-path="res://.godot/imported/spotlight.svg-81f98e7089f37767e226d86d33181712.ctex"
+uid="uid://d2ttfbrvuafgr"
+path="res://.godot/imported/calm.svg-0e664f19ec11aae86eaf5005e9fa3a55.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/backgrounds/backdrop/spotlight.svg"
-dest_files=["res://.godot/imported/spotlight.svg-81f98e7089f37767e226d86d33181712.ctex"]
+source_file="res://demos/demo-01/assets/characters/hero/calm.svg"
+dest_files=["res://.godot/imported/calm.svg-0e664f19ec11aae86eaf5005e9fa3a55.ctex"]
 
 [params]
 

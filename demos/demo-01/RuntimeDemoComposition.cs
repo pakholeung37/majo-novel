@@ -219,6 +219,7 @@ public static class RuntimeDemoComposition
     public static MajoProjectConfiguration CreateConfiguration()
     {
         var configuration = MajoProjectConfiguration.CreateDefault();
+        configuration.Resources!.RootPath = "res://demos/demo-01/assets";
         configuration.Presentation!.Enabled = true;
         configuration.Presentation.LettersPerSecond = 36;
         configuration.Auto!.ExtraDelaySeconds = 1;
