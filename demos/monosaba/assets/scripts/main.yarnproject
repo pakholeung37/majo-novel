@@ -1,0 +1,8 @@
+{
+    "projectFileVersion": 3,
+    "sourceFiles": [
+        "main.yarn"
+    ],
+    "excludeFiles": [],
+    "baseLanguage": "en"
+}
