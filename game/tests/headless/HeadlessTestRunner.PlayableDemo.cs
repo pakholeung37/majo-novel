@@ -5,10 +5,17 @@ using System.Threading.Tasks;
 using Godot;
 using Majo.Demo;
 using Majo.Runtime.Actors;
+using Majo.Runtime.Diagnostics;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Yarn;
 using Majo.Runtime.Operations;
+using Majo.Runtime.Played;
 using Majo.Runtime.Resources;
+using Majo.Runtime.Save;
+using Majo.Runtime.Settings;
+using Majo.Runtime.State;
+using Majo.Runtime.UI.SaveLoad;
+using Majo.Runtime.UI.Settings;
 
 namespace Majo.Runtime.HeadlessTests;
 
@@ -131,14 +138,19 @@ public partial class HeadlessTestRunner
                 "line:demo-input-guide",
                 "line:demo-markup",
                 "line:demo-auto-history-guide",
+                "line:demo-diagnostics-guide",
                 "line:demo-state-checkpoint",
                 "line:demo-state-mutated",
+                "line:demo-save-guide",
+                "line:demo-settings-global-guide",
+                "line:demo-played-skip-guide",
                 "line:demo-option-guide",
                 "line:demo-branch-evidence",
                 "line:demo-resource-summary",
                 "line:demo-finished",
             }),
-            "Runtime Demo automatic option selection or long-form flow was incorrect.");
+            "Runtime Demo automatic option selection or long-form flow was incorrect: " +
+            string.Join(", ", presenter.Lines.Select(line => line.Id)));
         Assert(presenter.Lines[0].Speaker == "Narrator" &&
                 !presenter.Lines[0].Text.Text.StartsWith("Narrator:", StringComparison.Ordinal),
             "M6 line projection did not separate the speaker from dialogue text.");
@@ -161,6 +173,38 @@ public partial class HeadlessTestRunner
             "Demo Presenter probe did not observe an option selection.");
         Assert(scheduler.ActiveOperations.Count == 0,
             "Runtime Demo ended with active operations.");
+
+        var diagnostics = bootstrap.Host.Services.Get<IRuntimeDiagnostics>();
+        var diagnosticSnapshot = diagnostics.CaptureSnapshot();
+        var played = bootstrap.Host.Services.Get<IPlayedRegister>();
+        var slots = bootstrap.Host.Services.Get<ISaveSlotManager>();
+        var settings = bootstrap.Host.Services.Get<ISettingsManager>();
+        var global = bootstrap.Host.Services.Get<IGlobalStateManager>();
+        Assert(
+            diagnosticSnapshot.Dialogue?.LineId == "line:demo-finished" &&
+            diagnosticSnapshot.RecentLogs?.Count > 0,
+            "M11 Demo did not expose its current line and structured event buffer.");
+        Assert(
+            configuration.State!.StorageNamespace == "majo/runtime-demo" &&
+            bootstrap.Host.Services.Get<IStateEligibility>() is not null,
+            "M12 Demo did not use its isolated durable state and eligibility composition.");
+        Assert(
+            slots.Capacities[SaveSlotKind.Manual] == 3 &&
+            slots.Capacities[SaveSlotKind.Quick] == 2 &&
+            slots.Capacities[SaveSlotKind.Auto] == 2 &&
+            bootstrap.Host.Services.Get<ISaveProductManager>() is not null &&
+            bootstrap.Host.Services.Get<ISaveLoadOverlay>() is not null,
+            "M13 Demo did not compose Manual/Quick/Auto slots and the default Save UI.");
+        Assert(
+            settings.Current.SkipDelaySeconds == 0.08 &&
+            global.RecoveryStatus.Kind != ScopedStateRecoveryKind.StrictFailure &&
+            bootstrap.Host.Services.Get<ISettingsOverlay>() is not null,
+            "M14 Demo did not compose projected Settings, Global State, and default Settings UI.");
+        Assert(
+            played.LocalePolicy == PlayedLocalePolicy.Shared &&
+            configuration.GlobalState!.Enabled &&
+            bootstrap.Host.Services.Get<Majo.Runtime.Auto.IPlaybackModeManager>() is not null,
+            "M15 Demo did not compose Global Played state and unified playback modes.");
 
         var missingProject = await AssertThrowsAsync<DialogueProjectException>(
             () => dialogue.StartAsync(new DialogueStartRequest("missing", "Start")));

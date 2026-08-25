@@ -268,14 +268,14 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
                 await Runner.Stop();
             }
 
-            if (waitForBoundary)
-            {
-                // Yarn command dispatch performs its final Continue on a later
-                // frame. Keep the adapter in stop-suppression mode until those
-                // continuations have retired, before a new session can begin.
-                await YarnTask.NextFrame();
-                await YarnTask.NextFrame();
-            }
+            // DialogueRunner.Stop waits for dialogue-complete presenters, but
+            // the RunLocalisedLine continuation that observed cancellation can
+            // still retire on a later frame. Keep the adapter in stop-suppression
+            // mode until that old line can no longer touch the next session's
+            // cancellation source. Command dispatch needs the same boundary for
+            // its final Continue.
+            await YarnTask.NextFrame();
+            await YarnTask.NextFrame();
         }
         else if (commandAdapter is not null)
         {

@@ -6,8 +6,10 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
+using Majo.Runtime.Auto;
 using Majo.Runtime.Core;
 using Majo.Runtime.Input;
+using Majo.Runtime.Operations;
 using Majo.Runtime.Save;
 
 namespace Majo.Runtime.UI.SaveLoad;
@@ -25,6 +27,8 @@ public sealed class DefaultSaveLoadOverlay : ISaveLoadOverlay
     private readonly Node owner;
     private readonly ISaveSlotManager slots;
     private readonly IInputManager input;
+    private readonly IFrameClock? frameClock;
+    private readonly IPlaybackModeManager? playback;
     private readonly PackedScene? scene;
     private readonly CancellationTokenSource lifetime = new();
     private CanvasLayer? layer;
@@ -40,12 +44,16 @@ public sealed class DefaultSaveLoadOverlay : ISaveLoadOverlay
         Node owner,
         ISaveSlotManager slots,
         IInputManager input,
-        PackedScene? scene = null)
+        PackedScene? scene = null,
+        IFrameClock? frameClock = null,
+        IPlaybackModeManager? playback = null)
     {
         this.owner = owner ?? throw new ArgumentNullException(nameof(owner));
         this.slots = slots ?? throw new ArgumentNullException(nameof(slots));
         this.input = input ?? throw new ArgumentNullException(nameof(input));
         this.scene = scene;
+        this.frameClock = frameClock;
+        this.playback = playback;
     }
 
     public bool IsOpen { get; private set; }
@@ -184,7 +192,7 @@ public sealed class DefaultSaveLoadOverlay : ISaveLoadOverlay
             throw new SaveSlotException(
                 "Save/load scene is missing Margin/Layout/Header/CloseButton.");
         quick.Pressed += () => _ = QuickSaveFromUiAsync();
-        close.Pressed += Close;
+        close.Pressed += () => _ = CloseFromUiAsync();
         return panel;
     }
 
@@ -217,7 +225,7 @@ public sealed class DefaultSaveLoadOverlay : ISaveLoadOverlay
         quick.Pressed += () => _ = QuickSaveFromUiAsync();
         header.AddChild(quick);
         var close = new Button { Text = "Close" };
-        close.Pressed += Close;
+        close.Pressed += () => _ = CloseFromUiAsync();
         header.AddChild(close);
         statusLabel = new Label { Text = "Ready" };
         layout.AddChild(statusLabel);
@@ -367,6 +375,8 @@ public sealed class DefaultSaveLoadOverlay : ISaveLoadOverlay
 
     private async Task SaveFromUiAsync(SaveSlotId id)
     {
+        using var advanceGuard = BeginAdvanceGuard();
+        using var playbackPause = playback?.AcquirePause(PlaybackPauseReason.External);
         Close();
         try
         {
@@ -376,10 +386,16 @@ public sealed class DefaultSaveLoadOverlay : ISaveLoadOverlay
         {
             SetStatus($"Save failed: {exception.Message}");
         }
+        finally
+        {
+            await DrainInitiatingInputAsync();
+        }
     }
 
     private async Task QuickSaveFromUiAsync()
     {
+        using var advanceGuard = BeginAdvanceGuard();
+        using var playbackPause = playback?.AcquirePause(PlaybackPauseReason.External);
         Close();
         try
         {
@@ -389,10 +405,17 @@ public sealed class DefaultSaveLoadOverlay : ISaveLoadOverlay
         {
             SetStatus($"Quick save failed: {exception.Message}");
         }
+        finally
+        {
+            await DrainInitiatingInputAsync();
+        }
     }
 
     private async Task LoadFromUiAsync(SaveSlotId id)
     {
+        using var advanceGuard = BeginAdvanceGuard();
+        playback?.SetMode(PlaybackMode.Manual);
+        using var playbackPause = playback?.AcquirePause(PlaybackPauseReason.StateRestore);
         Close();
         try
         {
@@ -401,6 +424,43 @@ public sealed class DefaultSaveLoadOverlay : ISaveLoadOverlay
         catch (Exception exception)
         {
             SetStatus($"Load failed: {exception.Message}");
+        }
+        finally
+        {
+            await DrainInitiatingInputAsync();
+        }
+    }
+
+    private async Task CloseFromUiAsync()
+    {
+        using var advanceGuard = BeginAdvanceGuard();
+        Close();
+        await DrainInitiatingInputAsync();
+    }
+
+    private IInputHandle BeginAdvanceGuard() => input.AcquireMuter(
+        this,
+        new InputMuteOptions(
+            [MajoInputActions.Advance],
+            "save-load-ui-advance-guard"));
+
+    private async Task DrainInitiatingInputAsync()
+    {
+        try
+        {
+            if (frameClock is not null)
+            {
+                await frameClock.NextFrameAsync(lifetime.Token);
+                await frameClock.NextFrameAsync(lifetime.Token);
+            }
+            else if (owner.IsInsideTree())
+            {
+                await owner.ToSignal(owner.GetTree(), SceneTree.SignalName.ProcessFrame);
+                await owner.ToSignal(owner.GetTree(), SceneTree.SignalName.ProcessFrame);
+            }
+        }
+        catch (OperationCanceledException)
+        {
         }
     }
 

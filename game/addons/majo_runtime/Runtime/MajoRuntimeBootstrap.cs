@@ -621,9 +621,13 @@ public partial class MajoRuntimeBootstrap : Node
                             resolver.Get<IInputManager>(),
                             Configuration.Save.DefaultUiScene ??
                                 GD.Load<PackedScene>(
-                                    "res://addons/majo_runtime/Runtime/UI/SaveLoad/DefaultSaveLoadOverlay.tscn")),
+                                    "res://addons/majo_runtime/Runtime/UI/SaveLoad/DefaultSaveLoadOverlay.tscn"),
+                            resolver.Get<IFrameClock>(),
+                            resolver.Get<IPlaybackModeManager>()),
                         typeof(ISaveSlotManager),
-                        typeof(IInputManager));
+                        typeof(IInputManager),
+                        typeof(IFrameClock),
+                        typeof(IPlaybackModeManager));
                 }
             }
         }

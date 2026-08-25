@@ -178,6 +178,31 @@ public sealed class AutoHistoryTests
         await harness.ShutdownAsync();
     }
 
+    [Fact(Timeout = 5_000)]
+    public async Task SkipAllHurriesCurrentAndEverySubsequentLine()
+    {
+        var harness = await AutoHarness.CreateAsync();
+
+        harness.Audio.StartVoice("first-voice");
+        harness.Dialogue.EmitLine(Line(
+            "line:first",
+            "First",
+            "majo:operation-group=group:first"));
+        harness.Playback.SetMode(PlaybackMode.SkipAll);
+        Assert.Equal(1, harness.Dialogue.HurryUpRequests);
+        Assert.Null(harness.Audio.CurrentVoice);
+        Assert.Equal("group:first", harness.Operations.CompletedGroup);
+
+        harness.Dialogue.EmitLine(Line(
+            "line:second",
+            "Second",
+            "majo:operation-group=group:second"));
+        Assert.Equal(2, harness.Dialogue.HurryUpRequests);
+        Assert.Equal("group:second", harness.Operations.CompletedGroup);
+
+        await harness.ShutdownAsync();
+    }
+
     [Fact]
     public async Task PlayedRegisterRoundTripsLocaleAndFingerprintPolicy()
     {
@@ -586,6 +611,7 @@ public sealed class AutoHistoryTests
         public Task<DialogueCompletion> Completion => Task.FromResult(
             new DialogueCompletion(DialogueCompletionKind.Completed, "test", "Start"));
         public int NextLineRequests { get; private set; }
+        public int HurryUpRequests { get; private set; }
         public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
@@ -593,7 +619,7 @@ public sealed class AutoHistoryTests
             DialogueStartRequest? request = null,
             CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task StopAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public void RequestHurryUp() { }
+        public void RequestHurryUp() => HurryUpRequests++;
         public void RequestNextLine()
         {
             NextLineRequests++;

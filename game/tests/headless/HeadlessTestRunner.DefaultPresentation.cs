@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
+using Majo.Runtime.Auto;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Presentation;
@@ -52,6 +53,7 @@ public partial class HeadlessTestRunner
 
         var dialogue = bootstrap.Host!.Services.Get<IDialoguePlayer>();
         var presentation = bootstrap.Host.Services.Get<IDialoguePresentation>();
+        var playback = bootstrap.Host.Services.Get<IPlaybackModeManager>();
         var input = bootstrap.Host.Services.Get<IInputManager>();
         var backend = bootstrap.Host.Services.Get<IYarnDialogueBackend>();
         var presentationRoot = bootstrap.FindChild(
@@ -221,6 +223,19 @@ public partial class HeadlessTestRunner
         Assert((await stoppedOptionsCompletion).Kind == DialogueCompletionKind.Stopped &&
                 !presentation.IsPresentingOptions && input.ActiveHandleCount == 3,
             "M8 did not cancel and release modal option Presentation.");
+
+        await dialogue.StartAsync();
+        await WaitForConditionAsync(
+            () => presentation.IsLineActive && !presentation.IsLineDisplayComplete,
+            2);
+        playback.SetMode(PlaybackMode.SkipAll);
+        await WaitForConditionAsync(
+            () => presentation.IsPresentingOptions,
+            2);
+        Assert(playback.Mode == PlaybackMode.Manual,
+            "M15 Skip did not instantly finish the one-letter-per-second typewriter " +
+            "or return to Manual at an option boundary.");
+        await dialogue.StopAsync();
 
         var presentationNode = presentationRoot;
         await bootstrap.RequestShutdownAsync();

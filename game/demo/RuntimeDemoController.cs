@@ -7,11 +7,18 @@ using Godot;
 using Majo.Runtime;
 using Majo.Runtime.Auto;
 using Majo.Runtime.Core;
+using Majo.Runtime.Diagnostics;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.History;
+using Majo.Runtime.Input;
 using Majo.Runtime.Operations;
+using Majo.Runtime.Played;
+using Majo.Runtime.Save;
 using Majo.Runtime.Script;
+using Majo.Runtime.Settings;
 using Majo.Runtime.State;
+using Majo.Runtime.UI.SaveLoad;
+using Majo.Runtime.UI.Settings;
 
 namespace Majo.Demo;
 
@@ -79,12 +86,25 @@ public partial class RuntimeDemoController : Node
                 hud = new RuntimeDemoHud { Name = "RuntimeDemoHud" };
                 AddChild(hud);
                 hud.Bind(
-                    services.Get<IAutoManager>(),
+                    services.Get<IPlaybackModeManager>(),
                     services.Get<IHistoryManager>(),
                     state,
                     services.Get<IScriptPlayback>(),
                     dialogue,
                     scheduler,
+                    services.Get<IInputManager>(),
+                    services.Get<IFrameClock>(),
+                    services.Get<IRuntimeDiagnostics>(),
+                    services.Get<IStateEligibility>(),
+                    services.Get<IGameSessionCoordinator>(),
+                    services.Get<ISaveSlotManager>(),
+                    services.Get<ISaveProductManager>(),
+                    services.Get<ISettingsManager>(),
+                    services.Get<IGlobalStateManager>(),
+                    services.Get<IPlayedRegister>(),
+                    services.Get<ISaveLoadOverlay>(),
+                    services.Get<ISettingsOverlay>(),
+                    () => runtime.Host?.SessionId ?? "<none>",
                     runtime.DebugOverlay);
             }
 
@@ -99,17 +119,16 @@ public partial class RuntimeDemoController : Node
                     "Runtime demo did not finish with a selected route and zero active operations.");
             }
 
-            await runtime.RequestShutdownAsync();
-            portraitLayer.QueueFree();
-            if (caseService.ShutdownCount != 1 ||
-                !caseService.RuntimeWasCancelledAtShutdown)
-            {
-                throw new InvalidOperationException(
-                    "Demo custom service did not complete its shutdown contract.");
-            }
-
             if (automatic)
             {
+                await runtime.RequestShutdownAsync();
+                portraitLayer.QueueFree();
+                if (caseService.ShutdownCount != 1 ||
+                    !caseService.RuntimeWasCancelledAtShutdown)
+                {
+                    throw new InvalidOperationException(
+                        "Demo custom service did not complete its shutdown contract.");
+                }
                 dialoguePresenter!.QueueFree();
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -123,7 +142,8 @@ public partial class RuntimeDemoController : Node
             }
             else
             {
-                hud!.SetStatus($"Runtime demo completed · route={route} · Runtime clean");
+                hud!.SetStatus(
+                    $"M11-M15 flow completed · route={route} · Runtime remains live for save/load, New Game and Skip validation.");
             }
         }
         catch (Exception exception)

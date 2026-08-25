@@ -147,6 +147,7 @@ public sealed class ScriptPlayback : IScriptPlayback
                     checkpoint.Spot.Script.ProjectId,
                     checkpoint.Spot.Script.NodeName),
                 cancellationToken);
+            await WaitForRestoredBoundaryAsync(checkpoint, cancellationToken);
             logger.Info(
                 "script",
                 "script.checkpoint_restore_completed",
@@ -156,6 +157,67 @@ public sealed class ScriptPlayback : IScriptPlayback
         {
             checkpointBackend.CancelPreparedRestore(checkpoint);
             throw;
+        }
+    }
+
+    private async Task WaitForRestoredBoundaryAsync(
+        ScriptCheckpoint checkpoint,
+        CancellationToken cancellationToken)
+    {
+        var settled = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        void ObservePhase(ScriptPlaybackPhase phase)
+        {
+            if (phase == ScriptPlaybackPhase.AwaitingAdvance)
+            {
+                var spot = CurrentSpot;
+                if (spot is not null &&
+                    string.Equals(
+                        spot.Script.ProjectId,
+                        checkpoint.Spot.Script.ProjectId,
+                        StringComparison.Ordinal) &&
+                    string.Equals(
+                        spot.Script.NodeName,
+                        checkpoint.Spot.Script.NodeName,
+                        StringComparison.Ordinal) &&
+                    string.Equals(
+                        spot.LineId,
+                        checkpoint.Spot.LineId,
+                        StringComparison.Ordinal))
+                {
+                    settled.TrySetResult();
+                }
+                else
+                {
+                    settled.TrySetException(new ScriptCheckpointException(
+                        "Checkpoint restore reached an unexpected line boundary: " +
+                        $"expected '{checkpoint.Spot.Script.ProjectId}:" +
+                        $"{checkpoint.Spot.Script.NodeName}#{checkpoint.Spot.LineId}', " +
+                        $"actual '{spot?.Script.ProjectId ?? "<none>"}:" +
+                        $"{spot?.Script.NodeName ?? "<none>"}#{spot?.LineId ?? "<none>"}'."));
+                }
+            }
+            else if (phase is ScriptPlaybackPhase.Faulted or ScriptPlaybackPhase.Idle)
+            {
+                settled.TrySetException(new ScriptCheckpointException(
+                    $"Checkpoint restore ended in phase '{phase}' before its current line " +
+                    "reached the awaiting-advance boundary."));
+            }
+        }
+
+        void HandlePhaseChanged(ScriptPlaybackPhaseChanged change) =>
+            ObservePhase(change.Current);
+
+        PhaseChanged += HandlePhaseChanged;
+        try
+        {
+            ObservePhase(Phase);
+            await settled.Task.WaitAsync(cancellationToken);
+        }
+        finally
+        {
+            PhaseChanged -= HandlePhaseChanged;
         }
     }
 

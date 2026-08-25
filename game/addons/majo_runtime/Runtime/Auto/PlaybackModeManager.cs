@@ -547,10 +547,11 @@ public sealed class PlaybackModeManager : IPlaybackModeManager
             return;
         }
         _ = StopVoiceAndCompleteOperationsAsync(current?.CorrelationGroupId);
-        if (presentation.IsLineActive && !presentation.IsLineDisplayComplete)
-        {
-            dialogue.RequestHurryUp();
-        }
+        // LinePresented is published by the facade presenter before the native
+        // LinePresenter begins its typewriter. Cancelling Yarn's hurry-up token
+        // here makes both the current line and every subsequent skipped line
+        // render completely without waiting for IsLineActive to catch up.
+        dialogue.RequestHurryUp();
         ReconcileDeadline();
     }
 

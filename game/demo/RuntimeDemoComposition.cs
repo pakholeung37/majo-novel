@@ -133,6 +133,17 @@ public static class RuntimeDemoComposition
         configuration.Auto!.ExtraDelaySeconds = 1;
         configuration.Operations!.DefaultAnimationDurationSeconds = 0.2;
         configuration.Diagnostics!.EnableOverlay = true;
+        configuration.Diagnostics.EnableFileLogging = true;
+        configuration.State!.StorageNamespace = "majo/runtime-demo";
+        configuration.State.GameBuildId = "runtime-demo-phase-3";
+        configuration.Save!.Enabled = true;
+        configuration.Save.ManualSlotCapacity = 3;
+        configuration.Save.QuickSlotCapacity = 2;
+        configuration.Save.AutoSlotCapacity = 2;
+        configuration.Save.ShowDefaultUi = true;
+        configuration.Settings!.ShowDefaultUi = true;
+        configuration.Settings.SkipDelaySeconds = 0.08;
+        configuration.GlobalState!.Enabled = true;
         configuration.Actors!.LeftPosition = new Vector2(560, 610);
         configuration.Actors.CenterPosition = new Vector2(960, 610);
         configuration.Actors.RightPosition = new Vector2(1360, 610);

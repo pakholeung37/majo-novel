@@ -752,9 +752,10 @@ public partial class DialogueRunner : Godot.Node
 
     private async YarnTask OnLineReceivedAsync(Line line)
     {
+        var lineDialogueCancellationSource = dialogueCancellationSource;
         var localisedLine =
             await LineProvider.GetLocalizedLineAsync(line,
-                dialogueCancellationSource?.Token ?? CancellationToken.None);
+                lineDialogueCancellationSource?.Token ?? CancellationToken.None);
         localisedLine.Source = this;
         if (!IsInstanceValid(this))
         {
@@ -772,7 +773,10 @@ public partial class DialogueRunner : Godot.Node
             return;
         }
 
-        if (dialogueCancellationSource?.IsCancellationRequested == false)
+        if (ReferenceEquals(
+                dialogueCancellationSource,
+                lineDialogueCancellationSource) &&
+            lineDialogueCancellationSource?.IsCancellationRequested == false)
         {
             Dialogue.Continue();
         }
@@ -796,23 +800,26 @@ public partial class DialogueRunner : Godot.Node
         currentLineCancellationSource?.Dispose();
         currentLineHurryUpSource?.Dispose();
 
+        CancellationTokenSource lineCancellationSource;
         if (dialogueCancellationSource != null)
         {
-            currentLineCancellationSource =
+            lineCancellationSource =
                 CancellationTokenSource.CreateLinkedTokenSource(dialogueCancellationSource.Token);
         }
         else
         {
-            currentLineCancellationSource = new CancellationTokenSource();
+            lineCancellationSource = new CancellationTokenSource();
         }
+        currentLineCancellationSource = lineCancellationSource;
 
         // now we make a new dependant hurry up cancellation token
-        currentLineHurryUpSource =
-            CancellationTokenSource.CreateLinkedTokenSource(currentLineCancellationSource.Token);
+        var lineHurryUpSource =
+            CancellationTokenSource.CreateLinkedTokenSource(lineCancellationSource.Token);
+        currentLineHurryUpSource = lineHurryUpSource;
         var metaToken = new LineCancellationToken
         {
-            NextLineToken = currentLineCancellationSource.Token,
-            HurryUpToken = currentLineHurryUpSource.Token,
+            NextLineToken = lineCancellationSource.Token,
+            HurryUpToken = lineHurryUpSource.Token,
         };
 
         var pendingTasks = new HashSet<YarnTask>();
@@ -880,11 +887,17 @@ public partial class DialogueRunner : Godot.Node
         }
         // We're done; dispose of the cancellation sources. (Null-check them because if we're leaving play mode, then these references may no longer be valid.)
 
-        currentLineCancellationSource?.Dispose();
-        currentLineCancellationSource = null;
+        lineCancellationSource.Dispose();
+        if (ReferenceEquals(currentLineCancellationSource, lineCancellationSource))
+        {
+            currentLineCancellationSource = null;
+        }
 
-        currentLineHurryUpSource?.Dispose();
-        currentLineHurryUpSource = null;
+        lineHurryUpSource.Dispose();
+        if (ReferenceEquals(currentLineHurryUpSource, lineHurryUpSource))
+        {
+            currentLineHurryUpSource = null;
+        }
     }
 
     private void OnOptionsReceived(OptionSet options)

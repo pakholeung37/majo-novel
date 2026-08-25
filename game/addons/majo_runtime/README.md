@@ -646,13 +646,17 @@ long-lived validation scene; new Runtime capabilities are appended here instead
 of creating milestone-named demos. Its current long-form Yarn flow covers service
 lifecycle, resources, parallel/wait/cancel/complete Operations, Actors, built-in
 and custom commands, dialogue sessions and variables, input, native markup,
-BGM/SFX/Voice, Script playback, Game State capture/restore, Auto, and Session
-History.
+BGM/SFX/Voice, Script playback, and the complete M11-M15 loop: structured
+Diagnostics, durable State eligibility and Session transitions, Manual/Quick/Auto
+Save, Settings and Global State persistence, Played Register, Auto/Skip playback,
+and Session History.
 
 The Dialogue Panel is hosted on CanvasLayer 20, above Actor layers. The validation
-HUD is on layer 30 and History is modal on layer 40. Use Space/mouse for dialogue,
-arrow keys/Enter for options, `A` for Auto, and `H` for History. At a completed
-line boundary the HUD also enables Game State capture and restore buttons.
+HUD is on layer 30 and the replaceable History, Save/Load, Settings, and Debug UI
+use modal input ownership. Use Space/mouse for dialogue, arrow keys/Enter for
+options, `A` for Auto, and `H` for History. The HUD groups its controls by
+milestone and reports save eligibility, Session/Line IDs, active Operations,
+structured log count, Slot state, Settings/Global recovery, and Played count.
 
 All extension code lives outside the plugin under `res://demo`:
 
@@ -663,7 +667,9 @@ All extension code lives outside the plugin under `res://demo`:
   substitute `FakeAudioClipLoader`/`FakeAudioBackend` so validation does not
   depend on an audio device or its shutdown timing.
 - `demo_route` demonstrates a custom Yarn command resolving the service.
-- `RuntimeDemoHud` exposes playback, State, Auto, and History controls.
+- `RuntimeDemoHud` exposes M11-M15 controls: Inspector/report export, State
+  capture/restore and New Game, Save/Load plus Quick/Auto Save, Settings/Global
+  flush, Played Register, and mutually exclusive Auto/Skip modes.
 - `RuntimeDialogueProbe` runs the same content without graphics for deterministic
   integration tests.
 

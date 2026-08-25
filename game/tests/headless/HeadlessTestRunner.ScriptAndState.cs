@@ -177,8 +177,16 @@ public partial class HeadlessTestRunner
         await sessions.LoadGameAsync(durableEnvelope.Snapshot);
         Assert(bootstrap.Host.SessionId != previousSessionId &&
                 playback.Mode == PlaybackMode.Manual &&
-                history.Entries.Count == 0,
-            "M12 Load Game did not apply its Session/History/Playback policy.");
+                history.Entries.Count == 1 &&
+                history.Entries[0].LineId == "line:m95-state-current" &&
+                dialogue.CurrentLineId == "line:m95-state-current" &&
+                presentation.IsLineDisplayComplete &&
+                script.Phase == ScriptPlaybackPhase.AwaitingAdvance,
+            "M12 Load Game did not return at the restored current-line boundary: " +
+            $"sessionChanged={bootstrap.Host.SessionId != previousSessionId}, " +
+            $"mode={playback.Mode}, history={history.Entries.Count}, " +
+            $"line={dialogue.CurrentLineId ?? "<none>"}, " +
+            $"displayComplete={presentation.IsLineDisplayComplete}, phase={script.Phase}.");
         await WaitForConditionAsync(
             () => lineProbe.Lines.Count >= 2 && presentation.IsLineActive,
             2);
@@ -224,6 +232,17 @@ public partial class HeadlessTestRunner
             $"phase={script.Phase}, handles={input.ActiveHandleCount}/{baseInputHandles}, " +
             $"text0={lineProbe.Lines[0].Text.Text}, text1={lineProbe.Lines[1].Text.Text}.");
 
+        var linesBeforeAdvance = lineProbe.Lines.Count;
+        dialogue.RequestNextLine();
+        await WaitForConditionAsync(
+            () => lineProbe.Lines.Count == linesBeforeAdvance + 1 &&
+                dialogue.CurrentLineId == "line:m95-state-after" &&
+                presentation.IsLineDisplayComplete &&
+                script.Phase == ScriptPlaybackPhase.AwaitingAdvance,
+            2);
+        Assert(lineProbe.Lines[^1].Id == "line:m95-state-after",
+            "M12 first advance after restore did not present the next line exactly once.");
+
         for (var round = 1; round <= 3; round++)
         {
             await dialogue.StopAsync();
@@ -267,15 +286,50 @@ public partial class HeadlessTestRunner
             var sessionBeforeLoad = bootstrap.Host.SessionId;
             var linesBeforeLoad = lineProbe.Lines.Count;
 
-            await slots.LoadAsync(slot);
+            if (round == 1)
+            {
+                saveLoadOverlay.Open();
+                await WaitForConditionAsync(
+                    () => bootstrap.FindChildren(
+                            "*",
+                            nameof(Button),
+                            recursive: true,
+                            owned: false)
+                        .OfType<Button>()
+                        .Any(button => button.Text == "Load"),
+                    2);
+                var loadButton = bootstrap.FindChildren(
+                        "*",
+                        nameof(Button),
+                        recursive: true,
+                        owned: false)
+                    .OfType<Button>()
+                    .First(button => button.Text == "Load");
+                loadButton.EmitSignal(BaseButton.SignalName.Pressed);
+                await WaitForConditionAsync(
+                    () => bootstrap.Host.SessionId != sessionBeforeLoad &&
+                        slots.Status == SaveSlotManagerStatus.Idle,
+                    2);
+            }
+            else
+            {
+                await slots.LoadAsync(slot);
+            }
             Assert(bootstrap.Host.SessionId != sessionBeforeLoad &&
                     playback.Mode == PlaybackMode.Manual &&
-                    history.Entries.Count == 0,
+                    history.Entries.Count == 1 &&
+                    history.Entries[0].LineId == savedLineId,
                 $"M13 Load did not apply Session/History/Playback policy in round {round}.");
             await WaitForConditionAsync(
                 () => lineProbe.Lines.Count == linesBeforeLoad + 1 &&
                     dialogue.CurrentLineId == savedLineId,
                 2);
+            if (round == 1)
+            {
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                Assert(dialogue.CurrentLineId == savedLineId,
+                    "M13 Save/Load UI advanced past the line restored by its Load button.");
+            }
             Assert(Mathf.IsEqualApprox(
                         (float)variables.Get("round").NumberValue,
                         round) &&
