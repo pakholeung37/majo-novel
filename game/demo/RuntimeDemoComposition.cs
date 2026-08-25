@@ -14,12 +14,26 @@ using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Resources;
+using Majo.Runtime.Localization;
 
 namespace Majo.Demo;
 
 public sealed class DemoSessionService : IRuntimeService
 {
     private readonly IRuntimeLifetime lifetime;
+    private readonly IResourceManager? resources;
+    private readonly ILocaleManager? locales;
+    private IResourceGroupLease? preloadGroup;
+
+    public DemoSessionService(
+        IRuntimeLifetime lifetime,
+        IResourceManager resources,
+        ILocaleManager locales)
+    {
+        this.lifetime = lifetime ?? throw new ArgumentNullException(nameof(lifetime));
+        this.resources = resources ?? throw new ArgumentNullException(nameof(resources));
+        this.locales = locales ?? throw new ArgumentNullException(nameof(locales));
+    }
 
     public DemoSessionService(IRuntimeLifetime lifetime)
     {
@@ -36,6 +50,10 @@ public sealed class DemoSessionService : IRuntimeService
 
     public bool RuntimeWasCancelledAtShutdown { get; private set; }
 
+    public IResourceGroupLease? PreloadGroup => preloadGroup;
+
+    public string VoiceLocale => locales?.VoiceLocale ?? "en";
+
     public Task InitializeAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -48,6 +66,8 @@ public sealed class DemoSessionService : IRuntimeService
         cancellationToken.ThrowIfCancellationRequested();
         ResetCount++;
         SelectedRoute = null;
+        preloadGroup?.Release();
+        preloadGroup = null;
         return Task.CompletedTask;
     }
 
@@ -56,6 +76,8 @@ public sealed class DemoSessionService : IRuntimeService
         cancellationToken.ThrowIfCancellationRequested();
         ShutdownCount++;
         RuntimeWasCancelledAtShutdown = lifetime.RuntimeCancellationToken.IsCancellationRequested;
+        preloadGroup?.Release();
+        preloadGroup = null;
         return Task.CompletedTask;
     }
 
@@ -63,6 +85,75 @@ public sealed class DemoSessionService : IRuntimeService
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(route);
         SelectedRoute = route;
+    }
+
+    public async Task SwitchVoiceLocaleAsync(
+        string locale,
+        CancellationToken cancellationToken)
+    {
+        var localeManager = locales ?? throw new RuntimeCommandException(
+            "demo_voice_locale", "Locale manager is not available.");
+        var result = await localeManager.ChangeVoiceLocaleAsync(locale, cancellationToken);
+        if (!result.Success)
+        {
+            throw new RuntimeCommandException(
+                "demo_voice_locale",
+                $"Voice locale switch to '{locale}' failed: {result.FailureReason}");
+        }
+    }
+
+    public async Task PreloadDemoAssetsAsync(
+        string groupId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(groupId);
+        var resourceManager = resources ?? throw new RuntimeCommandException(
+            "demo_preload", "Resource manager is not available.");
+        var localeManager = locales ?? throw new RuntimeCommandException(
+            "demo_preload", "Locale manager is not available.");
+        preloadGroup?.Release();
+        var manifest = new ResourcePreloadManifest(
+            groupId,
+            [
+                ResourcePreloadEntry.Create<Texture2D>(
+                    new ResourceKey("backgrounds/backdrop/courtroom"),
+                    estimatedBytes: 512 * 1024),
+                ResourcePreloadEntry.Create<Texture2D>(
+                    new ResourceKey("backgrounds/backdrop/spotlight"),
+                    estimatedBytes: 512 * 1024),
+                ResourcePreloadEntry.Create<Texture2D>(
+                    new ResourceKey("characters/hero/calm"),
+                    estimatedBytes: 256 * 1024),
+                ResourcePreloadEntry.Create<Texture2D>(
+                    new ResourceKey("characters/hero/determined"),
+                    estimatedBytes: 256 * 1024),
+                ResourcePreloadEntry.Create<AudioStream>(
+                    new ResourceKey("audio/bgm/demo-theme"),
+                    estimatedBytes: 1024 * 1024),
+                ResourcePreloadEntry.Create<AudioStream>(
+                    new ResourceKey("audio/bgm/demo-tension"),
+                    estimatedBytes: 1024 * 1024),
+                ResourcePreloadEntry.Create<AudioStream>(
+                    new ResourceKey("audio/voice/narrator-welcome"),
+                    estimatedBytes: 1024 * 1024,
+                    localizedRoot: "audio/voice",
+                    localeChannel: ResourceLocaleChannel.Voice),
+            ]);
+        preloadGroup = resourceManager.PreloadAsync(
+            manifest,
+            new ResourcePreloadContext(
+                localeManager.DialogueLocale,
+                localeManager.VoiceLocale,
+                localeManager.GetDialogueFallbackChain(localeManager.DialogueLocale),
+                localeManager.GetVoiceFallbackChain(localeManager.VoiceLocale)),
+            cancellationToken);
+        await preloadGroup.Completion.WaitAsync(cancellationToken);
+    }
+
+    public void ReleasePreload()
+    {
+        preloadGroup?.Release();
+        preloadGroup = null;
     }
 }
 
@@ -179,8 +270,13 @@ public static class RuntimeDemoComposition
         runtime.ConfigureServices += services =>
         {
             services.AddSingleton<DemoSessionService>(
-                resolver => new DemoSessionService(resolver.Get<IRuntimeLifetime>()),
-                typeof(IRuntimeLifetime));
+                resolver => new DemoSessionService(
+                    resolver.Get<IRuntimeLifetime>(),
+                    resolver.Get<IResourceManager>(),
+                    resolver.Get<ILocaleManager>()),
+                typeof(IRuntimeLifetime),
+                typeof(IResourceManager),
+                typeof(ILocaleManager));
             if (!useFakeAudio)
             {
                 return;
@@ -214,6 +310,9 @@ public static class RuntimeDemoComposition
     {
         ArgumentNullException.ThrowIfNull(commands);
         commands.Register<DemoRouteCommandArguments>(SelectRouteAsync);
+        commands.Register<DemoVoiceLocaleCommandArguments>(SwitchVoiceLocaleAsync);
+        commands.Register<DemoPreloadCommandArguments>(PreloadAsync);
+        commands.Register<DemoReleasePreloadCommandArguments>(ReleasePreloadAsync);
     }
 
     private static Task SelectRouteAsync(
@@ -228,6 +327,31 @@ public static class RuntimeDemoComposition
 
         var services = context.Require(context.Services, "ServiceResolver");
         services.Get<DemoSessionService>().SelectRoute(arguments.Route);
+        return Task.CompletedTask;
+    }
+
+    private static Task SwitchVoiceLocaleAsync(
+        DemoVoiceLocaleCommandArguments arguments,
+        RuntimeCommandContext context) =>
+        context.Require(context.Services, "ServiceResolver")
+            .Get<DemoSessionService>()
+            .SwitchVoiceLocaleAsync(arguments.Locale, context.CancellationToken);
+
+    private static Task PreloadAsync(
+        DemoPreloadCommandArguments arguments,
+        RuntimeCommandContext context) =>
+        context.Require(context.Services, "ServiceResolver")
+            .Get<DemoSessionService>()
+            .PreloadDemoAssetsAsync(arguments.Group, context.CancellationToken);
+
+    private static Task ReleasePreloadAsync(
+        DemoReleasePreloadCommandArguments arguments,
+        RuntimeCommandContext context)
+    {
+        _ = arguments;
+        context.Require(context.Services, "ServiceResolver")
+            .Get<DemoSessionService>()
+            .ReleasePreload();
         return Task.CompletedTask;
     }
 
@@ -258,4 +382,32 @@ public sealed class DemoRouteCommandArguments
 {
     [CommandParameter("route", 0, Primary = true, Required = true)]
     public string Route { get; set; } = string.Empty;
+}
+
+[RuntimeCommand(
+    "demo_voice_locale",
+    Category = "M17 Demo",
+    Usage = "demo_voice_locale <locale>")]
+public sealed class DemoVoiceLocaleCommandArguments
+{
+    [CommandParameter("locale", 0, Primary = true, Required = true)]
+    public string Locale { get; set; } = string.Empty;
+}
+
+[RuntimeCommand(
+    "demo_preload",
+    Category = "M18 Demo",
+    Usage = "demo_preload <group>")]
+public sealed class DemoPreloadCommandArguments
+{
+    [CommandParameter("group", 0, Primary = true, Required = true)]
+    public string Group { get; set; } = string.Empty;
+}
+
+[RuntimeCommand(
+    "demo_release_preload",
+    Category = "M18 Demo",
+    Usage = "demo_release_preload")]
+public sealed class DemoReleasePreloadCommandArguments
+{
 }

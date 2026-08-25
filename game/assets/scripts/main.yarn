@@ -12,6 +12,28 @@ Narrator: 欢迎来到 Majo Runtime 第三阶段验证场景，{$visitor}。除�
 <<endAwait>>
 Maya: 背景和角色由两个并行 Operation 驱动，并在两者都到达确定终态后才显示这句话。 #line:demo-parallel-ready #voice:maya-ready
 
+Narrator: M17 会把 Dialogue locale 与 Voice locale 分开管理；下一句语音会请求简体中文，并按 fallback chain 回退到现有英文资源。 #line:demo-m17-intro
+<<demo_voice_locale zh-CN>>
+Narrator: Voice locale 已切换为 zh-CN，文本、语音与资源解析各自保留稳定的 resolved locale。 #line:demo-m17-voice #voice:narrator-welcome
+
+<<demo_preload m18-opening>>
+Narrator: M18 显式预取了本章背景、立绘、BGM 与 Voice；preload group 完成后才继续，离开演示段落时会释放 lease。 #line:demo-m18-preload
+
+<<cameraMove 40 y:0 duration:0.25 group:m19-stage operation:demo-camera-pan>>
+<<cameraZoom 1.08 duration:0.25 group:m19-stage operation:demo-camera-zoom>>
+<<transition wipeLeft appearance:spotlight duration:0.3 group:m19-stage operation:demo-stage-transition>>
+<<overlay 0.18 duration:0.25 group:m19-stage operation:demo-stage-overlay>>
+<<letterbox 0.08 duration:0.25 group:m19-stage operation:demo-stage-letterbox>>
+<<flash intensity:0.35 duration:0.15 group:m19-stage operation:demo-stage-flash>>
+<<await group:m19-stage>>
+Narrator: M19 Stage 已汇合 Camera、Transition 与 Screen FX Operation；这些效果可独立等待、取消、Skip，并把稳定终态写入 Game State。 #line:demo-m19-stage
+
+<<cameraReset duration:0.2 wait:true operation:demo-stage-camera-reset>>
+<<overlay 0 duration:0.2 wait:true operation:demo-stage-overlay-reset>>
+<<letterbox 0 duration:0.2 wait:true operation:demo-stage-letterbox-reset>>
+<<demo_release_preload>>
+Narrator: M17-M19 演示资源已释放，接下来继续原有的 Audio、State、Save/Load 与 Played 流程。 #line:demo-m17-m19-complete
+
 <<sfx demo-chime instance:checkpoint-chime>>
 Narrator: 刚才的提示音、循环背景音与角色语音分别走 SFX、BGM 和单通道 Voice。 #line:demo-audio-ready
 

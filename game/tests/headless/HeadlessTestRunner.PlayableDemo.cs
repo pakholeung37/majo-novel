@@ -130,6 +130,11 @@ public partial class HeadlessTestRunner
             {
                 "line:demo-welcome",
                 "line:demo-parallel-ready",
+                "line:demo-m17-intro",
+                "line:demo-m17-voice",
+                "line:demo-m18-preload",
+                "line:demo-m19-stage",
+                "line:demo-m17-m19-complete",
                 "line:demo-audio-ready",
                 "line:demo-operation-wait",
                 "line:demo-operation-cancel",
@@ -158,6 +163,8 @@ public partial class HeadlessTestRunner
             "M6 dialogue did not retain the most recently presented line ID.");
         Assert(caseService.SelectedRoute == "evidence",
             "Demo custom command did not update the custom service.");
+        Assert(caseService.VoiceLocale == "zh-CN" && caseService.PreloadGroup is null,
+            "M17/M18 Demo commands did not switch voice locale or release the preload group.");
         Assert(caseService.InitializeCount == 1,
             "Demo custom service was not initialized exactly once.");
         Assert(customFactory.CreateCount == 1,
