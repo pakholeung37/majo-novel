@@ -611,6 +611,11 @@ public sealed class SaveSlotManager : ISaveSlotManager
             }
             display[SaveSlotMetadataKeys.TextSummary] =
                 NormalizeRequired(entry.Text, 240);
+            if (!string.IsNullOrWhiteSpace(entry.Locale))
+            {
+                display[SaveSlotMetadataKeys.Locale] =
+                    NormalizeRequired(entry.Locale, 40);
+            }
         }
         foreach (var pair in request?.DeveloperMetadata ??
                      new Dictionary<string, string>())
@@ -653,7 +658,8 @@ public sealed class SaveSlotManager : ISaveSlotManager
             Get(display, SaveSlotMetadataKeys.PlayerName),
             Get(display, SaveSlotMetadataKeys.ThumbnailReference),
             Get(display, SaveSlotMetadataKeys.ThumbnailFailure),
-            new ReadOnlyDictionary<string, string>(developer));
+            new ReadOnlyDictionary<string, string>(developer),
+            Locale: Get(display, SaveSlotMetadataKeys.Locale));
     }
 
     private static SaveSlotMetadata UnavailableMetadata(

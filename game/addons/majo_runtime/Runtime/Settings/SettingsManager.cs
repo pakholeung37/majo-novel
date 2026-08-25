@@ -6,12 +6,16 @@ using System.Threading;
 using System.Threading.Tasks;
 using Majo.Runtime.Core;
 using Majo.Runtime.State;
+using Majo.Runtime.Localization;
 
 namespace Majo.Runtime.Settings;
 
 public sealed class SettingsManager : ScopedStatePersistence, ISettingsManager
 {
     private readonly IReadOnlyList<ISettingsProjection> projections;
+    private readonly ILocaleManager? localeManager;
+    private int localeChangeFromSettings;
+    private bool localeEventSubscribed;
 
     public SettingsManager(
         RuntimeSettings defaults,
@@ -24,7 +28,8 @@ public sealed class SettingsManager : ScopedStatePersistence, ISettingsManager
         string gameBuildId,
         string storageNamespace,
         TimeSpan debounce,
-        IRuntimeLogger? logger = null)
+        IRuntimeLogger? logger = null,
+        ILocaleManager? localeManager = null)
         : base(
             StateScope.Settings,
             WithBuiltInContributor(contributors, out var builtIn, defaults.Validate()),
@@ -42,6 +47,7 @@ public sealed class SettingsManager : ScopedStatePersistence, ISettingsManager
         Defaults = defaults;
         Current = defaults;
         this.projections = projections;
+        this.localeManager = localeManager;
         builtIn.Attach(this);
     }
 
@@ -63,11 +69,16 @@ public sealed class SettingsManager : ScopedStatePersistence, ISettingsManager
         {
             return;
         }
-        var previous = Current;
-        Current = settings;
-        ApplyProjections();
-        MarkDirty();
-        Changed?.Invoke(new SettingsChanged(previous, settings));
+
+        if (localeManager is not null &&
+            (!string.Equals(localeManager.DialogueLocale, settings.DialogueLocale, StringComparison.OrdinalIgnoreCase) ||
+             !string.Equals(localeManager.VoiceLocale, settings.VoiceLocale, StringComparison.OrdinalIgnoreCase)))
+        {
+            _ = ChangeLocalesAndCommitAsync(settings);
+            return;
+        }
+
+        Commit(settings);
     }
 
     public void ResetToDefaults() => Update(Defaults);
@@ -75,7 +86,49 @@ public sealed class SettingsManager : ScopedStatePersistence, ISettingsManager
     public override async Task InitializeAsync(CancellationToken cancellationToken)
     {
         await base.InitializeAsync(cancellationToken);
+        if (localeManager is not null &&
+            !string.Equals(localeManager.DialogueLocale, Current.DialogueLocale, StringComparison.OrdinalIgnoreCase))
+        {
+            var result = await localeManager.ChangeDialogueLocaleAsync(Current.DialogueLocale, cancellationToken);
+            if (!result.Success)
+            {
+                Current = Current with { DialogueLocale = localeManager.DialogueLocale };
+                MarkDirty();
+            }
+        }
+
+        if (localeManager is not null &&
+            !string.Equals(localeManager.VoiceLocale, Current.VoiceLocale, StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                await localeManager.ChangeVoiceLocaleAsync(Current.VoiceLocale, cancellationToken);
+            }
+            catch
+            {
+                Current = Current with { VoiceLocale = localeManager.VoiceLocale };
+                MarkDirty();
+            }
+        }
+
+        if (localeManager is not null && !localeEventSubscribed)
+        {
+            localeManager.DialogueLocaleChanged += HandleDialogueLocaleChanged;
+            localeManager.VoiceLocaleChanged += HandleVoiceLocaleChanged;
+            localeEventSubscribed = true;
+        }
         ApplyProjections();
+    }
+
+    public override async Task ShutdownAsync(CancellationToken cancellationToken)
+    {
+        if (localeManager is not null && localeEventSubscribed)
+        {
+            localeManager.DialogueLocaleChanged -= HandleDialogueLocaleChanged;
+            localeManager.VoiceLocaleChanged -= HandleVoiceLocaleChanged;
+            localeEventSubscribed = false;
+        }
+        await base.ShutdownAsync(cancellationToken);
     }
 
     public new Task FlushAsync(CancellationToken cancellationToken = default) =>
@@ -104,6 +157,82 @@ public sealed class SettingsManager : ScopedStatePersistence, ISettingsManager
             {
                 LastProjectionError = exception.Message;
             }
+        }
+    }
+
+    private void Commit(RuntimeSettings settings)
+    {
+        if (settings == Current)
+        {
+            return;
+        }
+        var previous = Current;
+        Current = settings;
+        ApplyProjections();
+        MarkDirty();
+        Changed?.Invoke(new SettingsChanged(previous, settings));
+    }
+
+    private async Task ChangeLocalesAndCommitAsync(RuntimeSettings settings)
+    {
+        Interlocked.Increment(ref localeChangeFromSettings);
+        var previousDialogue = localeManager!.DialogueLocale;
+        try
+        {
+            var dialogueResult = await localeManager.ChangeDialogueLocaleAsync(settings.DialogueLocale);
+            if (!dialogueResult.Success)
+            {
+                LastProjectionError = dialogueResult.FailureReason;
+                return;
+            }
+
+            try
+            {
+                var voiceResult = await localeManager.ChangeVoiceLocaleAsync(settings.VoiceLocale);
+                if (!voiceResult.Success)
+                {
+                    await localeManager.ChangeDialogueLocaleAsync(previousDialogue);
+                    LastProjectionError = voiceResult.FailureReason;
+                    return;
+                }
+            }
+            catch
+            {
+                await localeManager.ChangeDialogueLocaleAsync(previousDialogue);
+                throw;
+            }
+
+            Commit(settings with
+            {
+                DialogueLocale = localeManager.DialogueLocale,
+                VoiceLocale = localeManager.VoiceLocale,
+            });
+        }
+        catch (Exception exception)
+        {
+            LastProjectionError = exception.Message;
+        }
+        finally
+        {
+            Interlocked.Decrement(ref localeChangeFromSettings);
+        }
+    }
+
+    private void HandleDialogueLocaleChanged(LocaleChangedEvent change)
+    {
+        if (Volatile.Read(ref localeChangeFromSettings) > 0)
+        {
+            return;
+        }
+
+        Commit(Current with { DialogueLocale = change.CurrentLocale });
+    }
+
+    private void HandleVoiceLocaleChanged(LocaleChangedEvent change)
+    {
+        if (Volatile.Read(ref localeChangeFromSettings) == 0)
+        {
+            Commit(Current with { VoiceLocale = change.CurrentLocale });
         }
     }
 

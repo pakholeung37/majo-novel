@@ -1,8 +1,8 @@
 # Majo Runtime 第三阶段 Roadmap
 
-状态：已确认；M10.5-M15 已完成
+状态：已完成；M10.5-M15 已交付，原定 M16 已取消
 承接范围：`runtime-plan.md` 的 M10 完成之后  
-目标阶段：M10.5、M11、M12-M16
+完成范围：M10.5、M11、M12、M13、M14、M15
 主题：可分发性、可观测性、持久化玩家循环
 
 ## 1. 阶段目标
@@ -17,11 +17,10 @@ Input、Audio、Auto 和 History 基础转化为可发布、可诊断、可长�
 3. Game、Global 和 Settings 状态可以安全、可迁移地持久化。
 4. 玩家可以使用 Manual、Quick 和 Auto Save 完成完整存读档闭环。
 5. Auto、Skip 和 Manual 共享唯一播放模式所有权，不形成互相竞争的控制器。
-6. Rollback 只跨越明确支持回退的状态边界，不虚假承诺任意外部副作用可逆。
 
 本阶段仍保持以下永久边界：证词、证据、推理和辩证玩法由游戏项目或独立玩法插件
-实现，不进入 Majo Runtime。Runtime 只提供状态贡献、保存资格和 Rollback barrier 等
-通用扩展接口。
+实现，不进入 Majo Runtime。Runtime 只提供状态贡献、保存资格和外部玩法 barrier 等
+通用扩展接口。原定 Rollback 产品能力不再属于 Runtime roadmap。
 
 ## 2. 为什么先做 Diagnostics
 
@@ -35,9 +34,9 @@ Operation 后台异常观察，但它们只构成最低限度的日志骨架：
 - 没有日志过滤、内存缓冲、文件 Sink、报告导出或统一故障快照。
 - 没有能够回答“当前究竟在等待什么”的 Debug Inspector。
 
-Save/Load 和 Rollback 会把一次行为扩展成跨 Dialogue、Script、State、Actor、Audio、
+Save/Load 会把一次行为扩展成跨 Dialogue、Script、State、Actor、Audio、
 Input 和 Operation 的恢复事务。如果先实现持久化而后补诊断，偶发失败只能依靠零散
-Godot 输出反推。因此 M11 Diagnostics 是 M12-M16 的强制架构门。
+Godot 输出反推。因此 M11 Diagnostics 是 M12-M15 的强制架构门。
 
 ## 3. 总体顺序
 
@@ -50,19 +49,18 @@ M10 Auto + History
     -> M13B Save / Load Product Loop
     -> M14 Settings & Global State
     -> M15 Played Register & Skip
-    -> M16 Rollback
+
+M16 Rollback（取消，不实施）
 ```
 
 依赖规则：
 
 - M10.5 未通过前，不冻结第三阶段公共 API。
-- M12 未通过前，不实现 Slot、Quick Save、Auto Save 或 Rollback Stack。
+- M12 未通过前，不实现 Slot、Quick Save 或 Auto Save。
 - M12 必须先冻结 Contributor capability、保存资格、Session 和底层 Restore Transaction；
-  M13-M16 不再各自建立冲突的生命周期或恢复语义。
+  M13-M15 不再各自建立冲突的生命周期或恢复语义。
 - M13A 未通过前，不实现缩略图、Auto Save 触发器和默认 Save/Load UI。
 - M14 的 Global State 未持久化前，不实现跨周目的 Read-only Skip。
-- M16 复用 M12 的底层 Restore Transaction，但不复用 M13 的“新 Session、清空 History”
-  产品编排。
 
 ## 4. 第三阶段需要冻结的跨里程碑语义
 
@@ -95,12 +93,12 @@ History 属于 Session。加载 Game Slot 后清空 History，不把当前进程
 错误地带入已加载的旧进度。
 
 以上行为由显式 Game Session 协调者拥有，不把“开始新 Session”等同于完整
-`RuntimeHost.ResetAsync`。Load Game 和未来 Rollback 可以共享底层状态恢复事务，但必须
-使用不同的 Session、History 和播放模式编排策略。
+`RuntimeHost.ResetAsync`。Load Game 使用统一的底层状态恢复事务，并由 Session 协调者
+负责 History 和播放模式编排。
 
 ### 4.3 安全保存边界
 
-首版只在 `AwaitingAdvance` 安全边界保存和压入 Rollback Snapshot。待选选项、非空
+首版只在 `AwaitingAdvance` 安全边界保存。待选选项、非空
 Yarn call/value stack、Command 执行中、Presenter 显示中和任意 VM 指令中间态不可保存。
 
 调用方必须能够查询统一的 `CanSave` 及类型化拒绝原因。资格检查同时考虑 Script 安全
@@ -123,7 +121,7 @@ Yarn call/value stack、Command 执行中、Presenter 显示中和任意 VM 指�
 - 明确并固化 Runtime API（SemVer）、State 格式（v1 严格指纹）和 Yarn Bridge（精确版本 fail-fast）的版本策略。
 - 门禁脚本 `tools/test.sh` 升级并一次性绿色通过。
 
-## 6. M11：Diagnostics & Observability（主体已完成）
+## 6. M11：Diagnostics & Observability（已完成）
 
 ### 6.1 目标
 
@@ -246,12 +244,12 @@ IDiagnosticContributor
 - Diagnostics 公共 DTO 不引用 Yarn、Godot Node、Resource 或其他场景对象。
 - Overlay 反复打开、关闭、Reset 和 Shutdown 后没有输入或 Node 泄漏。
 
-## 7. M12：Durable State、Capability 与 Restore Transaction
+## 7. M12：Durable State、Capability 与 Restore Transaction（已完成）
 
 ### 7.1 目标
 
 把 M9.6 的内存 Game Snapshot 扩展为稳定、可替换且可迁移的磁盘持久化基础，同时冻结
-M13-M16 共用的 Contributor capability、保存资格、Game Session 和底层恢复事务。M12
+M13-M15 共用的 Contributor capability、保存资格、Game Session 和底层恢复事务。M12
 仍不提供 Slot 产品行为、缩略图或 Save/Load UI。
 
 ### 7.2 分层
@@ -360,7 +358,7 @@ Envelope 至少包含：
 - 自定义 Storage 和 Serializer 可以替换而不修改 StateManager。
 - 诊断报告记录迁移链、commit 阶段和拒绝原因，但不记录完整 State payload。
 
-## 8. M13：Save / Load Slot Core 与 Product Loop
+## 8. M13：Save / Load Slot Core 与 Product Loop（已完成）
 
 ### 8.1 M13A 目标：Headless Slot Core
 
@@ -540,61 +538,15 @@ Manual <-> SkipAll
   终态；无关 Operation 不被误完成，且没有延迟 Continue。
 - Global State round-trip 后已读判定保持一致。
 
-## 11. M16：Rollback
+## 11. M16：Rollback（已取消）
 
-### 11.1 目标
+M16 不再实施，第三阶段以 M15 完成为终点。取消原因：当前产品不需要玩家回退能力，
+而完整 Rollback 会扩大所有 State Contributor、外部玩法副作用、History 和 Session 的
+长期兼容成本。M12 已交付的通用 Restore Transaction、Contributor capability 和 barrier
+机制继续作为 Save/Load 与宿主扩展基础，但不据此承诺 Runtime Rollback 产品能力。
 
-复用 State Snapshot 和 Restore 事务提供有界的玩家回退能力，不实现通用 time travel。
-
-### 11.2 Rollback Snapshot
-
-- 只在 `AwaitingAdvance` 安全边界捕获。
-- 使用有数量和估算内存双上限的 ring buffer。
-- Snapshot 只在内存中存在，不写入普通 Game Slot。
-- 每个 Snapshot 持有单调 sequence、播放位置、展示摘要和稳定估算大小；首版 Rollback UI
-  不要求缩略图。
-- 超出容量按最旧优先确定淘汰，并释放 Snapshot 持有的 payload 和展示 metadata。
-- 相邻完全等价状态可以按稳定 fingerprint 去重，但不得合并不同播放位置。
-- 当前 `AwaitingAdvance` Snapshot 作为时间线头部存在但不是第一步回退目标；第一次
-  Rollback 选择前一个可达 Snapshot，避免“回退”后仍停在同一行。
-
-### 11.3 Contributor Capability 与 Barrier Interval
-
-- Rollback 直接消费 M12 已冻结的 Contributor capability，不在 M16 修改
-  `IStateContributor` 基础契约。
-- 内建 Script、Variables、Actors、Background 和 BGM 的 RollbackPolicy 为 Supported。
-- SFX、Voice、Input Handle、Operation 和 Node 引用仍不进入 Snapshot。
-- 外部玩法 Contributor 默认形成 Barrier 或 Unsupported，只有显式声明并通过测试后才
-  支持 Rollback。
-- 不可逆外部副作用发生在 Snapshot A 与 B 之间，因此 barrier 记录为 sequence interval，
-  而不是含糊地附着到单个 Snapshot。玩家可以回到 barrier 同侧，但不能跨越该 interval。
-- Snapshot 淘汰时同步裁剪失去端点的 interval metadata，不留下幽灵 barrier。
-- barrier 必须提供开发者诊断和可选玩家提示原因。
-- Runtime 不假设证据提交、成就、网络请求或平台购买可以回退。
-
-### 11.4 玩家语义
-
-- 回退恢复目标行并只重放一次，下一次 Advance 进入正确后续指令。
-- Played Register 不随 Rollback 回退，因为玩家已经实际看过对应台词。
-- History 默认保留本 Session 实际展示过的内容，不因 Rollback 删除。
-- Rollback 重放的目标行属于再次实际展示，默认向 History 追加新条目；项目可以通过
-  History presentation policy 折叠连续重复展示，但不能改写既有历史条目。
-- 回退到选项之前的安全行是允许的，但不恢复“选项正在显示”的 VM 中间态。
-- Rollback 开始时关闭 Auto/Skip、History、Save/Load 和其他模态界面。
-- Rollback 复用 M12 的底层 Restore Transaction，但保持当前 Game Session，不执行 M13
-  Load Game 的新 Session、清空 History 或 Global/Settings 编排。
-- 默认 Rollback UI 支持逐步回退和可用范围提示，可整体替换。
-
-### 11.5 M16 严格验收
-
-- 容量、估算内存、sequence 和淘汰顺序确定，Reset/New Game/Load Game 清空 Stack。
-- 第一次回退选择前一个可达 Snapshot，不会恢复当前时间线头部的等价状态。
-- 连续跨多行和分支前回退后，Variables、Actors、Background、BGM 和 Script 一致。
-- 不可回退 Contributor 精确形成 barrier interval；同侧回退允许、跨 interval 拒绝，拒绝
-  不破坏当前状态。
-- Rollback 中途 Restore 失败进入明确 Faulted 状态并保持输入阻断。
-- Played Register 不回退；History 保留旧条目并按既定策略记录目标行重放。
-- 高频 push/pop 不产生未观察 Task、Operation、Input 或 Node 泄漏。
+Rollback 不自动顺延到第四阶段；只有出现明确产品需求、交互设计和外部副作用边界后，
+才以新的 roadmap 决策重新立项。
 
 ## 12. 第三阶段统一测试门禁
 
@@ -610,9 +562,8 @@ Manual <-> SkipAll
 7. 模拟损坏、写入中断、commit 前后取消、版本不兼容、缺失/未知 Contributor 和迁移失败。
 8. Serializer 验证重复序列化与 deserialize/re-serialize 的规范 bytes 一致。
 9. Game、Global 和 Settings 分别验证严格失败、软恢复、dirty 和 Flush 策略。
-10. Save/Load、Skip 和 Rollback 的核心时序 headless 连续运行三次。
+10. Save/Load 和 Skip 的核心时序 headless 连续运行三次。
 11. M13A 的 Slot Core 不依赖默认 UI 或缩略图；M13B UI 使用真实 Input modal 路径验证。
-12. Rollback 测试覆盖 Snapshot sequence、barrier interval 两侧和时间线头部选择规则。
 
 禁止用固定长时间 `Task.Delay` 证明时序；继续使用 Fake Frame Clock、事件边界和合理
 超时。文件 I/O 测试允许真实异步磁盘操作，但必须隔离路径并可确定清理。
@@ -627,48 +578,49 @@ Manual <-> SkipAll
 - Manual、Quick 和 Auto Save 可安全 round-trip，损坏或不兼容文件不破坏当前游戏。
 - Auto Save 只在配置条件关联的 `AwaitingAdvance` 边界提交，不捕获 node enter 或 VM
   中间态。
-- New Game、Load Game、Return To Title 和 Rollback 使用唯一 Session 协调者；Load 新建
-  Session 并清 History，Rollback 保持 Session 和 History。
+- New Game、Load Game 和 Return To Title 使用唯一 Session 协调者；Load 新建 Session
+  并清 History。
 - Settings 和 Global State 跨进程恢复，Game Slot 不覆盖它们。
 - Read-only Skip 基于稳定 Line ID 的 Played Register，并在未读台词和选项处停止。
-- Rollback 只跨越明确支持的 Contributor，并遵守快照之间的 barrier interval。
 - Manual、Auto 和 Skip 只有一个播放模式真相来源。
 - History 仍为 Session 状态，不进入 Game Slot；Played Register 不因 Game Load 或
-  Rollback 回退。
+  New Game 清除。
 - 默认 UI 均可直接使用，也可通过 PackedScene 整体替换。
 - 所有核心路径通过纯 C#、Godot headless、可见 smoke、失败探针和重复时序测试。
 - Runtime 源码仍不包含证词、证据、推理或辩证玩法实现。
 
-## 14. 延后到第四阶段重新评估
+## 14. 第四阶段重新评估结果
+
+纳入第四阶段：
 
 - Camera、复杂 Transition 和 Screen FX。
 - 运行时语言切换和完整本地化工具链。
 - 分层立绘、Spine、Live2D 和视频 Actor。
 - 资源预加载策略和更复杂的资源生命周期。
 - Editor Command 检查器、Yarn 辅助诊断和可视化配置工具。
+
+本轮不纳入：
+
 - 多 Yarn Script Track、后台脚本循环和 `sync` 轨道接管。
 - 云存档、跨设备冲突合并、加密、防作弊和 DRM。
 - 通用远程 Debug Console 或能够任意修改 VM 状态的调试器。
+- Rollback 已取消，不属于默认承接项。
 
-第四阶段的优先级应由真实游戏制作反馈决定，不在第三阶段预先承诺完整 Naninovel
+第四阶段的已选范围和顺序见 `runtime-roadmap-phase-4.md`；仍不追求完整 Naninovel
 功能对齐。
 
-## 15. 已确认默认与剩余实施决策
+## 15. 已确认默认与完成结论
 
 已确认默认：
 
 1. 剧本更新后的旧存档只允许显式 migration，不自动猜测恢复位置。
-2. 外部玩法默认不支持 Rollback，并形成 Barrier/Unsupported；显式声明和测试后才开放。
-3. History 在 Rollback 后保留已展示内容，目标行重放默认追加新条目。
-4. Auto Save 同时支持 Yarn node/tag/line metadata 和项目 API，但只在关联的
+2. Auto Save 同时支持 Yarn node/tag/line metadata 和项目 API，但只在关联的
    `AwaitingAdvance` 安全边界真正提交。
-5. Played Register 默认跨 locale 共享 stable Line ID；项目可以显式替换 identity policy。
-6. M16 只复用 M12 底层 Restore Transaction，不复用 M13 Load Game 产品编排。
+3. Played Register 默认跨 locale 共享 stable Line ID；项目可以显式替换 identity policy。
+4. M16 Rollback 已取消，且不自动顺延到后续阶段。
 
-进入对应 milestone 前仍需确定：
+第三阶段完成时采用：
 
-1. 第三阶段首要产品目标是通用插件发行，还是服务当前实际游戏制作；默认继续以通用
-   插件契约和 clean-consumer 门禁为准，再由真实游戏反馈调整默认 UI。
-2. JSON Lines 文件日志是否默认只在 Development build 开启；默认建议 Development 开启、
-   Release 关闭，但 Release Error 仍进入 Ring Buffer 和 Godot Console。
-3. Global State 损坏时项目是否采用默认隔离重建或严格启动失败；Runtime 默认隔离重建。
+1. 继续以通用插件契约和 clean-consumer 门禁为发行基线，再由真实游戏反馈调整默认 UI。
+2. JSON Lines 文件日志默认关闭，可由项目显式启用；Ring Buffer 和 Godot Console 保持可用。
+3. Global State 损坏默认隔离重建，项目可显式开启严格启动失败。

@@ -76,6 +76,7 @@ public partial class HeadlessTestRunner : Node
 		await ValidateScriptAndStateRuntimeAsync();
 		await ValidateAutoAndHistoryRuntimeAsync();
 		await ValidateSettingsRuntimeAsync();
+		await ValidateLocaleRuntimeAsync();
 		await ValidateDefaultPresentationAsync();
 		await ValidateSuccessfulRuntimeLifecycleAsync();
 		await ValidateLifecycleTimeoutAsync();

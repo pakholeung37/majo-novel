@@ -59,6 +59,9 @@ public partial class MajoProjectConfiguration : Resource
     public SettingsConfiguration? Settings { get; set; }
 
     [Export]
+    public LocalizationConfiguration? Localization { get; set; }
+
+    [Export]
     public GlobalStateConfiguration? GlobalState { get; set; }
 
     public static MajoProjectConfiguration CreateDefault() => new()
@@ -78,6 +81,7 @@ public partial class MajoProjectConfiguration : Resource
         History = new HistoryConfiguration(),
         Diagnostics = new DiagnosticsConfiguration(),
         Settings = new SettingsConfiguration(),
+        Localization = new LocalizationConfiguration(),
         GlobalState = new GlobalStateConfiguration(),
     };
 
@@ -101,9 +105,40 @@ public partial class MajoProjectConfiguration : Resource
         ValidateHistory(issues);
         ValidateDiagnostics(issues);
         ValidateSettings(issues);
+        ValidateLocalization(issues);
         ValidateGlobalState(issues);
 
         return new ConfigurationValidationResult(issues);
+    }
+
+    private void ValidateLocalization(ICollection<ConfigurationIssue> issues)
+    {
+        if (Localization is null)
+        {
+            issues.Add(new ConfigurationIssue(nameof(Localization), "Configuration is required."));
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(Localization.DefaultLocale))
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Localization)}.{nameof(Localization.DefaultLocale)}",
+                "Default locale is required."));
+        }
+
+        if (!double.IsFinite(Localization.FontScale) || Localization.FontScale <= 0)
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Localization)}.{nameof(Localization.FontScale)}",
+                "Font scale must be finite and positive."));
+        }
+
+        if (Localization.LineSpacing < 0)
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Localization)}.{nameof(Localization.LineSpacing)}",
+                "Line spacing cannot be negative."));
+        }
     }
 
     private void ValidateSettings(ICollection<ConfigurationIssue> issues)
@@ -126,11 +161,29 @@ public partial class MajoProjectConfiguration : Resource
                 $"{nameof(Settings)}.{nameof(Settings.SkipDelaySeconds)}",
                 "Skip delay must be finite and non-negative."));
         }
-        if (string.IsNullOrWhiteSpace(Settings.Language))
+        if (!double.IsFinite(Settings.FontScale) || Settings.FontScale <= 0)
         {
             issues.Add(new ConfigurationIssue(
-                $"{nameof(Settings)}.{nameof(Settings.Language)}",
-                "Language identity is required."));
+                $"{nameof(Settings)}.{nameof(Settings.FontScale)}",
+                "Font scale must be finite and positive."));
+        }
+        if (Settings.LineSpacing < 0)
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Settings)}.{nameof(Settings.LineSpacing)}",
+                "Line spacing cannot be negative."));
+        }
+        if (string.IsNullOrWhiteSpace(Settings.DialogueLocale))
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Settings)}.{nameof(Settings.DialogueLocale)}",
+                "Dialogue locale identity is required."));
+        }
+        if (string.IsNullOrWhiteSpace(Settings.VoiceLocale))
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Settings)}.{nameof(Settings.VoiceLocale)}",
+                "Voice locale identity is required."));
         }
     }
 

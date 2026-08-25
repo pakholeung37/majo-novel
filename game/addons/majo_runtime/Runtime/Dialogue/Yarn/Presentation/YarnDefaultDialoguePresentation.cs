@@ -9,6 +9,7 @@ using Godot;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Dialogue.Presentation;
 using Majo.Runtime.Input;
+using Majo.Runtime.Localization;
 using Majo.Runtime.Operations;
 using YarnSpinnerGodot;
 
@@ -21,6 +22,8 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, I
     private readonly IFrameClock frameClock;
     private readonly DialoguePresentationConfiguration configuration;
     private readonly IReadOnlyList<IDialogueMarkupHandler> markupHandlers;
+    private readonly ILocaleManager? localeManager;
+    private readonly IFontCatalog? fontCatalog;
     private CanvasLayer? presentationLayer;
     private Control? root;
     private LinePresenter? linePresenter;
@@ -34,7 +37,9 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, I
         IInputManager input,
         IFrameClock frameClock,
         DialoguePresentationConfiguration configuration,
-        IReadOnlyList<IDialogueMarkupHandler> markupHandlers)
+        IReadOnlyList<IDialogueMarkupHandler> markupHandlers,
+        ILocaleManager? localeManager = null,
+        IFontCatalog? fontCatalog = null)
     {
         this.backend = backend ?? throw new ArgumentNullException(nameof(backend));
         this.input = input ?? throw new ArgumentNullException(nameof(input));
@@ -43,6 +48,8 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, I
             throw new ArgumentNullException(nameof(configuration));
         this.markupHandlers = markupHandlers ??
             throw new ArgumentNullException(nameof(markupHandlers));
+        this.localeManager = localeManager;
+        this.fontCatalog = fontCatalog;
     }
 
     public bool IsLineActive => markupBridge?.IsLineActive == true;
@@ -124,11 +131,21 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, I
         markupBridge.DisplayCompleted += HandleLineDisplayCompleted;
         markupBridge.LineDismissed += HandleLineDismissed;
         linePresenter.AddChild(markupBridge);
+        backend.SetPresentationQuiescenceWaiter(markupBridge.WaitUntilInactiveAsync);
         inputPresenter = new MajoPresentationInputPresenter(input, markupBridge, optionParent)
         {
             Name = "MajoInputPresenter",
         };
         root.AddChild(inputPresenter);
+
+        if (fontCatalog is not null)
+        {
+            fontCatalog.TypographyChanged += HandleTypographyChanged;
+        }
+        if (localeManager is not null)
+        {
+            localeManager.DialogueLocaleChanged += HandleLocaleChanged;
+        }
 
         linePresenter.ActionMarkupHandlers.Add(new MajoBbCodeMarkupHandler());
         linePresenter.ActionMarkupHandlers.Add(markupBridge);
@@ -154,7 +171,17 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, I
             return;
         }
 
+        if (fontCatalog is not null)
+        {
+            fontCatalog.TypographyChanged -= HandleTypographyChanged;
+        }
+        if (localeManager is not null)
+        {
+            localeManager.DialogueLocaleChanged -= HandleLocaleChanged;
+        }
+
         inputPresenter?.ResetInput();
+        backend.SetPresentationQuiescenceWaiter(null);
         if (markupBridge is not null)
         {
             markupBridge.DisplayCompleted -= HandleLineDisplayCompleted;
@@ -205,6 +232,53 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, I
         isInitialized = false;
     }
 
+    public void ReRenderLine(DialogueLine line)
+    {
+        if (linePresenter is null || !IsLineActive)
+        {
+            return;
+        }
+
+        if (linePresenter.characterNameText is not null)
+        {
+            linePresenter.characterNameText.Text = line.Speaker ?? string.Empty;
+            if (linePresenter.characterNameContainer is not null)
+            {
+                linePresenter.characterNameContainer.Visible = !string.IsNullOrWhiteSpace(line.Speaker);
+            }
+        }
+
+        if (linePresenter.lineText is not null)
+        {
+            linePresenter.lineText.Text = line.Text.Text;
+            linePresenter.lineText.VisibleRatio = 1.0f;
+        }
+    }
+
+    public void ReRenderOptions(IReadOnlyList<DialogueOption> options)
+    {
+        if (root is null || !IsPresentingOptions)
+        {
+            return;
+        }
+
+        var optionContainer = root.FindChild("OptionContainer", recursive: true, owned: false);
+        if (optionContainer is null)
+        {
+            return;
+        }
+
+        var optionButtons = optionContainer.GetChildren().OfType<Button>().ToList();
+        for (var i = 0; i < options.Count && i < optionButtons.Count; i++)
+        {
+            optionButtons[i].Text = options[i].Line.Text.Text;
+        }
+    }
+
+    private void HandleTypographyChanged() => ApplyTypography();
+
+    private void HandleLocaleChanged(LocaleChangedEvent _) => ApplyTypography();
+
     private void HandleLineDisplayCompleted() => LineDisplayCompleted?.Invoke();
 
     private void HandleLineDismissed() => LineDismissed?.Invoke();
@@ -230,23 +304,44 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, I
         presenter.fadeUpDuration = (float)configuration.FadeUpDurationSeconds;
         presenter.fadeDownDuration = (float)configuration.FadeDownDurationSeconds;
 
-        foreach (var label in Descendants(viewRoot).OfType<RichTextLabel>())
+        ApplyTypography();
+    }
+
+    private void ApplyTypography()
+    {
+        if (root is null)
         {
-            label.AddThemeFontSizeOverride("normal_font_size", configuration.FontSize);
-            label.AddThemeFontSizeOverride("bold_font_size", configuration.FontSize);
-            label.AddThemeFontSizeOverride("italics_font_size", configuration.FontSize);
-            label.AddThemeFontSizeOverride("bold_italics_font_size", configuration.FontSize);
-            label.AddThemeFontSizeOverride("mono_font_size", configuration.FontSize);
-            if (configuration.Font is null)
+            return;
+        }
+
+        var scale = fontCatalog?.FontScale ?? 1.0;
+        var scaledFontSize = Math.Max(8, (int)Math.Round(configuration.FontSize * scale));
+        var lineSpacing = fontCatalog?.LineSpacing ?? 0;
+        var currentLocale = localeManager?.DialogueLocale ?? "en";
+        var fallbackChain = localeManager?.GetFallbackChain(currentLocale) ?? [currentLocale];
+        var font = fontCatalog?.ResolveFont(currentLocale, fallbackChain) ?? configuration.Font;
+
+        foreach (var label in Descendants(root).OfType<RichTextLabel>())
+        {
+            label.AddThemeFontSizeOverride("normal_font_size", scaledFontSize);
+            label.AddThemeFontSizeOverride("bold_font_size", scaledFontSize);
+            label.AddThemeFontSizeOverride("italics_font_size", scaledFontSize);
+            label.AddThemeFontSizeOverride("bold_italics_font_size", scaledFontSize);
+            label.AddThemeFontSizeOverride("mono_font_size", scaledFontSize);
+
+            if (lineSpacing > 0)
             {
-                continue;
+                label.AddThemeConstantOverride("line_separation", lineSpacing);
             }
 
-            label.AddThemeFontOverride("normal_font", configuration.Font);
-            label.AddThemeFontOverride("bold_font", configuration.Font);
-            label.AddThemeFontOverride("italics_font", configuration.Font);
-            label.AddThemeFontOverride("bold_italics_font", configuration.Font);
-            label.AddThemeFontOverride("mono_font", configuration.Font);
+            if (font is not null)
+            {
+                label.AddThemeFontOverride("normal_font", font);
+                label.AddThemeFontOverride("bold_font", font);
+                label.AddThemeFontOverride("italics_font", font);
+                label.AddThemeFontOverride("bold_italics_font", font);
+                label.AddThemeFontOverride("mono_font", font);
+            }
         }
     }
 

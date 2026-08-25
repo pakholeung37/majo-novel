@@ -91,13 +91,22 @@ public partial class MyVisualNovelScene : Node
 
 ```text
 res://assets/characters/<actor-id>/<appearance>.svg (或 .png, .webp)
+res://assets/characters/<locale>/<actor-id>/<appearance>.svg (可选本地化版本)
 res://assets/backgrounds/<actor-id>/<appearance>.svg (或 .png, .webp)
+res://assets/backgrounds/<locale>/<actor-id>/<appearance>.svg (可选本地化版本)
 res://assets/scripts/<project-id>.yarnproject
 res://assets/scripts/<project-id>.yarn
 res://assets/audio/bgm/<clip-id>.ogg (或 .mp3, .wav)
+res://assets/audio/bgm/<locale>/<clip-id>.ogg (可选本地化版本)
 res://assets/audio/sfx/<clip-id>.ogg (或 .mp3, .wav)
+res://assets/audio/sfx/<locale>/<clip-id>.ogg (可选本地化版本)
 res://assets/audio/voice/<locale>/<line-id>.ogg (或 .mp3, .wav)
+res://assets/audio/voice/<line-id>.ogg (无 locale 的 fallback)
 ```
+
+资源按“精确 locale -> 父级 locale -> 对应通道默认 locale -> 无 locale 路径”解析。Dialogue/Text
+与 Voice locale 独立；美术、BGM、SFX 使用 Dialogue locale，Voice 使用 Voice locale。只使用
+无 locale 路径的简单项目无需额外配置。Runtime 自带 UI 是固定英文参考实现，UI 本地化由项目负责。
 
 ---
 
@@ -269,6 +278,13 @@ runtime.ConfigureServices += services =>
 ```sh
 ./tools/test.sh
 ```
+开发中需要快速反馈时执行：
+```sh
+./tools/test.sh --fast
+```
+快速模式保留主项目格式检查、Debug 构建、纯 C# 单元测试、Godot 导入、可见 Demo、
+一轮 Headless 集成测试和失败码探针。提交或发布前仍应执行默认的完整门禁。
+
 门禁会自动验证：
 1. 静态格式与类型诊断；
 2. 插件 staging 包清洁度（排除 Demo、测试、构建缓存和仓库专用路径）；

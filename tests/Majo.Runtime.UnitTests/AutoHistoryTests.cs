@@ -585,6 +585,8 @@ public sealed class AutoHistoryTests
         public bool IsLineActive => false;
         public bool IsLineDisplayComplete => false;
         public bool IsPresentingOptions => false;
+        public void ReRenderLine(DialogueLine line) { }
+        public void ReRenderOptions(IReadOnlyList<DialogueOption> options) { }
         public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;

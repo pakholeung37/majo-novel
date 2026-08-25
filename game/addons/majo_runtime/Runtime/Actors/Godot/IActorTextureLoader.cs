@@ -7,6 +7,9 @@ using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Core;
 using Majo.Runtime.Resources;
+using Majo.Runtime.Localization;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace Majo.Runtime.Actors.Godot;
 
@@ -23,6 +26,9 @@ public sealed class ResourceActorTextureLoader : IActorTextureLoader
     private readonly IResourceManager? resources;
     private readonly IMissingResourceReporter? missingResources;
     private readonly bool failOnMissingAssets;
+    private readonly ILocalizedResourceResolver? localizedResources;
+    private readonly ILocaleManager? locales;
+    private readonly string[] localizedRoots;
     private Texture2D? placeholderTexture;
 
     public ResourceActorTextureLoader(
@@ -31,16 +37,26 @@ public sealed class ResourceActorTextureLoader : IActorTextureLoader
     {
         this.failOnMissingAssets = failOnMissingAssets;
         this.missingResources = missingResources;
+        localizedRoots = [];
     }
 
     public ResourceActorTextureLoader(
         IResourceManager resources,
         bool failOnMissingAssets = false,
-        IMissingResourceReporter? missingResources = null)
+        IMissingResourceReporter? missingResources = null,
+        ILocalizedResourceResolver? localizedResources = null,
+        ILocaleManager? locales = null,
+        IEnumerable<string>? localizedRoots = null)
     {
         this.resources = resources ?? throw new System.ArgumentNullException(nameof(resources));
         this.failOnMissingAssets = failOnMissingAssets;
         this.missingResources = missingResources;
+        this.localizedResources = localizedResources;
+        this.locales = locales;
+        this.localizedRoots = (localizedRoots ?? [])
+            .Select(value => new ResourceKey(value).Path)
+            .OrderByDescending(value => value.Length)
+            .ToArray();
     }
 
     public Texture2D Load(ResourceKey key, string? overridePath = null)
@@ -50,7 +66,29 @@ public sealed class ResourceActorTextureLoader : IActorTextureLoader
             return Load(overridePath ?? key.Path);
         }
 
-        if (failOnMissingAssets || resources.Exists<Texture2D>(key, overridePath))
+        var root = localizedRoots.FirstOrDefault(value =>
+            key.Path.StartsWith($"{value}/", System.StringComparison.Ordinal));
+        if (root is not null && localizedResources is not null && locales is not null)
+        {
+            var resolution = localizedResources.Resolve<Texture2D>(
+                key,
+                root,
+                locales.DialogueLocale,
+                locales.GetDialogueFallbackChain(locales.DialogueLocale),
+                overridePath);
+            if (resolution.IsResolved)
+            {
+                return resources.Load<Texture2D>(
+                    resolution.ResolvedKey!.Value,
+                    resolution.ResolvedOverridePath);
+            }
+
+            if (failOnMissingAssets)
+            {
+                return resources.Load<Texture2D>(key, overridePath);
+            }
+        }
+        else if (failOnMissingAssets || resources.Exists<Texture2D>(key, overridePath))
         {
             return resources.Load<Texture2D>(key, overridePath);
         }

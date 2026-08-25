@@ -10,6 +10,8 @@ using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Presentation;
 using Majo.Runtime.Input;
+using Majo.Runtime.Localization;
+using Majo.Runtime.Resources;
 
 namespace Majo.Runtime.History;
 
@@ -20,6 +22,8 @@ public sealed class HistoryManager : IHistoryManager
     private readonly IAudioManager audio;
     private readonly IInputManager input;
     private readonly IRuntimeLogger logger;
+    private readonly ILocaleManager? locales;
+    private readonly ILocalizedResourceResolver? localizedResources;
     private readonly List<HistoryEntry> entries = new();
     private IInputHandle? toggleInput;
     private IInputHandle? modalInput;
@@ -33,7 +37,9 @@ public sealed class HistoryManager : IHistoryManager
         IAudioManager audio,
         IInputManager input,
         int capacity,
-        IRuntimeLogger? logger = null)
+        IRuntimeLogger? logger = null,
+        ILocaleManager? locales = null,
+        ILocalizedResourceResolver? localizedResources = null)
     {
         this.dialogue = dialogue ?? throw new ArgumentNullException(nameof(dialogue));
         this.presentation = presentation ??
@@ -41,6 +47,8 @@ public sealed class HistoryManager : IHistoryManager
         this.audio = audio ?? throw new ArgumentNullException(nameof(audio));
         this.input = input ?? throw new ArgumentNullException(nameof(input));
         this.logger = logger ?? NullRuntimeLogger.Instance;
+        this.locales = locales;
+        this.localizedResources = localizedResources;
         if (capacity <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(capacity));
@@ -187,8 +195,9 @@ public sealed class HistoryManager : IHistoryManager
 
         try
         {
+            var clipId = entry.VoicePath ?? entry.VoiceId;
             var result = await audio.PlayVoiceAsync(
-                entry.VoiceId,
+                clipId,
                 cancellationToken: cancellationToken);
             if (result.IsSkipped)
             {
@@ -224,12 +233,19 @@ public sealed class HistoryManager : IHistoryManager
             return;
         }
 
+        var voice = locales is not null && localizedResources is not null
+            ? DialogueVoiceResolver.ResolveExistingVoice(
+                line, audio, locales, localizedResources)
+            : null;
         entries.Add(new HistoryEntry(
             ++nextSequence,
             line.Id,
             line.Speaker,
             line.Text.Text,
-            DialogueVoiceResolver.ResolveExistingVoiceId(line, audio)));
+            voice?.VoiceId ?? DialogueVoiceResolver.ResolveExistingVoiceId(line, audio),
+            line.ResolvedLocale,
+            voice?.ResolvedPath,
+            voice?.ResolvedLocale));
         if (entries.Count > Capacity)
         {
             entries.RemoveRange(0, entries.Count - Capacity);

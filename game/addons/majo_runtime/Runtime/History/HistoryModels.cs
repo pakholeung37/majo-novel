@@ -10,7 +10,10 @@ public sealed record HistoryEntry(
     string LineId,
     string? Speaker,
     string Text,
-    string? VoiceId);
+    string? VoiceId,
+    string? Locale = null,
+    string? VoicePath = null,
+    string? VoiceLocale = null);
 
 public sealed record HistoryOpenStateChanged(bool IsOpen);
 

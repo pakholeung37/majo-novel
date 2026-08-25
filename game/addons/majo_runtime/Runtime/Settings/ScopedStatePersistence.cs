@@ -137,7 +137,7 @@ public abstract class ScopedStatePersistence : IRuntimeService
         return Task.CompletedTask;
     }
 
-    public async Task ShutdownAsync(CancellationToken cancellationToken)
+    public virtual async Task ShutdownAsync(CancellationToken cancellationToken)
     {
         CancelDebounce();
         try

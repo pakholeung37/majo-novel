@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Dialogue.Presentation;
 using Yarn.Markup;
@@ -16,6 +17,7 @@ internal sealed partial class MajoActionMarkupBridge : ActionMarkupHandler
     private readonly Action requestNextLine;
     private readonly IReadOnlyList<IDialogueMarkupHandler> handlers;
     private DialogueText? currentText;
+    private TaskCompletionSource inactive = CompletedInactiveSource();
 
     public MajoActionMarkupBridge(
         Action requestHurryUp,
@@ -48,6 +50,8 @@ internal sealed partial class MajoActionMarkupBridge : ActionMarkupHandler
         }
 
         currentText = YarnLineConverter.Convert(line);
+        inactive = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
         IsLineActive = true;
         IsDisplayComplete = false;
         foreach (var handler in handlers)
@@ -124,5 +128,17 @@ internal sealed partial class MajoActionMarkupBridge : ActionMarkupHandler
         currentText = null;
         IsLineActive = false;
         IsDisplayComplete = false;
+        inactive.TrySetResult();
+    }
+
+    public Task WaitUntilInactiveAsync(CancellationToken cancellationToken) =>
+        IsLineActive ? inactive.Task.WaitAsync(cancellationToken) : Task.CompletedTask;
+
+    private static TaskCompletionSource CompletedInactiveSource()
+    {
+        var source = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        source.SetResult();
+        return source;
     }
 }

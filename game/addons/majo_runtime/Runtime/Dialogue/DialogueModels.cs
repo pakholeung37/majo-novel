@@ -110,9 +110,11 @@ public sealed record DialogueLine(
     string Id,
     string? Speaker,
     DialogueText Text,
-    IReadOnlyList<string> Metadata);
+    IReadOnlyList<string> Metadata,
+    string? ResolvedLocale = null);
 
 public sealed record DialogueOption(
     int Id,
     DialogueLine Line,
-    bool IsAvailable);
+    bool IsAvailable,
+    IReadOnlyList<string>? Substitutions = null);

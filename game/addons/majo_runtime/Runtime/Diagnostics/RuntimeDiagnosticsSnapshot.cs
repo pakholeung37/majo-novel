@@ -30,11 +30,24 @@ public sealed record RuntimeDiagnosticsSnapshot(
     MissingResourceDiagnostics? MissingResources = null,
     SaveSlotDiagnostics? SaveSlots = null,
     SettingsDiagnostics? Settings = null,
-    GlobalStateDiagnostics? GlobalState = null);
+    GlobalStateDiagnostics? GlobalState = null,
+    LocaleDiagnostics? Locale = null);
+
+public sealed record LocaleDiagnostics(
+    string DialogueLocale,
+    string VoiceLocale,
+    string DefaultLocale,
+    string DefaultVoiceLocale,
+    IReadOnlyList<string> AvailableLocales,
+    IReadOnlyList<string> DialogueFallbackChain,
+    IReadOnlyList<string> VoiceFallbackChain,
+    string SwitchState,
+    int MissingKeyCount);
 
 public sealed record SettingsDiagnostics(
     bool IsDirty,
-    string Language,
+    string DialogueLocale,
+    string VoiceLocale,
     int LettersPerSecond,
     double AutoExtraDelaySeconds,
     ScopedStateRecoveryKind RecoveryKind,

@@ -3,11 +3,49 @@
 using System;
 using System.Linq;
 using Majo.Runtime.Dialogue;
+using Majo.Runtime.Localization;
+using Majo.Runtime.Resources;
 
 namespace Majo.Runtime.Audio;
 
-internal static class DialogueVoiceResolver
+public static class DialogueVoiceResolver
 {
+    public sealed record VoiceResolution(
+        string VoiceId,
+        string ResolvedPath,
+        string? ResolvedLocale,
+        LocalizedResourceFallbackSource FallbackSource);
+
+    public static VoiceResolution? ResolveExistingVoice(
+        DialogueLine line,
+        IAudioManager audio,
+        ILocaleManager locales,
+        ILocalizedResourceResolver resources)
+    {
+        ArgumentNullException.ThrowIfNull(line);
+        ArgumentNullException.ThrowIfNull(audio);
+        ArgumentNullException.ThrowIfNull(locales);
+        ArgumentNullException.ThrowIfNull(resources);
+        var voiceId = ResolveVoiceId(line);
+        if (voiceId is null)
+        {
+            return null;
+        }
+
+        var resolution = resources.ResolvePath(
+            voiceId,
+            locales.VoiceLocale,
+            locales.GetVoiceFallbackChain(locales.VoiceLocale),
+            candidate => audio.VoiceLoader.Exists(candidate));
+        return resolution.ResolvedPath is null
+            ? null
+            : new VoiceResolution(
+                voiceId,
+                resolution.ResolvedPath,
+                resolution.ResolvedLocale,
+                resolution.FallbackSource);
+    }
+
     public static string? ResolveExistingVoiceId(
         DialogueLine line,
         IAudioManager audio)
@@ -20,7 +58,8 @@ internal static class DialogueVoiceResolver
             return null;
         }
 
-        var localizedId = $"{audio.VoiceLocale}/{voiceId}";
+        var locale = audio.VoiceLocale;
+        var localizedId = $"{locale}/{voiceId}";
         return audio.VoiceLoader.Exists(localizedId) ? voiceId : null;
     }
 

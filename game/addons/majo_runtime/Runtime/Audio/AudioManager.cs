@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Majo.Runtime.Core;
+using Majo.Runtime.Localization;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Resources;
 
@@ -26,6 +27,8 @@ public sealed class AudioManager : IAudioManager
     private readonly IRuntimeLogger logger;
     private readonly IMissingResourceReporter? missingResources;
     private readonly bool failOnMissingClips;
+    private readonly ILocaleManager? locales;
+    private readonly ILocalizedResourceResolver? localizedResources;
     private AudioPlayback? voice;
     private IOperationHandle? voiceTransition;
     private long generatedSfxId;
@@ -49,7 +52,9 @@ public sealed class AudioManager : IAudioManager
         IAudioClipLoader voiceLoader,
         AudioSettings settings,
         IRuntimeLogger? logger = null,
-        IMissingResourceReporter? missingResources = null)
+        IMissingResourceReporter? missingResources = null,
+        ILocaleManager? locales = null,
+        ILocalizedResourceResolver? localizedResources = null)
     {
         this.backend = backend ?? throw new ArgumentNullException(nameof(backend));
         this.operations = operations ?? throw new ArgumentNullException(nameof(operations));
@@ -58,6 +63,8 @@ public sealed class AudioManager : IAudioManager
         VoiceLoader = voiceLoader ?? throw new ArgumentNullException(nameof(voiceLoader));
         this.logger = logger ?? NullRuntimeLogger.Instance;
         this.missingResources = missingResources;
+        this.locales = locales;
+        this.localizedResources = localizedResources;
         ArgumentNullException.ThrowIfNull(settings);
         masterVolume = ValidateVolume(settings.MasterVolume);
         bgmVolume = ValidateVolume(settings.BgmVolume);
@@ -169,6 +176,11 @@ public sealed class AudioManager : IAudioManager
 
         backendInitializationAttempted = true;
         await backend.InitializeAsync(cancellationToken);
+        if (locales is not null)
+        {
+            VoiceLocale = locales.VoiceLocale;
+            locales.VoiceLocaleChanged += HandleVoiceLocaleChanged;
+        }
         isInitialized = true;
     }
 
@@ -202,6 +214,10 @@ public sealed class AudioManager : IAudioManager
             await CompleteTransitionsAsync(cancellationToken);
             StopEveryPlayback();
             await backend.ShutdownAsync(cancellationToken);
+            if (locales is not null)
+            {
+                locales.VoiceLocaleChanged -= HandleVoiceLocaleChanged;
+            }
             isInitialized = false;
             backendInitializationAttempted = false;
         }
@@ -221,23 +237,25 @@ public sealed class AudioManager : IAudioManager
     {
         EnsureInitialized();
         clipId = RequireName(clipId, nameof(clipId));
+        var resolvedClipId = ResolveLocalizedClipId(
+            BgmLoader, clipId, locales?.DialogueLocale, useLegacyVoicePrefix: false);
         trackId = string.IsNullOrWhiteSpace(trackId) ? clipId : trackId.Trim();
         volume = ValidateVolume(volume);
         fade = fade.Validate();
-        if (ShouldSkipMissing(BgmLoader, clipId))
+        if (ShouldSkipMissing(BgmLoader, resolvedClipId))
         {
-            ReportMissingAudio(AudioCategory.Bgm, clipId, BgmLoader);
+            ReportMissingAudio(AudioCategory.Bgm, resolvedClipId, BgmLoader);
             return AudioPlaybackResult.Skipped(AudioCategory.Bgm, clipId, trackId);
         }
 
-        var clip = await BgmLoader.LoadAsync(clipId, cancellationToken: cancellationToken);
+        var clip = await BgmLoader.LoadAsync(resolvedClipId, cancellationToken: cancellationToken);
 
         await mutations.WaitAsync(cancellationToken);
         try
         {
             await CompleteTransitionAsync(bgmTransitions, trackId, cancellationToken);
             bgm.TryGetValue(trackId, out var previous);
-            if (previous is not null && previous.ClipId == clipId)
+            if (previous is not null && previous.ClipId == resolvedClipId)
             {
                 var previousVolume = previous.BaseVolume;
                 var previousLoop = previous.Backend.Loop;
@@ -260,7 +278,7 @@ public sealed class AudioManager : IAudioManager
             }
 
             var current = CreatePlayback(
-                AudioCategory.Bgm, clipId, trackId, clip, loop, volume,
+                AudioCategory.Bgm, resolvedClipId, trackId, clip, loop, volume,
                 fade.DurationSeconds > 0 ? 0 : EffectiveVolume(AudioCategory.Bgm, volume));
             lock (gate)
             {
@@ -356,18 +374,20 @@ public sealed class AudioManager : IAudioManager
     {
         EnsureInitialized();
         clipId = RequireName(clipId, nameof(clipId));
+        var resolvedClipId = ResolveLocalizedClipId(
+            SfxLoader, clipId, locales?.DialogueLocale, useLegacyVoicePrefix: false);
         volume = ValidateVolume(volume);
         fade = fade.Validate();
         instanceId = string.IsNullOrWhiteSpace(instanceId)
             ? $"sfx-{Interlocked.Increment(ref generatedSfxId)}"
             : instanceId.Trim();
-        if (ShouldSkipMissing(SfxLoader, clipId))
+        if (ShouldSkipMissing(SfxLoader, resolvedClipId))
         {
-            ReportMissingAudio(AudioCategory.Sfx, clipId, SfxLoader);
+            ReportMissingAudio(AudioCategory.Sfx, resolvedClipId, SfxLoader);
             return AudioPlaybackResult.Skipped(AudioCategory.Sfx, clipId, instanceId);
         }
 
-        var clip = await SfxLoader.LoadAsync(clipId, cancellationToken: cancellationToken);
+        var clip = await SfxLoader.LoadAsync(resolvedClipId, cancellationToken: cancellationToken);
         await mutations.WaitAsync(cancellationToken);
         try
         {
@@ -380,7 +400,7 @@ public sealed class AudioManager : IAudioManager
             }
 
             var playback = CreatePlayback(
-                AudioCategory.Sfx, clipId, instanceId, clip, loop, volume,
+                AudioCategory.Sfx, resolvedClipId, instanceId, clip, loop, volume,
                 fade.DurationSeconds > 0 ? 0 : EffectiveVolume(AudioCategory.Sfx, volume));
             lock (gate) { sfx.Add(instanceId, playback); }
             var operation = StartFade(
@@ -448,7 +468,8 @@ public sealed class AudioManager : IAudioManager
         clipId = RequireName(clipId, nameof(clipId));
         volume = ValidateVolume(volume);
         fade = fade.Validate();
-        var localizedId = $"{voiceLocale}/{clipId}";
+        var localizedId = ResolveLocalizedClipId(
+            VoiceLoader, clipId, voiceLocale, useLegacyVoicePrefix: true);
         if (ShouldSkipMissing(VoiceLoader, localizedId, overridePath))
         {
             ReportMissingAudio(
@@ -482,7 +503,7 @@ public sealed class AudioManager : IAudioManager
             }
 
             var playback = CreatePlayback(
-                AudioCategory.Voice, clipId, "voice", clip, loop, volume,
+                AudioCategory.Voice, localizedId, "voice", clip, loop, volume,
                 fade.DurationSeconds > 0 ? 0 : EffectiveVolume(AudioCategory.Voice, volume));
             lock (gate) { voice = playback; }
             var operation = StartFade(
@@ -997,6 +1018,32 @@ public sealed class AudioManager : IAudioManager
         AudioCategory.Voice => voiceVolume,
         _ => 1,
     };
+
+    private string ResolveLocalizedClipId(
+        IAudioClipLoader loader,
+        string clipId,
+        string? locale,
+        bool useLegacyVoicePrefix)
+    {
+        if (localizedResources is null || locales is null ||
+            string.IsNullOrWhiteSpace(locale) || clipId.Contains('/'))
+        {
+            return useLegacyVoicePrefix && !clipId.Contains('/')
+                ? $"{voiceLocale}/{clipId}"
+                : clipId;
+        }
+
+        return localizedResources.ResolvePath(
+            clipId,
+            locale,
+            useLegacyVoicePrefix
+                ? locales.GetVoiceFallbackChain(locale)
+                : locales.GetDialogueFallbackChain(locale),
+            candidate => loader.Exists(candidate)).ResolvedPath ?? $"{locale}/{clipId}";
+    }
+
+    private void HandleVoiceLocaleChanged(LocaleChangedEvent change) =>
+        VoiceLocale = change.CurrentLocale;
 
     private void EnsureInitialized()
     {

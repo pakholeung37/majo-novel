@@ -1,5 +1,9 @@
 #nullable enable
 
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Script;
 using YarnSpinnerGodot;
@@ -18,5 +22,15 @@ public interface IYarnDialogueBackend : IDialogueBackend,
 
     void UnregisterNativePresenter(Node presenter);
 
+    void SetPresentationQuiescenceWaiter(Func<CancellationToken, Task>? waiter);
+
     void ObserveCommandAdapter(IYarnCommandAdapter adapter);
+
+    DialogueLine? ReResolveCurrentLine(string locale, IReadOnlyList<string> fallbackChain);
+
+    IReadOnlyList<DialogueOption> ReResolveCurrentOptions(string locale, IReadOnlyList<string> fallbackChain);
+
+    void SetLocale(string locale);
+
+    Task WaitForLocaleSwitchBoundaryAsync(CancellationToken cancellationToken);
 }

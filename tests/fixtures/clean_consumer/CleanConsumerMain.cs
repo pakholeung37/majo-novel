@@ -166,7 +166,13 @@ public partial class CleanConsumerMain : Node
         await state.RestoreGameAsync(snapshot);
         await WaitForConditionAsync(
             () => lineProbe.Lines.Count >= 3 && presentation.IsLineActive,
-            2);
+            2,
+            () => $"Restored line did not become active: " +
+                $"probeCount={lineProbe.Lines.Count}, " +
+                $"isLineActive={presentation.IsLineActive}, " +
+                $"isDisplayComplete={presentation.IsLineDisplayComplete}, " +
+                $"currentLine='{dialogue.CurrentLineId ?? "<none>"}', " +
+                $"phase={script.Phase}.");
         dialogue.RequestHurryUp();
         await WaitForConditionAsync(() => presentation.IsLineDisplayComplete, 2);
 
@@ -222,7 +228,10 @@ public partial class CleanConsumerMain : Node
         await suite;
     }
 
-    private async Task WaitForConditionAsync(Func<bool> condition, double timeoutSeconds)
+    private async Task WaitForConditionAsync(
+        Func<bool> condition,
+        double timeoutSeconds,
+        Func<string>? timeoutMessage = null)
     {
         var startedAtMilliseconds = Time.GetTicksMsec();
         var timeoutMilliseconds = timeoutSeconds * 1_000;
@@ -230,7 +239,7 @@ public partial class CleanConsumerMain : Node
         {
             if (Time.GetTicksMsec() - startedAtMilliseconds >= timeoutMilliseconds)
             {
-                throw new TimeoutException(
+                throw new TimeoutException(timeoutMessage?.Invoke() ??
                     $"Condition was not reached within {timeoutSeconds:0.###} seconds.");
             }
 

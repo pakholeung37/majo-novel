@@ -6,6 +6,7 @@ using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
 using Majo.Runtime.Diagnostics;
 using Majo.Runtime.Input;
+using Majo.Runtime.Localization;
 
 namespace Majo.Runtime.UI.Diagnostics;
 
@@ -18,7 +19,13 @@ public partial class DefaultDebugOverlay : CanvasLayer, IDisposable
     private IInputHandle? toggleHandle;
     private IInputHandle? modalHandle;
     private Control? rootControl;
+    private Label? titleLabel;
+    private Button? closeButton;
+    private Button? refreshButton;
+    private Button? copySummaryButton;
+    private Button? exportButton;
     private Label? summaryLabel;
+    private Label? logHeaderLabel;
     private RichTextLabel? logTextLabel;
     private Label? statusLabel;
     private InputActionId? toggleAction;
@@ -211,36 +218,36 @@ public partial class DefaultDebugOverlay : CanvasLayer, IDisposable
         var headerBox = new HBoxContainer();
         vbox.AddChild(headerBox);
 
-        var titleLabel = new Label
+        titleLabel = new Label
         {
-            Text = "Majo Runtime Diagnostics Inspector",
+            Text = TrText(UiStringKeys.DebugTitle, "Majo Runtime Diagnostics Inspector"),
         };
         headerBox.AddChild(titleLabel);
 
-        var closeButton = new Button
+        closeButton = new Button
         {
-            Text = " Close (F3/Toggle) ",
+            Text = TrText(UiStringKeys.DebugClose, " Close (F3/Toggle) "),
         };
         closeButton.Pressed += Close;
         headerBox.AddChild(closeButton);
 
-        var refreshButton = new Button
+        refreshButton = new Button
         {
-            Text = " Refresh ",
+            Text = TrText(UiStringKeys.DebugRefresh, " Refresh "),
         };
         refreshButton.Pressed += Refresh;
         headerBox.AddChild(refreshButton);
 
-        var copySummaryButton = new Button
+        copySummaryButton = new Button
         {
-            Text = " Copy Summary ",
+            Text = TrText(UiStringKeys.DebugCopy, " Copy Summary "),
         };
         copySummaryButton.Pressed += HandleCopySummary;
         headerBox.AddChild(copySummaryButton);
 
-        var exportButton = new Button
+        exportButton = new Button
         {
-            Text = " Export Report ",
+            Text = TrText(UiStringKeys.DebugExport, " Export Report "),
         };
         exportButton.Pressed += HandleExportReport;
         headerBox.AddChild(exportButton);
@@ -257,11 +264,11 @@ public partial class DefaultDebugOverlay : CanvasLayer, IDisposable
         };
         vbox.AddChild(summaryLabel);
 
-        var logHeader = new Label
+        logHeaderLabel = new Label
         {
-            Text = "Recent Log Events:",
+            Text = TrText(UiStringKeys.DebugRecentLogs, "Recent Log Events:"),
         };
-        vbox.AddChild(logHeader);
+        vbox.AddChild(logHeaderLabel);
 
         logTextLabel = new RichTextLabel
         {
@@ -271,6 +278,8 @@ public partial class DefaultDebugOverlay : CanvasLayer, IDisposable
         };
         vbox.AddChild(logTextLabel);
     }
+
+    private static string TrText(string key, string fallback) => fallback;
 
     private void HandleCopySummary()
     {

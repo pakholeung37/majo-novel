@@ -205,11 +205,11 @@ public sealed class AudioManagerTests
 
         await presenter.PresentLineAsync(conventional, context);
         Assert.Equal("line-1", presenter.LastVoiceId);
-        Assert.Equal("line-1", harness.Audio.CurrentVoice?.ClipId);
+        Assert.Equal("en/line-1", harness.Audio.CurrentVoice?.ClipId);
 
         await presenter.PresentLineAsync(Line("line-x", "voice:line-2"), context);
         Assert.Equal("line-2", presenter.LastVoiceId);
-        Assert.Equal("line-2", harness.Audio.CurrentVoice?.ClipId);
+        Assert.Equal("en/line-2", harness.Audio.CurrentVoice?.ClipId);
 
         await presenter.PresentLineAsync(Line("line-x", "voice:missing"), context);
         Assert.Null(presenter.LastVoiceId);

@@ -17,19 +17,22 @@ internal sealed partial class YarnDialoguePresenterAdapter : Node, DialoguePrese
     private readonly IReadOnlyList<IDialoguePresenter> presenters;
     private readonly Action requestHurryUp;
     private readonly Action requestNextLine;
+    private readonly Func<LocalizedLine, DialogueLine> lineConverter;
     private readonly Action<DialogueLine, IReadOnlyList<string>> linePresented;
     private readonly Action<IReadOnlyList<MajoDialogueOption>> optionsPresented;
     private readonly object stopGate = new();
     private TaskCompletionSource stopBoundary = NewStopBoundary();
     private bool stopRequested;
     private int activePresentations;
+    private TaskCompletionSource? localeBoundary;
 
     public YarnDialoguePresenterAdapter(
         IReadOnlyList<IDialoguePresenter> presenters,
         Action requestHurryUp,
         Action requestNextLine,
         Action<DialogueLine, IReadOnlyList<string>> linePresented,
-        Action<IReadOnlyList<MajoDialogueOption>> optionsPresented)
+        Action<IReadOnlyList<MajoDialogueOption>> optionsPresented,
+        Func<LocalizedLine, DialogueLine>? lineConverter = null)
     {
         this.presenters = presenters ?? throw new ArgumentNullException(nameof(presenters));
         this.requestHurryUp = requestHurryUp ??
@@ -40,6 +43,7 @@ internal sealed partial class YarnDialoguePresenterAdapter : Node, DialoguePrese
             throw new ArgumentNullException(nameof(linePresented));
         this.optionsPresented = optionsPresented ??
             throw new ArgumentNullException(nameof(optionsPresented));
+        this.lineConverter = lineConverter ?? (line => YarnLineConverter.Convert(line));
     }
 
     public List<IActionMarkupHandler> ActionMarkupHandlers { get; } = new();
@@ -97,7 +101,7 @@ internal sealed partial class YarnDialoguePresenterAdapter : Node, DialoguePrese
             return;
         }
 
-        var converted = YarnLineConverter.Convert(line);
+        var converted = lineConverter(line);
         try
         {
             linePresented(converted, Array.AsReadOnly(line.Substitutions.ToArray()));
@@ -158,7 +162,11 @@ internal sealed partial class YarnDialoguePresenterAdapter : Node, DialoguePrese
         YarnDialogueOption[] dialogueOptions,
         CancellationToken cancellationToken)
     {
-        var converted = dialogueOptions.Select(YarnLineConverter.Convert).ToArray();
+        var converted = dialogueOptions.Select(option => new MajoDialogueOption(
+            option.DialogueOptionID,
+            lineConverter(option.Line),
+            option.IsAvailable,
+            Array.AsReadOnly(option.Line.Substitutions.ToArray()))).ToArray();
         optionsPresented(converted);
         if (presenters.Count == 0)
         {
@@ -265,6 +273,8 @@ internal sealed partial class YarnDialoguePresenterAdapter : Node, DialoguePrese
         lock (stopGate)
         {
             activePresentations++;
+            localeBoundary?.TrySetResult();
+            localeBoundary = null;
             if (stopRequested)
             {
                 stopBoundary.TrySetResult();
@@ -288,6 +298,22 @@ internal sealed partial class YarnDialoguePresenterAdapter : Node, DialoguePrese
         lock (stopGate)
         {
             stopBoundary.TrySetResult();
+            localeBoundary?.TrySetResult();
+            localeBoundary = null;
+        }
+    }
+
+    public Task WaitForPresentationBoundaryAsync(CancellationToken cancellationToken)
+    {
+        lock (stopGate)
+        {
+            if (activePresentations > 0 || stopRequested)
+            {
+                return Task.CompletedTask;
+            }
+
+            localeBoundary ??= NewStopBoundary();
+            return localeBoundary.Task.WaitAsync(cancellationToken);
         }
     }
 

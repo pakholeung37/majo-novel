@@ -17,6 +17,7 @@ using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Dialogue.Yarn;
 using Majo.Runtime.History;
 using Majo.Runtime.Input;
+using Majo.Runtime.Localization;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Resources;
 using Majo.Runtime.Save;
@@ -349,7 +350,8 @@ public sealed class RuntimeDiagnosticsService : IRuntimeDiagnostics
         {
             settingsDiag = new SettingsDiagnostics(
                 settingsManager.IsDirty,
-                settingsManager.Current.Language,
+                settingsManager.Current.DialogueLocale,
+                settingsManager.Current.VoiceLocale,
                 settingsManager.Current.LettersPerSecond,
                 settingsManager.Current.AutoExtraDelaySeconds,
                 settingsManager.RecoveryStatus.Kind,
@@ -368,6 +370,24 @@ public sealed class RuntimeDiagnosticsService : IRuntimeDiagnostics
                 globalManager.LastPersistenceError,
                 globalManager.RecoveryStatus.QuarantineKey,
                 globalManager.RecoveryStatus.BackupKey);
+        }
+
+        LocaleDiagnostics? localeDiag = null;
+        if (services.TryGet<ILocaleManager>(out var localeManager) &&
+            localeManager is not null)
+        {
+            initializedServicesList.Add(nameof(ILocaleManager));
+            var diag = localeManager.CaptureDiagnostics();
+            localeDiag = new LocaleDiagnostics(
+                diag.DialogueLocale,
+                diag.VoiceLocale,
+                diag.DefaultLocale,
+                diag.DefaultVoiceLocale,
+                diag.AvailableLocales,
+                diag.DialogueFallbackChain,
+                diag.VoiceFallbackChain,
+                diag.SwitchState.ToString(),
+                diag.MissingKeyCount);
         }
 
         var customSections = new Dictionary<string, DiagnosticSection>(StringComparer.Ordinal);
@@ -404,7 +424,8 @@ public sealed class RuntimeDiagnosticsService : IRuntimeDiagnostics
             missingResourceDiag,
             saveSlotDiag,
             settingsDiag,
-            globalDiag);
+            globalDiag,
+            localeDiag);
     }
 
     public async Task<string> ExportReportAsync(
@@ -557,6 +578,21 @@ public sealed class RuntimeDiagnosticsService : IRuntimeDiagnostics
                     $"- Last Failure: phase=`{snapshot.SaveSlots.LastFailurePhase}`, " +
                     $"message=`{snapshot.SaveSlots.LastFailureMessage}`");
             }
+            builder.AppendLine();
+        }
+
+        if (snapshot.Locale is not null)
+        {
+            builder.AppendLine("## Localization");
+            builder.AppendLine($"- Dialogue Locale: `{snapshot.Locale.DialogueLocale}`");
+            builder.AppendLine($"- Voice Locale: `{snapshot.Locale.VoiceLocale}`");
+            builder.AppendLine($"- Default Dialogue Locale: `{snapshot.Locale.DefaultLocale}`");
+            builder.AppendLine($"- Default Voice Locale: `{snapshot.Locale.DefaultVoiceLocale}`");
+            builder.AppendLine($"- Available Locales: {string.Join(", ", snapshot.Locale.AvailableLocales)}");
+            builder.AppendLine($"- Dialogue Fallback: {string.Join(" -> ", snapshot.Locale.DialogueFallbackChain)}");
+            builder.AppendLine($"- Voice Fallback: {string.Join(" -> ", snapshot.Locale.VoiceFallbackChain)}");
+            builder.AppendLine($"- Switch State: `{snapshot.Locale.SwitchState}`");
+            builder.AppendLine($"- Missing Keys: {snapshot.Locale.MissingKeyCount}");
             builder.AppendLine();
         }
 

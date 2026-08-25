@@ -27,7 +27,16 @@ public partial class SettingsConfiguration : Resource
     public bool ShowTextBox { get; set; } = true;
 
     [Export]
-    public string Language { get; set; } = "en";
+    public string DialogueLocale { get; set; } = "en";
+
+    [Export]
+    public string VoiceLocale { get; set; } = "en";
+
+    [Export(PropertyHint.Range, "0.5,2.0,0.05,or_greater")]
+    public double FontScale { get; set; } = 1.0;
+
+    [Export(PropertyHint.Range, "0,32,1,or_greater")]
+    public int LineSpacing { get; set; }
 
     [Export]
     public SkipDefaultMode SkipDefaultMode { get; set; } = SkipDefaultMode.ReadOnly;

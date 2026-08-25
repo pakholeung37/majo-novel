@@ -5,6 +5,7 @@ using Majo.Runtime.Audio;
 using Majo.Runtime.Auto;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Presentation;
+using Majo.Runtime.Localization;
 
 namespace Majo.Runtime.Settings;
 
@@ -13,15 +14,18 @@ public sealed class RuntimeSettingsProjection : ISettingsProjection
     private readonly IAudioManager audio;
     private readonly IPlaybackModeManager playback;
     private readonly IDialoguePresentationSettings? presentation;
+    private readonly ILocaleManager? localeManager;
 
     public RuntimeSettingsProjection(
         IAudioManager audio,
         IPlaybackModeManager playback,
-        IDialoguePresentation presentation)
+        IDialoguePresentation presentation,
+        ILocaleManager? localeManager = null)
     {
         this.audio = audio ?? throw new ArgumentNullException(nameof(audio));
         this.playback = playback ?? throw new ArgumentNullException(nameof(playback));
         this.presentation = presentation as IDialoguePresentationSettings;
+        this.localeManager = localeManager;
     }
 
     public void Apply(RuntimeSettings settings)
@@ -45,6 +49,16 @@ public sealed class RuntimeSettingsProjection : ISettingsProjection
         if (presentation is not null)
         {
             presentation.LettersPerSecond = settings.LettersPerSecond;
+        }
+
+        if (localeManager is not null)
+        {
+            localeManager.Fonts.SetTypography(settings.FontScale, settings.LineSpacing);
+        }
+
+        if (!string.IsNullOrWhiteSpace(settings.VoiceLocale))
+        {
+            audio.VoiceLocale = settings.VoiceLocale;
         }
     }
 }

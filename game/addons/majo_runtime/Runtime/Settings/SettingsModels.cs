@@ -26,7 +26,11 @@ public sealed record RuntimeSettings(
     double SkipDelaySeconds = 0.05,
     bool ShowSpeakerName = true,
     bool ShowTextBox = true,
-    string Language = "en")
+    string DialogueLocale = "en",
+    string VoiceLocale = "en",
+    double FontScale = 1.0,
+    int LineSpacing = 0,
+    string? Language = null)
 {
     public RuntimeSettings Validate()
     {
@@ -50,8 +54,19 @@ public sealed record RuntimeSettings(
         {
             throw new ArgumentOutOfRangeException(nameof(SkipDefaultMode));
         }
-        ArgumentException.ThrowIfNullOrWhiteSpace(Language);
-        return this;
+        if (!double.IsFinite(FontScale) || FontScale <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(FontScale), "Font scale must be greater than zero.");
+        }
+        if (LineSpacing < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(LineSpacing), "Line spacing cannot be negative.");
+        }
+        ArgumentException.ThrowIfNullOrWhiteSpace(DialogueLocale);
+        ArgumentException.ThrowIfNullOrWhiteSpace(VoiceLocale);
+        return string.IsNullOrWhiteSpace(Language)
+            ? this
+            : this with { DialogueLocale = Language, Language = null };
     }
 
     private static void ValidateVolume(float value, string name)

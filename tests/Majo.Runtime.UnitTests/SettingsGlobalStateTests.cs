@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Majo.Runtime.Settings;
 using Majo.Runtime.State;
+using Majo.Runtime.Localization;
 using Xunit;
 
 namespace Majo.Runtime.UnitTests;
@@ -150,6 +151,41 @@ public sealed class SettingsGlobalStateTests
     }
 
     [Fact]
+    public async Task FailedLocaleSwitchDoesNotCommitSettingsLanguage()
+    {
+        using var directory = new TemporaryDirectory();
+        var locales = new LocaleManager(
+            "en",
+            ["en", "zh-CN"],
+            preflightLocale: (locale, _) => throw new InvalidOperationException($"Missing catalog for {locale}"));
+        var manager = CreateLocaleSettings(directory.Path, locales);
+        await locales.InitializeAsync(default);
+        await manager.InitializeAsync(default);
+
+        manager.Update(manager.Current with { DialogueLocale = "zh-CN" });
+
+        Assert.Equal("en", locales.DialogueLocale);
+        Assert.Equal("en", manager.Current.DialogueLocale);
+        Assert.Contains("Missing catalog", manager.LastProjectionError);
+    }
+
+    [Fact]
+    public async Task DirectLocaleSwitchCommitsSettingsLanguage()
+    {
+        using var directory = new TemporaryDirectory();
+        var locales = new LocaleManager("en", ["en", "zh-CN"]);
+        var manager = CreateLocaleSettings(directory.Path, locales);
+        await locales.InitializeAsync(default);
+        await manager.InitializeAsync(default);
+
+        var result = await locales.ChangeLocaleAsync("zh-CN");
+
+        Assert.True(result.Success);
+        Assert.Equal("zh-CN", manager.Current.DialogueLocale);
+        Assert.True(manager.IsDirty);
+    }
+
+    [Fact]
     public async Task GlobalContributorUsesRegisteredSchemaMigration()
     {
         using var directory = new TemporaryDirectory();
@@ -203,7 +239,7 @@ public sealed class SettingsGlobalStateTests
 
     private static SettingsManager CreateSettings(string root, ISettingsProjection projection)
     {
-        var defaults = new RuntimeSettings(Language: "zh-Hans");
+        var defaults = new RuntimeSettings(DialogueLocale: "zh-Hans", VoiceLocale: "en");
         return new SettingsManager(
             defaults,
             [],
@@ -216,6 +252,19 @@ public sealed class SettingsGlobalStateTests
             "test",
             TimeSpan.FromHours(1));
     }
+
+    private static SettingsManager CreateLocaleSettings(string root, ILocaleManager locales) => new(
+        new RuntimeSettings(DialogueLocale: "en", VoiceLocale: "en"),
+        [],
+        [new RecordingProjection()],
+        new CanonicalJsonStateSerializer(),
+        new FileStateStorage(root, "test"),
+        new StateMigrationRegistry(),
+        "1.0.0",
+        "build",
+        "test",
+        TimeSpan.FromHours(1),
+        localeManager: locales);
 
     private static GlobalStateManager CreateGlobal(
         string root,

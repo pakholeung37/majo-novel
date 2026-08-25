@@ -141,7 +141,7 @@ public partial class HeadlessTestRunner
             .Single(button => button.TooltipText == "Replay voice: m10-voice");
         replayButton.EmitSignal(BaseButton.SignalName.Pressed);
         await WaitForConditionAsync(
-            () => audio.CurrentVoice?.ClipId == "m10-voice",
+            () => audio.CurrentVoice?.ClipId == "en/m10-voice",
             2);
         Assert(audio.CurrentVoice?.State == AudioPlaybackState.Playing,
             "M10 default History UI could not replay the retained Voice entry.");

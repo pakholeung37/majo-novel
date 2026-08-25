@@ -58,7 +58,8 @@ public sealed record SaveSlotMetadata(
     string? ThumbnailReference,
     string? ThumbnailFailureReason,
     IReadOnlyDictionary<string, string> DeveloperMetadata,
-    string? FailureMessage = null);
+    string? FailureMessage = null,
+    string? Locale = null);
 
 public sealed record SaveSlotSaveRequest(
     string? PlayerName = null,
@@ -136,6 +137,7 @@ public static class SaveSlotMetadataKeys
     public const string PlayerName = "majo.slot.playerName";
     public const string Speaker = "majo.slot.speaker";
     public const string TextSummary = "majo.slot.textSummary";
+    public const string Locale = "majo.slot.locale";
     public const string ThumbnailReference = "majo.slot.thumbnail";
     public const string ThumbnailFailure = "majo.slot.thumbnailFailure";
     public const string DeveloperPrefix = "developer.";

@@ -9,6 +9,7 @@ using Godot;
 using Majo.Runtime.Auto;
 using Majo.Runtime.Core;
 using Majo.Runtime.Input;
+using Majo.Runtime.Localization;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Save;
 
@@ -218,16 +219,16 @@ public sealed class DefaultSaveLoadOverlay : ISaveLoadOverlay
         layout.AddChild(header);
         header.AddChild(new Label
         {
-            Text = "Save / Load",
+            Text = TrText(UiStringKeys.SaveLoadTitle, "Save / Load"),
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
         });
-        var quick = new Button { Text = "Quick Save" };
+        var quick = new Button { Text = TrText(UiStringKeys.SaveLoadQuickSave, "Quick Save") };
         quick.Pressed += () => _ = QuickSaveFromUiAsync();
         header.AddChild(quick);
-        var close = new Button { Text = "Close" };
+        var close = new Button { Text = TrText(UiStringKeys.SaveLoadClose, "Close") };
         close.Pressed += () => _ = CloseFromUiAsync();
         header.AddChild(close);
-        statusLabel = new Label { Text = "Ready" };
+        statusLabel = new Label { Text = TrText(UiStringKeys.SaveLoadReady, "Ready") };
         layout.AddChild(statusLabel);
         var scroll = new ScrollContainer { SizeFlagsVertical = Control.SizeFlags.ExpandFill };
         layout.AddChild(scroll);
@@ -235,6 +236,8 @@ public sealed class DefaultSaveLoadOverlay : ISaveLoadOverlay
         scroll.AddChild(entries);
         return panel;
     }
+
+    private static string TrText(string key, string fallback) => fallback;
 
     private async Task RebuildAsync()
     {
@@ -254,9 +257,9 @@ public sealed class DefaultSaveLoadOverlay : ISaveLoadOverlay
                 child.Free();
             }
             var byId = saved.ToDictionary(value => value.Id);
-            AddSection("Manual", SaveSlotKind.Manual, byId, includeEmpty: true);
-            AddSection("Quick", SaveSlotKind.Quick, byId, includeEmpty: false);
-            AddSection("Auto", SaveSlotKind.Auto, byId, includeEmpty: false);
+            AddSection(TrText(UiStringKeys.SaveLoadSectionManual, "Manual"), SaveSlotKind.Manual, byId, includeEmpty: true);
+            AddSection(TrText(UiStringKeys.SaveLoadSectionQuick, "Quick"), SaveSlotKind.Quick, byId, includeEmpty: false);
+            AddSection(TrText(UiStringKeys.SaveLoadSectionAuto, "Auto"), SaveSlotKind.Auto, byId, includeEmpty: false);
             entries.GetChildren().OfType<Button>().FirstOrDefault()?.GrabFocus();
         }
         catch (OperationCanceledException)
@@ -292,17 +295,18 @@ public sealed class DefaultSaveLoadOverlay : ISaveLoadOverlay
         }
         if (!any)
         {
-            entries.AddChild(new Label { Text = "No saves." });
+            entries.AddChild(new Label { Text = TrText(UiStringKeys.SaveLoadEmptySaves, "No saves.") });
         }
     }
 
     private Control BuildSlotRow(SaveSlotId id, SaveSlotMetadata? metadata)
     {
         var row = new HBoxContainer();
+        var emptyText = TrText(UiStringKeys.SaveLoadSlotEmpty, "Empty");
         var label = new Label
         {
             Text = metadata is null
-                ? $"{id.Index:D2}  Empty"
+                ? $"{id.Index:D2}  {emptyText}"
                 : FormatMetadata(metadata),
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
             TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis,
@@ -310,11 +314,12 @@ public sealed class DefaultSaveLoadOverlay : ISaveLoadOverlay
         row.AddChild(label);
         if (id.Kind == SaveSlotKind.Manual)
         {
-            var save = new Button { Text = metadata is null ? "Save" : "Overwrite" };
+            var saveText = metadata is null ? TrText(UiStringKeys.SaveLoadBtnSave, "Save") : TrText(UiStringKeys.SaveLoadBtnOverwrite, "Overwrite");
+            var save = new Button { Text = saveText };
             save.Disabled = !CanSaveFromMenu(id);
             save.Pressed += () => ConfirmOrRun(
                 id,
-                "overwrite",
+                saveText,
                 metadata is not null,
                 () => SaveFromUiAsync(id));
             row.AddChild(save);
@@ -323,7 +328,7 @@ public sealed class DefaultSaveLoadOverlay : ISaveLoadOverlay
         {
             var load = new Button
             {
-                Text = "Load",
+                Text = TrText(UiStringKeys.SaveLoadBtnLoad, "Load"),
                 Disabled = metadata.Compatibility != SaveSlotCompatibility.Compatible,
             };
             load.Pressed += () => _ = LoadFromUiAsync(id);
@@ -333,18 +338,19 @@ public sealed class DefaultSaveLoadOverlay : ISaveLoadOverlay
                 var name = new LineEdit
                 {
                     Text = metadata.PlayerName ?? string.Empty,
-                    PlaceholderText = "Save name",
+                    PlaceholderText = TrText(UiStringKeys.SaveLoadPlaceholderName, "Save name"),
                     CustomMinimumSize = new Vector2(140, 0),
                 };
                 row.AddChild(name);
-                var rename = new Button { Text = "Rename" };
+                var rename = new Button { Text = TrText(UiStringKeys.SaveLoadBtnRename, "Rename") };
                 rename.Pressed += () => _ = RenameFromUiAsync(id, name.Text);
                 row.AddChild(rename);
             }
-            var delete = new Button { Text = "Delete" };
+            var deleteText = TrText(UiStringKeys.SaveLoadBtnDelete, "Delete");
+            var delete = new Button { Text = deleteText };
             delete.Pressed += () => ConfirmOrRun(
                 id,
-                "delete",
+                deleteText,
                 true,
                 () => DeleteFromUiAsync(id));
             row.AddChild(delete);
@@ -366,7 +372,8 @@ public sealed class DefaultSaveLoadOverlay : ISaveLoadOverlay
         if (pendingConfirmation != (slot, action))
         {
             pendingConfirmation = (slot, action);
-            SetStatus($"Press {action} again to confirm {slot}.");
+            var confirmTemplate = TrText(UiStringKeys.SaveLoadConfirm, "Press {0} again to confirm {1}.");
+            SetStatus(string.Format(confirmTemplate, action, slot));
             return;
         }
         pendingConfirmation = null;

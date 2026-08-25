@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Majo.Runtime.Core;
+using Majo.Runtime.Localization;
 
 namespace Majo.Runtime.Actors;
 
@@ -21,12 +22,18 @@ public sealed class ActorManager : IActorManager
     private readonly Dictionary<string, Task<IActor>> pendingActors =
         new(StringComparer.Ordinal);
     private CancellationTokenSource actorLifetime = new();
+    private readonly ILocaleManager? locales;
+    private readonly IRuntimeLogger logger;
     private bool isInitialized;
 
     public ActorManager(
         IEnumerable<ActorDefinition> definitions,
-        IEnumerable<IActorFactory>? factories = null)
+        IEnumerable<IActorFactory>? factories = null,
+        ILocaleManager? locales = null,
+        IRuntimeLogger? logger = null)
     {
+        this.locales = locales;
+        this.logger = logger ?? NullRuntimeLogger.Instance;
         ArgumentNullException.ThrowIfNull(definitions);
         foreach (var definition in definitions)
         {
@@ -94,6 +101,11 @@ public sealed class ActorManager : IActorManager
             factory.ValidateDefinition(definition);
         }
 
+        if (locales is not null)
+        {
+            locales.DialogueLocaleChanged += HandleDialogueLocaleChanged;
+        }
+
         isInitialized = true;
         return Task.CompletedTask;
     }
@@ -116,6 +128,10 @@ public sealed class ActorManager : IActorManager
         cancellationToken.ThrowIfCancellationRequested();
         await CancelPendingCreationsAsync(cancellationToken, replaceLifetime: false);
         DestroyAll();
+        if (locales is not null)
+        {
+            locales.DialogueLocaleChanged -= HandleDialogueLocaleChanged;
+        }
         isInitialized = false;
         actorLifetime.Dispose();
     }
@@ -280,6 +296,31 @@ public sealed class ActorManager : IActorManager
         if (exceptions.Count > 0)
         {
             throw new AggregateException("One or more actors failed to destroy.", exceptions);
+        }
+    }
+
+    private void HandleDialogueLocaleChanged(LocaleChangedEvent change)
+    {
+        IActor[] snapshot;
+        lock (gate)
+        {
+            snapshot = actors.Values.Where(actor => actor.Visible).ToArray();
+        }
+
+        foreach (var actor in snapshot)
+        {
+            try
+            {
+                actor.SetAppearance(actor.Appearance);
+            }
+            catch (Exception exception)
+            {
+                logger.Warning(
+                    "locale",
+                    "locale.actor_refresh_failed",
+                    $"Actor '{actor.Id}' kept its previous appearance after dialogue locale switched to '{change.CurrentLocale}': {exception.Message}",
+                    exception);
+            }
         }
     }
 

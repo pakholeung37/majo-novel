@@ -23,6 +23,7 @@ using Majo.Runtime.Dialogue.Yarn.Presentation;
 using Majo.Runtime.Input;
 using Majo.Runtime.Input.Godot;
 using Majo.Runtime.History;
+using Majo.Runtime.Localization;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Operations.Godot;
 using Majo.Runtime.Played;
@@ -63,6 +64,9 @@ public partial class MajoRuntimeBootstrap : Node
     private readonly CancellationTokenSource bootstrapLifetime = new();
     private Task? shutdownTask;
     private IYarnCommandAdapter? yarnCommandAdapter;
+    private IYarnDialogueBackend? yarnDialogueBackend;
+    private IDialoguePlayer? dialoguePlayer;
+    private IDialoguePresentation? dialoguePresentation;
     private bool isExitingTree;
     private bool isBootstrapLifetimeDisposed;
     private bool isRuntimeShutdownSignalEmitted;
@@ -85,6 +89,8 @@ public partial class MajoRuntimeBootstrap : Node
     public Action<DialoguePresenterRegistry>? ConfigureDialoguePresenters { get; set; }
 
     public Action<DialogueMarkupHandlerRegistry>? ConfigureDialogueMarkupHandlers { get; set; }
+
+    public Action<ILocaleManager>? ConfigureLocales { get; set; }
 
     public Action<StateContributorRegistry>? ConfigureStateContributors { get; set; }
 
@@ -225,7 +231,8 @@ public partial class MajoRuntimeBootstrap : Node
                 Host.Services.TryGet<IRuntimeDiagnostics>(out var diagnostics) &&
                 Host.Services.TryGet<IInputManager>(out var inputManager))
             {
-                DebugOverlay = new DefaultDebugOverlay(this, diagnostics!, inputManager!, Configuration.Diagnostics);
+                DebugOverlay = new DefaultDebugOverlay(
+                    this, diagnostics!, inputManager!, Configuration.Diagnostics);
             }
 
             if (isExitingTree)
@@ -281,13 +288,21 @@ public partial class MajoRuntimeBootstrap : Node
                     resolver.Get<IRuntimeLifetime>()),
                 typeof(IFrameClock),
                 typeof(IRuntimeLifetime))
+            .AddSingleton<ILocalizedResourceResolver>(
+                resolver => new LocalizedResourceResolver(resolver.Get<IResourceManager>()),
+                typeof(IResourceManager))
             .AddSingleton<IActorTextureLoader>(
                 resolver => new ResourceActorTextureLoader(
                     resolver.Get<IResourceManager>(),
                     Configuration!.Resources!.FailOnMissingAssets,
-                    resolver.Get<IMissingResourceReporter>()),
+                    resolver.Get<IMissingResourceReporter>(),
+                    resolver.Get<ILocalizedResourceResolver>(),
+                    resolver.Get<ILocaleManager>(),
+                    [Configuration.Resources.CharactersPath, Configuration.Resources.BackgroundsPath]),
                 typeof(IResourceManager),
-                typeof(IMissingResourceReporter))
+                typeof(IMissingResourceReporter),
+                typeof(ILocalizedResourceResolver),
+                typeof(ILocaleManager))
             .AddSingleton<IOperationScheduler>(
                 resolver => new OperationScheduler(
                     resolver.Get<IFrameClock>(),
@@ -299,19 +314,89 @@ public partial class MajoRuntimeBootstrap : Node
                 resolver => CreateAudioManager(
                     resolver.Get<IResourceManager>(),
                     resolver.Get<IOperationScheduler>(),
-                    resolver.Get<IMissingResourceReporter>()),
+                    resolver.Get<IMissingResourceReporter>(),
+                    resolver.Get<ILocaleManager>(),
+                    resolver.Get<ILocalizedResourceResolver>()),
                 typeof(IResourceManager),
                 typeof(IOperationScheduler),
-                typeof(IMissingResourceReporter))
+                typeof(IMissingResourceReporter),
+                typeof(ILocaleManager),
+                typeof(ILocalizedResourceResolver))
             .AddSingleton<GodotActorHost>(_ => new GodotActorHost(this))
             .AddSingleton<IActorManager>(
                 resolver => CreateActorManager(
                     resolver.Get<GodotActorHost>(),
                     resolver.Get<IOperationScheduler>(),
-                    resolver.Get<IActorTextureLoader>()),
+                    resolver.Get<IActorTextureLoader>(),
+                    resolver.Get<ILocaleManager>()),
                 typeof(GodotActorHost),
                 typeof(IOperationScheduler),
-                typeof(IActorTextureLoader));
+                typeof(IActorTextureLoader),
+                typeof(ILocaleManager));
+
+        var fontCatalog = new FontCatalog();
+        if (Configuration?.Localization is not null)
+        {
+            fontCatalog.FontScale = Configuration.Localization.FontScale;
+            fontCatalog.LineSpacing = Configuration.Localization.LineSpacing;
+        }
+
+        services
+            .AddSingleton<IFontCatalog>(_ => fontCatalog)
+            .AddSingleton<ILocaleManager>(
+                resolver =>
+                {
+                    var defaultLoc = Configuration?.Localization?.DefaultLocale ?? Configuration?.Settings?.DialogueLocale ?? "en";
+                    var defaultVoiceLoc = Configuration?.Settings?.VoiceLocale ?? Configuration?.Audio?.VoiceLocale ?? "en";
+                    var supportedLocs = Configuration?.Localization?.SupportedLocales?.ToArray() ?? ["en", "zh-CN"];
+                    LocaleManager? manager = null;
+                    manager = new LocaleManager(
+                        defaultLoc,
+                        supportedLocs,
+                        fontCatalog,
+                        isBusyCheck: () => yarnCommandAdapter?.HasActiveCommands == true,
+                        onLocaleApplied: locale =>
+                        {
+                            if (yarnDialogueBackend is not null)
+                            {
+                                yarnDialogueBackend.SetLocale(locale);
+                            }
+
+                            if (dialoguePlayer?.State == DialogueSessionState.Running &&
+                                yarnDialogueBackend is not null &&
+                                dialoguePresentation is not null)
+                            {
+                                var fallbackChain = manager!.GetFallbackChain(locale);
+                                if (dialoguePlayer.IsPresentingOptions)
+                                {
+                                    var reResolvedOpts = yarnDialogueBackend.ReResolveCurrentOptions(locale, fallbackChain);
+                                    dialoguePresentation.ReRenderOptions(reResolvedOpts);
+                                }
+                                else if (!string.IsNullOrWhiteSpace(dialoguePlayer.CurrentLineId))
+                                {
+                                    var reResolvedLine = yarnDialogueBackend.ReResolveCurrentLine(locale, fallbackChain);
+                                    if (reResolvedLine is not null)
+                                    {
+                                        dialoguePresentation.ReRenderLine(reResolvedLine);
+                                    }
+                                }
+                            }
+
+                            return Task.CompletedTask;
+                        },
+                        applyEngineLocale: TranslationServer.SetLocale,
+                        logger: Logger,
+                        waitForSafeBoundary: async cancellationToken =>
+                        {
+                            if (yarnDialogueBackend is not null)
+                            {
+                                await yarnDialogueBackend.WaitForLocaleSwitchBoundaryAsync(cancellationToken);
+                            }
+                        },
+                        defaultVoiceLocale: defaultVoiceLoc);
+                    ConfigureLocales?.Invoke(manager);
+                    return manager;
+                });
 
         var presenterRegistry = new DialoguePresenterRegistry();
         ConfigureDialoguePresenters?.Invoke(presenterRegistry);
@@ -319,26 +404,44 @@ public partial class MajoRuntimeBootstrap : Node
         ConfigureDialogueMarkupHandlers?.Invoke(markupHandlerRegistry);
         services
             .AddSingleton<IYarnDialogueBackend>(
-                resolver => new YarnDialogueBackend(
-                    this,
-                    resolver.Get<IResourceManager>(),
-                    Configuration!.Resources!.ScriptsPath,
-                    presenterRegistry.Presenters
-                        .Concat<IDialoguePresenter>(
-                            [new VoiceDialoguePresenter(resolver.Get<IAudioManager>())])
-                        .ToArray()),
+                resolver =>
+                {
+                    yarnDialogueBackend = new YarnDialogueBackend(
+                        this,
+                        resolver.Get<IResourceManager>(),
+                        Configuration!.Resources!.ScriptsPath,
+                        presenterRegistry.Presenters
+                            .Concat<IDialoguePresenter>(
+                                [new VoiceDialoguePresenter(
+                                    resolver.Get<IAudioManager>(),
+                                    resolver.Get<ILocaleManager>(),
+                                    resolver.Get<ILocalizedResourceResolver>())])
+                            .ToArray(),
+                        resolver.Get<ILocaleManager>());
+                    return yarnDialogueBackend;
+                },
                 typeof(IResourceManager),
-                typeof(IAudioManager))
+                typeof(IAudioManager),
+                typeof(ILocaleManager),
+                typeof(ILocalizedResourceResolver))
             .AddSingleton<IDialoguePresentation>(
-                resolver => new YarnDefaultDialoguePresentation(
-                    resolver.Get<IYarnDialogueBackend>(),
-                    resolver.Get<IInputManager>(),
-                    resolver.Get<IFrameClock>(),
-                    Configuration!.Presentation!,
-                    markupHandlerRegistry.Handlers),
+                resolver =>
+                {
+                    dialoguePresentation = new YarnDefaultDialoguePresentation(
+                        resolver.Get<IYarnDialogueBackend>(),
+                        resolver.Get<IInputManager>(),
+                        resolver.Get<IFrameClock>(),
+                        Configuration!.Presentation!,
+                        markupHandlerRegistry.Handlers,
+                        resolver.Get<ILocaleManager>(),
+                        resolver.Get<IFontCatalog>());
+                    return dialoguePresentation;
+                },
                 typeof(IYarnDialogueBackend),
                 typeof(IInputManager),
-                typeof(IFrameClock))
+                typeof(IFrameClock),
+                typeof(ILocaleManager),
+                typeof(IFontCatalog))
             .AddSingleton<IDialogueVariables>(
                 resolver => new DialogueVariables(
                     resolver.Get<IYarnDialogueBackend>().VariableStore),
@@ -354,11 +457,15 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(IOperationScheduler),
                 typeof(IAudioManager))
             .AddSingleton<IDialoguePlayer>(
-                resolver => new DialoguePlayer(
-                    resolver.Get<IYarnDialogueBackend>(),
-                    Configuration!.Dialogue!.DefaultProjectId,
-                    Configuration.Dialogue.DefaultStartNode,
-                    Logger),
+                resolver =>
+                {
+                    dialoguePlayer = new DialoguePlayer(
+                        resolver.Get<IYarnDialogueBackend>(),
+                        Configuration!.Dialogue!.DefaultProjectId,
+                        Configuration.Dialogue.DefaultStartNode,
+                        Logger);
+                    return dialoguePlayer;
+                },
                 typeof(IYarnDialogueBackend),
                 typeof(IYarnCommandAdapter),
                 typeof(IDialoguePresentation))
@@ -381,11 +488,15 @@ public partial class MajoRuntimeBootstrap : Node
                     resolver.Get<IAudioManager>(),
                     resolver.Get<IInputManager>(),
                     Configuration!.History!.Capacity,
-                    Logger),
+                    Logger,
+                    resolver.Get<ILocaleManager>(),
+                    resolver.Get<ILocalizedResourceResolver>()),
                 typeof(IDialoguePlayer),
                 typeof(IDialoguePresentation),
                 typeof(IAudioManager),
-                typeof(IInputManager))
+                typeof(IInputManager),
+                typeof(ILocaleManager),
+                typeof(ILocalizedResourceResolver))
             .AddSingleton<IPlayedRegister>(
                 resolver => new PlayedRegister(
                     resolver.Get<IDialoguePlayer>(),
@@ -464,7 +575,8 @@ public partial class MajoRuntimeBootstrap : Node
                         [new RuntimeSettingsProjection(
                             resolver.Get<IAudioManager>(),
                             resolver.Get<IPlaybackModeManager>(),
-                            resolver.Get<IDialoguePresentation>())],
+                            resolver.Get<IDialoguePresentation>(),
+                            resolver.Get<ILocaleManager>())],
                         resolver.Get<IStateSerializer>(),
                         resolver.Get<IStateStorage>(),
                         stateMigrations,
@@ -472,12 +584,14 @@ public partial class MajoRuntimeBootstrap : Node
                         Configuration.State.GameBuildId,
                         Configuration.State.StorageNamespace,
                         TimeSpan.FromSeconds(Configuration.Settings.FlushDebounceSeconds),
-                        Logger),
+                        Logger,
+                        resolver.Get<ILocaleManager>()),
                     typeof(IStateSerializer),
                     typeof(IStateStorage),
                     typeof(IAudioManager),
                     typeof(IPlaybackModeManager),
-                    typeof(IDialoguePresentation));
+                    typeof(IDialoguePresentation),
+                    typeof(ILocaleManager));
             }
 
             if (Configuration.GlobalState?.Enabled == true)
@@ -509,9 +623,11 @@ public partial class MajoRuntimeBootstrap : Node
                         this,
                         resolver.Get<ISettingsManager>(),
                         resolver.Get<IInputManager>(),
+                        resolver.Get<ILocaleManager>(),
                         Configuration.Settings.DefaultUiScene),
                     typeof(ISettingsManager),
-                    typeof(IInputManager));
+                    typeof(IInputManager),
+                    typeof(ILocaleManager));
             }
             services.AddSingleton<IStateEligibility>(
                 resolver => new StateEligibility(
@@ -688,7 +804,10 @@ public partial class MajoRuntimeBootstrap : Node
             settings.SkipDelaySeconds,
             settings.ShowSpeakerName,
             settings.ShowTextBox,
-            settings.Language);
+            settings.DialogueLocale,
+            settings.VoiceLocale,
+            settings.FontScale,
+            settings.LineSpacing);
     }
 
     private IYarnCommandAdapter CreateYarnCommandAdapter(
@@ -726,7 +845,8 @@ public partial class MajoRuntimeBootstrap : Node
     private ActorManager CreateActorManager(
         GodotActorHost host,
         IOperationScheduler scheduler,
-        IActorTextureLoader textureLoader)
+        IActorTextureLoader textureLoader,
+        ILocaleManager locales)
     {
         var actorConfiguration = Configuration!.Actors!;
         var manager = new ActorManager(
@@ -742,7 +862,9 @@ public partial class MajoRuntimeBootstrap : Node
                     host.BackgroundLayer,
                     scheduler,
                     textureLoader),
-            });
+            },
+            locales,
+            Logger);
         ConfigureActorFactories?.Invoke(manager);
         return manager;
     }
@@ -764,7 +886,9 @@ public partial class MajoRuntimeBootstrap : Node
     private IAudioManager CreateAudioManager(
         IResourceManager resources,
         IOperationScheduler operations,
-        IMissingResourceReporter missingResources)
+        IMissingResourceReporter missingResources,
+        ILocaleManager locales,
+        ILocalizedResourceResolver localizedResources)
     {
         var configuration = Configuration!.Audio!;
         return new AudioManager(
@@ -785,7 +909,9 @@ public partial class MajoRuntimeBootstrap : Node
                 configuration.VoiceLocale,
                 configuration.FailOnMissingClips),
             Logger,
-            missingResources);
+            missingResources,
+            locales,
+            localizedResources);
     }
 
     private async Task ShutdownHostAsync(CancellationToken cancellationToken = default)
@@ -797,6 +923,9 @@ public partial class MajoRuntimeBootstrap : Node
                 yarnCommandAdapter.CommandFailed -= HandleCommandFailed;
                 yarnCommandAdapter = null;
             }
+            yarnDialogueBackend = null;
+            dialoguePlayer = null;
+            dialoguePresentation = null;
 
             if (Host is not null)
             {

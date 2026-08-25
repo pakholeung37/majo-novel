@@ -12,6 +12,8 @@ using Majo.Runtime.Script;
 using Majo.YarnBridge;
 using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Resources;
+using Majo.Runtime.Localization;
+using Yarn.Markup;
 using YarnSpinnerGodot;
 
 namespace Majo.Runtime.Dialogue.Yarn;
@@ -23,6 +25,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
     private readonly Node owner;
     private readonly IResourceLoader<YarnProject> projects;
     private readonly IReadOnlyList<IDialoguePresenter> presenters;
+    private readonly ILocaleManager? localeManager;
     private readonly YarnVmStateBridge stateBridge = new();
     private readonly YarnDialogueVariableStore variableStore = new();
     private readonly object sync = new();
@@ -39,22 +42,28 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
     private string currentNodeName = string.Empty;
     private string currentLineId = string.Empty;
     private IReadOnlyList<string> currentSubstitutions = Array.Empty<string>();
+    private DialogueLine? currentLine;
+    private IReadOnlyList<DialogueOption> currentOptions = Array.Empty<DialogueOption>();
     private ScriptCheckpoint? pendingRestore;
     private Exception? pendingFailure;
     private bool isStopping;
     private bool isInitialized;
     private int nextLineRequested;
+    private string configuredLocale = "en";
+    private Func<CancellationToken, Task>? presentationQuiescenceWaiter;
 
     public YarnDialogueBackend(
         Node owner,
         IResourceManager resources,
         string scriptsPath,
-        IReadOnlyList<IDialoguePresenter> presenters)
+        IReadOnlyList<IDialoguePresenter> presenters,
+        ILocaleManager? localeManager = null)
     {
         this.owner = owner ?? throw new ArgumentNullException(nameof(owner));
         ArgumentNullException.ThrowIfNull(resources);
         projects = resources.CreateLoader<YarnProject>(scriptsPath);
         this.presenters = presenters ?? throw new ArgumentNullException(nameof(presenters));
+        this.localeManager = localeManager;
     }
 
     public event Action<string>? NodeEntered;
@@ -101,7 +110,12 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
             RequestHurryUp,
             RequestNextLine,
             HandleLinePresented,
-            options => OptionsPresented?.Invoke(options))
+            options =>
+            {
+                currentOptions = options;
+                OptionsPresented?.Invoke(options);
+            },
+            ConvertPresentedLine)
         {
             Name = "MajoPresenterAdapter",
         };
@@ -111,6 +125,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
         runner.AddChild(presenterAdapter);
         runner.dialoguePresenters = new Godot.Collections.Array<Node?> { presenterAdapter };
         owner.AddChild(runner);
+        configuredLocale = localeManager?.DialogueLocale ?? TranslationServer.GetLocale();
 
         nodeStarted = Callable.From<string>(HandleNodeStarted);
         nodeCompleted = Callable.From<string>(HandleNodeCompleted);
@@ -218,6 +233,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
 
         variableStore.Program = project.Program;
         Runner.SetProject(project);
+        SetLocale(configuredLocale);
         presenterAdapter!.BeginSession();
         await Runner.StartDialogue(startNode);
         cancellationToken.ThrowIfCancellationRequested();
@@ -266,6 +282,11 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
             if (Runner.IsDialogueRunning)
             {
                 await Runner.Stop();
+            }
+
+            if (presentationQuiescenceWaiter is not null)
+            {
+                await presentationQuiescenceWaiter(cancellationToken);
             }
 
             // DialogueRunner.Stop waits for dialogue-complete presenters, but
@@ -454,6 +475,9 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
         Runner.dialoguePresenters.Remove(presenter);
     }
 
+    public void SetPresentationQuiescenceWaiter(Func<CancellationToken, Task>? waiter) =>
+        presentationQuiescenceWaiter = waiter;
+
     private void HandleNodeStarted(string nodeName)
     {
         currentNodeName = nodeName;
@@ -516,8 +540,181 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
     {
         currentLineId = line.Id;
         currentSubstitutions = substitutions;
+        currentLine = line;
+        currentOptions = Array.Empty<DialogueOption>();
         Volatile.Write(ref nextLineRequested, 0);
         LinePresented?.Invoke(line);
+    }
+
+    public DialogueLine? ReResolveCurrentLine(string locale, IReadOnlyList<string> fallbackChain)
+    {
+        if (string.IsNullOrWhiteSpace(currentLineId) || runner?.YarnProject is null)
+        {
+            return null;
+        }
+
+        var project = runner.YarnProject;
+        string? rawText = null;
+        string? resolvedLocale = null;
+
+        foreach (var candidate in fallbackChain)
+        {
+            var translated = ResolveExactGodotTranslation(currentLineId, candidate);
+            if (translated is not null)
+            {
+                rawText = translated;
+                resolvedLocale = candidate;
+                break;
+            }
+        }
+
+        if (rawText is null && project.baseLocalization is not null)
+        {
+            rawText = project.baseLocalization.GetLocalizedString(currentLineId);
+            resolvedLocale = project.baseLocalization.LocaleCode;
+        }
+
+        if (rawText is null)
+        {
+            return currentLine;
+        }
+
+        var localized = CreateLocalizedLine(
+            currentLineId,
+            rawText,
+            currentSubstitutions,
+            project.LineMetadata?.GetMetadata(currentLineId) ?? Array.Empty<string>(),
+            locale);
+        var reResolved = YarnLineConverter.Convert(localized, resolvedLocale);
+
+        currentLine = reResolved;
+        return reResolved;
+    }
+
+    public IReadOnlyList<DialogueOption> ReResolveCurrentOptions(string locale, IReadOnlyList<string> fallbackChain)
+    {
+        if (currentOptions.Count == 0 || runner?.YarnProject is null)
+        {
+            return currentOptions;
+        }
+
+        var project = runner.YarnProject;
+        var list = new List<DialogueOption>(currentOptions.Count);
+        foreach (var option in currentOptions)
+        {
+            var lineId = option.Line.Id;
+            string? rawText = null;
+            string? resolvedLocale = null;
+            foreach (var candidate in fallbackChain)
+            {
+                var translated = ResolveExactGodotTranslation(lineId, candidate);
+                if (translated is not null)
+                {
+                    rawText = translated;
+                    resolvedLocale = candidate;
+                    break;
+                }
+            }
+
+            if (rawText is null && project.baseLocalization is not null)
+            {
+                rawText = project.baseLocalization.GetLocalizedString(lineId);
+                resolvedLocale = project.baseLocalization.LocaleCode;
+            }
+
+            if (rawText is not null)
+            {
+                var metadata = project.LineMetadata?.GetMetadata(lineId) ?? Array.Empty<string>();
+                var substitutions = option.Substitutions ?? Array.Empty<string>();
+                var localized = CreateLocalizedLine(lineId, rawText, substitutions, metadata, locale);
+                var newLine = YarnLineConverter.Convert(localized, resolvedLocale);
+                list.Add(new DialogueOption(option.Id, newLine, option.IsAvailable, substitutions));
+            }
+            else
+            {
+                list.Add(option);
+            }
+        }
+
+        currentOptions = list.AsReadOnly();
+        return currentOptions;
+    }
+
+    public void SetLocale(string locale)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(locale);
+        configuredLocale = LocaleManager.NormalizeLocale(locale);
+        if (runner?.YarnProject is not null)
+        {
+            if (runner.LineProvider is LineProviderBehaviour provider)
+            {
+                provider.LocaleCode = configuredLocale;
+            }
+        }
+    }
+
+    public Task WaitForLocaleSwitchBoundaryAsync(CancellationToken cancellationToken)
+    {
+        if (runner?.IsDialogueRunning != true || commandAdapter?.HasActiveCommands != true)
+        {
+            return Task.CompletedTask;
+        }
+
+        return presenterAdapter!.WaitForPresentationBoundaryAsync(cancellationToken);
+    }
+
+    private DialogueLine ConvertPresentedLine(LocalizedLine line) =>
+        YarnLineConverter.Convert(line, ResolvePresentedLocale(line));
+
+    private string ResolvePresentedLocale(LocalizedLine line)
+    {
+        var requested = localeManager?.DialogueLocale ?? runner?.LineProvider.LocaleCode ?? "en";
+        var chain = localeManager?.GetFallbackChain(requested) ?? [requested];
+        foreach (var candidate in chain)
+        {
+            var translated = ResolveExactGodotTranslation(line.TextID, candidate);
+            if (translated is not null &&
+                string.Equals(translated, line.RawText, StringComparison.Ordinal))
+            {
+                return candidate;
+            }
+        }
+
+        return runner?.YarnProject?.baseLocalization?.LocaleCode ?? requested;
+    }
+
+    private static string? ResolveExactGodotTranslation(string lineId, string locale)
+    {
+        foreach (var translation in TranslationServer.FindTranslations(locale, exact: true))
+        {
+            var value = translation.GetMessage(new StringName(lineId)).ToString();
+            if (!string.IsNullOrEmpty(value) &&
+                !string.Equals(value, lineId, StringComparison.Ordinal))
+            {
+                return value;
+            }
+        }
+
+        return null;
+    }
+
+    private static LocalizedLine CreateLocalizedLine(
+        string lineId,
+        string rawText,
+        IReadOnlyList<string> substitutions,
+        IReadOnlyList<string> metadata,
+        string parserLocale)
+    {
+        var expanded = LineParser.ExpandSubstitutions(rawText, substitutions.ToArray());
+        var parser = new LineParser();
+        return new LocalizedLine
+        {
+            TextID = lineId,
+            RawText = rawText,
+            Substitutions = substitutions.ToArray(),
+            Metadata = metadata.ToArray(),
+            Text = parser.ParseString(expanded, parserLocale),
+        };
     }
 
     private void HandleCommandFailed(RuntimeCommandException failure)

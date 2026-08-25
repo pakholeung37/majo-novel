@@ -221,12 +221,23 @@ Default conventions:
 
 ```text
 res://assets/characters/<actor-id>/<appearance>.<texture-extension>
+res://assets/characters/<locale>/<actor-id>/<appearance>.<texture-extension>
 res://assets/backgrounds/<actor-id>/<appearance>.<texture-extension>
+res://assets/backgrounds/<locale>/<actor-id>/<appearance>.<texture-extension>
 res://assets/scripts/<project-id>.yarnproject
 res://assets/audio/bgm/<clip-id>.<audio-extension>
+res://assets/audio/bgm/<locale>/<clip-id>.<audio-extension>
 res://assets/audio/sfx/<clip-id>.<audio-extension>
+res://assets/audio/sfx/<locale>/<clip-id>.<audio-extension>
 res://assets/audio/voice/<locale>/<line-id>.<audio-extension>
+res://assets/audio/voice/<line-id>.<audio-extension>
 ```
+
+Localized content resolves from exact locale to parent, its channel default, then
+the flat path. Dialogue and Voice locales are independent; art, BGM, and SFX
+use Dialogue locale, while Voice uses Voice locale. Flat-only projects require
+no locale folders. The bundled UI remains a fixed English reference UI; UI
+localization belongs to the host project.
 
 An Actor therefore needs no physical texture paths:
 
@@ -703,6 +714,16 @@ Run the complete local gate from the repository root:
 ```sh
 ./tools/test.sh
 ```
+
+For a shorter development feedback loop, run:
+
+```sh
+./tools/test.sh --fast
+```
+
+Fast mode keeps formatting, the main Debug build, unit tests, Godot import,
+the visible demo smoke, one headless integration pass, and the negative exit-code
+probe. Run the default full gate before submitting or releasing changes.
 
 The gate performs:
 1. Scoped C# formatting and static diagnostics across all projects (`game`, unit tests, and clean-consumer fixture).

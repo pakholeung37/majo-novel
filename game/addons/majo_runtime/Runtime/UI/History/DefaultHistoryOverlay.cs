@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Core;
 using Majo.Runtime.History;
+using Majo.Runtime.Localization;
 
 namespace Majo.Runtime.UI.History;
 
@@ -15,11 +16,15 @@ public sealed class DefaultHistoryOverlay : IRuntimeService
     private readonly IHistoryManager history;
     private CanvasLayer? layer;
     private Control? root;
+    private Label? titleLabel;
+    private Button? closeButton;
     private VBoxContainer? entries;
     private Label? emptyLabel;
     private bool isInitialized;
 
-    public DefaultHistoryOverlay(Node owner, IHistoryManager history)
+    public DefaultHistoryOverlay(
+        Node owner,
+        IHistoryManager history)
     {
         this.owner = owner ?? throw new ArgumentNullException(nameof(owner));
         this.history = history ?? throw new ArgumentNullException(nameof(history));
@@ -83,6 +88,8 @@ public sealed class DefaultHistoryOverlay : IRuntimeService
         root = null;
         entries = null;
         emptyLabel = null;
+        titleLabel = null;
+        closeButton = null;
         isInitialized = false;
         return Task.CompletedTask;
     }
@@ -109,18 +116,20 @@ public sealed class DefaultHistoryOverlay : IRuntimeService
         margin.AddChild(layout);
         var header = new HBoxContainer();
         layout.AddChild(header);
-        header.AddChild(new Label
+        titleLabel = new Label
         {
-            Text = "History",
+            Text = TrText(UiStringKeys.HistoryTitle, "History"),
             SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
-        });
-        var close = new Button { Text = "Close" };
-        close.Pressed += history.Close;
-        header.AddChild(close);
+        };
+        header.AddChild(titleLabel);
+        closeButton = new Button { Text = TrText(UiStringKeys.HistoryClose, "Close") };
+        closeButton.Pressed += history.Close;
+        header.AddChild(closeButton);
 
         var scroll = new ScrollContainer
         {
             SizeFlagsVertical = Control.SizeFlags.ExpandFill,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
         };
         layout.AddChild(scroll);
         entries = new VBoxContainer
@@ -130,12 +139,14 @@ public sealed class DefaultHistoryOverlay : IRuntimeService
         scroll.AddChild(entries);
         emptyLabel = new Label
         {
-            Text = "No completed dialogue in this session.",
+            Text = TrText(UiStringKeys.HistoryEmpty, "No completed dialogue in this session."),
             HorizontalAlignment = HorizontalAlignment.Center,
         };
         entries.AddChild(emptyLabel);
         return panel;
     }
+
+    private static string TrText(string key, string fallback) => fallback;
 
     private void HandleOpenStateChanged(HistoryOpenStateChanged change)
     {
@@ -146,6 +157,7 @@ public sealed class DefaultHistoryOverlay : IRuntimeService
     }
 
     private void HandleEntriesChanged(HistoryEntriesChanged _) => RebuildEntries();
+
 
     private void RebuildEntries()
     {
@@ -163,7 +175,7 @@ public sealed class DefaultHistoryOverlay : IRuntimeService
         {
             emptyLabel = new Label
             {
-                Text = "No completed dialogue in this session.",
+                Text = TrText(UiStringKeys.HistoryEmpty, "No completed dialogue in this session."),
                 HorizontalAlignment = HorizontalAlignment.Center,
             };
             entries.AddChild(emptyLabel);
@@ -171,6 +183,9 @@ public sealed class DefaultHistoryOverlay : IRuntimeService
         }
 
         emptyLabel = null;
+        var noVoiceText = TrText(UiStringKeys.HistoryNoVoice, "No replayable voice");
+        var replayVoiceTemplate = TrText(UiStringKeys.HistoryReplayVoice, "Replay voice: {0}");
+
         foreach (var entry in history.Entries)
         {
             var speaker = string.IsNullOrWhiteSpace(entry.Speaker)
@@ -183,8 +198,10 @@ public sealed class DefaultHistoryOverlay : IRuntimeService
                 Alignment = HorizontalAlignment.Left,
                 Disabled = entry.VoiceId is null,
                 TooltipText = entry.VoiceId is null
-                    ? "No replayable voice"
-                    : $"Replay voice: {entry.VoiceId}",
+                    ? noVoiceText
+                    : string.Format(replayVoiceTemplate, entry.VoiceId),
+                SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+                AutowrapMode = TextServer.AutowrapMode.WordSmart,
             };
             var sequence = entry.Sequence;
             button.Pressed += () => _ = ReplayVoiceAsync(sequence);

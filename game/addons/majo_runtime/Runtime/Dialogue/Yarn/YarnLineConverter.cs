@@ -20,7 +20,7 @@ public static class YarnLineConverter
             text.Attributes.Select(Convert).ToArray());
     }
 
-    public static DialogueLine Convert(YarnLocalizedLine line)
+    public static DialogueLine Convert(YarnLocalizedLine line, string? resolvedLocale = null)
     {
         ArgumentNullException.ThrowIfNull(line);
         var text = line.TextWithoutCharacterName;
@@ -28,7 +28,8 @@ public static class YarnLineConverter
             line.TextID,
             line.CharacterName,
             Convert(text),
-            (line.Metadata ?? Array.Empty<string>()).ToArray());
+            (line.Metadata ?? Array.Empty<string>()).ToArray(),
+            resolvedLocale);
     }
 
     public static DialogueOption Convert(YarnDialogueOption option)
@@ -37,7 +38,8 @@ public static class YarnLineConverter
         return new DialogueOption(
             option.DialogueOptionID,
             Convert(option.Line),
-            option.IsAvailable);
+            option.IsAvailable,
+            Array.AsReadOnly(option.Line.Substitutions.ToArray()));
     }
 
     private static DialogueMarkupAttribute Convert(MarkupAttribute attribute)
