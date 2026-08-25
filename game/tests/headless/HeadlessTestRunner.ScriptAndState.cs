@@ -18,6 +18,7 @@ using Majo.Runtime.Save;
 using Majo.Runtime.Save.Godot;
 using Majo.Runtime.Script;
 using Majo.Runtime.State;
+using Majo.Runtime.Stage;
 using Majo.Runtime.UI.SaveLoad;
 
 namespace Majo.Runtime.HeadlessTests;
@@ -82,6 +83,9 @@ public partial class HeadlessTestRunner
         var variables = services.Get<IDialogueVariables>();
         var actors = services.Get<IActorManager>();
         var audio = services.Get<IAudioManager>();
+        var camera = services.Get<ICameraManager>();
+        var effects = services.Get<IScreenEffectManager>();
+        var transitions = services.Get<IStageTransitionManager>();
         var input = services.Get<IInputManager>();
         var operations = services.Get<IOperationScheduler>();
         var serializer = services.Get<IStateSerializer>();
@@ -136,6 +140,9 @@ public partial class HeadlessTestRunner
         var room = actors.Create("state-room");
         room.SetAppearance("dark");
         await audio.PlayBgmAsync("calm", "music", volume: 0.7f);
+        camera.ApplyStableState(new CameraState(new Vector2(123, 234), 1.25f, 7));
+        effects.ApplyStableState(new ScreenEffectState(new Color(0.1f, 0.2f, 0.3f, 1), 0.4f, 0.15f));
+        transitions.ApplyStableAppearance("courtroom");
 
         var snapshot = await state.CaptureGameAsync();
         Assert(snapshot.Records.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(
@@ -143,6 +150,7 @@ public partial class HeadlessTestRunner
                     BuiltInStateKeys.DialogueVariables,
                     BuiltInStateKeys.Actors,
                     BuiltInStateKeys.AudioBgm,
+                    BuiltInStateKeys.Stage,
                     BuiltInStateKeys.ScriptPlayback,
                 ]),
             "M9.6 StateManager did not capture all built-in Game contributors.");
@@ -172,6 +180,9 @@ public partial class HeadlessTestRunner
         await audio.PlayBgmAsync("battle", "music", volume: 0.2f);
         await audio.PlaySfxAsync("hit", "transient-sfx");
         await audio.PlayVoiceAsync("voice");
+        camera.ApplyStableState(CameraState.Default);
+        effects.ApplyStableState(ScreenEffectState.Default);
+        transitions.ApplyStableAppearance(null);
 
         var previousSessionId = bootstrap.Host.SessionId;
         await sessions.LoadGameAsync(durableEnvelope.Snapshot);
@@ -213,6 +224,13 @@ public partial class HeadlessTestRunner
                 restoredHero.Visible &&
                 restoredRoom.Appearance == "dark",
             "M9.6 actor/background state did not round-trip.");
+        Assert(camera.State.Position.IsEqualApprox(new Vector2(123, 234)) &&
+                Mathf.IsEqualApprox(camera.State.Zoom, 1.25f) &&
+                Mathf.IsEqualApprox(camera.State.RotationDegrees, 7) &&
+                Mathf.IsEqualApprox(effects.State.OverlayOpacity, 0.4f) &&
+                Mathf.IsEqualApprox(effects.State.LetterboxRatio, 0.15f) &&
+                transitions.Appearance == "courtroom",
+            "M19 Stage state did not round-trip.");
         Assert(audio.BgmTracks.Count == 1 &&
                 audio.BgmTracks.Single().ClipId == "calm" &&
                 audio.BgmTracks.Single().InstanceId == "music" &&

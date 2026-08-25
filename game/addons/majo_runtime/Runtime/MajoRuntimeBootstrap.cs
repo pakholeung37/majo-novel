@@ -34,6 +34,8 @@ using Majo.Runtime.Save;
 using Majo.Runtime.Save.Godot;
 using Majo.Runtime.Settings;
 using Majo.Runtime.State;
+using Majo.Runtime.Stage;
+using Majo.Runtime.Stage.Godot;
 using Majo.Runtime.UI.Diagnostics;
 using Majo.Runtime.UI.History;
 using Majo.Runtime.UI.SaveLoad;
@@ -95,6 +97,8 @@ public partial class MajoRuntimeBootstrap : Node
     public Action<StateContributorRegistry>? ConfigureStateContributors { get; set; }
 
     public Action<StateMigrationRegistry>? ConfigureStateMigrations { get; set; }
+
+    public Action<StageTransitionProviderRegistry>? ConfigureStageTransitionProviders { get; set; }
 
     public Func<Node, IAudioBackend>? AudioBackendFactory { get; set; }
 
@@ -332,7 +336,40 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(GodotActorHost),
                 typeof(IOperationScheduler),
                 typeof(IActorTextureLoader),
-                typeof(ILocaleManager));
+                typeof(ILocaleManager))
+            .AddSingleton<IStageBackend>(
+                resolver => new GodotStageBackend(this, resolver.Get<GodotActorHost>()),
+                typeof(GodotActorHost))
+            .AddSingleton<IStageAccessibility>(
+                _ => new StageAccessibility(Configuration!.Stage!.ReduceMotion))
+            .AddSingleton<ICameraManager>(
+                resolver => new CameraManager(
+                    resolver.Get<IStageBackend>(),
+                    resolver.Get<IOperationScheduler>(),
+                    resolver.Get<IStageAccessibility>()),
+                typeof(IStageBackend),
+                typeof(IOperationScheduler),
+                typeof(IStageAccessibility))
+            .AddSingleton<IStageTransitionManager>(
+                resolver =>
+                {
+                    var registry = new StageTransitionProviderRegistry();
+                    ConfigureStageTransitionProviders?.Invoke(registry);
+                    return new StageTransitionManager(
+                        resolver.Get<IStageBackend>(),
+                        resolver.Get<IOperationScheduler>(),
+                        registry.Providers);
+                },
+                typeof(IStageBackend),
+                typeof(IOperationScheduler))
+            .AddSingleton<IScreenEffectManager>(
+                resolver => new ScreenEffectManager(
+                    resolver.Get<IStageBackend>(),
+                    resolver.Get<IOperationScheduler>(),
+                    resolver.Get<IStageAccessibility>()),
+                typeof(IStageBackend),
+                typeof(IOperationScheduler),
+                typeof(IStageAccessibility));
 
         var fontCatalog = new FontCatalog();
         if (Configuration?.Localization is not null)
@@ -574,9 +611,10 @@ public partial class MajoRuntimeBootstrap : Node
                             value.Scope == StateScope.Settings).ToArray(),
                         [new RuntimeSettingsProjection(
                             resolver.Get<IAudioManager>(),
-                            resolver.Get<IPlaybackModeManager>(),
-                            resolver.Get<IDialoguePresentation>(),
-                            resolver.Get<ILocaleManager>())],
+                        resolver.Get<IPlaybackModeManager>(),
+                        resolver.Get<IDialoguePresentation>(),
+                        resolver.Get<ILocaleManager>(),
+                        resolver.Get<IStageAccessibility>())],
                         resolver.Get<IStateSerializer>(),
                         resolver.Get<IStateStorage>(),
                         stateMigrations,
@@ -591,7 +629,8 @@ public partial class MajoRuntimeBootstrap : Node
                     typeof(IAudioManager),
                     typeof(IPlaybackModeManager),
                     typeof(IDialoguePresentation),
-                    typeof(ILocaleManager));
+                    typeof(ILocaleManager),
+                    typeof(IStageAccessibility));
             }
 
             if (Configuration.GlobalState?.Enabled == true)
@@ -645,6 +684,9 @@ public partial class MajoRuntimeBootstrap : Node
                     resolver.Get<IActorManager>(),
                     resolver.Get<IAudioManager>(),
                     resolver.Get<IHistoryManager>(),
+                    resolver.Get<ICameraManager>(),
+                    resolver.Get<IScreenEffectManager>(),
+                    resolver.Get<IStageTransitionManager>(),
                     resolver.Get<IScriptPlayback>(),
                     resolver.Get<IDialoguePlayer>(),
                     resolver.Get<IInputManager>(),
@@ -657,6 +699,9 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(IActorManager),
                 typeof(IAudioManager),
                 typeof(IHistoryManager),
+                typeof(ICameraManager),
+                typeof(IScreenEffectManager),
+                typeof(IStageTransitionManager),
                 typeof(IScriptPlayback),
                 typeof(IDialoguePlayer),
                 typeof(IInputManager),
@@ -754,6 +799,9 @@ public partial class MajoRuntimeBootstrap : Node
         IActorManager actors,
         IAudioManager audio,
         IHistoryManager history,
+        ICameraManager camera,
+        IScreenEffectManager effects,
+        IStageTransitionManager transitions,
         IScriptPlayback scriptPlayback,
         IDialoguePlayer dialogue,
         IInputManager input,
@@ -766,6 +814,7 @@ public partial class MajoRuntimeBootstrap : Node
             .Register(new DialogueVariablesStateContributor(variables))
             .Register(new ActorStateContributor(actors))
             .Register(new AudioStateContributor(audio))
+            .Register(new StageStateContributor(camera, effects, transitions))
             .Register(new SessionHistoryStateContributor(history));
         foreach (var contributor in customContributors)
         {
@@ -807,7 +856,8 @@ public partial class MajoRuntimeBootstrap : Node
             settings.DialogueLocale,
             settings.VoiceLocale,
             settings.FontScale,
-            settings.LineSpacing);
+            settings.LineSpacing,
+            settings.ReduceMotion);
     }
 
     private IYarnCommandAdapter CreateYarnCommandAdapter(
@@ -819,6 +869,7 @@ public partial class MajoRuntimeBootstrap : Node
         var commands = new RuntimeCommandRegistry();
         BuiltInRuntimeCommands.Register(commands, new ActorCommandService(actors));
         commands.RegisterModule(new AudioCommandModule(audio));
+        commands.RegisterModule(new StageCommandModule());
         ConfigureCommands?.Invoke(commands);
         var catalog = commands.BuildCatalog();
         var converters = new CommandValueConverterRegistry();
@@ -880,7 +931,13 @@ public partial class MajoRuntimeBootstrap : Node
             .RegisterSourceExtensions<AudioStream>("wav", "ogg", "mp3");
         var providers = new ResourceProviderRegistry().Register(godotProvider);
         ConfigureResourceProviders?.Invoke(providers);
-        return new ResourceManager(providers.Providers, lifetime, Logger);
+        return new ResourceManager(
+            providers.Providers,
+            lifetime,
+            Logger,
+            memoryBudgetBytes: (long)Configuration.Resources.MemoryBudgetMiB * 1024 * 1024,
+            defaultResourceEstimateBytes:
+                (long)Configuration.Resources.DefaultResourceEstimateKiB * 1024);
     }
 
     private IAudioManager CreateAudioManager(

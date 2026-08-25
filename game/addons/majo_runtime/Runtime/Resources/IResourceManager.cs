@@ -10,6 +10,17 @@ public interface IResourceManager : IRuntimeService
 {
     int LoadedResourceCount { get; }
 
+    ResourceCacheSnapshot CaptureCacheSnapshot() => new(
+        LoadedResourceCount,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        System.Array.Empty<ResourceCacheEntrySnapshot>());
+
     TResource Load<TResource>(
         ResourceKey key,
         string? overridePath = null)
@@ -20,6 +31,23 @@ public interface IResourceManager : IRuntimeService
         string? overridePath = null,
         CancellationToken cancellationToken = default)
         where TResource : class;
+
+    IResourceLease<TResource> LeaseAsync<TResource>(
+        ResourceKey key,
+        string? overridePath = null,
+        long estimatedBytes = 0,
+        bool pinned = false,
+        CancellationToken cancellationToken = default)
+        where TResource : class => throw new System.NotSupportedException(
+            "This resource manager does not support leases.");
+
+    IResourceGroupLease PreloadAsync(
+        ResourcePreloadManifest manifest,
+        ResourcePreloadContext? context = null,
+        CancellationToken cancellationToken = default) => throw new System.NotSupportedException(
+            "This resource manager does not support preload groups.");
+
+    int TrimCache() => 0;
 
     bool Exists<TResource>(
         ResourceKey key,

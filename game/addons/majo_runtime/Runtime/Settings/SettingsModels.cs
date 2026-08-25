@@ -30,6 +30,7 @@ public sealed record RuntimeSettings(
     string VoiceLocale = "en",
     double FontScale = 1.0,
     int LineSpacing = 0,
+    bool ReduceMotion = false,
     string? Language = null)
 {
     public RuntimeSettings Validate()

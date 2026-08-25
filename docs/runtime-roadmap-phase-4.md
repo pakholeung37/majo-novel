@@ -1,6 +1,6 @@
 # Majo Runtime 第四阶段 Roadmap
 
-状态：进行中；M17、M17.5 已完成，下一里程碑为 M18  
+状态：进行中；M17、M17.5 已完成；M18、M19 核心 Runtime 已实现，正在收尾验收，下一里程碑为 M20
 承接范围：第三阶段 M10.5-M15 已完成；原定 M16 Rollback 已取消  
 目标阶段：M17-M22  
 主题：生产化创作、表现能力与 1.0 准备
@@ -172,11 +172,20 @@ Settings 使用同一个当前 locale、fallback chain 与切换事务。
 - Fake provider 可确定测试顺序、进度和取消；Godot headless 覆盖真实 Texture、Audio、Font。
 - clean-consumer 和 Release export 不包含宿主未引用的 Demo 预取 manifest。
 
+### 5.4 当前实现进度
+
+- `IResourceLease` / `IResourceGroupLease`、并发去重、独立取消、释放、失败重试和
+  Reset/Shutdown 回收已接入 `ResourceManager`。
+- 预取 manifest 支持 Dialogue/Voice locale variant、估算预算、pinned group、LRU 淘汰和
+  cache snapshot 诊断；现有 `Load` / `LoadAsync` 保持兼容。
+- ResourceManager unit tests 已覆盖取消竞态、预算压力、pinned 保留、locale fallback 和
+  reset 后重载；Godot headless 已验证生命周期回收。
+
 ## 6. M19：Camera、Transition & Screen FX
 
 ### 6.1 目标
 
-建立统一 Stage 表现服务，覆盖常用 2D Camera、场景转场和屏幕效果，同时保持现有
+参考 naninovel 建立统一 Stage 表现服务，覆盖常用 2D Camera、场景转场和屏幕效果，同时保持现有
 Operation、Playback、State 和 Resource 契约。
 
 ### 6.2 交付
@@ -200,6 +209,16 @@ Operation、Playback、State 和 Resource 契约。
 - locale 切换与资源预取期间触发 Transition 不会引用已释放资源。
 - Reduce Motion 不改变 Yarn 指令顺序、Command 完成语义或存档结果。
 - headless 测试覆盖状态与 Operation，可见 smoke 覆盖画面层级、遮罩和窗口尺寸变化。
+
+### 6.4 当前实现进度
+
+- 默认 Godot 2D backend、Fake backend、Camera/Transition/Screen FX manager 和自定义
+  transition provider registry 已接入 Runtime service graph。
+- Stage operation 复用现有 scheduler 的 wait/group/Cancel/Complete/Skip 语义，并提供
+  `cameraMove`、`cameraZoom`、`cameraRotate`、`cameraReset`、`cameraShake`、`transition`、
+  `overlay`、`letterbox`、`flash` 命令。
+- 稳定 Camera、Screen Effect 和 Stage appearance 已纳入 Game State；headless 已覆盖
+  Save/Load round-trip、Reset/Shutdown 和宿主节点提前释放的 teardown 边界。
 
 ## 7. M20：Rich-media Actor Extensions
 

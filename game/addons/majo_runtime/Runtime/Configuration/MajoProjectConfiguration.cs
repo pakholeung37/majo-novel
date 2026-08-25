@@ -62,6 +62,9 @@ public partial class MajoProjectConfiguration : Resource
     public LocalizationConfiguration? Localization { get; set; }
 
     [Export]
+    public StageConfiguration? Stage { get; set; }
+
+    [Export]
     public GlobalStateConfiguration? GlobalState { get; set; }
 
     public static MajoProjectConfiguration CreateDefault() => new()
@@ -82,6 +85,7 @@ public partial class MajoProjectConfiguration : Resource
         Diagnostics = new DiagnosticsConfiguration(),
         Settings = new SettingsConfiguration(),
         Localization = new LocalizationConfiguration(),
+        Stage = new StageConfiguration(),
         GlobalState = new GlobalStateConfiguration(),
     };
 
@@ -106,6 +110,7 @@ public partial class MajoProjectConfiguration : Resource
         ValidateDiagnostics(issues);
         ValidateSettings(issues);
         ValidateLocalization(issues);
+        ValidateStage(issues);
         ValidateGlobalState(issues);
 
         return new ConfigurationValidationResult(issues);
@@ -138,6 +143,29 @@ public partial class MajoProjectConfiguration : Resource
             issues.Add(new ConfigurationIssue(
                 $"{nameof(Localization)}.{nameof(Localization.LineSpacing)}",
                 "Line spacing cannot be negative."));
+        }
+    }
+
+    private void ValidateStage(ICollection<ConfigurationIssue> issues)
+    {
+        if (Stage is null)
+        {
+            issues.Add(new ConfigurationIssue(nameof(Stage), "Configuration is required."));
+            return;
+        }
+        if (!double.IsFinite(Stage.DefaultTransitionDurationSeconds) ||
+            Stage.DefaultTransitionDurationSeconds < 0)
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Stage)}.{nameof(Stage.DefaultTransitionDurationSeconds)}",
+                "Default transition duration must be finite and non-negative."));
+        }
+        if (!double.IsFinite(Stage.DefaultEffectDurationSeconds) ||
+            Stage.DefaultEffectDurationSeconds < 0)
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Stage)}.{nameof(Stage.DefaultEffectDurationSeconds)}",
+                "Default effect duration must be finite and non-negative."));
         }
     }
 
@@ -329,6 +357,18 @@ public partial class MajoProjectConfiguration : Resource
         ValidateResourceKeyPrefix(Resources.CharactersPath, nameof(Resources.CharactersPath), issues);
         ValidateResourceKeyPrefix(Resources.BackgroundsPath, nameof(Resources.BackgroundsPath), issues);
         ValidateResourceKeyPrefix(Resources.ScriptsPath, nameof(Resources.ScriptsPath), issues);
+        if (Resources.MemoryBudgetMiB < 0)
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Resources)}.{nameof(Resources.MemoryBudgetMiB)}",
+                "Memory budget cannot be negative."));
+        }
+        if (Resources.DefaultResourceEstimateKiB < 0)
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Resources)}.{nameof(Resources.DefaultResourceEstimateKiB)}",
+                "Default resource estimate cannot be negative."));
+        }
     }
 
     private static void ValidateResourceKeyPrefix(

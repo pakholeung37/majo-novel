@@ -11,6 +11,7 @@ using Majo.Runtime.Audio;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.History;
 using Majo.Runtime.Script;
+using Majo.Runtime.Stage;
 
 namespace Majo.Runtime.State;
 
@@ -21,6 +22,112 @@ public static class BuiltInStateKeys
     public const string AudioBgm = "majo.audio.bgm";
     public const string ScriptPlayback = "majo.script.playback";
     public const string SessionHistory = "majo.session.history";
+    public const string Stage = "majo.stage";
+}
+
+public sealed class StageStateContributor : IStateContributor
+{
+    private readonly ICameraManager camera;
+    private readonly IScreenEffectManager effects;
+    private readonly IStageTransitionManager transitions;
+
+    public StageStateContributor(
+        ICameraManager camera,
+        IScreenEffectManager effects,
+        IStageTransitionManager transitions)
+    {
+        this.camera = camera ?? throw new ArgumentNullException(nameof(camera));
+        this.effects = effects ?? throw new ArgumentNullException(nameof(effects));
+        this.transitions = transitions ?? throw new ArgumentNullException(nameof(transitions));
+    }
+
+    public string Key => BuiltInStateKeys.Stage;
+    public StateScope Scope => StateScope.Game;
+    public int SchemaVersion => 1;
+    public StateContributorCapability Capability => StateContributorCapability.DurableRollback;
+
+    public ValueTask<StateRecord> CaptureAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var state = new StagePayload(
+            camera.State.Position.X,
+            camera.State.Position.Y,
+            camera.State.Zoom,
+            camera.State.RotationDegrees,
+            effects.State.OverlayColor.R,
+            effects.State.OverlayColor.G,
+            effects.State.OverlayColor.B,
+            effects.State.OverlayColor.A,
+            effects.State.OverlayOpacity,
+            effects.State.LetterboxRatio,
+            transitions.Appearance);
+        return ValueTask.FromResult(new StateRecord(
+            Key, Scope, SchemaVersion, StateJson.Serialize(state)));
+    }
+
+    public ValueTask PreflightAsync(StateRecord record, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        _ = Decode(record);
+        return ValueTask.CompletedTask;
+    }
+
+    public ValueTask RestoreAsync(StateRecord record, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var payload = Decode(record);
+        camera.ApplyStableState(new CameraState(
+            new Vector2(payload.CameraX, payload.CameraY),
+            payload.CameraZoom,
+            payload.CameraRotation));
+        effects.ApplyStableState(new ScreenEffectState(
+            new Color(payload.OverlayR, payload.OverlayG, payload.OverlayB, payload.OverlayAlpha),
+            payload.OverlayOpacity,
+            payload.LetterboxRatio));
+        transitions.ApplyStableAppearance(payload.Appearance);
+        return ValueTask.CompletedTask;
+    }
+
+    public ValueTask ResetAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        camera.ApplyStableState(CameraState.Default);
+        effects.ApplyStableState(ScreenEffectState.Default);
+        transitions.ApplyStableAppearance(null);
+        return ValueTask.CompletedTask;
+    }
+
+    private static StagePayload Decode(StateRecord record)
+    {
+        var payload = StateJson.Deserialize<StagePayload>(record);
+        if (!float.IsFinite(payload.CameraX) || !float.IsFinite(payload.CameraY) ||
+            !float.IsFinite(payload.CameraZoom) || payload.CameraZoom <= 0 ||
+            !float.IsFinite(payload.CameraRotation) ||
+            !float.IsFinite(payload.OverlayR) || !float.IsFinite(payload.OverlayG) ||
+            !float.IsFinite(payload.OverlayB) || !float.IsFinite(payload.OverlayAlpha) ||
+            payload.OverlayAlpha is < 0 or > 1 ||
+            !float.IsFinite(payload.OverlayOpacity) ||
+            payload.OverlayOpacity is < 0 or > 1 ||
+            !float.IsFinite(payload.LetterboxRatio) ||
+            payload.LetterboxRatio is < 0 or > 0.5f)
+        {
+            throw new StateSnapshotException($"State record '{BuiltInStateKeys.Stage}' contains invalid Stage state.");
+        }
+        return payload;
+    }
+
+    private sealed record StagePayload(
+        float CameraX,
+        float CameraY,
+        float CameraZoom,
+        float CameraRotation,
+        float OverlayR,
+        float OverlayG,
+        float OverlayB,
+        float OverlayAlpha,
+        float OverlayOpacity,
+        float LetterboxRatio,
+        string? Appearance);
 }
 
 public sealed class SessionHistoryStateContributor : IStateContributor

@@ -24,4 +24,10 @@ public partial class ResourceConfiguration : Resource
 
     [Export]
     public bool FailOnMissingAssets { get; set; }
+
+    [Export(PropertyHint.Range, "0,16384,1,or_greater")]
+    public int MemoryBudgetMiB { get; set; } = 512;
+
+    [Export(PropertyHint.Range, "0,1024,1,or_greater")]
+    public int DefaultResourceEstimateKiB { get; set; } = 256;
 }

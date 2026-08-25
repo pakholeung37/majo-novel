@@ -6,6 +6,7 @@ using Majo.Runtime.Auto;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Presentation;
 using Majo.Runtime.Localization;
+using Majo.Runtime.Stage;
 
 namespace Majo.Runtime.Settings;
 
@@ -15,17 +16,20 @@ public sealed class RuntimeSettingsProjection : ISettingsProjection
     private readonly IPlaybackModeManager playback;
     private readonly IDialoguePresentationSettings? presentation;
     private readonly ILocaleManager? localeManager;
+    private readonly IStageAccessibility? stageAccessibility;
 
     public RuntimeSettingsProjection(
         IAudioManager audio,
         IPlaybackModeManager playback,
         IDialoguePresentation presentation,
-        ILocaleManager? localeManager = null)
+        ILocaleManager? localeManager = null,
+        IStageAccessibility? stageAccessibility = null)
     {
         this.audio = audio ?? throw new ArgumentNullException(nameof(audio));
         this.playback = playback ?? throw new ArgumentNullException(nameof(playback));
         this.presentation = presentation as IDialoguePresentationSettings;
         this.localeManager = localeManager;
+        this.stageAccessibility = stageAccessibility;
     }
 
     public void Apply(RuntimeSettings settings)
@@ -59,6 +63,11 @@ public sealed class RuntimeSettingsProjection : ISettingsProjection
         if (!string.IsNullOrWhiteSpace(settings.VoiceLocale))
         {
             audio.VoiceLocale = settings.VoiceLocale;
+        }
+
+        if (stageAccessibility is not null)
+        {
+            stageAccessibility.ReduceMotion = settings.ReduceMotion;
         }
     }
 }

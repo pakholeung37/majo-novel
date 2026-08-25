@@ -43,4 +43,7 @@ public partial class SettingsConfiguration : Resource
 
     [Export(PropertyHint.Range, "0,5,0.01,or_greater")]
     public double SkipDelaySeconds { get; set; } = 0.05;
+
+    [Export]
+    public bool ReduceMotion { get; set; }
 }

@@ -87,6 +87,102 @@ public sealed class ResourceManagerTests
     }
 
     [Fact(Timeout = 5_000)]
+    public async Task ConcurrentLeasesDeduplicateAndCallerCancellationIsIndependent()
+    {
+        using var lifetime = new TestRuntimeLifetime();
+        var asset = new TestAsset("leased");
+        var provider = new MemoryProvider("memory")
+            .Add("memory://characters/hero/calm", asset)
+            .PauseAsyncLoads();
+        var manager = new ResourceManager([provider], lifetime);
+        await manager.InitializeAsync(CancellationToken.None);
+
+        var first = manager.LeaseAsync<TestAsset>(
+            new ResourceKey("characters/hero/calm"), estimatedBytes: 64);
+        var second = manager.LeaseAsync<TestAsset>(
+            new ResourceKey("characters/hero/calm"), estimatedBytes: 64);
+        first.Cancel();
+        provider.ReleaseAsyncLoads();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => first.Completion);
+        await second.Completion;
+        Assert.Equal(ResourceLeaseState.Cancelled, first.State);
+        Assert.Equal(ResourceLeaseState.Ready, second.State);
+        Assert.Same(asset, second.Resource);
+        Assert.Equal(1, provider.AsyncLoadCount);
+        Assert.Equal(1, manager.CaptureCacheSnapshot().ActiveLeaseCount);
+
+        second.Release();
+        Assert.Equal(0, manager.CaptureCacheSnapshot().ActiveLeaseCount);
+        Assert.Equal(1, manager.TrimCache());
+        await manager.ShutdownAsync(CancellationToken.None);
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task BudgetEvictsOnlyUnleasedEntriesAndRetainsPinnedGroups()
+    {
+        using var lifetime = new TestRuntimeLifetime();
+        var provider = new MemoryProvider("memory")
+            .Add("memory://backgrounds/a", new TestAsset("a"))
+            .Add("memory://backgrounds/b", new TestAsset("b"));
+        var manager = new ResourceManager(
+            [provider], lifetime, memoryBudgetBytes: 100);
+        await manager.InitializeAsync(CancellationToken.None);
+
+        var pinned = manager.PreloadAsync(new ResourcePreloadManifest(
+            "chapter",
+            [ResourcePreloadEntry.Create<TestAsset>(
+                new ResourceKey("backgrounds/a"), estimatedBytes: 80)],
+            pinned: true));
+        await pinned.Completion;
+        var transient = manager.LeaseAsync<TestAsset>(
+            new ResourceKey("backgrounds/b"), estimatedBytes: 80);
+        await transient.Completion;
+
+        Assert.True(manager.CaptureCacheSnapshot().IsOverBudget);
+        transient.Release();
+        var pressured = manager.CaptureCacheSnapshot();
+        Assert.False(pressured.IsOverBudget);
+        Assert.Single(pressured.Entries);
+        Assert.Equal("memory://backgrounds/a", pressured.Entries[0].ResolvedPath);
+        Assert.Equal(1, pressured.Entries[0].PinnedLeaseCount);
+
+        pinned.Release();
+        Assert.Equal(1, manager.TrimCache());
+        await manager.ShutdownAsync(CancellationToken.None);
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task PreloadManifestResolvesLocaleFallbackBeforeFlatResource()
+    {
+        using var lifetime = new TestRuntimeLifetime();
+        var localized = new TestAsset("zh");
+        var provider = new MemoryProvider("memory")
+            .Add("memory://voice/zh/line-1", localized)
+            .Add("memory://voice/line-1", new TestAsset("flat"));
+        var manager = new ResourceManager([provider], lifetime);
+        await manager.InitializeAsync(CancellationToken.None);
+        var manifest = new ResourcePreloadManifest(
+            "localized",
+            [ResourcePreloadEntry.Create<TestAsset>(
+                new ResourceKey("voice/line-1"),
+                localizedRoot: "voice",
+                localeChannel: ResourceLocaleChannel.Voice)]);
+
+        var group = manager.PreloadAsync(manifest, new ResourcePreloadContext(
+            "en",
+            "zh-CN",
+            ["en"],
+            ["zh-CN", "zh", "en"]));
+        await group.Completion;
+
+        Assert.Same(localized, group.Resources[0].Resource);
+        Assert.Equal("memory://voice/zh/line-1", group.Resources[0].ResolvedPath);
+        group.Release();
+        await manager.ShutdownAsync(CancellationToken.None);
+    }
+
+    [Fact(Timeout = 5_000)]
     public async Task ResetClearsCacheAndMissingErrorsListCandidates()
     {
         using var lifetime = new TestRuntimeLifetime();
