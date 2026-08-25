@@ -152,6 +152,11 @@ internal static class GodotInputDefaults
             KeyEvent(Key.A),
             JoyEvent(JoyButton.Y),
         ]),
+        new(MajoInputActions.Skip,
+        [
+            KeyEvent(Key.K),
+            JoyEvent(JoyButton.RightShoulder),
+        ]),
         new(MajoInputActions.History,
         [
             KeyEvent(Key.H),

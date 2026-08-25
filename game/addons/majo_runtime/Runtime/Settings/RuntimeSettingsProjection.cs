@@ -37,6 +37,11 @@ public sealed class RuntimeSettingsProjection : ISettingsProjection
         playback.ApplyAutoSettings(
             TimeSpan.FromSeconds(settings.AutoExtraDelaySeconds),
             settings.AutoWaitForVoice);
+        playback.ApplySkipSettings(
+            TimeSpan.FromSeconds(settings.SkipDelaySeconds),
+            settings.SkipDefaultMode == SkipDefaultMode.ReadOnly
+                ? PlaybackMode.SkipReadOnly
+                : PlaybackMode.SkipAll);
         if (presentation is not null)
         {
             presentation.LettersPerSecond = settings.LettersPerSecond;

@@ -25,6 +25,7 @@ using Majo.Runtime.Input.Godot;
 using Majo.Runtime.History;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Operations.Godot;
+using Majo.Runtime.Played;
 using Majo.Runtime.Resources;
 using Majo.Runtime.Resources.Godot;
 using Majo.Runtime.Script;
@@ -385,6 +386,13 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(IDialoguePresentation),
                 typeof(IAudioManager),
                 typeof(IInputManager))
+            .AddSingleton<IPlayedRegister>(
+                resolver => new PlayedRegister(
+                    resolver.Get<IDialoguePlayer>(),
+                    resolver.Get<IDialoguePresentation>(),
+                    logger: Logger),
+                typeof(IDialoguePlayer),
+                typeof(IDialoguePresentation))
             .AddSingleton<IPlaybackModeManager>(
                 resolver => new PlaybackModeManager(
                     resolver.Get<IScriptPlayback>(),
@@ -393,15 +401,25 @@ public partial class MajoRuntimeBootstrap : Node
                     resolver.Get<IFrameClock>(),
                     resolver.Get<IInputManager>(),
                     resolver.Get<IHistoryManager>(),
+                    resolver.Get<IDialoguePresentation>(),
+                    resolver.Get<IPlayedRegister>(),
+                    resolver.Get<IOperationScheduler>(),
                     TimeSpan.FromSeconds(Configuration!.Auto!.ExtraDelaySeconds),
                     Configuration.Auto.WaitForVoice,
+                    TimeSpan.FromSeconds(Configuration.Settings!.SkipDelaySeconds),
+                    Configuration.Settings.SkipDefaultMode == SkipDefaultMode.ReadOnly
+                        ? PlaybackMode.SkipReadOnly
+                        : PlaybackMode.SkipAll,
                     Logger),
                 typeof(IScriptPlayback),
                 typeof(IDialoguePlayer),
                 typeof(IAudioManager),
                 typeof(IFrameClock),
                 typeof(IInputManager),
-                typeof(IHistoryManager))
+                typeof(IHistoryManager),
+                typeof(IDialoguePresentation),
+                typeof(IPlayedRegister),
+                typeof(IOperationScheduler))
             .AddSingleton<IAutoManager>(
                 resolver => new AutoManager(resolver.Get<IPlaybackModeManager>()),
                 typeof(IPlaybackModeManager));
@@ -428,6 +446,7 @@ public partial class MajoRuntimeBootstrap : Node
                 BuiltInStateKeys.AudioBgm,
                 BuiltInStateKeys.ScriptPlayback,
                 BuiltInStateKeys.SessionHistory,
+                PlayedRegister.StateKey,
                 "runtime.settings",
             ]);
             services.AddSingleton<IStateSerializer>(
@@ -465,8 +484,9 @@ public partial class MajoRuntimeBootstrap : Node
             {
                 services.AddSingleton<IGlobalStateManager>(
                     resolver => new GlobalStateManager(
-                        customContributors.Where(value =>
-                            value.Scope == StateScope.Global).ToArray(),
+                        new IStateContributor[] { (IStateContributor)resolver.Get<IPlayedRegister>() }
+                            .Concat(customContributors.Where(value =>
+                                value.Scope == StateScope.Global)).ToArray(),
                         resolver.Get<IStateSerializer>(),
                         resolver.Get<IStateStorage>(),
                         stateMigrations,
@@ -477,7 +497,8 @@ public partial class MajoRuntimeBootstrap : Node
                         Configuration.GlobalState.StrictRecovery,
                         Logger),
                     typeof(IStateSerializer),
-                    typeof(IStateStorage));
+                    typeof(IStateStorage),
+                    typeof(IPlayedRegister));
             }
 
             if (Configuration.Settings?.Enabled == true &&

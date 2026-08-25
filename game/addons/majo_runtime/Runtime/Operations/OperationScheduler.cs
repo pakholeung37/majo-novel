@@ -209,6 +209,23 @@ public sealed class OperationScheduler : IOperationScheduler
         return WaitForHandlesAsync(handles, cancellationToken);
     }
 
+    public Task CompleteSkippableAsync(
+        string groupId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(groupId);
+        OperationHandle[] handles;
+        lock (gate)
+        {
+            EnsureInitialized();
+            handles = operationsByGroup.TryGetValue(groupId, out var group)
+                ? group.Where(value => value.IsSkippable).ToArray()
+                : Array.Empty<OperationHandle>();
+        }
+        foreach (var handle in handles) handle.Complete();
+        return WaitForHandlesAsync(handles, cancellationToken);
+    }
+
     private OperationHandle[] ResolveTarget(OperationTarget target)
     {
         lock (gate)

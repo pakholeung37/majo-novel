@@ -98,6 +98,10 @@ public abstract class ScopedStatePersistence : IRuntimeService
             return;
         }
         initialized = true;
+        foreach (var notifier in Contributors.OfType<IStateDirtyNotifier>())
+        {
+            notifier.StateDirty += MarkDirty;
+        }
         try
         {
             var bytes = await storage.ReadAsync(StorageKey, cancellationToken);
@@ -136,11 +140,21 @@ public abstract class ScopedStatePersistence : IRuntimeService
     public async Task ShutdownAsync(CancellationToken cancellationToken)
     {
         CancelDebounce();
-        if (IsDirty)
+        try
         {
-            await FlushAsync(cancellationToken);
+            if (IsDirty)
+            {
+                await FlushAsync(cancellationToken);
+            }
         }
-        initialized = false;
+        finally
+        {
+            foreach (var notifier in Contributors.OfType<IStateDirtyNotifier>())
+            {
+                notifier.StateDirty -= MarkDirty;
+            }
+            initialized = false;
+        }
     }
 
     protected void MarkDirty()

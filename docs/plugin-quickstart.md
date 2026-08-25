@@ -218,6 +218,19 @@ await settings.FlushAsync();
 和 `FlushAsync()`；默认同样隔离损坏文件，也可设置 `GlobalState.StrictRecovery = true` 改为
 严格启动失败。Global 与 Settings 都不会进入 Game Slot，也不会被 New Game / Load Game 回退。
 
+### Played Register 与 Skip（M15）
+
+`IPlayedRegister` 只在 `LineDisplayCompleted` 后，以 Project ID 与稳定 Line ID 标记已读，并作为
+Global Contributor 通过 debounce 写盘。`IPlaybackModeManager` 统一拥有 Manual、Auto、
+`SkipReadOnly` 和 `SkipAll`；默认 `K` 切换 Settings 指定的 Skip 模式。Read-only Skip 使用展示
+开始时冻结的 `WasPlayedBeforePresentation`，精确停在第一条此前未读台词；选项会结束 Skip，
+History、Save/Load、Settings、Debug modal、restore 与外部 pause handle 会暂停 Skip。
+
+需要让当前台词关联动画直接到终态时，为台词添加 `majo:operation-group=<id>` metadata，Operation
+使用相同 group 并显式传入 `isSkippable: true`。Skip 只完成该组中已标记的 Operation，不影响宿主
+玩法或其他组。可选源内容指纹使用 `majo:fingerprint=<fingerprint>`，不会基于 substitutions 或最终
+渲染文本计算。
+
 ### 自定义 Yarn Command
 ```csharp
 [RuntimeCommand("setScore", Category = "Game")]

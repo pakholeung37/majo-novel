@@ -47,6 +47,8 @@ internal sealed class OperationHandle : IOperationHandle
 
     public string? GroupId => definition.GroupId;
 
+    public bool IsSkippable => definition.IsSkippable;
+
     public string DiagnosticId => definition.Id ?? diagnosticId;
 
     public OperationState State

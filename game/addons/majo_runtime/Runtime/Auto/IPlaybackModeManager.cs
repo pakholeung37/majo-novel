@@ -46,11 +46,18 @@ public interface IPlaybackModeManager : IRuntimeService
     IReadOnlyList<PlaybackPauseReason> PauseReasons { get; }
     TimeSpan ExtraDelay { get; }
     bool WaitForVoice { get; }
+    TimeSpan SkipDelay => TimeSpan.Zero;
     bool HasPendingDeadline { get; }
 
     void SetMode(PlaybackMode mode);
     void ToggleAuto();
     void ApplyAutoSettings(TimeSpan extraDelay, bool waitForVoice)
+    {
+    }
+    void ApplySkipSettings(TimeSpan delay, PlaybackMode defaultMode)
+    {
+    }
+    void ToggleSkip()
     {
     }
     IPlaybackPauseHandle AcquirePause(PlaybackPauseReason reason);

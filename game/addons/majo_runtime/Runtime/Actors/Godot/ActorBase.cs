@@ -319,7 +319,8 @@ public abstract class ActorBase : IActor, IGodotActorView
             {
                 await WaitForPredecessorAsync(previous, cancellationToken);
                 await operation.CancelAsync(cancellationToken);
-            });
+            },
+            isSkippable: true);
         var handle = Scheduler.Start(sequenced);
         propertyOperations[property] = handle;
         return handle;

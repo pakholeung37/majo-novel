@@ -10,7 +10,7 @@ Compatibility baseline:
 
 Yarn Spinner is an external prerequisite and is not bundled with this plugin.
 
-Current implementation status: M14 Settings and Global State, M13 Save/Load product loop, M12 Durable State
+Current implementation status: M15 Played Register and Skip, M14 Settings and Global State, M13 Save/Load product loop, M12 Durable State
 foundation, M11 Diagnostics,
 M10.5 Distributability Gate, M10 Auto and Session History, M9 audio runtime,
 M8 default VN presentation and Yarn markup bridge, M7 input ownership, M6
@@ -532,6 +532,29 @@ storage core. Its default corruption policy also quarantines and starts empty;
 set `GlobalStateConfiguration.StrictRecovery` to fail initialization instead.
 Both managers retain dirty state after a failed write and flush during normal
 Runtime shutdown. Neither scope is captured by Game slots or reset by New Game.
+
+## Played Register and Skip
+
+`IPlayedRegister` records a line only after `LineDisplayCompleted`, using the
+stable project and line IDs. It is a built-in Global contributor, so read state
+survives New Game and Game-slot load and is persisted through the same coalesced
+Global flush. The default identity is shared across locales. Custom construction
+can select `PlayedLocalePolicy.PerLocale` and
+`PlayedContentChangePolicy.TreatAsUnread`.
+
+`IPlaybackModeManager` is the single owner of Manual, Auto, `SkipReadOnly`, and
+`SkipAll`. `K` toggles the configured Skip mode. Read-only Skip tests the immutable
+`WasPlayedBeforePresentation` captured when the current presentation began and
+returns to Manual at the first previously unread line. Options stop Skip; History,
+modal UI, restore, and external pause handles suspend it. Skip uses unscaled delay,
+stops Voice, and never changes `SceneTree.TimeScale`.
+
+For line-scoped visual completion, add `majo:operation-group=<id>` to the line
+metadata and use the same group for operations. Only operations created with
+`isSkippable: true` in that group are completed; unrelated and unmarked operations
+continue normally. Built-in actor animation and audio fade operations are marked
+skippable. Optional stable source fingerprints use
+`majo:fingerprint=<fingerprint>` metadata.
 
 ## Yarn commands
 

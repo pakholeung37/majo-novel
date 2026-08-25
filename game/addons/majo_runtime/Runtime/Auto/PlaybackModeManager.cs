@@ -8,9 +8,11 @@ using System.Threading.Tasks;
 using Majo.Runtime.Audio;
 using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue;
+using Majo.Runtime.Dialogue.Presentation;
 using Majo.Runtime.History;
 using Majo.Runtime.Input;
 using Majo.Runtime.Operations;
+using Majo.Runtime.Played;
 using Majo.Runtime.Script;
 
 namespace Majo.Runtime.Auto;
@@ -24,6 +26,9 @@ public sealed class PlaybackModeManager : IPlaybackModeManager
     private readonly IFrameClock clock;
     private readonly IInputManager input;
     private readonly IHistoryManager history;
+    private readonly IDialoguePresentation presentation;
+    private readonly IPlayedRegister played;
+    private readonly IOperationScheduler operations;
     private readonly IRuntimeLogger logger;
     private readonly Dictionary<PlaybackPauseReason, int> pauseCounts = new();
     private CancellationTokenSource? lifetime;
@@ -42,6 +47,37 @@ public sealed class PlaybackModeManager : IPlaybackModeManager
         TimeSpan extraDelay,
         bool waitForVoice,
         IRuntimeLogger? logger = null)
+        : this(
+            script,
+            dialogue,
+            audio,
+            clock,
+            input,
+            history,
+            NullDialoguePresentation.Instance,
+            new LegacyPlayedRegister(dialogue),
+            NullOperationScheduler.Instance,
+            extraDelay,
+            waitForVoice,
+            logger: logger)
+    {
+    }
+
+    public PlaybackModeManager(
+        IScriptPlayback script,
+        IDialoguePlayer dialogue,
+        IAudioManager audio,
+        IFrameClock clock,
+        IInputManager input,
+        IHistoryManager history,
+        IDialoguePresentation presentation,
+        IPlayedRegister played,
+        IOperationScheduler operations,
+        TimeSpan extraDelay,
+        bool waitForVoice,
+        TimeSpan? skipDelay = null,
+        PlaybackMode defaultSkipMode = PlaybackMode.SkipReadOnly,
+        IRuntimeLogger? logger = null)
     {
         this.script = script ?? throw new ArgumentNullException(nameof(script));
         this.dialogue = dialogue ?? throw new ArgumentNullException(nameof(dialogue));
@@ -49,6 +85,9 @@ public sealed class PlaybackModeManager : IPlaybackModeManager
         this.clock = clock ?? throw new ArgumentNullException(nameof(clock));
         this.input = input ?? throw new ArgumentNullException(nameof(input));
         this.history = history ?? throw new ArgumentNullException(nameof(history));
+        this.presentation = presentation ?? throw new ArgumentNullException(nameof(presentation));
+        this.played = played ?? throw new ArgumentNullException(nameof(played));
+        this.operations = operations ?? throw new ArgumentNullException(nameof(operations));
         this.logger = logger ?? NullRuntimeLogger.Instance;
         if (extraDelay < TimeSpan.Zero)
         {
@@ -57,6 +96,9 @@ public sealed class PlaybackModeManager : IPlaybackModeManager
 
         ExtraDelay = extraDelay;
         WaitForVoice = waitForVoice;
+        SkipDelay = skipDelay ?? TimeSpan.FromMilliseconds(50);
+        ValidateSkipMode(defaultSkipMode);
+        DefaultSkipMode = defaultSkipMode;
     }
 
     public event Action<PlaybackModeChanged>? ModeChanged;
@@ -94,6 +136,16 @@ public sealed class PlaybackModeManager : IPlaybackModeManager
             ReconcileDeadline();
         }
     }
+    public TimeSpan SkipDelay
+    {
+        get { lock (sync) { return skipDelay; } }
+        private set
+        {
+            if (value < TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(value));
+            lock (sync) { skipDelay = value; }
+        }
+    }
+    public PlaybackMode DefaultSkipMode { get; private set; }
     public bool HasPendingDeadline
     {
         get { lock (sync) { return deadline is not null; } }
@@ -101,6 +153,7 @@ public sealed class PlaybackModeManager : IPlaybackModeManager
 
     private TimeSpan extraDelay;
     private bool waitForVoice;
+    private TimeSpan skipDelay;
 
     public Task InitializeAsync(CancellationToken cancellationToken)
     {
@@ -114,6 +167,9 @@ public sealed class PlaybackModeManager : IPlaybackModeManager
         script.PhaseChanged += HandlePhaseChanged;
         history.OpenStateChanged += HandleHistoryOpenStateChanged;
         input.Dispatched += HandleInputDispatched;
+        input.HandlesChanged += HandleInputHandlesChanged;
+        dialogue.LinePresented += HandleLinePresented;
+        audio.PlaybackStarted += HandleAudioPlaybackStarted;
         EnsureToggleInput();
         isInitialized = true;
         ReconcileIntrinsicPauses();
@@ -145,9 +201,13 @@ public sealed class PlaybackModeManager : IPlaybackModeManager
         script.PhaseChanged -= HandlePhaseChanged;
         history.OpenStateChanged -= HandleHistoryOpenStateChanged;
         input.Dispatched -= HandleInputDispatched;
+        input.HandlesChanged -= HandleInputHandlesChanged;
+        dialogue.LinePresented -= HandleLinePresented;
+        audio.PlaybackStarted -= HandleAudioPlaybackStarted;
         if (toggleInput is not null)
         {
             toggleInput.Activated -= HandleToggleInput;
+            toggleInput.Activated -= HandleSkipInput;
             toggleInput.Dispose();
             toggleInput = null;
         }
@@ -167,10 +227,6 @@ public sealed class PlaybackModeManager : IPlaybackModeManager
 
     public void SetMode(PlaybackMode mode)
     {
-        if (mode is PlaybackMode.SkipReadOnly or PlaybackMode.SkipAll)
-        {
-            throw new NotSupportedException("Skip playback modes are introduced in M15.");
-        }
         if (!Enum.IsDefined(mode))
         {
             throw new ArgumentOutOfRangeException(nameof(mode));
@@ -193,10 +249,17 @@ public sealed class PlaybackModeManager : IPlaybackModeManager
             "playback.mode_changed",
             $"Playback mode changed from '{change.Previous}' to '{change.Current}'.");
         ReconcileDeadline();
+        if (IsSkip(mode))
+        {
+            ApplySkipToCurrentPresentation();
+        }
     }
 
     public void ToggleAuto() => SetMode(
         Mode == PlaybackMode.Auto ? PlaybackMode.Manual : PlaybackMode.Auto);
+
+    public void ToggleSkip() => SetMode(
+        IsSkip(Mode) ? PlaybackMode.Manual : DefaultSkipMode);
 
     public void ApplyAutoSettings(TimeSpan extraDelay, bool waitForVoice)
     {
@@ -212,9 +275,22 @@ public sealed class PlaybackModeManager : IPlaybackModeManager
         ReconcileDeadline();
     }
 
+    public void ApplySkipSettings(TimeSpan delay, PlaybackMode defaultMode)
+    {
+        if (delay < TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(delay));
+        ValidateSkipMode(defaultMode);
+        lock (sync)
+        {
+            skipDelay = delay;
+            DefaultSkipMode = defaultMode;
+        }
+        ReconcileDeadline();
+    }
+
     public IPlaybackPauseHandle AcquirePause(PlaybackPauseReason reason)
     {
-        if (reason is PlaybackPauseReason.History or PlaybackPauseReason.Options)
+        if (reason is PlaybackPauseReason.History or PlaybackPauseReason.Options or
+            PlaybackPauseReason.Modal)
         {
             throw new ArgumentException(
                 $"Pause reason '{reason}' is owned by PlaybackModeManager.",
@@ -235,9 +311,44 @@ public sealed class PlaybackModeManager : IPlaybackModeManager
         return new PauseHandle(this, reason);
     }
 
-    private void HandlePhaseChanged(ScriptPlaybackPhaseChanged _) => ReconcileIntrinsicPauses();
+    private void HandlePhaseChanged(ScriptPlaybackPhaseChanged change)
+    {
+        if (change.Current == ScriptPlaybackPhase.PresentingOptions && IsSkip(Mode))
+        {
+            SetMode(PlaybackMode.Manual);
+        }
+        ReconcileIntrinsicPauses();
+    }
     private void HandleHistoryOpenStateChanged(HistoryOpenStateChanged _) => ReconcileIntrinsicPauses();
-    private void HandleToggleInput(InputActivation _) => ToggleAuto();
+    private void HandleToggleInput(InputActivation activation)
+    {
+        if (activation.Action == MajoInputActions.Auto) ToggleAuto();
+    }
+    private void HandleSkipInput(InputActivation activation)
+    {
+        if (activation.Action == MajoInputActions.Skip) ToggleSkip();
+    }
+    private void HandleInputHandlesChanged() => ReconcileIntrinsicPauses();
+    private void HandleAudioPlaybackStarted(IAudioPlayback playback)
+    {
+        if (IsSkip(Mode) && playback.Category == AudioCategory.Voice)
+        {
+            _ = StopVoiceAndCompleteOperationsAsync(groupId: null);
+        }
+    }
+
+    private void HandleLinePresented(DialogueLine _)
+    {
+        if (!IsSkip(Mode)) return;
+        var captured = played.CurrentPresentation;
+        if (Mode == PlaybackMode.SkipReadOnly &&
+            captured?.WasPlayedBeforePresentation != true)
+        {
+            SetMode(PlaybackMode.Manual);
+            return;
+        }
+        ApplySkipToCurrentPresentation();
+    }
 
     private void EnsureToggleInput()
     {
@@ -248,11 +359,15 @@ public sealed class PlaybackModeManager : IPlaybackModeManager
         if (toggleInput is not null)
         {
             toggleInput.Activated -= HandleToggleInput;
+            toggleInput.Activated -= HandleSkipInput;
         }
         toggleInput = input.AcquireScope(
             this,
-            new InputScopeOptions([MajoInputActions.Auto], name: "playback-auto-toggle"));
+            new InputScopeOptions(
+                [MajoInputActions.Auto, MajoInputActions.Skip],
+                name: "playback-auto-toggle"));
         toggleInput.Activated += HandleToggleInput;
+        toggleInput.Activated += HandleSkipInput;
     }
 
     private void HandleInputDispatched(InputActivation activation)
@@ -276,6 +391,9 @@ public sealed class PlaybackModeManager : IPlaybackModeManager
             changed |= SetIntrinsicPauseLocked(
                 PlaybackPauseReason.Options,
                 script.Phase == ScriptPlaybackPhase.PresentingOptions);
+            changed |= SetIntrinsicPauseLocked(
+                PlaybackPauseReason.Modal,
+                input.ActiveHandles.Any(value => value.IsModal));
         }
         if (changed)
         {
@@ -310,7 +428,7 @@ public sealed class PlaybackModeManager : IPlaybackModeManager
         lock (sync)
         {
             CancelDeadlineLocked();
-            if (!isInitialized || Mode != PlaybackMode.Auto || pauseCounts.Count > 0 ||
+            if (!isInitialized || Mode == PlaybackMode.Manual || pauseCounts.Count > 0 ||
                 script.Phase != ScriptPlaybackPhase.AwaitingAdvance)
             {
                 return;
@@ -319,12 +437,11 @@ public sealed class PlaybackModeManager : IPlaybackModeManager
             deadline = CancellationTokenSource.CreateLinkedTokenSource(lifetime!.Token);
             version = ++deadlineVersion;
             token = deadline.Token;
-            voice = WaitForVoice ? audio.CurrentVoice : null;
+            voice = Mode == PlaybackMode.Auto && WaitForVoice ? audio.CurrentVoice : null;
             logger.Debug(
                 "auto",
                 "auto.deadline_scheduled",
-                $"Auto advance scheduled after {ExtraDelay.TotalSeconds:0.###} seconds " +
-                $"(waitForVoice: {WaitForVoice}).");
+                $"{Mode} advance scheduled.");
         }
         _ = RunDeadlineAsync(version, voice, token);
     }
@@ -340,11 +457,12 @@ public sealed class PlaybackModeManager : IPlaybackModeManager
             {
                 await voice.Completion.WaitAsync(cancellationToken);
             }
-            await clock.DelayAsync(ExtraDelay, FrameTimeMode.Unscaled, cancellationToken);
+            var delay = IsSkip(Mode) ? SkipDelay : ExtraDelay;
+            await clock.DelayAsync(delay, FrameTimeMode.Unscaled, cancellationToken);
             lock (sync)
             {
                 if (!isInitialized || deadlineVersion != version ||
-                    cancellationToken.IsCancellationRequested || Mode != PlaybackMode.Auto ||
+                    cancellationToken.IsCancellationRequested || Mode == PlaybackMode.Manual ||
                     pauseCounts.Count > 0 || script.Phase != ScriptPlaybackPhase.AwaitingAdvance)
                 {
                     return;
@@ -418,6 +536,52 @@ public sealed class PlaybackModeManager : IPlaybackModeManager
         deadline = null;
     }
 
+    private void ApplySkipToCurrentPresentation()
+    {
+        if (!IsSkip(Mode) || IsPaused) return;
+        var current = played.CurrentPresentation;
+        if (Mode == PlaybackMode.SkipReadOnly &&
+            current?.WasPlayedBeforePresentation != true)
+        {
+            SetMode(PlaybackMode.Manual);
+            return;
+        }
+        _ = StopVoiceAndCompleteOperationsAsync(current?.CorrelationGroupId);
+        if (presentation.IsLineActive && !presentation.IsLineDisplayComplete)
+        {
+            dialogue.RequestHurryUp();
+        }
+        ReconcileDeadline();
+    }
+
+    private async Task StopVoiceAndCompleteOperationsAsync(string? groupId)
+    {
+        try
+        {
+            await audio.StopVoiceAsync(cancellationToken: lifetime?.Token ?? default);
+            if (!string.IsNullOrWhiteSpace(groupId))
+            {
+                await operations.CompleteSkippableAsync(groupId, lifetime?.Token ?? default);
+            }
+        }
+        catch (OperationCanceledException) when (lifetime?.IsCancellationRequested != false)
+        {
+        }
+        catch (Exception exception)
+        {
+            logger.Error("auto", "skip.complete_failed", $"Skip completion failed: {exception.Message}", exception);
+            Failed?.Invoke(exception);
+        }
+    }
+
+    private static bool IsSkip(PlaybackMode mode) =>
+        mode is PlaybackMode.SkipReadOnly or PlaybackMode.SkipAll;
+
+    private static void ValidateSkipMode(PlaybackMode mode)
+    {
+        if (!IsSkip(mode)) throw new ArgumentOutOfRangeException(nameof(mode));
+    }
+
     private sealed class PauseHandle : IPlaybackPauseHandle
     {
         private PlaybackModeManager? owner;
@@ -436,5 +600,51 @@ public sealed class PlaybackModeManager : IPlaybackModeManager
             var manager = Interlocked.Exchange(ref owner, null);
             manager?.ReleasePause(Reason);
         }
+    }
+
+    private sealed class NullDialoguePresentation : IDialoguePresentation
+    {
+        public static NullDialoguePresentation Instance { get; } = new();
+        public event Action? LineDisplayCompleted { add { } remove { } }
+        public event Action? LineDismissed { add { } remove { } }
+        public bool IsLineActive => false;
+        public bool IsLineDisplayComplete => true;
+        public bool IsPresentingOptions => false;
+        public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private sealed class LegacyPlayedRegister : IPlayedRegister
+    {
+        private readonly IDialoguePlayer dialogue;
+        public LegacyPlayedRegister(IDialoguePlayer dialogue) => this.dialogue = dialogue;
+        public event Action? Changed { add { } remove { } }
+        public PlayedLocalePolicy LocalePolicy => PlayedLocalePolicy.Shared;
+        public PlayedContentChangePolicy ContentChangePolicy => PlayedContentChangePolicy.KeepPlayed;
+        public IReadOnlyCollection<PlayedEntry> Entries => Array.Empty<PlayedEntry>();
+        public PlayedPresentation? CurrentPresentation => dialogue.CurrentProjectId is { } project &&
+            dialogue.CurrentLineId is { } line
+                ? new PlayedPresentation(new PlayedIdentity(project, line), null, true, null)
+                : null;
+        public bool IsPlayed(string projectId, string lineId, string? locale = null, string? contentFingerprint = null) => true;
+        public void Clear() { }
+        public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private sealed class NullOperationScheduler : IOperationScheduler
+    {
+        public static NullOperationScheduler Instance { get; } = new();
+        public IReadOnlyCollection<IOperationHandle> ActiveOperations => Array.Empty<IOperationHandle>();
+        public IOperationHandle Start(OperationDefinition definition) => throw new NotSupportedException();
+        public Task WaitAsync(OperationTarget target, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task CancelAsync(OperationTarget target, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task CompleteAsync(OperationTarget target, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task CompleteSkippableAsync(string groupId, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }

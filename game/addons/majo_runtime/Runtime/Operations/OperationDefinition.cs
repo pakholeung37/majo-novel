@@ -13,7 +13,8 @@ public sealed class OperationDefinition
         string? id = null,
         string? groupId = null,
         Func<CancellationToken, Task>? completeAsync = null,
-        Func<CancellationToken, Task>? cancelAsync = null)
+        Func<CancellationToken, Task>? cancelAsync = null,
+        bool isSkippable = false)
     {
         ArgumentNullException.ThrowIfNull(executeAsync);
         ValidateOptionalName(id, nameof(id));
@@ -24,6 +25,7 @@ public sealed class OperationDefinition
         GroupId = groupId;
         CompleteAsync = completeAsync ?? (_ => Task.CompletedTask);
         CancelAsync = cancelAsync ?? (_ => Task.CompletedTask);
+        IsSkippable = isSkippable;
     }
 
     public string? Id { get; }
@@ -35,6 +37,8 @@ public sealed class OperationDefinition
     public Func<CancellationToken, Task> CompleteAsync { get; }
 
     public Func<CancellationToken, Task> CancelAsync { get; }
+
+    public bool IsSkippable { get; }
 
     private static void ValidateOptionalName(string? value, string parameterName)
     {

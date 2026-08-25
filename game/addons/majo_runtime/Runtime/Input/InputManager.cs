@@ -39,6 +39,8 @@ public sealed class InputManager : IInputManager
 
     public event Action<InputActivation>? Dispatched;
 
+    public event Action? HandlesChanged;
+
     public bool Enabled
     {
         get
@@ -137,11 +139,12 @@ public sealed class InputManager : IInputManager
     {
         ArgumentNullException.ThrowIfNull(owner);
         options ??= new InputScopeOptions();
+        InputHandle handle;
         lock (sync)
         {
             EnsureInitializedLocked();
             RegisterOwnerLocked(owner);
-            var handle = new InputHandle(
+            handle = new InputHandle(
                 this,
                 owner,
                 ++nextOrder,
@@ -151,19 +154,21 @@ public sealed class InputManager : IInputManager
                 "input",
                 "input.scope_acquired",
                 $"Input scope '{handle.Name ?? "<anon>"}' acquired (modal: {handle.IsModal}).");
-            return handle;
         }
+        HandlesChanged?.Invoke();
+        return handle;
     }
 
     public IInputHandle AcquireMuter(object owner, InputMuteOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(owner);
         options ??= new InputMuteOptions();
+        InputHandle handle;
         lock (sync)
         {
             EnsureInitializedLocked();
             RegisterOwnerLocked(owner);
-            var handle = new InputHandle(
+            handle = new InputHandle(
                 this,
                 owner,
                 ++nextOrder,
@@ -173,8 +178,9 @@ public sealed class InputManager : IInputManager
                 "input",
                 "input.muter_acquired",
                 $"Input muter '{handle.Name ?? "<anon>"}' acquired.");
-            return handle;
         }
+        HandlesChanged?.Invoke();
+        return handle;
     }
 
     public void ReleaseOwner(object owner)
@@ -278,6 +284,7 @@ public sealed class InputManager : IInputManager
         }
 
         ownerToDetach?.Detach();
+        HandlesChanged?.Invoke();
         logger.Debug(
             "input",
             handle.Kind == InputHandleKind.Scope

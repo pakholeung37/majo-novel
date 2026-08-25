@@ -597,7 +597,8 @@ public sealed class AudioManager : IAudioManager
             {
                 CancelOnce();
                 return Task.CompletedTask;
-            }));
+            },
+            isSkippable: true));
     }
 
     private AudioPlayback CreatePlayback(

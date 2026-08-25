@@ -13,6 +13,8 @@ public static class MajoInputActions
 
     public static readonly InputActionId Auto = new("auto");
 
+    public static readonly InputActionId Skip = new("skip");
+
     public static readonly InputActionId History = new("history");
 
     public static readonly InputActionId Menu = new("menu");
@@ -34,6 +36,7 @@ public static class MajoInputActions
         Advance,
         Cancel,
         Auto,
+        Skip,
         History,
         Menu,
         QuickSave,

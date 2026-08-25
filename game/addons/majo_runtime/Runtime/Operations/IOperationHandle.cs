@@ -11,6 +11,8 @@ public interface IOperationHandle
 
     string? GroupId { get; }
 
+    bool IsSkippable => false;
+
     string DiagnosticId => Id ?? string.Empty;
 
     OperationState State { get; }

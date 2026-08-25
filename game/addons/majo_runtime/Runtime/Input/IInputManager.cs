@@ -27,6 +27,8 @@ public interface IInputManager : IRuntimeService
 {
     event Action<InputActivation>? Dispatched;
 
+    event Action? HandlesChanged { add { } remove { } }
+
     bool Enabled { get; set; }
 
     int ActiveHandleCount { get; }

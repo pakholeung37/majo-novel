@@ -5,7 +5,9 @@ using Majo.Runtime.Dialogue.Presentation;
 using Majo.Runtime.History;
 using Majo.Runtime.Input;
 using Majo.Runtime.Operations;
+using Majo.Runtime.Played;
 using Majo.Runtime.Script;
+using Majo.Runtime.State;
 using Xunit;
 
 namespace Majo.Runtime.UnitTests;
@@ -150,6 +152,67 @@ public sealed class AutoHistoryTests
     }
 
     [Fact(Timeout = 5_000)]
+    public async Task ReadOnlySkipUsesPlayedStateCapturedBeforePresentation()
+    {
+        var harness = await AutoHarness.CreateAsync();
+        var playedLine = Line("line:played", "Played");
+        harness.Dialogue.EmitLine(playedLine);
+        Assert.False(harness.Played.CurrentPresentation!.WasPlayedBeforePresentation);
+        harness.Presentation.CompleteLine();
+
+        harness.Dialogue.EmitLine(playedLine);
+        Assert.True(harness.Played.CurrentPresentation!.WasPlayedBeforePresentation);
+        harness.Playback.SetMode(PlaybackMode.SkipReadOnly);
+        Assert.Equal(PlaybackMode.SkipReadOnly, harness.Playback.Mode);
+        harness.Presentation.CompleteLine();
+        harness.Script.SetPhase(ScriptPlaybackPhase.AwaitingAdvance);
+        await harness.Clock.WaitForPendingDelayAsync();
+        harness.Clock.CompleteNextDelay();
+        await harness.Dialogue.WaitForNextLineRequestAsync();
+
+        harness.Dialogue.EmitLine(Line("line:new", "New"));
+        Assert.False(harness.Played.CurrentPresentation!.WasPlayedBeforePresentation);
+        Assert.Equal(PlaybackMode.Manual, harness.Playback.Mode);
+        harness.Presentation.CompleteLine();
+        Assert.True(harness.Played.IsPlayed("test", "line:new"));
+        await harness.ShutdownAsync();
+    }
+
+    [Fact]
+    public async Task PlayedRegisterRoundTripsLocaleAndFingerprintPolicy()
+    {
+        var dialogue = new FakeDialoguePlayer();
+        var presentation = new FakePresentation();
+        var locale = "zh-Hans";
+        var first = new PlayedRegister(
+            dialogue,
+            presentation,
+            PlayedLocalePolicy.PerLocale,
+            PlayedContentChangePolicy.TreatAsUnread,
+            () => locale);
+        await first.InitializeAsync(default);
+        dialogue.EmitLine(Line("line:1", "Text", "majo:fingerprint=v1"));
+        presentation.CompleteLine();
+        Assert.True(first.IsPlayed("test", "line:1", "zh-Hans", "v1"));
+        Assert.False(first.IsPlayed("test", "line:1", "en", "v1"));
+        Assert.False(first.IsPlayed("test", "line:1", "zh-Hans", "v2"));
+
+        var record = await ((IStateContributor)first).CaptureAsync(default);
+        var second = new PlayedRegister(
+            dialogue,
+            presentation,
+            PlayedLocalePolicy.PerLocale,
+            PlayedContentChangePolicy.TreatAsUnread,
+            () => locale);
+        await ((IStateContributor)second).PreflightAsync(record, default);
+        await ((IStateContributor)second).RestoreAsync(record, default);
+
+        Assert.True(second.IsPlayed("test", "line:1", "zh-Hans", "v1"));
+        Assert.Equal(first.Entries, second.Entries);
+        await first.ShutdownAsync(default);
+    }
+
+    [Fact(Timeout = 5_000)]
     public async Task AutoFacadeProjectsTheSinglePlaybackOwner()
     {
         var harness = await AutoHarness.CreateAsync();
@@ -259,6 +322,9 @@ public sealed class AutoHistoryTests
             FakeAudioManager audio,
             FakeFrameClock clock,
             FakeHistoryManager history,
+            FakePresentation presentation,
+            PlayedRegister played,
+            RecordingOperationScheduler operations,
             PlaybackModeManager playback,
             AutoManager manager)
         {
@@ -269,6 +335,9 @@ public sealed class AutoHistoryTests
             Audio = audio;
             Clock = clock;
             History = history;
+            Presentation = presentation;
+            Played = played;
+            Operations = operations;
             Playback = playback;
             Manager = manager;
         }
@@ -280,6 +349,9 @@ public sealed class AutoHistoryTests
         public FakeAudioManager Audio { get; }
         public FakeFrameClock Clock { get; }
         public FakeHistoryManager History { get; }
+        public FakePresentation Presentation { get; }
+        public PlayedRegister Played { get; }
+        public RecordingOperationScheduler Operations { get; }
         public PlaybackModeManager Playback { get; }
         public AutoManager Manager { get; }
 
@@ -294,6 +366,9 @@ public sealed class AutoHistoryTests
             var audio = new FakeAudioManager();
             var clock = new FakeFrameClock();
             var history = new FakeHistoryManager();
+            var presentation = new FakePresentation();
+            var played = new PlayedRegister(dialogue, presentation);
+            var operations = new RecordingOperationScheduler();
             var playback = new PlaybackModeManager(
                 script,
                 dialogue,
@@ -301,9 +376,14 @@ public sealed class AutoHistoryTests
                 clock,
                 input,
                 history,
+                presentation,
+                played,
+                operations,
                 TimeSpan.FromSeconds(1),
-                waitForVoice: true);
+                waitForVoice: true,
+                skipDelay: TimeSpan.FromMilliseconds(10));
             var manager = new AutoManager(playback);
+            await played.InitializeAsync(CancellationToken.None);
             await playback.InitializeAsync(CancellationToken.None);
             await manager.InitializeAsync(CancellationToken.None);
             return new AutoHarness(
@@ -314,6 +394,9 @@ public sealed class AutoHistoryTests
                 audio,
                 clock,
                 history,
+                presentation,
+                played,
+                operations,
                 playback,
                 manager);
         }
@@ -322,6 +405,7 @@ public sealed class AutoHistoryTests
         {
             await Manager.ShutdownAsync(CancellationToken.None);
             await Playback.ShutdownAsync(CancellationToken.None);
+            await Played.ShutdownAsync(CancellationToken.None);
             await Input.ShutdownAsync(CancellationToken.None);
             await InputBackend.ShutdownAsync(CancellationToken.None);
         }
@@ -638,5 +722,23 @@ public sealed class AutoHistoryTests
         public Task Completion => Task.CompletedTask;
         public void Cancel() { }
         public void Complete() { }
+    }
+
+    private sealed class RecordingOperationScheduler : IOperationScheduler
+    {
+        public IReadOnlyCollection<IOperationHandle> ActiveOperations => [];
+        public string? CompletedGroup { get; private set; }
+        public IOperationHandle Start(OperationDefinition definition) => throw new NotSupportedException();
+        public Task WaitAsync(OperationTarget target, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task CancelAsync(OperationTarget target, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task CompleteAsync(OperationTarget target, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task CompleteSkippableAsync(string groupId, CancellationToken cancellationToken = default)
+        {
+            CompletedGroup = groupId;
+            return Task.CompletedTask;
+        }
+        public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }

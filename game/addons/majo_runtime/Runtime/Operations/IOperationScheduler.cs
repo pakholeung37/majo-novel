@@ -16,4 +16,7 @@ public interface IOperationScheduler : IRuntimeService
     Task CancelAsync(OperationTarget target, CancellationToken cancellationToken = default);
 
     Task CompleteAsync(OperationTarget target, CancellationToken cancellationToken = default);
+
+    Task CompleteSkippableAsync(string groupId, CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
 }

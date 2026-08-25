@@ -1,6 +1,6 @@
 # Majo Runtime 第三阶段 Roadmap
 
-状态：已确认；M10.5-M14 已完成
+状态：已确认；M10.5-M15 已完成
 承接范围：`runtime-plan.md` 的 M10 完成之后  
 目标阶段：M10.5、M11、M12-M16
 主题：可分发性、可观测性、持久化玩家循环
@@ -490,7 +490,7 @@ Scope 失败策略：
   的软恢复或严格失败策略。
 - debounce、显式 Flush、Shutdown Flush 和写入失败后的 dirty 状态行为确定。
 
-## 10. M15：Played Register & Skip
+## 10. M15：Played Register & Skip（已完成）
 
 ### 10.1 Played Register
 

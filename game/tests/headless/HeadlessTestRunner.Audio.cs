@@ -50,7 +50,7 @@ public partial class HeadlessTestRunner
         Assert(audioHost.GetChildCount() == 2,
             "M9 BGM crossfade did not keep old and new Godot players concurrently.");
         await crossfade.FadeOperation.Completion;
-        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await WaitForConditionAsync(() => audioHost.GetChildCount() == 1, 2);
         Assert(audioHost.GetChildCount() == 1 &&
                 audio.BgmTracks.Single().ClipId == "battle",
             "M9 BGM crossfade did not release the old Godot player.");
