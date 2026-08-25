@@ -1,9 +1,8 @@
-/game/.godot/
-/game/android/
-/game/*.ysls.json
+/.godot/
+/android/
+*.ysls.json
 /tests/fixtures/clean_consumer/.godot/
 /tests/fixtures/clean_consumer/addons/
-/tests/fixtures/clean_consumer/*.ysls.json
 /original/
 __pycache__/
 *.pyc
