@@ -652,7 +652,7 @@ available through `IYarnCommandAdapter.LastFailure`.
 
 ## Runtime validation demo
 
-Run the project or open `res://demo/RuntimeDemo.tscn`. This is the single,
+Run the project or open `res://demos/demo-01/RuntimeDemo.tscn`. This is the single,
 long-lived validation scene; new Runtime capabilities are appended here instead
 of creating milestone-named demos. Its current long-form Yarn flow covers service
 lifecycle, resources, parallel/wait/cancel/complete Operations, Actors, built-in

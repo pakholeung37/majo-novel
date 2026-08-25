@@ -118,7 +118,7 @@ check_dotnet_formatting() {
     run_with_timeout 180 dotnet format "$GAME_PROJECT/Majo Rebuild.csproj" \
         --no-restore \
         --verify-no-changes \
-        --include "$GAME_PROJECT/addons/majo_runtime" "$GAME_PROJECT/demo" \
+        --include "$GAME_PROJECT/addons/majo_runtime" "$GAME_PROJECT/demos/demo-01" \
             "$GAME_PROJECT/tests/headless" \
         --verbosity minimal >"$game_log" 2>&1 &
     game_pid="$!"
