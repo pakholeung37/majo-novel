@@ -119,7 +119,7 @@ check_dotnet_formatting() {
         --no-restore \
         --verify-no-changes \
         --include "$GAME_PROJECT/addons/majo_runtime" "$GAME_PROJECT/demos/demo-01" \
-            "$GAME_PROJECT/demos/monosaba" "$GAME_PROJECT/tests/headless" \
+            "$GAME_PROJECT/demos/manosaba" "$GAME_PROJECT/tests/headless" \
         --verbosity minimal >"$game_log" 2>&1 &
     game_pid="$!"
     run_with_timeout 180 dotnet format "$UNIT_TEST_PROJECT" \

@@ -19,6 +19,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Bridges", "Bridges", "{FA30
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "YarnSpinnerStateBridge", "addons\majo_runtime\Bridges\YarnSpinnerStateBridge\YarnSpinnerStateBridge.csproj", "{33DBF491-D443-4936-AF5A-5782D6447365}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Majo.Runtime.UnitTests", "tests\Majo.Runtime.UnitTests\Majo.Runtime.UnitTests.csproj", "{210A076D-7F30-40AD-ABAF-11931B8F016D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -65,6 +69,18 @@ Global
 		{33DBF491-D443-4936-AF5A-5782D6447365}.Release|x64.Build.0 = Release|Any CPU
 		{33DBF491-D443-4936-AF5A-5782D6447365}.Release|x86.ActiveCfg = Release|Any CPU
 		{33DBF491-D443-4936-AF5A-5782D6447365}.Release|x86.Build.0 = Release|Any CPU
+		{210A076D-7F30-40AD-ABAF-11931B8F016D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{210A076D-7F30-40AD-ABAF-11931B8F016D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{210A076D-7F30-40AD-ABAF-11931B8F016D}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{210A076D-7F30-40AD-ABAF-11931B8F016D}.Debug|x64.Build.0 = Debug|Any CPU
+		{210A076D-7F30-40AD-ABAF-11931B8F016D}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{210A076D-7F30-40AD-ABAF-11931B8F016D}.Debug|x86.Build.0 = Debug|Any CPU
+		{210A076D-7F30-40AD-ABAF-11931B8F016D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{210A076D-7F30-40AD-ABAF-11931B8F016D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{210A076D-7F30-40AD-ABAF-11931B8F016D}.Release|x64.ActiveCfg = Release|Any CPU
+		{210A076D-7F30-40AD-ABAF-11931B8F016D}.Release|x64.Build.0 = Release|Any CPU
+		{210A076D-7F30-40AD-ABAF-11931B8F016D}.Release|x86.ActiveCfg = Release|Any CPU
+		{210A076D-7F30-40AD-ABAF-11931B8F016D}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -76,5 +92,6 @@ Global
 		{145D8C85-9148-25EE-B154-112245C9CEDE} = {E1748B93-FA13-C50B-BD89-C3B777E73FCB}
 		{FA30944D-C391-B885-E72F-430326067926} = {145D8C85-9148-25EE-B154-112245C9CEDE}
 		{33DBF491-D443-4936-AF5A-5782D6447365} = {FA30944D-C391-B885-E72F-430326067926}
+		{210A076D-7F30-40AD-ABAF-11931B8F016D} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 EndGlobal

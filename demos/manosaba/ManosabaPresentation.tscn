@@ -1,0 +1,438 @@
+[gd_scene format=3 uid="uid://bawptwbix3dmw"]
+
+[ext_resource type="Script" uid="uid://31e6aadfld2b" path="res://demos/manosaba/manosabaPresentation.cs" id="1_ui"]
+[ext_resource type="Script" uid="uid://b8nsxur6opm4k" path="res://addons/YarnSpinner-Godot/Runtime/Async/LinePresenter.cs" id="2_line"]
+[ext_resource type="Script" uid="uid://ba6k2ox6e4qg" path="res://addons/YarnSpinner-Godot/Runtime/Async/OptionsPresenter.cs" id="3_options"]
+[ext_resource type="PackedScene" uid="uid://b56ngcrq31nc5" path="res://addons/YarnSpinner-Godot/Scenes/OptionItem.tscn" id="4_option"]
+[ext_resource type="Texture2D" uid="uid://bj1jwmm3xlhrb" path="res://demos/manosaba/assets/ui/adv/NormalPrinter_Screen.png" id="5_screen"]
+[ext_resource type="Texture2D" uid="uid://bbemuyvr1871r" path="res://demos/manosaba/assets/ui/adv/NormalPrinter_Frame_Bottom.png" id="6_bottom"]
+[ext_resource type="Texture2D" uid="uid://cw4spk6n0qra5" path="res://demos/manosaba/assets/ui/adv/NormalPrinter_Frame_Top.png" id="7_top"]
+[ext_resource type="Texture2D" uid="uid://4shn5vsa0pc0" path="res://demos/manosaba/assets/ui/adv/NormalPrinter_Grass_1.png" id="8_grass1"]
+[ext_resource type="Texture2D" uid="uid://eqqmp563fv41" path="res://demos/manosaba/assets/ui/adv/NormalPrinter_Grass_2.png" id="9_grass2"]
+[ext_resource type="Texture2D" uid="uid://ccxd3lc0gt38e" path="res://demos/manosaba/assets/ui/adv/AutoToggle_Off.png" id="10_auto_off"]
+[ext_resource type="Texture2D" uid="uid://c8msucownrxw1" path="res://demos/manosaba/assets/ui/adv/AutoToggle_On.png" id="11_auto_on"]
+[ext_resource type="Texture2D" uid="uid://dfnlegl1qagmr" path="res://demos/manosaba/assets/ui/adv/InputIndicator.png" id="12_next"]
+[ext_resource type="Texture2D" uid="uid://cb3r8ry6hj70i" path="res://demos/manosaba/assets/ui/adv/MenuButton.png" id="13_menu"]
+[ext_resource type="Texture2D" uid="uid://cnl8l7fko453c" path="res://demos/manosaba/assets/ui/adv/BookButton.png" id="14_book"]
+[ext_resource type="Texture2D" uid="uid://dx4allqo4oafy" path="res://demos/manosaba/assets/ui/adv/NamePlateBase.png" id="15_name"]
+[ext_resource type="Texture2D" uid="uid://dbgk4k5jshjgc" path="res://demos/manosaba/assets/ui/menu/MenuFrame.png" id="16_phone"]
+[ext_resource type="Texture2D" uid="uid://cvuk1vqriw13v" path="res://demos/manosaba/assets/ui/menu/MenuCloseIcon.png" id="17_close"]
+[ext_resource type="Texture2D" uid="uid://dfc2ep5la08j4" path="res://demos/manosaba/assets/ui/menu/WiFi_Notice.png" id="18_wifi"]
+[ext_resource type="Texture2D" uid="uid://ceh64py5xtm16" path="res://demos/manosaba/assets/ui/menu/MenuButton_Save_Normal@ZhHans.png" id="19_save"]
+[ext_resource type="Texture2D" uid="uid://ck14lyiuhf8b1" path="res://demos/manosaba/assets/ui/menu/MenuButton_Save_Highlighted@ZhHans.png" id="20_save_hover"]
+[ext_resource type="Texture2D" uid="uid://cm4ue8ssjytqg" path="res://demos/manosaba/assets/ui/menu/MenuButton_Load_Normal@ZhHans.png" id="21_load"]
+[ext_resource type="Texture2D" uid="uid://yf58lrmta28r" path="res://demos/manosaba/assets/ui/menu/MenuButton_Load_Highlighted@ZhHans.png" id="22_load_hover"]
+[ext_resource type="Texture2D" uid="uid://cdsr2vho6qmfk" path="res://demos/manosaba/assets/ui/menu/MenuButton_Log_Normal@ZhHans.png" id="23_log"]
+[ext_resource type="Texture2D" uid="uid://va5qm1g7js7q" path="res://demos/manosaba/assets/ui/menu/MenuButton_Log_Highlighted@ZhHans.png" id="24_log_hover"]
+[ext_resource type="Texture2D" uid="uid://gjmkqofei0q7" path="res://demos/manosaba/assets/ui/menu/MenuButton_Options_Normal@ZhHans.png" id="25_options"]
+[ext_resource type="Texture2D" uid="uid://c7jp0q47ayiwv" path="res://demos/manosaba/assets/ui/menu/MenuButton_Options_Highlighted@ZhHans.png" id="26_options_hover"]
+[ext_resource type="Texture2D" uid="uid://dc15ermbw5a2k" path="res://demos/manosaba/assets/ui/menu/MenuButton_Title_Normal@ZhHans.png" id="27_title"]
+[ext_resource type="Texture2D" uid="uid://cxph1cu7mx5e5" path="res://demos/manosaba/assets/ui/menu/MenuButton_Title_Highlighted@ZhHans.png" id="28_title_hover"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_option"]
+bg_color = Color(0.045, 0.04, 0.045, 0.94)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.72, 0.68, 0.65, 0.9)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[node name="manosabaPresentation" type="Control" unique_id=1118689207]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 1
+script = ExtResource("1_ui")
+
+[node name="LinePresenter" type="Control" parent="." unique_id=2045381213 node_paths=PackedStringArray("presenterControl", "lineText", "characterNameText", "characterNameContainer")]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 1
+script = ExtResource("2_line")
+presenterControl = NodePath("PresenterControl")
+lineText = NodePath("PresenterControl/LineText")
+characterNameText = NodePath("CharacterNamePanel/CharacterNameText")
+characterNameContainer = NodePath("CharacterNamePanel")
+useFadeEffect = false
+lettersPerSecond = 32
+typewriterStyle = 1
+
+[node name="GrassLeft" type="TextureRect" parent="LinePresenter" unique_id=2068371094]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -274.0
+offset_bottom = 278.0
+grow_horizontal = 0
+mouse_filter = 2
+texture = ExtResource("8_grass1")
+expand_mode = 1
+
+[node name="Screen" type="TextureRect" parent="LinePresenter" unique_id=784802526]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -639.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+texture = ExtResource("5_screen")
+expand_mode = 1
+
+[node name="BottomFrame" type="TextureRect" parent="LinePresenter" unique_id=1728031496]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -598.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+texture = ExtResource("6_bottom")
+expand_mode = 1
+
+[node name="TopFrame" type="TextureRect" parent="LinePresenter" unique_id=272056993]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -216.0
+offset_bottom = 352.0
+grow_horizontal = 0
+mouse_filter = 2
+texture = ExtResource("7_top")
+expand_mode = 1
+
+[node name="GrassRight" type="TextureRect" parent="LinePresenter" unique_id=1685286435]
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_top = -322.0
+offset_right = 278.0
+grow_vertical = 0
+pivot_offset = Vector2(-1, 323)
+mouse_filter = 2
+texture = ExtResource("9_grass2")
+expand_mode = 1
+
+[node name="PresenterControl" type="Control" parent="LinePresenter" unique_id=1807125287]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="LineText" type="RichTextLabel" parent="LinePresenter/PresenterControl" unique_id=1778460445]
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -549.0
+offset_top = -185.0
+offset_right = 549.0
+offset_bottom = -25.0
+grow_horizontal = 2
+grow_vertical = 0
+pivot_offset = Vector2(2, -3)
+mouse_filter = 2
+theme_override_colors/default_color = Color(0.91, 0.9, 0.88, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.9)
+theme_override_constants/line_separation = 8
+theme_override_constants/shadow_offset_x = 2
+theme_override_constants/shadow_offset_y = 2
+bbcode_enabled = true
+scroll_active = false
+autowrap_mode = 2
+
+[node name="CharacterNamePanel" type="TextureRect" parent="LinePresenter" unique_id=1103432621]
+visible = false
+layout_mode = 0
+offset_left = 350.0
+offset_top = 696.0
+offset_right = 801.0
+offset_bottom = 913.0
+mouse_filter = 2
+texture = ExtResource("15_name")
+expand_mode = 1
+
+[node name="CharacterNameText" type="RichTextLabel" parent="LinePresenter/CharacterNamePanel" unique_id=1061676218]
+visible = false
+layout_mode = 0
+offset_left = 82.0
+offset_top = 76.0
+offset_right = 390.0
+offset_bottom = 130.0
+mouse_filter = 2
+theme_override_colors/default_color = Color(0.91, 0.9, 0.88, 1)
+bbcode_enabled = true
+fit_content = true
+scroll_active = false
+
+[node name="InputIndicator" type="TextureRect" parent="LinePresenter" unique_id=1649029840]
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -523.0
+offset_top = -109.0
+offset_right = -459.0
+offset_bottom = -53.0
+grow_horizontal = 0
+grow_vertical = 0
+mouse_filter = 2
+texture = ExtResource("12_next")
+expand_mode = 1
+
+[node name="BookButton" type="TextureButton" parent="LinePresenter" unique_id=167783571]
+visible = false
+layout_mode = 1
+offset_right = 161.0
+offset_bottom = 159.0
+pivot_offset = Vector2(1607, -75)
+mouse_default_cursor_shape = 2
+texture_normal = ExtResource("14_book")
+ignore_texture_size = true
+stretch_mode = 0
+
+[node name="MenuButton" type="TextureButton" parent="LinePresenter" unique_id=499596088]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -177.0
+offset_top = -2.0
+offset_bottom = 176.0
+grow_horizontal = 0
+mouse_default_cursor_shape = 2
+texture_normal = ExtResource("13_menu")
+ignore_texture_size = true
+stretch_mode = 0
+
+[node name="OptionsPresenter" type="Control" parent="." unique_id=2096693676 node_paths=PackedStringArray("presenterControl", "optionParent")]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 1
+script = ExtResource("3_options")
+presenterControl = NodePath("PresenterControl")
+optionItemPrefab = ExtResource("4_option")
+optionParent = NodePath("PresenterControl/OptionContainer")
+useFadeEffect = false
+
+[node name="PresenterControl" type="PanelContainer" parent="OptionsPresenter" unique_id=1878388231]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -420.0
+offset_top = -190.0
+offset_right = 420.0
+offset_bottom = 220.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBox_option")
+
+[node name="OptionContainer" type="VBoxContainer" parent="OptionsPresenter/PresenterControl" unique_id=131816995]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="MenuPanel" type="Control" parent="." unique_id=1045601923]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 1
+
+[node name="InputBlocker" type="ColorRect" parent="MenuPanel" unique_id=260463935]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.08)
+
+[node name="Phone" type="Control" parent="MenuPanel" unique_id=1887029965]
+anchors_preset = 0
+offset_left = 1268.0
+offset_top = 56.0
+offset_right = 1895.0
+offset_bottom = 1062.0
+rotation = -0.09773844
+pivot_offset = Vector2(313.5, 503)
+mouse_filter = 1
+
+[node name="Frame" type="TextureRect" parent="MenuPanel/Phone" unique_id=1710744028]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("16_phone")
+expand_mode = 1
+
+[node name="Wifi" type="TextureRect" parent="MenuPanel/Phone" unique_id=594828304]
+layout_mode = 0
+offset_left = 106.2279
+offset_top = 111.99551
+offset_right = 140.2279
+offset_bottom = 137.99551
+mouse_filter = 2
+texture = ExtResource("18_wifi")
+expand_mode = 1
+
+[node name="CloseButton" type="TextureButton" parent="MenuPanel/Phone" unique_id=1229204371]
+layout_mode = 0
+offset_left = 488.29663
+offset_top = 78.641174
+offset_right = 539.29663
+offset_bottom = 128.64117
+mouse_default_cursor_shape = 2
+texture_normal = ExtResource("17_close")
+ignore_texture_size = true
+stretch_mode = 0
+
+[node name="SaveButton" type="TextureButton" parent="MenuPanel/Phone" unique_id=436878821]
+layout_mode = 0
+offset_left = 114.37019
+offset_top = 182.0365
+offset_right = 320.37018
+offset_bottom = 376.0365
+mouse_default_cursor_shape = 2
+texture_normal = ExtResource("19_save")
+texture_hover = ExtResource("20_save_hover")
+ignore_texture_size = true
+stretch_mode = 0
+
+[node name="LoadButton" type="TextureButton" parent="MenuPanel/Phone" unique_id=948059127]
+layout_mode = 0
+offset_left = 329.0
+offset_top = 178.0
+offset_right = 535.0
+offset_bottom = 372.0
+mouse_default_cursor_shape = 2
+texture_normal = ExtResource("21_load")
+texture_hover = ExtResource("22_load_hover")
+ignore_texture_size = true
+stretch_mode = 0
+
+[node name="HistoryButton" type="TextureButton" parent="MenuPanel/Phone" unique_id=583417612]
+layout_mode = 0
+offset_left = 116.47524
+offset_top = 396.26434
+offset_right = 322.47525
+offset_bottom = 590.26434
+mouse_default_cursor_shape = 2
+texture_normal = ExtResource("23_log")
+texture_hover = ExtResource("24_log_hover")
+ignore_texture_size = true
+stretch_mode = 0
+
+[node name="OptionsButton" type="TextureButton" parent="MenuPanel/Phone" unique_id=1699016919]
+layout_mode = 0
+offset_left = 329.0
+offset_top = 393.0
+offset_right = 535.0
+offset_bottom = 587.0
+mouse_default_cursor_shape = 2
+texture_normal = ExtResource("25_options")
+texture_hover = ExtResource("26_options_hover")
+ignore_texture_size = true
+stretch_mode = 0
+
+[node name="TitleButton" type="TextureButton" parent="MenuPanel/Phone" unique_id=1081666766]
+layout_mode = 0
+offset_left = 121.78056
+offset_top = 618.84436
+offset_right = 327.78058
+offset_bottom = 812.84436
+mouse_default_cursor_shape = 2
+texture_normal = ExtResource("27_title")
+texture_hover = ExtResource("28_title_hover")
+ignore_texture_size = true
+stretch_mode = 0
+
+[node name="Status" type="Label" parent="MenuPanel" unique_id=447913280]
+layout_mode = 0
+offset_left = 1420.0
+offset_top = 903.0
+offset_right = 1825.0
+offset_bottom = 943.0
+rotation = 0.0349066
+theme_override_colors/font_color = Color(0.22, 0.2, 0.2, 0.72)
+theme_override_font_sizes/font_size = 17
+text = "右键或 Esc 关闭"
+horizontal_alignment = 1
+
+[node name="AutoButton" type="TextureButton" parent="." unique_id=461072955]
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 80.0
+offset_top = -147.0
+offset_right = 298.0
+offset_bottom = -37.0
+grow_vertical = 0
+pivot_offset = Vector2(-1976, 266)
+mouse_default_cursor_shape = 2
+toggle_mode = true
+texture_normal = ExtResource("10_auto_off")
+texture_pressed = ExtResource("11_auto_on")
+stretch_mode = 0
+
+[node name="AutoLabel" type="RichTextLabel" parent="AutoButton" unique_id=901146085]
+layout_mode = 1
+anchors_preset = -1
+anchor_left = 0.65400004
+anchor_top = 0.5
+anchor_right = 0.65400004
+anchor_bottom = 0.5
+offset_left = -51.572006
+offset_top = -30.5
+offset_right = 51.427994
+offset_bottom = 26.5
+grow_horizontal = 0
+grow_vertical = 2
+pivot_offset = Vector2(0, 1.5)
+mouse_filter = 2
+theme_override_colors/default_color = Color(0.88, 0.85, 0.82, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.9)
+theme_override_constants/shadow_offset_x = 2
+theme_override_constants/shadow_offset_y = 2
+theme_override_font_sizes/normal_font_size = 22
+text = "Auto"
+fit_content = true
+scroll_active = false

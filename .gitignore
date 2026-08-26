@@ -15,3 +15,7 @@ TestResults/
 /export/
 /build/
 .DS_Store
+/demos/manosaba/assets/fonts
+/demos/manosaba/assets/backgrounds
+/demos/manosaba/assets/ui
+/demos/manosaba/reference

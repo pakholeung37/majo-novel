@@ -1,0 +1,14 @@
+[remap]
+
+importer="yarnscript"
+type="Resource"
+uid="uid://cymcc0260exd2"
+path="res://.godot/imported/Act01_Chapter01_Adv01.yarn-56d094f42140d933613def7d42d5b6dd.tres"
+
+[deps]
+
+source_file="res://demos/manosaba/assets/scripts/Act01_Chapter01/Act01_Chapter01_Adv01.yarn"
+dest_files=["res://.godot/imported/Act01_Chapter01_Adv01.yarn-56d094f42140d933613def7d42d5b6dd.tres"]
+
+[params]
+
