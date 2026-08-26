@@ -20,11 +20,15 @@ public partial class ManosabaPresentation : Control
 	private TextureButton? optionsButton;
 	private TextureButton? titleButton;
 	private Label? menuStatus;
+	private TextureRect? inputIndicator;
 	private IPlaybackModeManager? playback;
 	private IHistoryManager? history;
 	private ISaveLoadOverlay? saveLoad;
 	private ISettingsOverlay? settings;
 	private IPlaybackPauseHandle? menuPause;
+	private Tween? menuButtonHoverTween;
+	private Tween? inputIndicatorTween;
+	private static readonly Vector2 MenuButtonHoverScale = new(1.08f, 1.08f);
 
 	public override void _Ready()
 	{
@@ -38,6 +42,7 @@ public partial class ManosabaPresentation : Control
 		optionsButton = GetNode<TextureButton>("MenuPanel/Phone/OptionsButton");
 		titleButton = GetNode<TextureButton>("MenuPanel/Phone/TitleButton");
 		menuStatus = GetNode<Label>("MenuPanel/Status");
+		inputIndicator = GetNodeOrNull<TextureRect>("LinePresenter/InputIndicator");
 
 		menuButton.Pressed += ToggleMenu;
 		closeButton.Pressed += CloseMenu;
@@ -48,17 +53,27 @@ public partial class ManosabaPresentation : Control
 		titleButton.Pressed += ShowTitleNotice;
 		autoButton.Pressed += ToggleAuto;
 
-		// The ADV presenter owns a full-screen input scope. Keep the interactive
-		// art above it and stop GUI clicks before they can become Advance input.
-		foreach (var button in new[]
-				 {
-					 menuButton, closeButton, saveButton, loadButton,
-					 historyButton, optionsButton, titleButton, autoButton,
-				 })
+		if (menuButton is not null)
 		{
-			button.MouseFilter = MouseFilterEnum.Stop;
-			button.ZIndex = 100;
+			menuButton.PivotOffset = menuButton.Size / 2;
+			menuButton.Resized += () => menuButton.PivotOffset = menuButton.Size / 2;
+			menuButton.MouseEntered += OnMenuButtonMouseEntered;
+			menuButton.MouseExited += OnMenuButtonMouseExited;
 		}
+
+		StartInputIndicatorBlink();
+
+		// // The ADV presenter owns a full-screen input scope. Keep the interactive
+		// // art above it and stop GUI clicks before they can become Advance input.
+		// foreach (var button in new[]
+		// 		 {
+		// 			 menuButton, closeButton, saveButton, loadButton,
+		// 			 historyButton, optionsButton, titleButton, autoButton,
+		// 		 })
+		// {
+		// 	button.MouseFilter = MouseFilterEnum.Stop;
+		// 	button.ZIndex = 100;
+		// }
 
 		menuPanel.Visible = false;
 	}
@@ -108,6 +123,12 @@ public partial class ManosabaPresentation : Control
 			playback.ModeChanged -= HandlePlaybackModeChanged;
 		}
 
+		menuButtonHoverTween?.Kill();
+		menuButtonHoverTween = null;
+
+		inputIndicatorTween?.Kill();
+		inputIndicatorTween = null;
+
 		menuPause?.Dispose();
 		menuPause = null;
 	}
@@ -140,6 +161,7 @@ public partial class ManosabaPresentation : Control
 		menuPanel.Visible = visible;
 		if (visible)
 		{
+			AnimateMenuButtonScale(Vector2.One);
 			menuPause = playback?.AcquirePause(PlaybackPauseReason.Modal);
 			if (menuStatus is not null)
 			{
@@ -151,6 +173,42 @@ public partial class ManosabaPresentation : Control
 			menuPause?.Dispose();
 			menuPause = null;
 		}
+	}
+
+	private void OnMenuButtonMouseEntered() => AnimateMenuButtonScale(MenuButtonHoverScale);
+
+	private void OnMenuButtonMouseExited() => AnimateMenuButtonScale(Vector2.One);
+
+	private void AnimateMenuButtonScale(Vector2 targetScale)
+	{
+		if (menuButton is null || !IsInsideTree())
+		{
+			return;
+		}
+
+		menuButtonHoverTween?.Kill();
+		menuButtonHoverTween = CreateTween();
+		menuButtonHoverTween
+			.SetTrans(Tween.TransitionType.Cubic)
+			.SetEase(Tween.EaseType.Out);
+		menuButtonHoverTween.TweenProperty(menuButton, "scale", targetScale, 0.15);
+	}
+
+	private void StartInputIndicatorBlink()
+	{
+		if (inputIndicator is null || !IsInsideTree())
+		{
+			return;
+		}
+
+		inputIndicatorTween?.Kill();
+		inputIndicatorTween = CreateTween();
+		inputIndicatorTween.SetLoops();
+		inputIndicatorTween
+			.SetTrans(Tween.TransitionType.Sine)
+			.SetEase(Tween.EaseType.InOut);
+		inputIndicatorTween.TweenProperty(inputIndicator, "modulate:a", 0.0f, 1.6);
+		inputIndicatorTween.TweenProperty(inputIndicator, "modulate:a", 1.0f, 1.6);
 	}
 
 	private void ToggleAuto() => playback?.ToggleAuto();

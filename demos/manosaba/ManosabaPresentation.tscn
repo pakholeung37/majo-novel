@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://bawptwbix3dmw"]
 
-[ext_resource type="Script" uid="uid://31e6aadfld2b" path="res://demos/manosaba/manosabaPresentation.cs" id="1_ui"]
+[ext_resource type="Script" uid="uid://31e6aadfld2b" path="res://demos/manosaba/ManosabaPresentation.cs" id="1_ui"]
 [ext_resource type="Script" uid="uid://b8nsxur6opm4k" path="res://addons/YarnSpinner-Godot/Runtime/Async/LinePresenter.cs" id="2_line"]
 [ext_resource type="Script" uid="uid://ba6k2ox6e4qg" path="res://addons/YarnSpinner-Godot/Runtime/Async/OptionsPresenter.cs" id="3_options"]
 [ext_resource type="PackedScene" uid="uid://b56ngcrq31nc5" path="res://addons/YarnSpinner-Godot/Scenes/OptionItem.tscn" id="4_option"]
@@ -195,10 +195,10 @@ anchor_left = 1.0
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = -523.0
-offset_top = -109.0
-offset_right = -459.0
-offset_bottom = -53.0
+offset_left = -370.0
+offset_top = -111.0
+offset_right = -306.0
+offset_bottom = -55.0
 grow_horizontal = 0
 grow_vertical = 0
 mouse_filter = 2
@@ -221,27 +221,28 @@ layout_mode = 1
 anchors_preset = 1
 anchor_left = 1.0
 anchor_right = 1.0
-offset_left = -177.0
-offset_top = -2.0
-offset_bottom = 176.0
+offset_left = -186.0
+offset_top = 6.0
+offset_right = -9.0
+offset_bottom = 184.0
 grow_horizontal = 0
+pivot_offset = Vector2(88.5, 89)
 mouse_default_cursor_shape = 2
 texture_normal = ExtResource("13_menu")
 ignore_texture_size = true
 stretch_mode = 0
 
 [node name="AutoButton" type="TextureButton" parent="LinePresenter" unique_id=461072955]
+z_index = 1
 layout_mode = 1
 anchors_preset = 2
 anchor_top = 1.0
 anchor_bottom = 1.0
-offset_left = 423.0
-offset_top = -169.00006
-offset_right = 641.0
-offset_bottom = -59.00006
+offset_top = -110.0
+offset_right = 218.0
 grow_vertical = 0
 scale = Vector2(0.8, 0.8)
-pivot_offset = Vector2(-1976, 266)
+pivot_offset = Vector2(114, 56.3125)
 mouse_default_cursor_shape = 2
 toggle_mode = true
 texture_normal = ExtResource("10_auto_off")
@@ -273,13 +274,13 @@ fit_content = true
 scroll_active = false
 
 [node name="OptionsPresenter" type="Control" parent="." unique_id=2096693676 node_paths=PackedStringArray("presenterControl", "optionParent")]
+visible = false
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-mouse_filter = 1
 script = ExtResource("3_options")
 presenterControl = NodePath("PresenterControl")
 optionItemPrefab = ExtResource("4_option")
@@ -314,13 +315,14 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-mouse_filter = 1
 
 [node name="InputBlocker" type="ColorRect" parent="MenuPanel" unique_id=260463935]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+offset_left = -0.00012207031
+offset_right = -0.00012207031
 grow_horizontal = 2
 grow_vertical = 2
 color = Color(0, 0, 0, 0.08)
@@ -340,7 +342,6 @@ grow_horizontal = 0
 grow_vertical = 2
 rotation = -0.09773844
 pivot_offset = Vector2(313.5, 503)
-mouse_filter = 1
 
 [node name="Frame" type="TextureRect" parent="MenuPanel/Phone" unique_id=1710744028]
 layout_mode = 1

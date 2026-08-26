@@ -107,10 +107,13 @@ public sealed class MissingResourceReporter : IMissingResourceReporter
             return;
         }
 
+        var displayPath = string.IsNullOrWhiteSpace(key.RequestedPath)
+            ? key.ResourceId
+            : key.RequestedPath;
         logger.Warning(
             "resource",
             "resource.missing_fallback",
-            $"Missing {key.ResourceType} resource '{key.ResourceId}'; fallback '{key.Fallback}' was used.",
+            $"Missing {key.ResourceType} resource '{displayPath}'; fallback '{key.Fallback}' was used.",
             properties: new Dictionary<string, object?>
             {
                 ["resourceType"] = key.ResourceType,

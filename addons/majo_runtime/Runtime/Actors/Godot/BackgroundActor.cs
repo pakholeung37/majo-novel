@@ -166,7 +166,7 @@ public sealed class BackgroundActor : ActorBase, IBackgroundActor
         {
             Name = "Appearance",
             ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
-            StretchMode = TextureRect.StretchModeEnum.Scale,
+            StretchMode = TextureRect.StretchModeEnum.KeepAspectCovered,
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
         Container.AddChild(view);

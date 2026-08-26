@@ -3,6 +3,7 @@ using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Dialogue.Commands.Audio;
+using Majo.Runtime.Localization;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Resources;
 using Xunit;
@@ -218,6 +219,64 @@ public sealed class AudioManagerTests
         await harness.Host.ShutdownAsync();
     }
 
+    [Fact(Timeout = 5_000)]
+    public async Task BgmAndSfxDoNotApplyLocaleEvenWhenLocaleManagerIsConfigured()
+    {
+        var backend = new FakeAudioBackend();
+        var bgm = new FakeAudioClipLoader("audio/bgm").Register("calm");
+        var sfx = new FakeAudioClipLoader("audio/sfx").Register("hit");
+        var voice = new FakeAudioClipLoader("audio/voice").Register("zh-CN/greeting");
+        var missingResources = new MissingResourceReporter();
+        var localeManager = new LocaleManager(
+            "en",
+            ["en", "zh-CN", "ja"],
+            defaultVoiceLocale: "zh-CN");
+        var localizedResolver = new LocalizedResourceResolver(new ResolverOnlyResourceManager());
+
+        var frameClock = new ImmediateFrameClock();
+        var host = new RuntimeServiceRegistry()
+            .AddSingleton<IFrameClock>(_ => frameClock)
+            .AddSingleton<IMissingResourceReporter>(_ => missingResources)
+            .AddSingleton<IOperationScheduler>(
+                resolver => new OperationScheduler(
+                    resolver.Get<IFrameClock>(),
+                    resolver.Get<IRuntimeLifetime>()),
+                typeof(IFrameClock),
+                typeof(IRuntimeLifetime))
+            .AddSingleton<IAudioManager>(
+                resolver => new AudioManager(
+                    backend,
+                    resolver.Get<IOperationScheduler>(),
+                    bgm,
+                    sfx,
+                    voice,
+                    new AudioSettings(VoiceLocale: "zh-CN"),
+                    missingResources: missingResources,
+                    locales: localeManager,
+                    localizedResources: localizedResolver),
+                typeof(IOperationScheduler))
+            .Build();
+        await host.InitializeAsync();
+        var audio = host.Services.Get<IAudioManager>();
+
+        var bgmResult = await audio.PlayBgmAsync("calm");
+        Assert.False(bgmResult.IsSkipped);
+        Assert.Equal("calm", bgmResult.Playback.ClipId);
+
+        var missingBgm = await audio.PlayBgmAsync("Ambient_011_001");
+        Assert.True(missingBgm.IsSkipped);
+        var occurrence = Assert.Single(missingResources.Occurrences);
+        Assert.Equal("Bgm", occurrence.ResourceType);
+        Assert.Equal("Ambient_011_001", occurrence.ResourceId);
+        Assert.Equal("audio/bgm/Ambient_011_001", occurrence.RequestedPath);
+
+        var voiceResult = await audio.PlayVoiceAsync("greeting");
+        Assert.False(voiceResult.IsSkipped);
+        Assert.Equal("zh-CN/greeting", voiceResult.Playback.ClipId);
+
+        await host.ShutdownAsync();
+    }
+
     [Fact]
     public void AudioCommandModuleRegistersTypedCommandsAndAudioFadeDefault()
     {
@@ -361,5 +420,31 @@ public sealed class AudioManagerTests
 
         public Task CompleteAsync(OperationTarget target, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
+    }
+
+    private sealed class ResolverOnlyResourceManager : IResourceManager
+    {
+        public int LoadedResourceCount => 0;
+
+        public TResource Load<TResource>(ResourceKey key, string? overridePath = null)
+            where TResource : class => throw new NotSupportedException();
+
+        public Task<TResource> LoadAsync<TResource>(
+            ResourceKey key,
+            string? overridePath = null,
+            CancellationToken cancellationToken = default)
+            where TResource : class => Task.FromException<TResource>(new NotSupportedException());
+
+        public bool Exists<TResource>(ResourceKey key, string? overridePath = null)
+            where TResource : class => false;
+
+        public IResourceLoader<TResource> CreateLoader<TResource>(string pathPrefix)
+            where TResource : class => throw new NotSupportedException();
+
+        public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }

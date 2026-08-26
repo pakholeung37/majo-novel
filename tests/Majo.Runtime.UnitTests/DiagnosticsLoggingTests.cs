@@ -121,9 +121,10 @@ public sealed class DiagnosticsLoggingTests
 
         var occurrence = Assert.Single(reporter.Occurrences);
         Assert.Equal(2, occurrence.Count);
-        Assert.Single(
+        var loggedEvent = Assert.Single(
             recording.Events,
             entry => entry.EventId == "resource.missing_fallback");
+        Assert.Equal("Missing Bgm resource 'audio/bgm/demo-missing'; fallback 'skip' was used.", loggedEvent.Message);
 
         await reporter.ResetAsync(CancellationToken.None);
         Assert.Empty(reporter.Occurrences);

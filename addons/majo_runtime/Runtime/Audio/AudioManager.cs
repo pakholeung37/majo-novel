@@ -237,25 +237,23 @@ public sealed class AudioManager : IAudioManager
     {
         EnsureInitialized();
         clipId = RequireName(clipId, nameof(clipId));
-        var resolvedClipId = ResolveLocalizedClipId(
-            BgmLoader, clipId, locales?.DialogueLocale, useLegacyVoicePrefix: false);
         trackId = string.IsNullOrWhiteSpace(trackId) ? clipId : trackId.Trim();
         volume = ValidateVolume(volume);
         fade = fade.Validate();
-        if (ShouldSkipMissing(BgmLoader, resolvedClipId))
+        if (ShouldSkipMissing(BgmLoader, clipId))
         {
-            ReportMissingAudio(AudioCategory.Bgm, resolvedClipId, BgmLoader);
+            ReportMissingAudio(AudioCategory.Bgm, clipId, BgmLoader);
             return AudioPlaybackResult.Skipped(AudioCategory.Bgm, clipId, trackId);
         }
 
-        var clip = await BgmLoader.LoadAsync(resolvedClipId, cancellationToken: cancellationToken);
+        var clip = await BgmLoader.LoadAsync(clipId, cancellationToken: cancellationToken);
 
         await mutations.WaitAsync(cancellationToken);
         try
         {
             await CompleteTransitionAsync(bgmTransitions, trackId, cancellationToken);
             bgm.TryGetValue(trackId, out var previous);
-            if (previous is not null && previous.ClipId == resolvedClipId)
+            if (previous is not null && previous.ClipId == clipId)
             {
                 var previousVolume = previous.BaseVolume;
                 var previousLoop = previous.Backend.Loop;
@@ -278,7 +276,7 @@ public sealed class AudioManager : IAudioManager
             }
 
             var current = CreatePlayback(
-                AudioCategory.Bgm, resolvedClipId, trackId, clip, loop, volume,
+                AudioCategory.Bgm, clipId, trackId, clip, loop, volume,
                 fade.DurationSeconds > 0 ? 0 : EffectiveVolume(AudioCategory.Bgm, volume));
             lock (gate)
             {
@@ -374,20 +372,18 @@ public sealed class AudioManager : IAudioManager
     {
         EnsureInitialized();
         clipId = RequireName(clipId, nameof(clipId));
-        var resolvedClipId = ResolveLocalizedClipId(
-            SfxLoader, clipId, locales?.DialogueLocale, useLegacyVoicePrefix: false);
         volume = ValidateVolume(volume);
         fade = fade.Validate();
         instanceId = string.IsNullOrWhiteSpace(instanceId)
             ? $"sfx-{Interlocked.Increment(ref generatedSfxId)}"
             : instanceId.Trim();
-        if (ShouldSkipMissing(SfxLoader, resolvedClipId))
+        if (ShouldSkipMissing(SfxLoader, clipId))
         {
-            ReportMissingAudio(AudioCategory.Sfx, resolvedClipId, SfxLoader);
+            ReportMissingAudio(AudioCategory.Sfx, clipId, SfxLoader);
             return AudioPlaybackResult.Skipped(AudioCategory.Sfx, clipId, instanceId);
         }
 
-        var clip = await SfxLoader.LoadAsync(resolvedClipId, cancellationToken: cancellationToken);
+        var clip = await SfxLoader.LoadAsync(clipId, cancellationToken: cancellationToken);
         await mutations.WaitAsync(cancellationToken);
         try
         {
@@ -400,7 +396,7 @@ public sealed class AudioManager : IAudioManager
             }
 
             var playback = CreatePlayback(
-                AudioCategory.Sfx, resolvedClipId, instanceId, clip, loop, volume,
+                AudioCategory.Sfx, clipId, instanceId, clip, loop, volume,
                 fade.DurationSeconds > 0 ? 0 : EffectiveVolume(AudioCategory.Sfx, volume));
             lock (gate) { sfx.Add(instanceId, playback); }
             var operation = StartFade(
@@ -468,8 +464,7 @@ public sealed class AudioManager : IAudioManager
         clipId = RequireName(clipId, nameof(clipId));
         volume = ValidateVolume(volume);
         fade = fade.Validate();
-        var localizedId = ResolveLocalizedClipId(
-            VoiceLoader, clipId, voiceLocale, useLegacyVoicePrefix: true);
+        var localizedId = ResolveLocalizedVoiceClipId(clipId);
         if (ShouldSkipMissing(VoiceLoader, localizedId, overridePath))
         {
             ReportMissingAudio(
@@ -563,11 +558,17 @@ public sealed class AudioManager : IAudioManager
         AudioCategory category,
         string clipId,
         IAudioClipLoader loader,
-        string? overridePath = null) => missingResources?.Report(
+        string? overridePath = null)
+    {
+        var requestedPath = overridePath ?? (string.IsNullOrWhiteSpace(loader.PathPrefix)
+            ? clipId
+            : $"{loader.PathPrefix.TrimEnd('/')}/{clipId.TrimStart('/')}");
+        missingResources?.Report(
             category.ToString(),
             clipId,
             "skip",
-            overridePath ?? $"{loader.PathPrefix}/{clipId}");
+            requestedPath);
+    }
 
     private IOperationHandle StartFade(
         IReadOnlyList<FadeTarget> targets,
@@ -1019,27 +1020,21 @@ public sealed class AudioManager : IAudioManager
         _ => 1,
     };
 
-    private string ResolveLocalizedClipId(
-        IAudioClipLoader loader,
-        string clipId,
-        string? locale,
-        bool useLegacyVoicePrefix)
+    private string ResolveLocalizedVoiceClipId(string clipId)
     {
         if (localizedResources is null || locales is null ||
-            string.IsNullOrWhiteSpace(locale) || clipId.Contains('/'))
+            string.IsNullOrWhiteSpace(voiceLocale) || clipId.Contains('/'))
         {
-            return useLegacyVoicePrefix && !clipId.Contains('/')
+            return !clipId.Contains('/') && !string.IsNullOrWhiteSpace(voiceLocale)
                 ? $"{voiceLocale}/{clipId}"
                 : clipId;
         }
 
         return localizedResources.ResolvePath(
             clipId,
-            locale,
-            useLegacyVoicePrefix
-                ? locales.GetVoiceFallbackChain(locale)
-                : locales.GetDialogueFallbackChain(locale),
-            candidate => loader.Exists(candidate)).ResolvedPath ?? $"{locale}/{clipId}";
+            voiceLocale,
+            locales.GetVoiceFallbackChain(voiceLocale),
+            candidate => VoiceLoader.Exists(candidate)).ResolvedPath ?? $"{voiceLocale}/{clipId}";
     }
 
     private void HandleVoiceLocaleChanged(LocaleChangedEvent change) =>
