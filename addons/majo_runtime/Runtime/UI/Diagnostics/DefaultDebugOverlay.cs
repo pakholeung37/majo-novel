@@ -190,7 +190,7 @@ public partial class DefaultDebugOverlay : CanvasLayer, IDisposable
             AnchorRight = 1.0f,
             AnchorBottom = 1.0f,
             MouseFilter = Control.MouseFilterEnum.Ignore,
-            Visible = false,
+            Visible = configuration.defaultOverlayVisible,
         };
         AddChild(rootControl);
 

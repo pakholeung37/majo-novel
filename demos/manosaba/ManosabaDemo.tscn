@@ -1,15 +1,14 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene format=3 uid="uid://qtplp54pm1ub"]
 
-[ext_resource type="Script" path="res://demos/manosaba/ManosabaDemoController.cs" id="1_controller"]
-[ext_resource type="Texture2D" path="res://demos/manosaba/assets/backgrounds/stills/Still_140_001.png" id="2_cg"]
+[ext_resource type="Script" uid="uid://tiu2to0oxum8" path="res://demos/manosaba/ManosabaDemoController.cs" id="1_controller"]
 
-[node name="ManosabaDemo" type="Node"]
+[node name="ManosabaDemo" type="Node" unique_id=639194268]
 script = ExtResource("1_controller")
 
-[node name="StageLayer" type="CanvasLayer" parent="."]
+[node name="StageLayer" type="CanvasLayer" parent="." unique_id=788850392]
 layer = 0
 
-[node name="Stage" type="Control" parent="StageLayer"]
+[node name="Stage" type="Control" parent="StageLayer" unique_id=2094966127]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -18,14 +17,11 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="OpeningCg" type="TextureRect" parent="StageLayer/Stage"]
+[node name="ColorRect" type="ColorRect" parent="StageLayer/Stage" unique_id=1323092283]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-mouse_filter = 2
-texture = ExtResource("2_cg")
-expand_mode = 1
-stretch_mode = 6
+color = Color(0, 0, 0, 1)

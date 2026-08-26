@@ -30,5 +30,8 @@ public partial class DiagnosticsConfiguration : Resource
     public bool EnableOverlay { get; set; }
 
     [Export]
+    public bool defaultOverlayVisible { get; set; } = false;
+
+    [Export]
     public string OverlayAction { get; set; } = "majo_debug";
 }

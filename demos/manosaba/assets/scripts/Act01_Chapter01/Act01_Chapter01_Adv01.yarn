@@ -15,10 +15,9 @@ title: Act01_Chapter01_Adv01
 // ========================================
 // ●シーン1‐0-1
 // ========================================
-
-// <<modifyBackgroundExtended Id:Stills Scale:g_backgroundDefaultScale Duration:0 Lazy:0 AppearanceAndTransition:140_1>>
+<<back backdrop appearance:courtroom>>
 // <<modifyBackgroundExtended TintColor:#000000 Duration:1.2 Lazy:0 AppearanceAndTransition:Transparent SubId:Overlay>>
-// <<wait WaitMode:1.8>>
+<<wait 1.8>>
 
 // <<playBgm BgmPath:Ambi_11_1 Volume:1.0 Loop:1 FadeInDuration:0.0>>
 // <<autoSave>>

@@ -230,6 +230,48 @@ texture_normal = ExtResource("13_menu")
 ignore_texture_size = true
 stretch_mode = 0
 
+[node name="AutoButton" type="TextureButton" parent="LinePresenter" unique_id=461072955]
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 423.0
+offset_top = -169.00006
+offset_right = 641.0
+offset_bottom = -59.00006
+grow_vertical = 0
+scale = Vector2(0.8, 0.8)
+pivot_offset = Vector2(-1976, 266)
+mouse_default_cursor_shape = 2
+toggle_mode = true
+texture_normal = ExtResource("10_auto_off")
+texture_pressed = ExtResource("11_auto_on")
+stretch_mode = 0
+
+[node name="AutoLabel" type="RichTextLabel" parent="LinePresenter/AutoButton" unique_id=901146085]
+layout_mode = 1
+anchors_preset = -1
+anchor_left = 0.65400004
+anchor_top = 0.5
+anchor_right = 0.65400004
+anchor_bottom = 0.5
+offset_left = -51.572006
+offset_top = -30.5
+offset_right = 51.427994
+offset_bottom = 26.5
+grow_horizontal = 0
+grow_vertical = 2
+pivot_offset = Vector2(0, 1.5)
+mouse_filter = 2
+theme_override_colors/default_color = Color(0.88, 0.85, 0.82, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.9)
+theme_override_constants/shadow_offset_x = 2
+theme_override_constants/shadow_offset_y = 2
+theme_override_font_sizes/normal_font_size = 22
+text = "Auto"
+fit_content = true
+scroll_active = false
+
 [node name="OptionsPresenter" type="Control" parent="." unique_id=2096693676 node_paths=PackedStringArray("presenterControl", "optionParent")]
 layout_mode = 1
 anchors_preset = 15
@@ -260,6 +302,7 @@ grow_vertical = 2
 theme_override_styles/panel = SubResource("StyleBox_option")
 
 [node name="OptionContainer" type="VBoxContainer" parent="OptionsPresenter/PresenterControl" unique_id=131816995]
+visible = false
 layout_mode = 2
 theme_override_constants/separation = 12
 
@@ -283,11 +326,18 @@ grow_vertical = 2
 color = Color(0, 0, 0, 0.08)
 
 [node name="Phone" type="Control" parent="MenuPanel" unique_id=1887029965]
-anchors_preset = 0
-offset_left = 1268.0
-offset_top = 56.0
-offset_right = 1895.0
-offset_bottom = 1062.0
+layout_mode = 1
+anchors_preset = 6
+anchor_left = 1.0
+anchor_top = 0.5
+anchor_right = 1.0
+anchor_bottom = 0.5
+offset_left = -646.0
+offset_top = -503.0
+offset_right = -19.0
+offset_bottom = 503.0
+grow_horizontal = 0
+grow_vertical = 2
 rotation = -0.09773844
 pivot_offset = Vector2(313.5, 503)
 mouse_filter = 1
@@ -395,44 +445,3 @@ theme_override_colors/font_color = Color(0.22, 0.2, 0.2, 0.72)
 theme_override_font_sizes/font_size = 17
 text = "右键或 Esc 关闭"
 horizontal_alignment = 1
-
-[node name="AutoButton" type="TextureButton" parent="." unique_id=461072955]
-layout_mode = 1
-anchors_preset = 2
-anchor_top = 1.0
-anchor_bottom = 1.0
-offset_left = 80.0
-offset_top = -147.0
-offset_right = 298.0
-offset_bottom = -37.0
-grow_vertical = 0
-pivot_offset = Vector2(-1976, 266)
-mouse_default_cursor_shape = 2
-toggle_mode = true
-texture_normal = ExtResource("10_auto_off")
-texture_pressed = ExtResource("11_auto_on")
-stretch_mode = 0
-
-[node name="AutoLabel" type="RichTextLabel" parent="AutoButton" unique_id=901146085]
-layout_mode = 1
-anchors_preset = -1
-anchor_left = 0.65400004
-anchor_top = 0.5
-anchor_right = 0.65400004
-anchor_bottom = 0.5
-offset_left = -51.572006
-offset_top = -30.5
-offset_right = 51.427994
-offset_bottom = 26.5
-grow_horizontal = 0
-grow_vertical = 2
-pivot_offset = Vector2(0, 1.5)
-mouse_filter = 2
-theme_override_colors/default_color = Color(0.88, 0.85, 0.82, 1)
-theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.9)
-theme_override_constants/shadow_offset_x = 2
-theme_override_constants/shadow_offset_y = 2
-theme_override_font_sizes/normal_font_size = 22
-text = "Auto"
-fit_content = true
-scroll_active = false

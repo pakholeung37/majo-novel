@@ -28,7 +28,8 @@ public partial class ManosabaDemoController : Node
 			configuration.State!.StorageNamespace = "majo/manosaba";
 			configuration.State.GameBuildId = "manosaba-v0.1";
 			configuration.Save!.Enabled = true;
-			configuration.Diagnostics!.EnableOverlay = false;
+			configuration.Diagnostics!.EnableOverlay = true;
+			configuration.Diagnostics!.defaultOverlayVisible = true;
 			configuration.Presentation!.PresenterScene =
 				ResourceLoader.Load<PackedScene>(
 					"res://demos/manosaba/ManosabaPresentation.tscn");
