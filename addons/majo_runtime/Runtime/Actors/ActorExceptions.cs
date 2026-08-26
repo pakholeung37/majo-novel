@@ -47,6 +47,19 @@ public sealed class ActorFactoryNotFoundException : ActorException
     }
 }
 
+public sealed class ActorFactoryConflictException : ActorException
+{
+    public ActorFactoryConflictException(
+        string actorId,
+        string existingFactoryId,
+        string requestedFactoryId)
+        : base(
+            $"Actor '{actorId}' uses factory '{existingFactoryId}' and cannot be used " +
+            $"as '{requestedFactoryId}'.")
+    {
+    }
+}
+
 public sealed class DuplicateActorFactoryException : ActorException
 {
     public DuplicateActorFactoryException(string factoryId)

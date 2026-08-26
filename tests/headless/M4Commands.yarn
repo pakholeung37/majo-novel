@@ -19,11 +19,13 @@ Narrator: after complete #line:m4-after-complete
 title: BadArguments
 ---
 <<char hero appearance:happy position:nowhere>>
+Narrator: after bad command #line:m4-after-bad-command
 ===
 
 title: UnknownCommand
 ---
 <<majo_unknown detail>>
+Narrator: after unknown command #line:m4-after-unknown-command
 ===
 
 title: StopCancellation

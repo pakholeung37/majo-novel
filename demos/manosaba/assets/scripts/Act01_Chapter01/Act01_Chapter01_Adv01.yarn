@@ -15,7 +15,7 @@ title: Act01_Chapter01_Adv01
 // ========================================
 // ●シーン1‐0-1
 // ========================================
-<<back backdrop appearance:courtroom>>
+<<back stills appearance:Still_140_001>>
 // <<modifyBackgroundExtended TintColor:#000000 Duration:1.2 Lazy:0 AppearanceAndTransition:Transparent SubId:Overlay>>
 <<wait 1.8>>
 

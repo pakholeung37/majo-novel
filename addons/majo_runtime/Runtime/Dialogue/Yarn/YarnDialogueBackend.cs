@@ -719,6 +719,12 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
 
     private void HandleCommandFailed(RuntimeCommandException failure)
     {
+        if (failure.IsRecoverable &&
+            commandAdapter?.AbortOnRecoverableFailure != true)
+        {
+            return;
+        }
+
         lock (sync)
         {
             pendingFailure = failure;

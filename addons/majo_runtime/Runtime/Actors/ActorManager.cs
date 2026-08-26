@@ -21,19 +21,24 @@ public sealed class ActorManager : IActorManager
         new(StringComparer.Ordinal);
     private readonly Dictionary<string, Task<IActor>> pendingActors =
         new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> pendingActorFactories =
+        new(StringComparer.Ordinal);
     private CancellationTokenSource actorLifetime = new();
     private readonly ILocaleManager? locales;
     private readonly IRuntimeLogger logger;
+    private readonly ActorCreationConventions conventions;
     private bool isInitialized;
 
     public ActorManager(
         IEnumerable<ActorDefinition> definitions,
         IEnumerable<IActorFactory>? factories = null,
         ILocaleManager? locales = null,
-        IRuntimeLogger? logger = null)
+        IRuntimeLogger? logger = null,
+        ActorCreationConventions? conventions = null)
     {
         this.locales = locales;
         this.logger = logger ?? NullRuntimeLogger.Instance;
+        this.conventions = conventions ?? new ActorCreationConventions();
         ArgumentNullException.ThrowIfNull(definitions);
         foreach (var definition in definitions)
         {
@@ -216,6 +221,85 @@ public sealed class ActorManager : IActorManager
         return creation.WaitAsync(cancellationToken);
     }
 
+    public IActor GetOrCreate(ActorSpawnRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        EnsureInitialized();
+        lock (gate)
+        {
+            if (actors.TryGetValue(request.ActorId, out var existing))
+            {
+                ValidateRequiredFactory(request, existing.FactoryId);
+                return existing;
+            }
+
+            if (pendingActors.ContainsKey(request.ActorId))
+            {
+                throw new DuplicateActorIdException(request.ActorId);
+            }
+        }
+
+        var definition = ResolveDefinition(request);
+        if (!factories.TryGetValue(definition.FactoryId, out var factory))
+        {
+            throw new ActorFactoryNotFoundException(definition.FactoryId, request.ActorId);
+        }
+
+        var actor = factory.Create(definition) ?? throw new ActorException(
+            $"Actor factory '{factory.FactoryId}' returned null for '{request.ActorId}'.");
+        ValidateCreatedActor(request.ActorId, factory, actor);
+        lock (gate)
+        {
+            actors.Add(request.ActorId, actor);
+        }
+
+        return actor;
+    }
+
+    public Task<IActor> GetOrCreateAsync(
+        ActorSpawnRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        EnsureInitialized();
+        cancellationToken.ThrowIfCancellationRequested();
+        Task<IActor> creation;
+        lock (gate)
+        {
+            if (actors.TryGetValue(request.ActorId, out var existing))
+            {
+                ValidateRequiredFactory(request, existing.FactoryId);
+                return Task.FromResult(existing);
+            }
+
+            if (pendingActors.TryGetValue(request.ActorId, out creation!))
+            {
+                ValidatePendingFactory(request);
+                return creation.WaitAsync(cancellationToken);
+            }
+
+            var definition = ResolveDefinition(request);
+            if (!factories.TryGetValue(definition.FactoryId, out var factory))
+            {
+                throw new ActorFactoryNotFoundException(definition.FactoryId, request.ActorId);
+            }
+
+            var completion = new TaskCompletionSource<IActor>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            creation = completion.Task;
+            pendingActors.Add(request.ActorId, creation);
+            pendingActorFactories.Add(request.ActorId, definition.FactoryId);
+            _ = CompleteCreationAsync(
+                request.ActorId,
+                definition,
+                factory,
+                completion,
+                actorLifetime.Token);
+        }
+
+        return creation.WaitAsync(cancellationToken);
+    }
+
     public TActor Get<TActor>(string actorId) where TActor : class, IActor
     {
         EnsureInitialized();
@@ -266,10 +350,82 @@ public sealed class ActorManager : IActorManager
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(actorId);
         ArgumentException.ThrowIfNullOrWhiteSpace(factoryId);
-        return definitions.TryGetValue(actorId, out var definition) &&
-            string.Equals(definition.FactoryId, factoryId, StringComparison.Ordinal) &&
-            factories.ContainsKey(factoryId);
+        if (!factories.ContainsKey(factoryId))
+        {
+            return false;
+        }
+
+        return definitions.TryGetValue(actorId, out var definition)
+            ? string.Equals(definition.FactoryId, factoryId, StringComparison.Ordinal)
+            : IsConventionFactory(factoryId);
     }
+
+    private ActorDefinition ResolveDefinition(ActorSpawnRequest request)
+    {
+        if (definitions.TryGetValue(request.ActorId, out var definition))
+        {
+            ValidateRequiredFactory(request, definition.FactoryId);
+            return definition;
+        }
+
+        if (!IsConventionFactory(request.FallbackFactoryId))
+        {
+            throw new ActorNotFoundException(request.ActorId);
+        }
+
+        var resourcePathPrefix = request.FallbackFactoryId == ActorFactoryIds.Character
+            ? conventions.CharactersPath
+            : conventions.BackgroundsPath;
+        var inferred = new ActorDefinition(
+            request.ActorId,
+            request.FallbackFactoryId,
+            resourcePathPrefix,
+            request.InitialAppearance,
+            [],
+            request.InitialPosition ?? CharacterPositionPreset.Center);
+        logger.Debug(
+            "actor",
+            "actor.definition_inferred",
+            $"Actor '{request.ActorId}' used conventional '{request.FallbackFactoryId}' configuration.",
+            properties: new Dictionary<string, object?>
+            {
+                ["actorId"] = request.ActorId,
+                ["factoryId"] = request.FallbackFactoryId,
+                ["initialAppearance"] = request.InitialAppearance,
+                ["resourcePathPrefix"] = resourcePathPrefix,
+            });
+        return inferred;
+    }
+
+    private void ValidatePendingFactory(ActorSpawnRequest request)
+    {
+        if (!pendingActorFactories.TryGetValue(request.ActorId, out var factoryId))
+        {
+            return;
+        }
+
+        ValidateRequiredFactory(request, factoryId);
+    }
+
+    private static void ValidateRequiredFactory(
+        ActorSpawnRequest request,
+        string factoryId)
+    {
+        if (request.RequiredFactoryId is not null &&
+            !string.Equals(
+                factoryId,
+                request.RequiredFactoryId,
+                StringComparison.Ordinal))
+        {
+            throw new ActorFactoryConflictException(
+                request.ActorId,
+                factoryId,
+                request.RequiredFactoryId);
+        }
+    }
+
+    private static bool IsConventionFactory(string factoryId) =>
+        factoryId is ActorFactoryIds.Character or ActorFactoryIds.Background;
 
     private void DestroyAll()
     {
@@ -359,6 +515,7 @@ public sealed class ActorManager : IActorManager
             lock (gate)
             {
                 pendingActors.Remove(actorId);
+                pendingActorFactories.Remove(actorId);
             }
         }
     }

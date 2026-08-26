@@ -3,6 +3,7 @@
 using System;
 using System.Threading.Tasks;
 using Majo.Runtime.Actors;
+using Majo.Runtime.Core;
 using Majo.Runtime.Operations;
 
 namespace Majo.Runtime.Dialogue.Commands;
@@ -10,10 +11,14 @@ namespace Majo.Runtime.Dialogue.Commands;
 public sealed class ActorCommandService : IActorCommandService
 {
     private readonly IActorManager actors;
+    private readonly IRuntimeLogger logger;
 
-    public ActorCommandService(IActorManager actors)
+    public ActorCommandService(
+        IActorManager actors,
+        IRuntimeLogger? logger = null)
     {
         this.actors = actors ?? throw new ArgumentNullException(nameof(actors));
+        this.logger = logger ?? NullRuntimeLogger.Instance;
     }
 
     public Task BackAsync(BackCommand command) => BackAsync(
@@ -28,7 +33,10 @@ public sealed class ActorCommandService : IActorCommandService
         {
             ArgumentNullException.ThrowIfNull(command);
             var (actor, created) = await GetOrCreateAsync<IBackgroundActor>(
-                command.ActorId,
+                new ActorSpawnRequest(
+                    command.ActorId,
+                    ActorFactoryIds.Background,
+                    command.Appearance),
                 context.CancellationToken);
             var operationScheduled = false;
             try
@@ -93,7 +101,11 @@ public sealed class ActorCommandService : IActorCommandService
         {
             ArgumentNullException.ThrowIfNull(command);
             var (actor, created) = await GetOrCreateAsync<ICharacterActor>(
-                command.ActorId,
+                new ActorSpawnRequest(
+                    command.ActorId,
+                    ActorFactoryIds.Character,
+                    command.Appearance,
+                    command.Position),
                 context.CancellationToken);
             var operationScheduled = false;
             try
@@ -132,6 +144,21 @@ public sealed class ActorCommandService : IActorCommandService
         () =>
         {
             ArgumentNullException.ThrowIfNull(command);
+            if (!actors.TryGet(command.ActorId, out _))
+            {
+                logger.Warning(
+                    "actor",
+                    "actor.missing_noop",
+                    $"Actor '{command.ActorId}' was not active; command 'hide' was skipped.",
+                    properties: new System.Collections.Generic.Dictionary<string, object?>
+                    {
+                        ["actorId"] = command.ActorId,
+                        ["commandName"] = "hide",
+                        ["fallback"] = "no-op",
+                    });
+                return Task.CompletedTask;
+            }
+
             var actor = actors.Get<IActor>(command.ActorId);
             var operation = actor.Hide(
                 command.DurationSeconds,
@@ -142,21 +169,20 @@ public sealed class ActorCommandService : IActorCommandService
         });
 
     private async Task<(TActor Actor, bool Created)> GetOrCreateAsync<TActor>(
-        string actorId,
+        ActorSpawnRequest request,
         System.Threading.CancellationToken cancellationToken)
         where TActor : class, IActor
     {
-        if (actors.TryGet(actorId, out _))
+        if (actors.TryGet(request.ActorId, out _))
         {
-            return (actors.Get<TActor>(actorId), false);
+            return (actors.Get<TActor>(request.ActorId), false);
         }
 
-        var actor = await actors.CreateAsync(actorId, cancellationToken);
+        var actor = await actors.GetOrCreateAsync(request, cancellationToken);
         if (actor is not TActor typedActor)
         {
-            actors.Remove(actorId);
             throw new ActorException(
-                $"Actor '{actorId}' is '{actor.GetType().FullName}', " +
+                $"Actor '{request.ActorId}' is '{actor.GetType().FullName}', " +
                 $"not '{typeof(TActor).FullName}'.");
         }
 
@@ -188,7 +214,7 @@ public sealed class ActorCommandService : IActorCommandService
         {
             throw;
         }
-        catch (Exception exception)
+        catch (ActorException exception)
         {
             throw new RuntimeCommandException(commandName, exception.Message, exception);
         }

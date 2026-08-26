@@ -7,6 +7,12 @@ namespace Majo.Runtime.Dialogue.Yarn;
 
 public interface IYarnCommandRegistry
 {
+    event Action<string>? UnhandledCommand
+    {
+        add { }
+        remove { }
+    }
+
     CancellationToken DialogueCancellationToken => CancellationToken.None;
 
     void AddCommandHandler(string commandName, Delegate handler);

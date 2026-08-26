@@ -170,6 +170,85 @@ public sealed class ActorManagerTests
         await manager.ShutdownAsync(CancellationToken.None);
     }
 
+    [Fact(Timeout = 5_000)]
+    public async Task MissingBuiltInDefinitionUsesSpawnRequestAndResourceConventions()
+    {
+        var factory = new CapturingActorFactory(ActorFactoryIds.Character);
+        var manager = new ActorManager(
+            [],
+            [factory],
+            conventions: new ActorCreationConventions(
+                "portraits",
+                "scenes"));
+        await manager.InitializeAsync(CancellationToken.None);
+
+        var actor = await manager.GetOrCreateAsync(new ActorSpawnRequest(
+            "new-hero",
+            ActorFactoryIds.Character,
+            "happy",
+            CharacterPositionPreset.Left));
+
+        Assert.Equal("new-hero", actor.Id);
+        Assert.NotNull(factory.LastDefinition);
+        Assert.Equal("happy", factory.LastDefinition.DefaultAppearance);
+        Assert.Equal(CharacterPositionPreset.Left, factory.LastDefinition.InitialPosition);
+        Assert.Equal(
+            "portraits/new-hero/happy",
+            factory.LastDefinition.GetAppearanceResourceKey("happy").Path);
+        Assert.True(manager.CanCreate("another-hero", ActorFactoryIds.Character));
+        await manager.ShutdownAsync(CancellationToken.None);
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task ExplicitDefinitionRejectsConflictingSpawnFactory()
+    {
+        var definition = new ActorDefinition(
+            "stage",
+            ActorFactoryIds.Background,
+            "courtroom",
+            []);
+        var manager = new ActorManager(
+            [definition],
+            [
+                new CapturingActorFactory(ActorFactoryIds.Background),
+                new CapturingActorFactory(ActorFactoryIds.Character),
+            ]);
+        await manager.InitializeAsync(CancellationToken.None);
+
+        await Assert.ThrowsAsync<ActorFactoryConflictException>(() =>
+            manager.GetOrCreateAsync(new ActorSpawnRequest(
+                "stage",
+                ActorFactoryIds.Character,
+                "normal",
+                requiredFactoryId: ActorFactoryIds.Character)));
+
+        Assert.Empty(manager.Actors);
+        await manager.ShutdownAsync(CancellationToken.None);
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task ExplicitCustomFactoryOverridesCommandFallbackFactory()
+    {
+        var factory = new CapturingActorFactory("portrait");
+        var definition = new ActorDefinition(
+            "hero",
+            "portrait",
+            "portraits",
+            "calm",
+            []);
+        var manager = new ActorManager([definition], [factory]);
+        await manager.InitializeAsync(CancellationToken.None);
+
+        var actor = await manager.GetOrCreateAsync(new ActorSpawnRequest(
+            "hero",
+            ActorFactoryIds.Character,
+            "happy"));
+
+        Assert.Equal("portrait", actor.FactoryId);
+        Assert.Same(definition, factory.LastDefinition);
+        await manager.ShutdownAsync(CancellationToken.None);
+    }
+
     private static ActorDefinition CreateDefinition(string id) => new(
         id,
         "test",
@@ -191,6 +270,24 @@ public sealed class ActorManagerTests
         {
             CreateCount++;
             return new FakeActor(definition.Id, definition.DefaultAppearance);
+        }
+    }
+
+    private sealed class CapturingActorFactory : IActorFactory
+    {
+        public CapturingActorFactory(string factoryId) => FactoryId = factoryId;
+
+        public string FactoryId { get; }
+
+        public ActorDefinition? LastDefinition { get; private set; }
+
+        public IActor Create(ActorDefinition definition)
+        {
+            LastDefinition = definition;
+            return new FakeActor(
+                definition.Id,
+                definition.DefaultAppearance,
+                definition.FactoryId);
         }
     }
 
@@ -234,13 +331,19 @@ public sealed class ActorManagerTests
 
     private sealed class FakeActor : IActor
     {
-        public FakeActor(string id, string appearance)
+        public FakeActor(
+            string id,
+            string appearance,
+            string factoryId = "test")
         {
             Id = id;
             Appearance = appearance;
+            FactoryId = factoryId;
         }
 
         public string Id { get; }
+
+        public string FactoryId { get; }
 
         public string Appearance { get; private set; }
 

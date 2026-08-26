@@ -168,11 +168,12 @@ and non-Godot hosts can use `FakeInputBackend`, while projects can replace
 
 ## Actors
 
-Actor definitions live under `MajoProjectConfiguration.Actors`. Each definition
-selects a factory (`character` or `background`) and a default appearance.
-Character definitions also select the configured `Left`, `Center`, or `Right`
-position preset. Texture paths follow the resource conventions below; the
-appearance list is optional and contains only explicit overrides.
+Built-in `char` and `back` commands can create actors without a configured
+definition. The command supplies the actor role and initial appearance, and the
+Runtime infers `characters/<actor-id>/<appearance>` or
+`backgrounds/<actor-id>/<appearance>`. Definitions under
+`MajoProjectConfiguration.Actors` are optional overrides for custom factories,
+resource prefixes, default appearances, positions, and explicit texture paths.
 
 The bootstrap registers `IActorManager` by default:
 
@@ -203,6 +204,9 @@ Custom factories can be added or replace built-ins through
 instead of the built-in texture appearance schema. Factories validate that
 payload through `ValidateDefinition`; asynchronous factories can override
 `CreateAsync`, while concurrent requests for one Actor ID share one creation.
+An existing actor must still implement the role requested by the command; using
+one ID as both a character and a background is reported as a recoverable command
+error.
 
 `IActor` exposes logical/presentation state but no longer exposes a concrete
 Node. Godot-backed actors additionally implement `IGodotActorView`. Target
@@ -264,6 +268,13 @@ var texture = await resources
 that path only and reports all attempted candidates if it is missing. Custom
 resource providers register through `ConfigureResourceProviders`; higher
 priority providers can replace project assets without changing logical IDs.
+
+Missing actor textures use `PlaceholderTexture2D` and emit a deduplicated
+warning unless `ResourceConfiguration.FailOnMissingAssets` enables strict asset
+loading. Recoverable Yarn command errors (unknown commands, invalid arguments,
+and actor content conflicts) are logged and skipped by default so dialogue can
+keep running during authoring and hot reload. Set
+`DialogueConfiguration.AbortOnCommandError` to `true` for strict sessions.
 
 ## Audio
 

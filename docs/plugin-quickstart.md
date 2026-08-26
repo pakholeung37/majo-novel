@@ -83,6 +83,15 @@ public partial class MyVisualNovelScene : Node
 }
 ```
 
+对于内置 `char` 和 `back` command，Actor 配置是可选覆盖而不是创建前提。若省略上例中的
+`ActorDefinitionConfiguration`，Runtime 会分别按
+`characters/<actor-id>/<appearance>` 和 `backgrounds/<actor-id>/<appearance>` 推导资源；
+自定义 Actor factory、特殊资源前缀或默认位置仍通过显式配置提供。
+
+Yarn command 的内容错误默认记录后跳过，未知 command 也会继续执行下一条指令。需要严格
+会话时可设置 `configuration.Dialogue!.AbortOnCommandError = true`。资源缺失默认使用
+`PlaceholderTexture2D` 并记录 warning；`FailOnMissingAssets` 可恢复严格资源加载。
+
 ---
 
 ## 4. 资源存放约定

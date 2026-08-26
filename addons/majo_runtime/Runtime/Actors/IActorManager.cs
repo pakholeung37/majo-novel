@@ -21,6 +21,25 @@ public interface IActorManager : IRuntimeService
         return Task.FromResult(Create(actorId));
     }
 
+    IActor GetOrCreate(ActorSpawnRequest request)
+    {
+        System.ArgumentNullException.ThrowIfNull(request);
+        if (TryGet(request.ActorId, out var existing))
+        {
+            return existing!;
+        }
+
+        return Create(request.ActorId);
+    }
+
+    Task<IActor> GetOrCreateAsync(
+        ActorSpawnRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(GetOrCreate(request));
+    }
+
     TActor Get<TActor>(string actorId) where TActor : class, IActor;
 
     bool TryGet(string actorId, out IActor? actor);

@@ -1,6 +1,7 @@
 using System.Reflection;
 using Godot;
 using Majo.Runtime.Actors;
+using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Dialogue.Yarn;
 using Majo.Runtime.Operations;
@@ -168,6 +169,31 @@ public sealed class RuntimeCommandTests
         background.LastOperation.Complete();
     }
 
+    [Fact(Timeout = 5_000)]
+    public async Task BackCommandInfersBackgroundForPreviouslyUnknownActorId()
+    {
+        var manager = new FakeActorManager();
+        var service = new ActorCommandService(manager);
+
+        await service.BackAsync(new BackCommand(
+            "chapter-one-stage", "courtroom", 0, false, null, null));
+
+        var background = manager.Get<FakeBackgroundActor>("chapter-one-stage");
+        Assert.Equal("courtroom", background.Appearance);
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task HideMissingActorIsNoOp()
+    {
+        var manager = new FakeActorManager();
+        var service = new ActorCommandService(manager);
+
+        await service.HideAsync(new HideCommand(
+            "not-active", 0.2, true, null, null));
+
+        Assert.Empty(manager.Actors);
+    }
+
     [Fact]
     public void CatalogIsTheSingleSourceOfBuiltInCommandNames()
     {
@@ -314,6 +340,67 @@ public sealed class RuntimeCommandTests
             catalog.Get("char").Descriptor.Usage,
             exception.Message,
             StringComparison.Ordinal);
+        await adapter.ShutdownAsync(CancellationToken.None);
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task LenientAdapterReportsAndSkipsRecoverableArgumentFailure()
+    {
+        var registry = new FakeCommandRegistry();
+        var adapter = CreateAdapter(
+            registry,
+            new RecordingCommandService(),
+            out _,
+            abortOnRecoverableFailure: false);
+        await adapter.InitializeAsync(CancellationToken.None);
+        var handler = Assert.IsType<Func<string[], Task>>(registry.Handlers["char"]);
+
+        await handler(["hero", "appearance:happy", "position:somewhere"]);
+
+        Assert.NotNull(adapter.LastFailure);
+        Assert.True(adapter.LastFailure!.IsRecoverable);
+        Assert.Equal(0, registry.AbortCount);
+        await adapter.ShutdownAsync(CancellationToken.None);
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task LenientAdapterReportsAndSkipsUnknownCommand()
+    {
+        var registry = new FakeCommandRegistry();
+        var adapter = CreateAdapter(
+            registry,
+            new RecordingCommandService(),
+            out _,
+            abortOnRecoverableFailure: false);
+        await adapter.InitializeAsync(CancellationToken.None);
+
+        registry.ReportUnhandledCommand("missing detail:value");
+
+        Assert.Equal("missing", adapter.LastFailure?.CommandName);
+        Assert.True(adapter.LastFailure?.IsRecoverable);
+        Assert.Equal(0, registry.AbortCount);
+        await adapter.ShutdownAsync(CancellationToken.None);
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task LenientAdapterStillAbortsForUnexpectedRuntimeFailure()
+    {
+        var registry = new FakeCommandRegistry();
+        var adapter = CreateAdapter(
+            registry,
+            new RecordingCommandService(),
+            out _,
+            configure: commands => commands.Register<ProbeCommandArguments>(
+                (_, _) => throw new InvalidOperationException("engine bug")),
+            abortOnRecoverableFailure: false);
+        await adapter.InitializeAsync(CancellationToken.None);
+        var handler = Assert.IsType<Func<string[], Task>>(registry.Handlers["probe"]);
+
+        var failure = await Assert.ThrowsAsync<RuntimeCommandException>(() =>
+            handler(["value", "detail:detail"]));
+
+        Assert.False(failure.IsRecoverable);
+        Assert.Equal(1, registry.AbortCount);
         await adapter.ShutdownAsync(CancellationToken.None);
     }
 
@@ -470,7 +557,7 @@ public sealed class RuntimeCommandTests
         var constructor = Assert.Single(typeof(ActorCommandService).GetConstructors());
         var parameters = constructor.GetParameters();
 
-        Assert.Equal([typeof(IActorManager)],
+        Assert.Equal([typeof(IActorManager), typeof(IRuntimeLogger)],
             parameters.Select(parameter => parameter.ParameterType));
         Assert.All(parameters, parameter => Assert.True(parameter.ParameterType.IsInterface));
     }
@@ -627,7 +714,8 @@ public sealed class RuntimeCommandTests
         out RuntimeCommandCatalog catalog,
         IActorManager? actors = null,
         IOperationScheduler? operations = null,
-        Action<RuntimeCommandRegistry>? configure = null)
+        Action<RuntimeCommandRegistry>? configure = null,
+        bool abortOnRecoverableFailure = true)
     {
         var commands = new RuntimeCommandRegistry();
         BuiltInRuntimeCommands.Register(commands, actorCommands);
@@ -637,7 +725,11 @@ public sealed class RuntimeCommandTests
             new CommandBinder(new CommandBindingContext(0.35)),
             actors,
             operations);
-        return new YarnCommandAdapter(yarnRegistry, catalog, dispatcher);
+        return new YarnCommandAdapter(
+            yarnRegistry,
+            catalog,
+            dispatcher,
+            abortOnRecoverableFailure);
     }
 
     [RuntimeCommand("probe", Category = "Test", Usage = "probe <value> detail:<value>")]
@@ -697,6 +789,8 @@ public sealed class RuntimeCommandTests
 
         public CancellationToken DialogueCancellationToken => dialogueCancellation.Token;
 
+        public event Action<string>? UnhandledCommand;
+
         public Dictionary<string, Delegate> Handlers { get; } = new(StringComparer.Ordinal);
 
         public List<string> RemovedCommands { get; } = new();
@@ -725,6 +819,9 @@ public sealed class RuntimeCommandTests
         }
 
         public void AbortDialogue() => AbortCount++;
+
+        public void ReportUnhandledCommand(string commandText) =>
+            UnhandledCommand?.Invoke(commandText);
 
         public void Dispose() => dialogueCancellation.Dispose();
     }
@@ -768,6 +865,29 @@ public sealed class RuntimeCommandTests
                 _ => new FakeCharacterActor(actorId, "default"),
             };
             actors.Add(actorId, actor);
+            return actor;
+        }
+
+        public IActor GetOrCreate(ActorSpawnRequest request)
+        {
+            if (actors.TryGetValue(request.ActorId, out var existing))
+            {
+                return existing;
+            }
+
+            IActor actor = request.ActorId == "broken"
+                ? new FailingAppearanceActor(request.ActorId, request.InitialAppearance)
+                : request.FallbackFactoryId switch
+            {
+                ActorFactoryIds.Background =>
+                    new FakeBackgroundActor(request.ActorId, request.InitialAppearance),
+                ActorFactoryIds.Character =>
+                    new FakeCharacterActor(request.ActorId, request.InitialAppearance),
+                _ => throw new ActorFactoryNotFoundException(
+                    request.FallbackFactoryId,
+                    request.ActorId),
+            };
+            actors.Add(request.ActorId, actor);
             return actor;
         }
 

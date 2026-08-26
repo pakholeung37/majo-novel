@@ -153,7 +153,8 @@ public sealed class RuntimeCommandDispatcher : IDisposable
             var failure = new RuntimeCommandException(
                 registration.Name,
                 exception.Message,
-                exception);
+                exception,
+                recoverable: false);
             logger.Error(
                 "command",
                 "command.faulted",
@@ -178,6 +179,42 @@ public sealed class RuntimeCommandDispatcher : IDisposable
             dialogueOperations.Clear();
             activeCommands.Clear();
         }
+    }
+
+    public void ReportUnknownCommand(string commandText)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(commandText);
+        IRuntimeLifetime? lifetime = null;
+        IDialoguePlayer? dialogue = null;
+        services?.TryGet(out lifetime);
+        services?.TryGet(out dialogue);
+        var host = lifetime as RuntimeHost;
+        var commandName = commandText.Split(
+            (char[]?)null,
+            2,
+            StringSplitOptions.RemoveEmptyEntries)[0];
+        var correlation = new RuntimeLogCorrelation(
+            host?.RuntimeId ?? string.Empty,
+            host?.SessionId,
+            (dialogue as DialoguePlayer)?.CurrentDialogueSessionId,
+            Guid.NewGuid().ToString("N"));
+        var failure = new RuntimeCommandException(
+            commandName,
+            "Command is not registered.");
+        logger.Error(
+            "command",
+            "command.unknown",
+            $"Unknown Yarn command '{commandName}' was skipped.",
+            failure,
+            correlation,
+            new Dictionary<string, object?>
+            {
+                ["commandName"] = commandName,
+                ["commandText"] = commandText,
+                ["sourceLineId"] = dialogue?.CurrentLineId,
+                ["fallback"] = "skip",
+            });
+        ReportFailure(failure);
     }
 
     public async Task DrainDialogueOperationsAsync(CancellationToken cancellationToken)

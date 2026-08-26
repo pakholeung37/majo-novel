@@ -13,6 +13,7 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
     private readonly IYarnCommandRegistry registry;
     private readonly RuntimeCommandCatalog catalog;
     private readonly RuntimeCommandDispatcher dispatcher;
+    private readonly bool abortOnRecoverableFailure;
     private readonly List<string> registeredCommands = new();
     private readonly List<CatalogCommandHandler> commandHandlers = new();
     private bool isInitialized;
@@ -20,16 +21,20 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
     public YarnCommandAdapter(
         IYarnCommandRegistry registry,
         RuntimeCommandCatalog catalog,
-        RuntimeCommandDispatcher dispatcher)
+        RuntimeCommandDispatcher dispatcher,
+        bool abortOnRecoverableFailure = false)
     {
         this.registry = registry ?? throw new ArgumentNullException(nameof(registry));
         this.catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         this.dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
+        this.abortOnRecoverableFailure = abortOnRecoverableFailure;
     }
 
     public event Action<RuntimeCommandException>? CommandFailed;
 
     public RuntimeCommandException? LastFailure => dispatcher.LastFailure;
+
+    public bool AbortOnRecoverableFailure => abortOnRecoverableFailure;
 
     public bool HasActiveCommands => dispatcher.HasActiveCommands;
 
@@ -53,12 +58,14 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
         {
             dispatcher.Validate(catalog);
             dispatcher.CommandFailed += HandleCommandFailed;
+            registry.UnhandledCommand += HandleUnhandledCommand;
             foreach (var command in catalog.Commands)
             {
                 var handler = new CatalogCommandHandler(
                     command,
                     dispatcher,
-                    registry);
+                    registry,
+                    abortOnRecoverableFailure);
                 commandHandlers.Add(handler);
                 Register(command.Name, (Func<string[], Task>)handler.ExecuteAsync);
             }
@@ -69,6 +76,7 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
         catch
         {
             dispatcher.CommandFailed -= HandleCommandFailed;
+            registry.UnhandledCommand -= HandleUnhandledCommand;
             UnregisterAll();
             throw;
         }
@@ -96,6 +104,7 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
             await dispatcher.DrainDialogueOperationsAsync(cancellationToken);
             dispatcher.Reset();
             dispatcher.CommandFailed -= HandleCommandFailed;
+            registry.UnhandledCommand -= HandleUnhandledCommand;
             UnregisterAll();
             isInitialized = false;
         }
@@ -114,10 +123,17 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
         }
         finally
         {
-            // A diagnostic listener must never prevent the dialogue from being aborted.
-            registry.AbortDialogue();
+            // Unexpected runtime faults remain fatal to the current dialogue. Recoverable
+            // content errors are skipped unless strict authoring behaviour was requested.
+            if (abortOnRecoverableFailure || !failure.IsRecoverable)
+            {
+                registry.AbortDialogue();
+            }
         }
     }
+
+    private void HandleUnhandledCommand(string commandText) =>
+        dispatcher.ReportUnknownCommand(commandText);
 
     private void Register(string commandName, Delegate handler)
     {
@@ -156,20 +172,35 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
         private readonly RuntimeCommandRegistration command;
         private readonly RuntimeCommandDispatcher dispatcher;
         private readonly IYarnCommandRegistry registry;
+        private readonly bool abortOnRecoverableFailure;
 
         public CatalogCommandHandler(
             RuntimeCommandRegistration command,
             RuntimeCommandDispatcher dispatcher,
-            IYarnCommandRegistry registry)
+            IYarnCommandRegistry registry,
+            bool abortOnRecoverableFailure)
         {
             this.command = command;
             this.dispatcher = dispatcher;
             this.registry = registry;
+            this.abortOnRecoverableFailure = abortOnRecoverableFailure;
         }
 
-        public Task ExecuteAsync(params string[] arguments) => dispatcher.ExecuteAsync(
-            command,
-            arguments,
-            registry.DialogueCancellationToken);
+        public async Task ExecuteAsync(params string[] arguments)
+        {
+            try
+            {
+                await dispatcher.ExecuteAsync(
+                    command,
+                    arguments,
+                    registry.DialogueCancellationToken);
+            }
+            catch (RuntimeCommandException exception) when (
+                exception.IsRecoverable && !abortOnRecoverableFailure)
+            {
+                // The dispatcher already recorded and published the failure. Returning a
+                // completed task lets Yarn advance to the next instruction.
+            }
+        }
     }
 }

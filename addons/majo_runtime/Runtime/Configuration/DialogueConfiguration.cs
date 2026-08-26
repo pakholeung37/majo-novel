@@ -22,4 +22,11 @@ public partial class DialogueConfiguration : Resource
     [Export]
     public string RequiredYarnRuntimeVersion { get; set; } =
         MajoRuntimeMetadata.RequiredYarnRuntimeVersion;
+
+    /// <summary>
+    /// Stops the current dialogue for recoverable script/content command errors.
+    /// Disabled by default so authoring mistakes can be corrected with hot reload.
+    /// </summary>
+    [Export]
+    public bool AbortOnCommandError { get; set; }
 }

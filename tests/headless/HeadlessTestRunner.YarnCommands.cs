@@ -149,10 +149,13 @@ public partial class HeadlessTestRunner
             "Bad Yarn arguments did not include command usage.");
         Assert(commandFailureSignal.StartsWith("char:", StringComparison.Ordinal),
             "Command failure was not exposed through the Runtime signal.");
-        await WaitForConditionAsync(() => !runner.IsDialogueRunning, 2);
-        await AssertThrowsAsync<RuntimeCommandException>(() => badArgumentsCompletion);
-        Assert(dialogue.State == DialogueSessionState.Faulted,
-            "M6 command failure did not fault the dialogue session.");
+        var badArgumentsResult = await badArgumentsCompletion;
+        Assert(badArgumentsResult.Kind == DialogueCompletionKind.Completed,
+            "Recoverable Yarn argument failure did not allow the dialogue to complete.");
+        Assert(dialogue.State == DialogueSessionState.Idle,
+            "Recoverable Yarn argument failure left the dialogue in a faulted state.");
+        Assert(presenter.Lines.LastOrDefault() == "after bad command",
+            "Yarn did not advance after a recoverable command failure.");
 
         var unhandledCommand = string.Empty;
         runner.Connect(
@@ -162,7 +165,13 @@ public partial class HeadlessTestRunner
         await WaitForConditionAsync(() => unhandledCommand.Length > 0, 2);
         Assert(unhandledCommand == "majo_unknown detail",
             "Yarn did not preserve the unhandled command diagnostic text.");
-        await dialogue.StopAsync();
+        var unknownResult = await dialogue.Completion;
+        Assert(unknownResult.Kind == DialogueCompletionKind.Completed,
+            "Unknown Yarn command did not allow the dialogue to complete.");
+        Assert(adapter.LastFailure?.CommandName == "majo_unknown",
+            "Unknown Yarn command was not exposed through Runtime diagnostics.");
+        Assert(presenter.Lines.LastOrDefault() == "after unknown command",
+            "Yarn did not advance after an unknown command.");
 
         var lineCountBeforeStop = presenter.Lines.Count;
         await dialogue.StartAsync(new DialogueStartRequest(StartNode: "StopCancellation"));

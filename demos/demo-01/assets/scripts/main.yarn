@@ -7,7 +7,7 @@ tags: runtime validation demo
 Narrator: 欢迎来到 Majo Runtime 第三阶段验证场景，{$visitor}。除了基础演出，右侧面板现在覆盖 M11 Diagnostics 到 M15 Played/Skip 的完整玩家循环。 #line:demo-welcome #voice:narrator-welcome
 
 <<await>>
-<<back backdrops appearance:courtroom duration:0.45 operation:demo-backdrop-opening>>
+<<back backdrop appearance:courtroom duration:0.45 operation:demo-backdrop-opening>>
 <<char hero appearance:calm position:left duration:0.45 operation:demo-hero-opening>>
 <<endAwait>>
 Maya: 背景和角色由两个并行 Operation 驱动，并在两者都到达确定终态后才显示这句话。 #line:demo-parallel-ready #voice:maya-ready

@@ -274,7 +274,8 @@ printf 'Checking Godot headless import and C# compilation for main game project.
 run_with_timeout 180 "$GODOT_EXECUTABLE" --headless --path "$GAME_PROJECT" --editor --quit
 
 printf 'Running visible Runtime Demo headless smoke test...\n'
-run_with_timeout 60 "$GODOT_EXECUTABLE" --headless --path "$GAME_PROJECT" -- --demo-auto
+run_with_timeout 60 "$GODOT_EXECUTABLE" --headless --path "$GAME_PROJECT" \
+    res://demos/demo-01/RuntimeDemo.tscn -- --demo-auto
 
 HEADLESS_RUN_COUNT=3
 if [[ "$TEST_MODE" == "fast" ]]; then

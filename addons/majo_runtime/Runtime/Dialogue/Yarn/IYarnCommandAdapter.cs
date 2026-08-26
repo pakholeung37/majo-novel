@@ -15,6 +15,8 @@ public interface IYarnCommandAdapter : IRuntimeService
 
     RuntimeCommandException? LastFailure { get; }
 
+    bool AbortOnRecoverableFailure => false;
+
     bool HasActiveCommands { get; }
 
     IReadOnlyList<RuntimeCommandActivity> ActiveCommands =>

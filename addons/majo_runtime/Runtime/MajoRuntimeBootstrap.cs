@@ -867,7 +867,7 @@ public partial class MajoRuntimeBootstrap : Node
         IAudioManager audio)
     {
         var commands = new RuntimeCommandRegistry();
-        BuiltInRuntimeCommands.Register(commands, new ActorCommandService(actors));
+        BuiltInRuntimeCommands.Register(commands, new ActorCommandService(actors, Logger));
         commands.RegisterModule(new AudioCommandModule(audio));
         commands.RegisterModule(new StageCommandModule());
         ConfigureCommands?.Invoke(commands);
@@ -888,7 +888,8 @@ public partial class MajoRuntimeBootstrap : Node
         var adapter = new YarnCommandAdapter(
             new DialogueRunnerCommandRegistry(backend.Runner),
             catalog,
-            dispatcher);
+            dispatcher,
+            Configuration.Dialogue!.AbortOnCommandError);
         backend.ObserveCommandAdapter(adapter);
         return adapter;
     }
@@ -915,7 +916,10 @@ public partial class MajoRuntimeBootstrap : Node
                     textureLoader),
             },
             locales,
-            Logger);
+            Logger,
+            new ActorCreationConventions(
+                Configuration.Resources!.CharactersPath,
+                Configuration.Resources.BackgroundsPath));
         ConfigureActorFactories?.Invoke(manager);
         return manager;
     }

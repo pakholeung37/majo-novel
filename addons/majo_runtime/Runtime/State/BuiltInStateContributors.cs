@@ -326,7 +326,13 @@ public sealed class ActorStateContributor : IStateContributor
         foreach (var entry in Decode(record))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var actor = await actors.CreateAsync(entry.Id, cancellationToken);
+            var actor = await actors.GetOrCreateAsync(
+                new ActorSpawnRequest(
+                    entry.Id,
+                    entry.FactoryId,
+                    entry.Appearance,
+                    requiredFactoryId: entry.FactoryId),
+                cancellationToken);
             actor.SetAppearance(entry.Appearance);
             actor.SetPosition(new Vector2(entry.PositionX, entry.PositionY));
             actor.SetTint(new Color(entry.TintR, entry.TintG, entry.TintB));
