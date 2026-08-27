@@ -591,7 +591,8 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
         var reResolved = YarnLineConverter.Convert(
             localized,
             resolvedLocale,
-            speakerNameResolver);
+            speakerNameResolver,
+            locale);
 
         currentLine = reResolved;
         return reResolved;
@@ -636,7 +637,8 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
                 var newLine = YarnLineConverter.Convert(
                     localized,
                     resolvedLocale,
-                    speakerNameResolver);
+                    speakerNameResolver,
+                    locale);
                 list.Add(new DialogueOption(option.Id, newLine, option.IsAvailable, substitutions));
             }
             else
@@ -676,7 +678,8 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
         YarnLineConverter.Convert(
             line,
             ResolvePresentedLocale(line),
-            speakerNameResolver);
+            speakerNameResolver,
+            localeManager?.DialogueLocale ?? configuredLocale);
 
     private string ResolvePresentedLocale(LocalizedLine line)
     {

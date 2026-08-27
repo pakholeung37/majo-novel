@@ -12,10 +12,16 @@ title: Act01_Chapter01_Adv02
 Ema: ——不对！ #line:0101Adv02_Ema001
 
 // <<playSfxModified SfxPath:Sfx_1 Volume:1.0 Loop:0 FadeInDuration:0.0>>
+<<sfx Sfx_Scenario_001>>
+<<curtain closed duration:0>>
 // <<modifyBackgroundExtended Id:Stills Rotation:,,-10 Scale:g_backgroundDefaultScale * 3 Lazy:0 ScenePosition:80,-35 AppearanceAndTransition:490_1 SubId:Middle>>
+<<back stills appearance:Still_490_001 duration:0>>
 // <<animateActorExtended ActorIds:Stills-Middle Loop:0 ScenePositionX:60 ScenePositionY:-20 EasingTypeName:EaseOutBack Duration:0.4>>
+
 // <<modifyBackgroundExtended TintColor:#000000 Duration:1.2 Lazy:0 AppearanceAndTransition:Transparent SubId:Overlay>>
+<<curtain open duration:1.2 wait:true>>
 // <<wait WaitMode:0.2>>
+<<wait 0.2>>
 
 樱羽艾玛大喊着，爬起身来。 #line:0101Adv02_Narrative001
 

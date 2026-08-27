@@ -23,14 +23,17 @@ public static class YarnLineConverter
     public static DialogueLine Convert(
         YarnLocalizedLine line,
         string? resolvedLocale = null,
-        DialogueSpeakerNameResolver? speakerNameResolver = null)
+        DialogueSpeakerNameResolver? speakerNameResolver = null,
+        string? speakerLocale = null)
     {
         ArgumentNullException.ThrowIfNull(line);
         var text = line.TextWithoutCharacterName;
         var speaker = line.CharacterName;
         if (!string.IsNullOrWhiteSpace(speaker) && speakerNameResolver is not null)
         {
-            speaker = speakerNameResolver(speaker, resolvedLocale ?? string.Empty) ?? speaker;
+            speaker = speakerNameResolver(
+                speaker,
+                speakerLocale ?? resolvedLocale ?? string.Empty) ?? speaker;
         }
 
         return new DialogueLine(

@@ -3,6 +3,7 @@
 using System;
 using Godot;
 using Majo.Runtime;
+using Majo.Runtime.Audio;
 using Majo.Runtime.Auto;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Dialogue;
@@ -60,11 +61,13 @@ public partial class ManosabaDemoController : Node
 					"Manosaba presentation did not instantiate correctly.");
 			}
 
+			services.TryGet<IAudioManager>(out var audio);
 			presentation.Bind(
 				services.Get<IPlaybackModeManager>(),
 				services.Get<IHistoryManager>(),
 				services.Get<ISaveLoadOverlay>(),
-				services.Get<ISettingsOverlay>());
+				services.Get<ISettingsOverlay>(),
+				audio);
 
 			var dialogue = services.Get<IDialoguePlayer>();
 			await dialogue.StartAsync();

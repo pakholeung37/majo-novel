@@ -1,6 +1,8 @@
 #nullable enable
 
+using System;
 using Godot;
+using Majo.Runtime.Audio;
 using Majo.Runtime.Auto;
 using Majo.Runtime.History;
 using Majo.Runtime.UI.SaveLoad;
@@ -21,14 +23,37 @@ public partial class ManosabaPresentation : Control
 	private TextureButton? titleButton;
 	private Label? menuStatus;
 	private TextureRect? inputIndicator;
+	private RichTextLabel? autoLabel;
 	private IPlaybackModeManager? playback;
 	private IHistoryManager? history;
 	private ISaveLoadOverlay? saveLoad;
 	private ISettingsOverlay? settings;
+	private IAudioManager? audio;
 	private IPlaybackPauseHandle? menuPause;
 	private Tween? menuButtonHoverTween;
+	private Tween? autoButtonHoverTween;
+	private Tween? autoLabelTween;
 	private Tween? inputIndicatorTween;
 	private static readonly Vector2 MenuButtonHoverScale = new(1.08f, 1.08f);
+	private static readonly Vector2 AutoButtonBaseScale = new(0.8f, 0.8f);
+	private static readonly Vector2 AutoButtonHoverScale = new(0.8f * 1.08f, 0.8f * 1.08f);
+	private const float AutoLabelOffOffsetLeft = -51.572f;
+	private const float AutoLabelOffOffsetRight = 51.428f;
+	private const float AutoLabelOnShiftX = 52.0f;
+
+	[Export] public AudioStream? AutoSubmitOnSound { get; set; }
+	[Export] public AudioStream? AutoSubmitOffSound { get; set; }
+	[Export] public AudioStream? MenuOpenSound { get; set; }
+	[Export] public AudioStream? MenuCloseSound { get; set; }
+
+	private const string DefaultAutoSubmitOnSoundPath =
+		"res://demos/manosaba/assets/audio/system/Sfx_System_Submit_001.wav";
+	private const string DefaultAutoSubmitOffSoundPath =
+		"res://demos/manosaba/assets/audio/system/Sfx_System_Submit_003a.wav";
+	private const string DefaultMenuOpenSoundPath =
+		"res://demos/manosaba/assets/audio/system/Sfx_System_Open_001.wav";
+	private const string DefaultMenuCloseSoundPath =
+		"res://demos/manosaba/assets/audio/system/Sfx_System_Close_001.wav";
 
 	public override void _Ready()
 	{
@@ -43,14 +68,20 @@ public partial class ManosabaPresentation : Control
 		titleButton = GetNode<TextureButton>("MenuPanel/Phone/TitleButton");
 		menuStatus = GetNode<Label>("MenuPanel/Status");
 		inputIndicator = GetNodeOrNull<TextureRect>("LinePresenter/InputIndicator");
+		autoLabel = GetNodeOrNull<RichTextLabel>("LinePresenter/AutoButton/AutoLabel");
+
+		AutoSubmitOnSound ??= ResourceLoader.Load<AudioStream>(DefaultAutoSubmitOnSoundPath);
+		AutoSubmitOffSound ??= ResourceLoader.Load<AudioStream>(DefaultAutoSubmitOffSoundPath);
+		MenuOpenSound ??= ResourceLoader.Load<AudioStream>(DefaultMenuOpenSoundPath);
+		MenuCloseSound ??= ResourceLoader.Load<AudioStream>(DefaultMenuCloseSoundPath);
 
 		menuButton.Pressed += ToggleMenu;
-		closeButton.Pressed += CloseMenu;
-		saveButton.Pressed += OpenSaveLoad;
-		loadButton.Pressed += OpenSaveLoad;
-		historyButton.Pressed += OpenHistory;
-		optionsButton.Pressed += OpenSettings;
-		titleButton.Pressed += ShowTitleNotice;
+		closeButton.Pressed += () => CloseMenu();
+		saveButton.Pressed += () => OnMenuPanelButtonPressed(OpenSaveLoad);
+		loadButton.Pressed += () => OnMenuPanelButtonPressed(OpenSaveLoad);
+		historyButton.Pressed += () => OnMenuPanelButtonPressed(OpenHistory);
+		optionsButton.Pressed += () => OnMenuPanelButtonPressed(OpenSettings);
+		titleButton.Pressed += () => OnMenuPanelButtonPressed(ShowTitleNotice);
 		autoButton.Pressed += ToggleAuto;
 
 		if (menuButton is not null)
@@ -61,6 +92,15 @@ public partial class ManosabaPresentation : Control
 			menuButton.MouseExited += OnMenuButtonMouseExited;
 		}
 
+		if (autoButton is not null)
+		{
+			autoButton.PivotOffset = autoButton.Size / 2;
+			autoButton.Resized += () => autoButton.PivotOffset = autoButton.Size / 2;
+			autoButton.MouseEntered += OnAutoButtonMouseEntered;
+			autoButton.MouseExited += OnAutoButtonMouseExited;
+		}
+
+		UpdateAutoLabelPosition(autoButton?.ButtonPressed == true, animate: false);
 		StartInputIndicatorBlink();
 
 		// // The ADV presenter owns a full-screen input scope. Keep the interactive
@@ -100,11 +140,11 @@ public partial class ManosabaPresentation : Control
 		if (menuPanel?.Visible == true)
 		{
 			if (IsPointerOver(closeButton, mouse.Position)) CloseMenu();
-			else if (IsPointerOver(saveButton, mouse.Position)) OpenSaveLoad();
-			else if (IsPointerOver(loadButton, mouse.Position)) OpenSaveLoad();
-			else if (IsPointerOver(historyButton, mouse.Position)) OpenHistory();
-			else if (IsPointerOver(optionsButton, mouse.Position)) OpenSettings();
-			else if (IsPointerOver(titleButton, mouse.Position)) ShowTitleNotice();
+			else if (IsPointerOver(saveButton, mouse.Position)) OnMenuPanelButtonPressed(OpenSaveLoad);
+			else if (IsPointerOver(loadButton, mouse.Position)) OnMenuPanelButtonPressed(OpenSaveLoad);
+			else if (IsPointerOver(historyButton, mouse.Position)) OnMenuPanelButtonPressed(OpenHistory);
+			else if (IsPointerOver(optionsButton, mouse.Position)) OnMenuPanelButtonPressed(OpenSettings);
+			else if (IsPointerOver(titleButton, mouse.Position)) OnMenuPanelButtonPressed(ShowTitleNotice);
 			else return;
 
 			GetViewport().SetInputAsHandled();
@@ -126,6 +166,12 @@ public partial class ManosabaPresentation : Control
 		menuButtonHoverTween?.Kill();
 		menuButtonHoverTween = null;
 
+		autoButtonHoverTween?.Kill();
+		autoButtonHoverTween = null;
+
+		autoLabelTween?.Kill();
+		autoLabelTween = null;
+
 		inputIndicatorTween?.Kill();
 		inputIndicatorTween = null;
 
@@ -137,21 +183,29 @@ public partial class ManosabaPresentation : Control
 		IPlaybackModeManager playbackModeManager,
 		IHistoryManager historyManager,
 		ISaveLoadOverlay saveLoadOverlay,
-		ISettingsOverlay settingsOverlay)
+		ISettingsOverlay settingsOverlay,
+		IAudioManager? audioManager = null)
 	{
 		playback = playbackModeManager;
 		history = historyManager;
 		saveLoad = saveLoadOverlay;
 		settings = settingsOverlay;
+		audio = audioManager;
 		playback.ModeChanged += HandlePlaybackModeChanged;
 		RefreshAutoState();
 	}
 
-	private void ToggleMenu() => SetMenuVisible(menuPanel?.Visible != true);
+	private void OnMenuPanelButtonPressed(Action action)
+	{
+		PlaySound(AutoSubmitOnSound);
+		action();
+	}
 
-	private void CloseMenu() => SetMenuVisible(false);
+	private void ToggleMenu() => SetMenuVisible(menuPanel?.Visible != true, playSound: true);
 
-	private void SetMenuVisible(bool visible)
+	private void CloseMenu(bool playSound = true) => SetMenuVisible(false, playSound: playSound);
+
+	private void SetMenuVisible(bool visible, bool playSound = true)
 	{
 		if (menuPanel is null || menuPanel.Visible == visible)
 		{
@@ -161,7 +215,12 @@ public partial class ManosabaPresentation : Control
 		menuPanel.Visible = visible;
 		if (visible)
 		{
+			if (playSound)
+			{
+				PlaySound(MenuOpenSound);
+			}
 			AnimateMenuButtonScale(Vector2.One);
+			AnimateAutoButtonScale(AutoButtonBaseScale);
 			menuPause = playback?.AcquirePause(PlaybackPauseReason.Modal);
 			if (menuStatus is not null)
 			{
@@ -170,6 +229,10 @@ public partial class ManosabaPresentation : Control
 		}
 		else
 		{
+			if (playSound)
+			{
+				PlaySound(MenuCloseSound);
+			}
 			menuPause?.Dispose();
 			menuPause = null;
 		}
@@ -194,6 +257,53 @@ public partial class ManosabaPresentation : Control
 		menuButtonHoverTween.TweenProperty(menuButton, "scale", targetScale, 0.15);
 	}
 
+	private void OnAutoButtonMouseEntered() => AnimateAutoButtonScale(AutoButtonHoverScale);
+
+	private void OnAutoButtonMouseExited() => AnimateAutoButtonScale(AutoButtonBaseScale);
+
+	private void AnimateAutoButtonScale(Vector2 targetScale)
+	{
+		if (autoButton is null || !IsInsideTree())
+		{
+			return;
+		}
+
+		autoButtonHoverTween?.Kill();
+		autoButtonHoverTween = CreateTween();
+		autoButtonHoverTween
+			.SetTrans(Tween.TransitionType.Cubic)
+			.SetEase(Tween.EaseType.Out);
+		autoButtonHoverTween.TweenProperty(autoButton, "scale", targetScale, 0.15);
+	}
+
+	private void PlaySound(AudioStream? stream)
+	{
+		if (stream is null || !IsInsideTree())
+		{
+			return;
+		}
+
+		var player = new AudioStreamPlayer
+		{
+			Stream = stream,
+		};
+		if (audio is not null)
+		{
+			if (audio.MasterMuted || audio.SfxMuted)
+			{
+				player.VolumeDb = -80;
+			}
+			else
+			{
+				var linear = Math.Clamp(audio.MasterVolume * audio.SfxVolume, 0f, 1f);
+				player.VolumeDb = linear <= 0 ? -80 : Mathf.LinearToDb(linear);
+			}
+		}
+		player.Finished += player.QueueFree;
+		AddChild(player);
+		player.Play();
+	}
+
 	private void StartInputIndicatorBlink()
 	{
 		if (inputIndicator is null || !IsInsideTree())
@@ -211,7 +321,22 @@ public partial class ManosabaPresentation : Control
 		inputIndicatorTween.TweenProperty(inputIndicator, "modulate:a", 1.0f, 1.6);
 	}
 
-	private void ToggleAuto() => playback?.ToggleAuto();
+	private void ToggleAuto()
+	{
+		if (playback is not null)
+		{
+			var turningOn = playback.Mode != PlaybackMode.Auto;
+			UpdateAutoLabelPosition(turningOn, animate: false);
+			playback.ToggleAuto();
+			PlaySound(turningOn ? AutoSubmitOnSound : AutoSubmitOffSound);
+		}
+		else if (autoButton is not null)
+		{
+			var turningOn = autoButton.ButtonPressed;
+			UpdateAutoLabelPosition(turningOn, animate: false);
+			PlaySound(turningOn ? AutoSubmitOnSound : AutoSubmitOffSound);
+		}
+	}
 
 	private void HandlePlaybackModeChanged(PlaybackModeChanged _) =>
 		CallDeferred(MethodName.RefreshAutoState);
@@ -220,25 +345,58 @@ public partial class ManosabaPresentation : Control
 	{
 		if (autoButton is not null && playback is not null)
 		{
-			autoButton.ButtonPressed = playback.Mode == PlaybackMode.Auto;
+			var isAuto = playback.Mode == PlaybackMode.Auto;
+			autoButton.ButtonPressed = isAuto;
+			UpdateAutoLabelPosition(isAuto, animate: false);
 		}
+	}
+
+	private void UpdateAutoLabelPosition(bool isAuto, bool animate = true)
+	{
+		if (autoLabel is null || !IsInsideTree())
+		{
+			return;
+		}
+
+		var targetOffsetLeft = isAuto
+			? AutoLabelOffOffsetLeft - AutoLabelOnShiftX
+			: AutoLabelOffOffsetLeft;
+		var targetOffsetRight = isAuto
+			? AutoLabelOffOffsetRight - AutoLabelOnShiftX
+			: AutoLabelOffOffsetRight;
+
+		autoLabelTween?.Kill();
+		if (!animate)
+		{
+			autoLabel.OffsetLeft = targetOffsetLeft;
+			autoLabel.OffsetRight = targetOffsetRight;
+			return;
+		}
+
+		autoLabelTween = CreateTween();
+		autoLabelTween
+			.SetParallel(true)
+			.SetTrans(Tween.TransitionType.Cubic)
+			.SetEase(Tween.EaseType.Out);
+		autoLabelTween.TweenProperty(autoLabel, "offset_left", targetOffsetLeft, 0.15);
+		autoLabelTween.TweenProperty(autoLabel, "offset_right", targetOffsetRight, 0.15);
 	}
 
 	private void OpenSaveLoad()
 	{
-		CloseMenu();
+		CloseMenu(playSound: false);
 		saveLoad?.Open();
 	}
 
 	private void OpenHistory()
 	{
-		CloseMenu();
+		CloseMenu(playSound: false);
 		history?.Open();
 	}
 
 	private void OpenSettings()
 	{
-		CloseMenu();
+		CloseMenu(playSound: false);
 		settings?.Open();
 	}
 
