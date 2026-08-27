@@ -370,7 +370,6 @@ Presentation settings are centralized under `Presentation`:
 ```csharp
 var configuration = MajoProjectConfiguration.CreateDefault();
 configuration.Presentation!.LettersPerSecond = 36;
-configuration.Presentation.FontSize = 30;
 configuration.Presentation.UseFadeEffect = true;
 configuration.Presentation.FadeUpDurationSeconds = 0.15;
 configuration.Presentation.Theme = myTheme;

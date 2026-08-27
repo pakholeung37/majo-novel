@@ -629,13 +629,6 @@ public partial class MajoProjectConfiguration : Resource
             return;
         }
 
-        if (Presentation.FontSize <= 0)
-        {
-            issues.Add(new ConfigurationIssue(
-                $"{nameof(Presentation)}.{nameof(Presentation.FontSize)}",
-                "Value must be greater than zero."));
-        }
-
         if (Presentation.LettersPerSecond <= 0)
         {
             issues.Add(new ConfigurationIssue(

@@ -167,9 +167,9 @@ public partial class HeadlessTestRunner
             },
         });
         configuration.Dialogue!.RequiredYarnRuntimeVersion = "99.0.0";
-        configuration.Presentation!.FontSize = 0;
-        configuration.Presentation.LettersPerSecond = 0;
+        configuration.Presentation!.LettersPerSecond = 0;
         configuration.Presentation.FadeUpDurationSeconds = double.NaN;
+        configuration.Presentation.FadeDownDurationSeconds = double.NaN;
         configuration.Audio!.MasterVolume = 2;
         configuration.Audio.DefaultFadeDurationSeconds = double.NaN;
         configuration.Audio.VoiceLocale = string.Empty;

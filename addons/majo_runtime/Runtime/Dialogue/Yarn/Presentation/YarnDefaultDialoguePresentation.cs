@@ -324,6 +324,8 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, I
         ApplyTypography();
     }
 
+    private const string BaseFontSizeMetaKey = "majo_base_font_size";
+
     private void ApplyTypography()
     {
         if (root is null)
@@ -332,7 +334,6 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, I
         }
 
         var scale = fontCatalog?.FontScale ?? 1.0;
-        var scaledFontSize = Math.Max(8, (int)Math.Round(configuration.FontSize * scale));
         var lineSpacing = fontCatalog?.LineSpacing ?? 0;
         var currentLocale = localeManager?.DialogueLocale ?? "en";
         var fallbackChain = localeManager?.GetFallbackChain(currentLocale) ?? [currentLocale];
@@ -340,6 +341,20 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, I
 
         foreach (var label in Descendants(root).OfType<RichTextLabel>())
         {
+            if (!label.HasMeta(BaseFontSizeMetaKey))
+            {
+                var originalSize = label.GetThemeFontSize("normal_font_size");
+                if (originalSize <= 0)
+                {
+                    originalSize = 24;
+                }
+
+                label.SetMeta(BaseFontSizeMetaKey, originalSize);
+            }
+
+            var baseFontSize = label.GetMeta(BaseFontSizeMetaKey).AsInt32();
+            var scaledFontSize = Math.Max(8, (int)Math.Round(baseFontSize * scale));
+
             label.AddThemeFontSizeOverride("normal_font_size", scaledFontSize);
             label.AddThemeFontSizeOverride("bold_font_size", scaledFontSize);
             label.AddThemeFontSizeOverride("italics_font_size", scaledFontSize);

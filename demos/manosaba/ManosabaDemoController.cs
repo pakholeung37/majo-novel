@@ -38,7 +38,6 @@ public partial class ManosabaDemoController : Node
 					"res://demos/manosaba/ManosabaPresentation.tscn");
 			configuration.Presentation.Font = ResourceLoader.Load<Font>(
 				"res://demos/manosaba/assets/fonts/SourceHanSerifSC.otf");
-			configuration.Presentation.FontSize = 34;
 			configuration.Presentation.LettersPerSecond = 36;
 
 			var characterNames = ManosabaCharacterNameCatalog.Load(

@@ -22,9 +22,6 @@ public partial class DialoguePresentationConfiguration : Resource
     [Export]
     public Font? Font { get; set; }
 
-    [Export(PropertyHint.Range, "8,96,1,or_greater")]
-    public int FontSize { get; set; } = 32;
-
     [Export(PropertyHint.Range, "1,240,1,or_greater")]
     public int LettersPerSecond { get; set; } = 32;
 
