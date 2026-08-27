@@ -26,5 +26,7 @@ public interface ISaveProductManager : IRuntimeService
     Task<SaveSlotMetadata> QuickSaveAsync(
         CancellationToken cancellationToken = default);
 
+    void RequestQuickSaveCandidate(string source = "project-api");
+
     void RequestAutoSaveCandidate(string source = "project-api");
 }

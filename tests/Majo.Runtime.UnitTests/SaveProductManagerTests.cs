@@ -77,6 +77,59 @@ public sealed class SaveProductManagerTests
         Assert.Equal("boss-defeated", slots.LastAutoRequest?.DeveloperMetadata?["autoSaveSource"]);
     }
 
+    [Fact]
+    public async Task ScriptSaveAndAutoSaveCandidatesUseIndependentSlotKinds()
+    {
+        var slots = new FakeSlots();
+        var dialogue = new FakeDialogue();
+        var presentation = new FakePresentation();
+        var script = new FakeScript();
+        var input = new InputManager(new FakeInputBackend());
+        await input.InitializeAsync(CancellationToken.None);
+        var product = new SaveProductManager(slots, dialogue, presentation, script, input);
+        await product.InitializeAsync(CancellationToken.None);
+
+        product.RequestQuickSaveCandidate("command:save");
+        product.RequestAutoSaveCandidate("command:autoSave");
+        var line = new DialogueLine("line-3", null, new DialogueText("Checkpoint", []), []);
+        script.SetLine("project", "node", line.Id, ScriptPlaybackPhase.PresentingLine);
+        dialogue.Present("project", "node", line);
+        script.SetLine("project", "node", line.Id, ScriptPlaybackPhase.AwaitingAdvance);
+        presentation.CompleteLine();
+
+        Assert.Equal(1, slots.QuickSaveCount);
+        Assert.Equal(1, slots.AutoSaveCount);
+        Assert.Equal("command:save", slots.LastQuickRequest?.DeveloperMetadata?["saveSource"]);
+        Assert.Equal("command:autoSave", slots.LastAutoRequest?.DeveloperMetadata?["autoSaveSource"]);
+    }
+
+    [Fact]
+    public async Task CandidateRequestedBetweenLinesTargetsTheFollowingBoundary()
+    {
+        var slots = new FakeSlots();
+        var dialogue = new FakeDialogue();
+        var presentation = new FakePresentation();
+        var script = new FakeScript();
+        var input = new InputManager(new FakeInputBackend());
+        await input.InitializeAsync(CancellationToken.None);
+        var product = new SaveProductManager(slots, dialogue, presentation, script, input);
+        await product.InitializeAsync(CancellationToken.None);
+
+        var previous = new DialogueLine("line-previous", null, new DialogueText("Before", []), []);
+        dialogue.Present("project", "node", previous);
+        presentation.DismissLine();
+        product.RequestQuickSaveCandidate("command:save");
+
+        var next = new DialogueLine("line-next", null, new DialogueText("After", []), []);
+        script.SetLine("project", "node", next.Id, ScriptPlaybackPhase.PresentingLine);
+        dialogue.Present("project", "node", next);
+        script.SetLine("project", "node", next.Id, ScriptPlaybackPhase.AwaitingAdvance);
+        presentation.CompleteLine();
+
+        Assert.Equal(1, slots.QuickSaveCount);
+        Assert.Equal("command:save", slots.LastQuickRequest?.DeveloperMetadata?["saveSource"]);
+    }
+
     private sealed class FakeSlots : ISaveSlotManager
     {
         public event Action<SaveSlotOperationInfo>? OperationStarted { add { } remove { } }
@@ -97,6 +150,7 @@ public sealed class SaveProductManagerTests
         public int AutoSaveCount { get; private set; }
         public int QuickSaveCount { get; private set; }
         public SaveSlotSaveRequest? LastRequest { get; private set; }
+        public SaveSlotSaveRequest? LastQuickRequest { get; private set; }
         public SaveSlotSaveRequest? LastAutoRequest { get; private set; }
         public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
@@ -130,6 +184,7 @@ public sealed class SaveProductManagerTests
             else if (kind == SaveSlotKind.Quick)
             {
                 QuickSaveCount++;
+                LastQuickRequest = request;
             }
             return Task.FromResult(CreateMetadata(new SaveSlotId(kind, 1)));
         }
@@ -199,7 +254,7 @@ public sealed class SaveProductManagerTests
     private sealed class FakePresentation : IDialoguePresentation
     {
         public event Action? LineDisplayCompleted;
-        public event Action? LineDismissed { add { } remove { } }
+        public event Action? LineDismissed;
         public bool IsLineActive => true;
         public bool IsLineDisplayComplete => true;
         public bool IsPresentingOptions => false;
@@ -209,6 +264,7 @@ public sealed class SaveProductManagerTests
         public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public void CompleteLine() => LineDisplayCompleted?.Invoke();
+        public void DismissLine() => LineDismissed?.Invoke();
     }
 
     private sealed class FakeScript : IScriptPlayback

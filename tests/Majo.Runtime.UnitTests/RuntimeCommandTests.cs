@@ -202,7 +202,7 @@ public sealed class RuntimeCommandTests
         var catalog = commands.BuildCatalog();
 
         Assert.Equal(
-            ["back", "char", "hide", "await", "endAwait", "cancel"],
+            ["back", "char", "hide", "await", "endAwait", "cancel", "save", "autoSave"],
             catalog.Commands.Select(command => command.Name));
         Assert.Equal(
             catalog.Commands.Count,
@@ -257,7 +257,7 @@ public sealed class RuntimeCommandTests
         Assert.DoesNotContain(
             commands.Registrations,
             registration => registration.Name == "probe");
-        Assert.Equal(6, commands.Registrations.Count);
+        Assert.Equal(8, commands.Registrations.Count);
     }
 
     [Fact]

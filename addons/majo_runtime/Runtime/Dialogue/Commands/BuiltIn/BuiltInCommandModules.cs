@@ -44,6 +44,8 @@ public sealed class PlaybackCommandModule : IRuntimeCommandModule
         commands
             .Register(new AwaitCommandHandler())
             .Register(new EndAwaitCommandHandler())
-            .Register(new CancelCommandHandler());
+            .Register(new CancelCommandHandler())
+            .Register(new SaveCommandHandler())
+            .Register(new AutoSaveCommandHandler());
     }
 }

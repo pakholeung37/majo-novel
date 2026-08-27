@@ -27,9 +27,12 @@ public sealed class SaveProductManager : ISaveProductManager
     private readonly IRuntimeLogger logger;
     private IInputHandle? quickSaveInput;
     private DialogueLine? currentLine;
+    private AutoSaveCandidate? quickCandidate;
     private AutoSaveCandidate? candidate;
+    private string? projectQuickCandidateForNextBoundary;
     private string? projectCandidateForNextBoundary;
     private long boundaryId;
+    private long? attemptedQuickBoundary;
     private long? attemptedBoundary;
     private bool isInitialized;
 
@@ -75,6 +78,7 @@ public sealed class SaveProductManager : ISaveProductManager
         }
         dialogue.LinePresented += HandleLinePresented;
         presentation.LineDisplayCompleted += HandleLineDisplayCompleted;
+        presentation.LineDismissed += HandleLineDismissed;
         EnsureQuickSaveInput();
         isInitialized = true;
         return Task.CompletedTask;
@@ -86,8 +90,11 @@ public sealed class SaveProductManager : ISaveProductManager
         lock (sync)
         {
             currentLine = null;
+            quickCandidate = null;
             candidate = null;
+            projectQuickCandidateForNextBoundary = null;
             projectCandidateForNextBoundary = null;
+            attemptedQuickBoundary = null;
             attemptedBoundary = null;
             boundaryId = 0;
         }
@@ -105,6 +112,7 @@ public sealed class SaveProductManager : ISaveProductManager
         }
         dialogue.LinePresented -= HandleLinePresented;
         presentation.LineDisplayCompleted -= HandleLineDisplayCompleted;
+        presentation.LineDismissed -= HandleLineDismissed;
         if (quickSaveInput is not null)
         {
             quickSaveInput.Activated -= HandleQuickSaveInput;
@@ -114,8 +122,11 @@ public sealed class SaveProductManager : ISaveProductManager
         lock (sync)
         {
             currentLine = null;
+            quickCandidate = null;
             candidate = null;
+            projectQuickCandidateForNextBoundary = null;
             projectCandidateForNextBoundary = null;
+            attemptedQuickBoundary = null;
             attemptedBoundary = null;
         }
         isInitialized = false;
@@ -125,6 +136,21 @@ public sealed class SaveProductManager : ISaveProductManager
     public Task<SaveSlotMetadata> QuickSaveAsync(
         CancellationToken cancellationToken = default) =>
         slots.SaveRotatingAsync(SaveSlotKind.Quick, cancellationToken: cancellationToken);
+
+    public void RequestQuickSaveCandidate(string source = "project-api")
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(source);
+        EnsureInitialized();
+        lock (sync)
+        {
+            if (currentLine is null)
+            {
+                projectQuickCandidateForNextBoundary = source.Trim();
+                return;
+            }
+            quickCandidate = CreateCandidate(source.Trim());
+        }
+    }
 
     public void RequestAutoSaveCandidate(string source = "project-api")
     {
@@ -153,7 +179,12 @@ public sealed class SaveProductManager : ISaveProductManager
         {
             currentLine = line;
             boundaryId++;
+            attemptedQuickBoundary = null;
             attemptedBoundary = null;
+            quickCandidate = projectQuickCandidateForNextBoundary is { } quickSource
+                ? CreateCandidate(quickSource)
+                : null;
+            projectQuickCandidateForNextBoundary = null;
             var source = MatchConfiguredSource(line);
             if (projectCandidateForNextBoundary is { } projectSource)
             {
@@ -172,25 +203,84 @@ public sealed class SaveProductManager : ISaveProductManager
         }
     }
 
+    private void HandleLineDismissed()
+    {
+        lock (sync)
+        {
+            currentLine = null;
+        }
+    }
+
     private void HandleLineDisplayCompleted()
     {
+        AutoSaveCandidate? pendingQuick;
         AutoSaveCandidate? pending;
         lock (sync)
         {
+            pendingQuick = quickCandidate;
             pending = candidate;
-            if (pending is null || attemptedBoundary == pending.BoundaryId)
-            {
-                return;
-            }
             if (script.Phase != ScriptPlaybackPhase.AwaitingAdvance ||
-                script.CurrentSpot?.LineId != pending.LineId)
+                script.CurrentSpot?.LineId is not { } currentLineId)
             {
                 return;
             }
-            attemptedBoundary = pending.BoundaryId;
-            candidate = null;
+
+            if (pendingQuick is not null &&
+                pendingQuick.LineId == currentLineId &&
+                attemptedQuickBoundary != pendingQuick.BoundaryId)
+            {
+                attemptedQuickBoundary = pendingQuick.BoundaryId;
+                quickCandidate = null;
+            }
+            else
+            {
+                pendingQuick = null;
+            }
+
+            if (pending is not null &&
+                pending.LineId == currentLineId &&
+                attemptedBoundary != pending.BoundaryId)
+            {
+                attemptedBoundary = pending.BoundaryId;
+                candidate = null;
+            }
+            else
+            {
+                pending = null;
+            }
         }
-        _ = CommitAutoSaveAsync(pending);
+        if (pendingQuick is not null)
+        {
+            _ = CommitQuickSaveAsync(pendingQuick);
+        }
+        if (pending is not null)
+        {
+            _ = CommitAutoSaveAsync(pending);
+        }
+    }
+
+    private async Task CommitQuickSaveAsync(AutoSaveCandidate pending)
+    {
+        try
+        {
+            await slots.SaveRotatingAsync(
+                SaveSlotKind.Quick,
+                new SaveSlotSaveRequest(
+                    DeveloperMetadata: new Dictionary<string, string>
+                    {
+                        ["saveSource"] = pending.Source,
+                        ["saveBoundary"] = pending.BoundaryId.ToString(
+                            System.Globalization.CultureInfo.InvariantCulture),
+                    }));
+        }
+        catch (Exception exception)
+        {
+            logger.Warning(
+                "save",
+                "save.command_failed",
+                $"Script save at boundary '{pending.BoundaryId}' failed: {exception.Message}",
+                exception);
+        }
     }
 
     private async Task CommitAutoSaveAsync(AutoSaveCandidate pending)
