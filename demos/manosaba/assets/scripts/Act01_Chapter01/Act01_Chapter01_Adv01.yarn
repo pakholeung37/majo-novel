@@ -80,7 +80,8 @@ title: Act01_Chapter01_Adv01
 
 大家都去死就好了。 #line:0101Adv01_Narrative024
 
-// <<gosub Path:System/System_Subroutine.EndAdv>>
+<<detour EndAdv>>
+<<jump Act01_Chapter01_Adv02>>
 
 // <<gotoModified Path:Act01_Chapter01/Act01_Chapter01_Adv02 SoftReset:true>>
 ===

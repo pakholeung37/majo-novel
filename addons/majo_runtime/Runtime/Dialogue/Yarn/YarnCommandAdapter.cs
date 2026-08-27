@@ -21,13 +21,25 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
     public YarnCommandAdapter(
         IYarnCommandRegistry registry,
         RuntimeCommandCatalog catalog,
+        RuntimeCommandDispatcher dispatcher) : this(
+            registry,
+            catalog,
+            dispatcher,
+            dispatcher?.AbortOnRecoverableFailure ?? false)
+    {
+    }
+
+    public YarnCommandAdapter(
+        IYarnCommandRegistry registry,
+        RuntimeCommandCatalog catalog,
         RuntimeCommandDispatcher dispatcher,
-        bool abortOnRecoverableFailure = false)
+        bool abortOnRecoverableFailure)
     {
         this.registry = registry ?? throw new ArgumentNullException(nameof(registry));
         this.catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         this.dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
-        this.abortOnRecoverableFailure = abortOnRecoverableFailure;
+        dispatcher.ConfigureFailurePolicy(abortOnRecoverableFailure);
+        this.abortOnRecoverableFailure = dispatcher.AbortOnRecoverableFailure;
     }
 
     public event Action<RuntimeCommandException>? CommandFailed;

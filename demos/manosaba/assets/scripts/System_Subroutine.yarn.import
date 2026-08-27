@@ -1,0 +1,14 @@
+[remap]
+
+importer="yarnscript"
+type="Resource"
+uid="uid://rncipvddg648"
+path="res://.godot/imported/System_Subroutine.yarn-84796c4a07d72aaaee60b0b1c3f9ea41.tres"
+
+[deps]
+
+source_file="res://demos/manosaba/assets/scripts/System_Subroutine.yarn"
+dest_files=["res://.godot/imported/System_Subroutine.yarn-84796c4a07d72aaaee60b0b1c3f9ea41.tres"]
+
+[params]
+

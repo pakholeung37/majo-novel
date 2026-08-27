@@ -19,6 +19,7 @@ public sealed class RuntimeCommandDispatcher : IDisposable
     private readonly IOperationScheduler? operations;
     private readonly IServiceResolver? services;
     private readonly IRuntimeLogger logger;
+    private bool abortOnRecoverableFailure;
     private readonly AwaitScopeCoordinator awaitScopes = new();
     private readonly HashSet<IOperationHandle> dialogueOperations =
         new(ReferenceEqualityComparer.Instance);
@@ -32,18 +33,25 @@ public sealed class RuntimeCommandDispatcher : IDisposable
         IActorManager? actors = null,
         IOperationScheduler? operations = null,
         IServiceResolver? services = null,
-        IRuntimeLogger? logger = null)
+        IRuntimeLogger? logger = null,
+        bool abortOnRecoverableFailure = false)
     {
         this.binder = binder ?? throw new ArgumentNullException(nameof(binder));
         this.actors = actors;
         this.operations = operations;
         this.services = services;
         this.logger = logger ?? NullRuntimeLogger.Instance;
+        this.abortOnRecoverableFailure = abortOnRecoverableFailure;
     }
 
     public event Action<RuntimeCommandException>? CommandFailed;
 
     public RuntimeCommandException? LastFailure { get; private set; }
+
+    public bool AbortOnRecoverableFailure => abortOnRecoverableFailure;
+
+    internal void ConfigureFailurePolicy(bool abortOnRecoverableFailure) =>
+        this.abortOnRecoverableFailure = abortOnRecoverableFailure;
 
     public bool HasActiveCommands
     {
@@ -139,12 +147,7 @@ public sealed class RuntimeCommandDispatcher : IDisposable
         }
         catch (RuntimeCommandException exception)
         {
-            logger.Error(
-                "command",
-                "command.faulted",
-                $"Command '{registration.Name}' failed: {exception.Message}",
-                exception,
-                correlation);
+            LogCommandFailure(registration.Name, exception, correlation, properties);
             ReportFailure(exception);
             throw;
         }
@@ -155,12 +158,18 @@ public sealed class RuntimeCommandDispatcher : IDisposable
                 exception.Message,
                 exception,
                 recoverable: false);
+            var failureProperties = new Dictionary<string, object?>(properties)
+            {
+                ["recoverable"] = false,
+                ["disposition"] = "abort",
+            };
             logger.Error(
                 "command",
                 "command.faulted",
                 $"Command '{registration.Name}' failed: {exception.Message}",
                 exception,
-                correlation);
+                correlation,
+                failureProperties);
             ReportFailure(failure);
             throw failure;
         }
@@ -201,20 +210,66 @@ public sealed class RuntimeCommandDispatcher : IDisposable
         var failure = new RuntimeCommandException(
             commandName,
             "Command is not registered.");
-        logger.Error(
-            "command",
-            "command.unknown",
-            $"Unknown Yarn command '{commandName}' was skipped.",
-            failure,
-            correlation,
-            new Dictionary<string, object?>
-            {
-                ["commandName"] = commandName,
-                ["commandText"] = commandText,
-                ["sourceLineId"] = dialogue?.CurrentLineId,
-                ["fallback"] = "skip",
-            });
+        var properties = new Dictionary<string, object?>
+        {
+            ["commandName"] = commandName,
+            ["commandText"] = commandText,
+            ["sourceLineId"] = dialogue?.CurrentLineId,
+            ["disposition"] = abortOnRecoverableFailure ? "abort" : "skip",
+        };
+        if (abortOnRecoverableFailure)
+        {
+            logger.Error(
+                "command",
+                "command.unknown",
+                $"Unknown Yarn command '{commandName}' aborted the dialogue.",
+                failure,
+                correlation,
+                properties);
+        }
+        else
+        {
+            logger.Warning(
+                "command",
+                "command.unknown",
+                $"Unknown Yarn command '{commandName}' was skipped.",
+                correlation: correlation,
+                properties: properties);
+        }
         ReportFailure(failure);
+    }
+
+    private void LogCommandFailure(
+        string commandName,
+        RuntimeCommandException failure,
+        RuntimeLogCorrelation correlation,
+        IReadOnlyDictionary<string, object?> baseProperties)
+    {
+        var abort = !failure.IsRecoverable || abortOnRecoverableFailure;
+        var properties = new Dictionary<string, object?>(baseProperties)
+        {
+            ["recoverable"] = failure.IsRecoverable,
+            ["disposition"] = abort ? "abort" : "skip",
+        };
+        if (abort)
+        {
+            logger.Error(
+                "command",
+                "command.faulted",
+                $"Command '{commandName}' failed: {failure.Message}",
+                failure,
+                correlation,
+                properties);
+        }
+        else
+        {
+            logger.Warning(
+                "command",
+                "command.rejected",
+                $"Command '{commandName}' was skipped: {failure.Message}",
+                correlation: correlation,
+                properties: properties);
+        }
     }
 
     public async Task DrainDialogueOperationsAsync(CancellationToken cancellationToken)

@@ -893,12 +893,12 @@ public partial class MajoRuntimeBootstrap : Node
             actors,
             operations,
             Host!.Services,
-            Logger);
+            Logger,
+            Configuration.Dialogue!.AbortOnCommandError);
         var adapter = new YarnCommandAdapter(
             new DialogueRunnerCommandRegistry(backend.Runner),
             catalog,
-            dispatcher,
-            Configuration.Dialogue!.AbortOnCommandError);
+            dispatcher);
         backend.ObserveCommandAdapter(adapter);
         return adapter;
     }

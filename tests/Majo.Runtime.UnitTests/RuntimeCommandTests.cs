@@ -4,6 +4,7 @@ using Majo.Runtime.Actors;
 using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Dialogue.Yarn;
+using Majo.Runtime.Diagnostics;
 using Majo.Runtime.Operations;
 using Xunit;
 
@@ -186,12 +187,19 @@ public sealed class RuntimeCommandTests
     public async Task HideMissingActorIsNoOp()
     {
         var manager = new FakeActorManager();
-        var service = new ActorCommandService(manager);
+        var logs = new RecordingLogSink();
+        var logger = new StructuredRuntimeLogger(logs, RuntimeLogLevel.Debug);
+        var service = new ActorCommandService(manager, logger);
 
         await service.HideAsync(new HideCommand(
             "not-active", 0.2, true, null, null));
 
         Assert.Empty(manager.Actors);
+        var warning = Assert.Single(
+            logs.Events,
+            log => log.EventId == "actor.missing_noop");
+        Assert.Equal(RuntimeLogLevel.Warning, warning.Level);
+        Assert.Equal("no-op", warning.Properties["fallback"]);
     }
 
     [Fact]
@@ -324,10 +332,13 @@ public sealed class RuntimeCommandTests
     public async Task AdapterCapturesClearArgumentFailure()
     {
         var registry = new FakeCommandRegistry();
+        var logs = new RecordingLogSink();
+        var logger = new StructuredRuntimeLogger(logs, RuntimeLogLevel.Debug);
         var adapter = CreateAdapter(
             registry,
             new RecordingCommandService(),
-            out var catalog);
+            out var catalog,
+            logger: logger);
         await adapter.InitializeAsync(CancellationToken.None);
         var handler = Assert.IsType<Func<string[], Task>>(registry.Handlers["char"]);
 
@@ -340,6 +351,12 @@ public sealed class RuntimeCommandTests
             catalog.Get("char").Descriptor.Usage,
             exception.Message,
             StringComparison.Ordinal);
+        Assert.Equal(1, registry.AbortCount);
+        var error = Assert.Single(
+            logs.Events,
+            log => log.EventId == "command.faulted");
+        Assert.Equal(RuntimeLogLevel.Error, error.Level);
+        Assert.Equal("abort", error.Properties["disposition"]);
         await adapter.ShutdownAsync(CancellationToken.None);
     }
 
@@ -347,10 +364,13 @@ public sealed class RuntimeCommandTests
     public async Task LenientAdapterReportsAndSkipsRecoverableArgumentFailure()
     {
         var registry = new FakeCommandRegistry();
+        var logs = new RecordingLogSink();
+        var logger = new StructuredRuntimeLogger(logs, RuntimeLogLevel.Debug);
         var adapter = CreateAdapter(
             registry,
             new RecordingCommandService(),
             out _,
+            logger: logger,
             abortOnRecoverableFailure: false);
         await adapter.InitializeAsync(CancellationToken.None);
         var handler = Assert.IsType<Func<string[], Task>>(registry.Handlers["char"]);
@@ -360,6 +380,11 @@ public sealed class RuntimeCommandTests
         Assert.NotNull(adapter.LastFailure);
         Assert.True(adapter.LastFailure!.IsRecoverable);
         Assert.Equal(0, registry.AbortCount);
+        var warning = Assert.Single(
+            logs.Events,
+            log => log.EventId == "command.rejected");
+        Assert.Equal(RuntimeLogLevel.Warning, warning.Level);
+        Assert.Equal("skip", warning.Properties["disposition"]);
         await adapter.ShutdownAsync(CancellationToken.None);
     }
 
@@ -367,10 +392,13 @@ public sealed class RuntimeCommandTests
     public async Task LenientAdapterReportsAndSkipsUnknownCommand()
     {
         var registry = new FakeCommandRegistry();
+        var logs = new RecordingLogSink();
+        var logger = new StructuredRuntimeLogger(logs, RuntimeLogLevel.Debug);
         var adapter = CreateAdapter(
             registry,
             new RecordingCommandService(),
             out _,
+            logger: logger,
             abortOnRecoverableFailure: false);
         await adapter.InitializeAsync(CancellationToken.None);
 
@@ -379,6 +407,11 @@ public sealed class RuntimeCommandTests
         Assert.Equal("missing", adapter.LastFailure?.CommandName);
         Assert.True(adapter.LastFailure?.IsRecoverable);
         Assert.Equal(0, registry.AbortCount);
+        var warning = Assert.Single(
+            logs.Events,
+            log => log.EventId == "command.unknown");
+        Assert.Equal(RuntimeLogLevel.Warning, warning.Level);
+        Assert.Equal("skip", warning.Properties["disposition"]);
         await adapter.ShutdownAsync(CancellationToken.None);
     }
 
@@ -386,10 +419,13 @@ public sealed class RuntimeCommandTests
     public async Task LenientAdapterStillAbortsForUnexpectedRuntimeFailure()
     {
         var registry = new FakeCommandRegistry();
+        var logs = new RecordingLogSink();
+        var logger = new StructuredRuntimeLogger(logs, RuntimeLogLevel.Debug);
         var adapter = CreateAdapter(
             registry,
             new RecordingCommandService(),
             out _,
+            logger: logger,
             configure: commands => commands.Register<ProbeCommandArguments>(
                 (_, _) => throw new InvalidOperationException("engine bug")),
             abortOnRecoverableFailure: false);
@@ -401,6 +437,11 @@ public sealed class RuntimeCommandTests
 
         Assert.False(failure.IsRecoverable);
         Assert.Equal(1, registry.AbortCount);
+        var error = Assert.Single(
+            logs.Events,
+            log => log.EventId == "command.faulted");
+        Assert.Equal(RuntimeLogLevel.Error, error.Level);
+        Assert.Equal("abort", error.Properties["disposition"]);
         await adapter.ShutdownAsync(CancellationToken.None);
     }
 
@@ -715,6 +756,7 @@ public sealed class RuntimeCommandTests
         IActorManager? actors = null,
         IOperationScheduler? operations = null,
         Action<RuntimeCommandRegistry>? configure = null,
+        IRuntimeLogger? logger = null,
         bool abortOnRecoverableFailure = true)
     {
         var commands = new RuntimeCommandRegistry();
@@ -724,12 +766,13 @@ public sealed class RuntimeCommandTests
         var dispatcher = new RuntimeCommandDispatcher(
             new CommandBinder(new CommandBindingContext(0.35)),
             actors,
-            operations);
+            operations,
+            logger: logger,
+            abortOnRecoverableFailure: abortOnRecoverableFailure);
         return new YarnCommandAdapter(
             yarnRegistry,
             catalog,
-            dispatcher,
-            abortOnRecoverableFailure);
+            dispatcher);
     }
 
     [RuntimeCommand("probe", Category = "Test", Usage = "probe <value> detail:<value>")]
