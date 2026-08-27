@@ -5,6 +5,8 @@ using System.Collections.Generic;
 
 namespace Majo.Runtime.Dialogue;
 
+public delegate string? DialogueSpeakerNameResolver(string speakerId, string locale);
+
 public enum DialogueSessionState
 {
     Idle,

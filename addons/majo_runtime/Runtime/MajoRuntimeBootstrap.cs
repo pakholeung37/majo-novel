@@ -94,6 +94,8 @@ public partial class MajoRuntimeBootstrap : Node
 
     public Action<DialogueMarkupHandlerRegistry>? ConfigureDialogueMarkupHandlers { get; set; }
 
+    public DialogueSpeakerNameResolver? ResolveSpeakerName { get; set; }
+
     public Action<ILocaleManager>? ConfigureLocales { get; set; }
 
     public Action<StateContributorRegistry>? ConfigureStateContributors { get; set; }
@@ -462,7 +464,8 @@ public partial class MajoRuntimeBootstrap : Node
                                     resolver.Get<ILocaleManager>(),
                                     resolver.Get<ILocalizedResourceResolver>())])
                             .ToArray(),
-                        resolver.Get<ILocaleManager>());
+                        resolver.Get<ILocaleManager>(),
+                        ResolveSpeakerName);
                     return yarnDialogueBackend;
                 },
                 typeof(IResourceManager),
@@ -479,7 +482,8 @@ public partial class MajoRuntimeBootstrap : Node
                         Configuration!.Presentation!,
                         markupHandlerRegistry.Handlers,
                         resolver.Get<ILocaleManager>(),
-                        resolver.Get<IFontCatalog>());
+                        resolver.Get<IFontCatalog>(),
+                        ResolveSpeakerName);
                     return dialoguePresentation;
                 },
                 typeof(IYarnDialogueBackend),

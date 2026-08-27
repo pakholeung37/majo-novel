@@ -20,13 +20,22 @@ public static class YarnLineConverter
             text.Attributes.Select(Convert).ToArray());
     }
 
-    public static DialogueLine Convert(YarnLocalizedLine line, string? resolvedLocale = null)
+    public static DialogueLine Convert(
+        YarnLocalizedLine line,
+        string? resolvedLocale = null,
+        DialogueSpeakerNameResolver? speakerNameResolver = null)
     {
         ArgumentNullException.ThrowIfNull(line);
         var text = line.TextWithoutCharacterName;
+        var speaker = line.CharacterName;
+        if (!string.IsNullOrWhiteSpace(speaker) && speakerNameResolver is not null)
+        {
+            speaker = speakerNameResolver(speaker, resolvedLocale ?? string.Empty) ?? speaker;
+        }
+
         return new DialogueLine(
             line.TextID,
-            line.CharacterName,
+            speaker,
             Convert(text),
             (line.Metadata ?? Array.Empty<string>()).ToArray(),
             resolvedLocale);

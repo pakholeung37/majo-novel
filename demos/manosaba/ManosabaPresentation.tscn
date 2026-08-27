@@ -176,7 +176,6 @@ texture = ExtResource("15_name")
 expand_mode = 1
 
 [node name="CharacterNameText" type="RichTextLabel" parent="LinePresenter/CharacterNamePanel" unique_id=1061676218]
-visible = false
 layout_mode = 0
 offset_left = 82.0
 offset_top = 76.0

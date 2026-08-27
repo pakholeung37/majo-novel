@@ -2,6 +2,7 @@
 Yarn Spinner is licensed to you under the terms found in the file LICENSE.md.
 */
 
+using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -85,6 +86,12 @@ public partial class LinePresenter : Node, DialoguePresenterBase
     /// just be the same game object as <see cref="characterNameText"/>.
     /// </remarks>
     [Export] public CanvasItem? characterNameContainer = null;
+
+    /// <summary>
+    /// Optionally resolves the stable character ID in a Yarn line to the name
+    /// that should be displayed for the active locale.
+    /// </summary>
+    public Func<LocalizedLine, string?>? CharacterNameResolver { get; set; }
 
 
     /// <summary>
@@ -306,14 +313,15 @@ public partial class LinePresenter : Node, DialoguePresenterBase
             // we are configured to show character names in their own little box, but this line doesn't have one
             if (IsInstanceValid(characterNameContainer))
             {
-                if (string.IsNullOrWhiteSpace(line.CharacterName))
+                var characterName = CharacterNameResolver?.Invoke(line) ?? line.CharacterName;
+                if (string.IsNullOrWhiteSpace(characterName))
                 {
                     characterNameContainer.Visible = false;
                 }
                 else
                 {
                     characterNameContainer.Visible = true;
-                    characterNameText.Text = line.CharacterName;
+                    characterNameText.Text = characterName;
                 }
             }
         }

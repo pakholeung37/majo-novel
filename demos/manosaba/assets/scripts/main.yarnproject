@@ -4,5 +4,5 @@
         "**/*.yarn"
     ],
     "excludeFiles": [],
-    "baseLanguage": "en"
+    "baseLanguage": "zh-Hans"
 }

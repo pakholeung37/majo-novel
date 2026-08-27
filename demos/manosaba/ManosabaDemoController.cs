@@ -25,6 +25,9 @@ public partial class ManosabaDemoController : Node
 		{
 			var configuration = MajoProjectConfiguration.CreateDefault();
 			configuration.Resources!.RootPath = "res://demos/manosaba/assets";
+			configuration.Localization!.DefaultLocale = "zh-Hans";
+			configuration.Localization.SupportedLocales = ["zh-Hans", "ja", "en", "zh-Hant"];
+			configuration.Settings!.DialogueLocale = "zh-Hans";
 			configuration.State!.StorageNamespace = "majo/manosaba";
 			configuration.State.GameBuildId = "manosaba-v0.1";
 			configuration.Save!.Enabled = true;
@@ -38,10 +41,13 @@ public partial class ManosabaDemoController : Node
 			configuration.Presentation.FontSize = 34;
 			configuration.Presentation.LettersPerSecond = 36;
 
+			var characterNames = ManosabaCharacterNameCatalog.Load(
+				"res://demos/manosaba/assets/localization/character_names.json");
 			var runtime = new MajoRuntimeBootstrap
 			{
 				Name = "ManosabaRuntime",
 				Configuration = configuration,
+				ResolveSpeakerName = characterNames.Resolve,
 			};
 
 			AddChild(runtime);

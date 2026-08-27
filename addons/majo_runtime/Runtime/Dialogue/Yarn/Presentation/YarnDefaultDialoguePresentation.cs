@@ -24,6 +24,7 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, I
     private readonly IReadOnlyList<IDialogueMarkupHandler> markupHandlers;
     private readonly ILocaleManager? localeManager;
     private readonly IFontCatalog? fontCatalog;
+    private readonly DialogueSpeakerNameResolver? speakerNameResolver;
     private CanvasLayer? presentationLayer;
     private Control? root;
     private LinePresenter? linePresenter;
@@ -39,7 +40,8 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, I
         DialoguePresentationConfiguration configuration,
         IReadOnlyList<IDialogueMarkupHandler> markupHandlers,
         ILocaleManager? localeManager = null,
-        IFontCatalog? fontCatalog = null)
+        IFontCatalog? fontCatalog = null,
+        DialogueSpeakerNameResolver? speakerNameResolver = null)
     {
         this.backend = backend ?? throw new ArgumentNullException(nameof(backend));
         this.input = input ?? throw new ArgumentNullException(nameof(input));
@@ -50,6 +52,7 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, I
             throw new ArgumentNullException(nameof(markupHandlers));
         this.localeManager = localeManager;
         this.fontCatalog = fontCatalog;
+        this.speakerNameResolver = speakerNameResolver;
     }
 
     public bool IsLineActive => markupBridge?.IsLineActive == true;
@@ -120,6 +123,20 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, I
         var optionParent = FindRequired<Node>(root, "OptionContainer");
 
         ConfigureView(root, linePresenter);
+        if (speakerNameResolver is not null)
+        {
+            linePresenter.CharacterNameResolver = line =>
+            {
+                var speaker = line.CharacterName;
+                if (string.IsNullOrWhiteSpace(speaker))
+                {
+                    return speaker;
+                }
+
+                var locale = localeManager?.DialogueLocale ?? TranslationServer.GetLocale();
+                return speakerNameResolver(speaker, locale) ?? speaker;
+            };
+        }
         linePresenter.dialogueRunner = backend.Runner;
         markupBridge = new MajoActionMarkupBridge(
             backend.RequestHurryUp,

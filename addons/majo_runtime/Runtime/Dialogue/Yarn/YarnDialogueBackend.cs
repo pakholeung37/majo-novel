@@ -26,6 +26,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
     private readonly IResourceLoader<YarnProject> projects;
     private readonly IReadOnlyList<IDialoguePresenter> presenters;
     private readonly ILocaleManager? localeManager;
+    private readonly DialogueSpeakerNameResolver? speakerNameResolver;
     private readonly YarnVmStateBridge stateBridge = new();
     private readonly YarnDialogueVariableStore variableStore = new();
     private readonly object sync = new();
@@ -57,13 +58,15 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
         IResourceManager resources,
         string scriptsPath,
         IReadOnlyList<IDialoguePresenter> presenters,
-        ILocaleManager? localeManager = null)
+        ILocaleManager? localeManager = null,
+        DialogueSpeakerNameResolver? speakerNameResolver = null)
     {
         this.owner = owner ?? throw new ArgumentNullException(nameof(owner));
         ArgumentNullException.ThrowIfNull(resources);
         projects = resources.CreateLoader<YarnProject>(scriptsPath);
         this.presenters = presenters ?? throw new ArgumentNullException(nameof(presenters));
         this.localeManager = localeManager;
+        this.speakerNameResolver = speakerNameResolver;
     }
 
     public event Action<string>? NodeEntered;
@@ -585,7 +588,10 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
             currentSubstitutions,
             project.LineMetadata?.GetMetadata(currentLineId) ?? Array.Empty<string>(),
             locale);
-        var reResolved = YarnLineConverter.Convert(localized, resolvedLocale);
+        var reResolved = YarnLineConverter.Convert(
+            localized,
+            resolvedLocale,
+            speakerNameResolver);
 
         currentLine = reResolved;
         return reResolved;
@@ -627,7 +633,10 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
                 var metadata = project.LineMetadata?.GetMetadata(lineId) ?? Array.Empty<string>();
                 var substitutions = option.Substitutions ?? Array.Empty<string>();
                 var localized = CreateLocalizedLine(lineId, rawText, substitutions, metadata, locale);
-                var newLine = YarnLineConverter.Convert(localized, resolvedLocale);
+                var newLine = YarnLineConverter.Convert(
+                    localized,
+                    resolvedLocale,
+                    speakerNameResolver);
                 list.Add(new DialogueOption(option.Id, newLine, option.IsAvailable, substitutions));
             }
             else
@@ -664,7 +673,10 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
     }
 
     private DialogueLine ConvertPresentedLine(LocalizedLine line) =>
-        YarnLineConverter.Convert(line, ResolvePresentedLocale(line));
+        YarnLineConverter.Convert(
+            line,
+            ResolvePresentedLocale(line),
+            speakerNameResolver);
 
     private string ResolvePresentedLocale(LocalizedLine line)
     {
