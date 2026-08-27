@@ -41,6 +41,7 @@ public partial class HeadlessTestRunner
         await bootstrap.InitializationCompletion;
 
         var stageViewport = bootstrap.GetNode<SubViewport>("MajoStageViewport");
+        var stageBackdrop = stageViewport.GetNode<ColorRect>("MajoStageBackdrop/Black");
         var actorRoot = stageViewport.GetNode<CanvasLayer>("MajoActors");
         var cameraOutput = bootstrap.GetNode<CanvasLayer>("MajoCameraOutput");
         var backgroundLayer = actorRoot.GetNode<Control>("Backgrounds");
@@ -66,6 +67,9 @@ public partial class HeadlessTestRunner
         Assert(background.CurrentView.Texture is not null, "Background texture was not loaded.");
         Assert(cameraOutput.GetNode<TextureRect>("LiveOutput").Texture is ViewportTexture,
             "Camera output did not present the isolated Stage viewport texture.");
+        Assert(stageBackdrop.Color == Colors.Black &&
+                stageBackdrop.GetParent<CanvasLayer>().Layer < actorRoot.Layer,
+            "Camera Stage did not retain an explicit black background below its actors.");
         Assert(character.Position.IsEqualApprox(configuration.Actors.LeftPosition),
             "Character did not use the configured left position preset.");
 

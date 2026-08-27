@@ -884,6 +884,7 @@ public partial class MajoRuntimeBootstrap : Node
         var commands = new RuntimeCommandRegistry();
         BuiltInRuntimeCommands.Register(commands, new ActorCommandService(actors, Logger));
         commands.RegisterModule(new AudioCommandModule(audio));
+        commands.RegisterModule(new CameraCommandModule());
         commands.RegisterModule(new StageCommandModule());
         ConfigureCommands?.Invoke(commands);
         var catalog = commands.BuildCatalog();

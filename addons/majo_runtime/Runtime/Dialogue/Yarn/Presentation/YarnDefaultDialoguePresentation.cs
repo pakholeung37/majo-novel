@@ -28,6 +28,7 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, I
     private CanvasLayer? presentationLayer;
     private Control? root;
     private LinePresenter? linePresenter;
+    private MajoSpeakerNamePresenter? speakerNamePresenter;
     private OptionsPresenter? optionsPresenter;
     private MajoActionMarkupBridge? markupBridge;
     private MajoPresentationInputPresenter? inputPresenter;
@@ -123,20 +124,6 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, I
         var optionParent = FindRequired<Node>(root, "OptionContainer");
 
         ConfigureView(root, linePresenter);
-        if (speakerNameResolver is not null)
-        {
-            linePresenter.CharacterNameResolver = line =>
-            {
-                var speaker = line.CharacterName;
-                if (string.IsNullOrWhiteSpace(speaker))
-                {
-                    return speaker;
-                }
-
-                var locale = localeManager?.DialogueLocale ?? TranslationServer.GetLocale();
-                return speakerNameResolver(speaker, locale) ?? speaker;
-            };
-        }
         linePresenter.dialogueRunner = backend.Runner;
         markupBridge = new MajoActionMarkupBridge(
             backend.RequestHurryUp,
@@ -154,6 +141,22 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, I
             Name = "MajoInputPresenter",
         };
         root.AddChild(inputPresenter);
+        var characterNameContainer = linePresenter.characterNameContainer ??
+            linePresenter.characterNameText ??
+            throw new DialogueException(
+                "Dialogue Presenter LinePresenter requires a character name container.");
+        var characterNameText = linePresenter.characterNameText ??
+            throw new DialogueException(
+                "Dialogue Presenter LinePresenter requires a character name text node.");
+        speakerNamePresenter = new MajoSpeakerNamePresenter(
+            characterNameContainer,
+            characterNameText,
+            localeManager,
+            speakerNameResolver)
+        {
+            Name = "MajoSpeakerNamePresenter",
+        };
+        root.AddChild(speakerNamePresenter);
 
         if (fontCatalog is not null)
         {
@@ -167,6 +170,7 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, I
         linePresenter.ActionMarkupHandlers.Add(new MajoBbCodeMarkupHandler());
         linePresenter.ActionMarkupHandlers.Add(markupBridge);
         backend.RegisterNativePresenter(linePresenter);
+        backend.RegisterNativePresenter(speakerNamePresenter);
         backend.RegisterNativePresenter(optionsPresenter);
         backend.RegisterNativePresenter(inputPresenter);
         return Task.CompletedTask;
@@ -176,6 +180,7 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, I
     {
         cancellationToken.ThrowIfCancellationRequested();
         inputPresenter?.ResetInput();
+        speakerNamePresenter?.Reset();
         markupBridge?.ResetState();
         return Task.CompletedTask;
     }
@@ -198,6 +203,7 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, I
         }
 
         inputPresenter?.ResetInput();
+        speakerNamePresenter?.Reset();
         backend.SetPresentationQuiescenceWaiter(null);
         if (markupBridge is not null)
         {
@@ -207,6 +213,7 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, I
 
         UnregisterPresenter(inputPresenter);
         UnregisterPresenter(optionsPresenter);
+        UnregisterPresenter(speakerNamePresenter);
         UnregisterPresenter(linePresenter);
         if (linePresenter is not null && markupBridge is not null &&
             GodotObject.IsInstanceValid(linePresenter) &&
@@ -243,6 +250,7 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, I
         presentationLayer = null;
         root = null;
         linePresenter = null;
+        speakerNamePresenter = null;
         optionsPresenter = null;
         markupBridge = null;
         inputPresenter = null;

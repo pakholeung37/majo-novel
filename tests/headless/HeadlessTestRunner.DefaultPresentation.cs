@@ -44,6 +44,7 @@ public partial class HeadlessTestRunner
         {
             Name = "M8Runtime",
             Configuration = configuration,
+            ResolveSpeakerName = (speaker, _) => $"Resolved {speaker}",
         };
         bootstrap.ConfigureDialogueMarkupHandlers += handlers => handlers
             .Register(firstHandler)
@@ -74,6 +75,10 @@ public partial class HeadlessTestRunner
             "CharacterNamePanel",
             recursive: true,
             owned: false) as CanvasItem;
+        var characterNameText = presentationRoot.FindChild(
+            "CharacterNameText",
+            recursive: true,
+            owned: false) as RichTextLabel;
         var optionContainer = presentationRoot.FindChild(
             "OptionContainer",
             recursive: true,
@@ -117,6 +122,9 @@ public partial class HeadlessTestRunner
                 StringComparison.Ordinal) &&
                 !nativeLineText.GetParsedText().Contains("[b]", StringComparison.Ordinal),
             "M8 did not project native Yarn style markup into RichTextLabel BBCode.");
+        Assert(characterNamePanel?.Visible == true &&
+                characterNameText?.Text == "Resolved Narrator",
+            "M8 did not resolve the speaker name outside Yarn Spinner source.");
 
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         Godot.Input.ParseInputEvent(new InputEventKey
@@ -144,8 +152,15 @@ public partial class HeadlessTestRunner
         await InjectMouseClickAsync(
             nativeLinePresenter.presenterControl!.GetGlobalRect().GetCenter());
         await WaitForConditionAsync(
+            () => characterNamePanel?.Visible == false && !dialogue.IsPresentingOptions,
+            1);
+        Assert(characterNamePanel?.Visible == false,
+            "M8 retained the previous speaker panel during a command after its line ended.");
+        await WaitForConditionAsync(
             () => dialogue.IsPresentingOptions && presentation.IsPresentingOptions,
             2);
+        Assert(characterNamePanel?.Visible == false,
+            "M8 retained the previous speaker panel after its dialogue line ended.");
         var visibleOptionItems = presentationRoot.FindChild(
                 "OptionContainer",
                 recursive: true,

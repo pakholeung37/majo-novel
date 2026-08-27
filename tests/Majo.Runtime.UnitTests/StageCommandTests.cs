@@ -9,9 +9,10 @@ namespace Majo.Runtime.UnitTests;
 public sealed class StageCommandTests
 {
     [Fact]
-    public void StageCommandModuleBuildsAValidatedCatalog()
+    public void StageAndCameraCommandModulesBuildAValidatedCatalog()
     {
         var registry = new RuntimeCommandRegistry();
+        registry.RegisterModule(new CameraCommandModule());
         registry.RegisterModule(new StageCommandModule());
         var catalog = registry.BuildCatalog();
 

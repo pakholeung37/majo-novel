@@ -23,6 +23,18 @@ internal sealed class GodotActorHost : IRuntimeService
             HandleInputLocally = false,
             GuiDisableInput = true,
         };
+        StageBackdropLayer = new CanvasLayer
+        {
+            Name = "MajoStageBackdrop",
+            Layer = -100,
+        };
+        StageBackdrop = new ColorRect
+        {
+            Name = "Black",
+            Color = Colors.Black,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        StageBackdropLayer.AddChild(StageBackdrop);
         Root = new CanvasLayer { Name = "MajoActors" };
         BackgroundLayer = new Control
         {
@@ -32,6 +44,7 @@ internal sealed class GodotActorHost : IRuntimeService
         CharacterLayer = new Node2D { Name = "Characters" };
         Root.AddChild(BackgroundLayer);
         Root.AddChild(CharacterLayer);
+        StageViewport.AddChild(StageBackdropLayer);
         StageViewport.AddChild(Root);
 
         OutputLayer = new CanvasLayer { Name = "MajoCameraOutput" };
@@ -43,6 +56,10 @@ internal sealed class GodotActorHost : IRuntimeService
     }
 
     public SubViewport StageViewport { get; }
+
+    public CanvasLayer StageBackdropLayer { get; }
+
+    public ColorRect StageBackdrop { get; }
 
     public CanvasLayer Root { get; }
 
@@ -68,6 +85,7 @@ internal sealed class GodotActorHost : IRuntimeService
         owner.AddChild(OutputLayer);
         ResizeOutput();
         LiveOutput.Texture = StageViewport.GetTexture();
+        StageBackdrop.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         BackgroundLayer.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         owner.GetViewport().SizeChanged += ResizeOutput;
         isInitialized = true;

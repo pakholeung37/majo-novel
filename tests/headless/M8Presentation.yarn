@@ -2,6 +2,7 @@ title: Start
 tags: headless m8
 ---
 Narrator: [mystery count=3 enabled=true label="alpha"][b]A deliberately long first line[/b] for the native typewriter.[/mystery] #line:m8-first
+<<wait 0.2>>
 -> First route
     Narrator: first route selected #line:m8-first-option
 -> Second route
