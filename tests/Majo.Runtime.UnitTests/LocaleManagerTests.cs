@@ -288,6 +288,13 @@ public sealed class LocaleManagerTests
 
         Assert.Equal("zh-CN", line.ResolvedLocale);
         Assert.Equal("custom_voice", DialogueVoiceResolver.ResolveVoiceId(line));
+
+        var yarnLine = new DialogueLine(
+            "line:0101Adv02_Ema001",
+            "Ema",
+            new DialogueText("不对！", Array.Empty<DialogueMarkupAttribute>()),
+            []);
+        Assert.Equal("0101Adv02_Ema001", DialogueVoiceResolver.ResolveVoiceId(yarnLine));
     }
 
     [Fact]

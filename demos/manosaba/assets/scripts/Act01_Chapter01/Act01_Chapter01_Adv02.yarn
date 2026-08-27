@@ -1,12 +1,300 @@
 title: Act01_Chapter01_Adv02
 ---
+// <<gosubResetWitchBook Path:System/System_ResetWitchBook IsDebugDirectJump:isDebugDirectJump>>
+// <<gosub Path:System/System_Subroutine.BeginAdv>>
 
-<<curtain closed duration:0>>
-<<back stills appearance:Still_140_001 duration:0>>
-<<curtain open duration:1.2 wait:true>>
-<<wait 1.8>>
+// # Scene1-0-2
 
-——这里是囚牢。
+// ========================================
+// ●シーン1-0-2
+// ========================================
+// <<autoSave>>
+Ema: ——不对！ #line:0101Adv02_Ema001
 
-// <<gotoModified Path:Act01_Chapter01/Act01_Chapter01_Adv02 SoftReset:true>>
+// <<playSfxModified SfxPath:Sfx_1 Volume:1.0 Loop:0 FadeInDuration:0.0>>
+// <<modifyBackgroundExtended Id:Stills Rotation:,,-10 Scale:g_backgroundDefaultScale * 3 Lazy:0 ScenePosition:80,-35 AppearanceAndTransition:490_1 SubId:Middle>>
+// <<animateActorExtended ActorIds:Stills-Middle Loop:0 ScenePositionX:60 ScenePositionY:-20 EasingTypeName:EaseOutBack Duration:0.4>>
+// <<modifyBackgroundExtended TintColor:#000000 Duration:1.2 Lazy:0 AppearanceAndTransition:Transparent SubId:Overlay>>
+// <<wait WaitMode:0.2>>
+
+樱羽艾玛大喊着，爬起身来。 #line:0101Adv02_Narrative001
+
+大概是因为做了噩梦，她的呼吸相当紊乱，[br]而且满身都是汗水。 #line:0101Adv02_Narrative002
+
+原来是做梦。她才刚安下心来——[br]眼前的光景就逐渐清晰了起来。 #line:0101Adv02_Narrative003
+
+// <<playBgm BgmPath:Bgm_21_1 Volume:1.0 Loop:1 FadeInDuration:0.0>>
+
+Ema: 咦，怎么回事，这里是……？ #line:0101Adv02_Ema002
+
+// <<modifyBackgroundExtended Id:Stills Rotation:,,0 Scale:g_backgroundDefaultScale Duration:0 Lazy:0 ScenePosition:50,50 AppearanceAndTransition:490_1>>
+// <<resetText>>
+// <<hideActors ActorIds:Stills-Middle Duration:0.6 Lazy:0>>
+// <<wait WaitMode:0.8>>
+
+醒来的艾玛发现，这里不是她自己的房间。[br]这是张做工粗糙的双层床，她睡在了这里的下铺。 #line:0101Adv02_Narrative004
+
+床紧贴着老旧的石墙，[br]而石墙似乎透着一股寒气，总令人不禁为之一颤。 #line:0101Adv02_Narrative005
+
+室内光线昏暗，空气也并不畅通。[br]并且——有一道铁栅栏限制了自由。 #line:0101Adv02_Narrative006
+
+// <<emoteShake ActorIds:Stills Loop:0>>
+
+Ema: 牢、牢房……！？为什么！？ #line:0101Adv02_Ema003
+
+艾玛陷入了恐慌，[br]拼命回想着睡前的记忆。 #line:0101Adv02_Narrative007
+
+Ema: （昨天是想到明天我就要上高中了……[br]　很开心地睡着了才对） #line:0101Adv02_Ema004
+
+昨天是春假的最后一天。 #line:0101Adv02_Narrative008
+
+艾玛早早地洗了澡，换了睡衣，[br]早早地钻进了被窝里。 #line:0101Adv02_Narrative009
+
+Ema: （记得睡觉前……我还看着挂在墙上的[br]　全新的高中制服） #line:0101Adv02_Ema005
+
+望着那件明天就要穿上的制服，[br]艾玛露出了十分幸福的笑容。 #line:0101Adv02_Narrative010
+
+Ema: （还下了决心，一切要重新开始……） #line:0101Adv02_Ema006
+
+然后在温暖的被窝包裹下，闭上了双眼。 #line:0101Adv02_Narrative011
+
+可是现在，她正被关在牢房里。[br]身上还穿着自己从没见过的衣服。 #line:0101Adv02_Narrative012
+
+Ema: （这是噩梦的后续……？） #line:0101Adv02_Ema007
+
+但，四周的一切却如此真实。 #line:0101Adv02_Narrative013
+
+她大致观察了下室内。四周被结实的石墙包围，[br]只有铁栅栏一面联通着过道。 #line:0101Adv02_Narrative014
+
+墙上安装有电视屏幕。 #line:0101Adv02_Narrative015
+
+在透着中世纪气息的古牢里面，[br]这块现代随处可见的显示屏幕实在是格格不入。 #line:0101Adv02_Narrative016
+
+// ========================================
+// [hideStill]
+// ========================================
+
+// <<modifyBackgroundExtended Scale:g_backgroundDefaultScale Lazy:0 AppearanceAndTransition:1_1>>
+// <<modifyCharacterExtended Lazy:0 ScenePosition:50 IdAndAppearance:Ema.Surprised1>>
+
+Ema: 我说，这里究竟是什么地方！？ #line:0101Adv02_Ema008
+
+艾玛抓着铁栅栏，喊出声来。 #line:0101Adv02_Narrative017
+
+紧接着，远远地从其他地方传来了[br]其他少女们的叫喊声。 #line:0101Adv02_Narrative018
+
+// <<hideAllCharacters Lazy:0>>
+
+// ＠遠野ハンナ
+Unknown: 竟把本小姐关在这种地方！[br]究竟是什么意思啊！？ #line:0101Adv02_Unknown001
+
+// ＠佐伯ミリア
+Unknown: 监禁少女可是犯罪欸！虽然不知是谁，[br]可干出来这种事，这辈子就到头了欸！？ #line:0101Adv02_Unknown002
+
+// ＠紫藤アリサ
+Unknown: 喂，开什么玩笑，我要杀了你！放我出去！！ #line:0101Adv02_Unknown003
+
+// <<modifyCharacterExtended Lazy:0 ScenePosition:50 IdAndAppearance:Ema.Normal1,ArmR3>>
+
+Ema: （……太好了，被关进来的[br]　不止我一个人） #line:0101Adv02_Ema009
+
+现场忽然吵闹起来，[br]艾玛的脸上露出了安心。紧接着—— #line:0101Adv02_Narrative019
+
+// <<hideAllCharacters Lazy:0>>
+
+// ＠二階堂ヒロ
+Unknown: ——能不能给我安静一下？ #line:0101Adv02_Unknown004
+
+从艾玛身后冷不防传来一道清冽的声音。 #line:0101Adv02_Narrative020
+
+// <<playSfxModified SfxPath:Sfx_1 Volume:1.0 Loop:0 FadeInDuration:0.0>>
+
+艾玛顺着声音望去，[br]发现双层床的上铺有个刚起身的人。 #line:0101Adv02_Narrative021
+
+// <<modifyCharacterExtended Lazy:0 ScenePosition:50 IdAndAppearance:Hiro.Angry1>>
+
+// ＠二階堂ヒロ
+Unknown: 大吵大闹是不对的。 #line:0101Adv02_Unknown005
+
+// 息を呑む
+Ema: ——！！ #line:0101Adv02_Ema010
+
+艾玛十分吃惊，瞬间忘记了呼吸。[br]因为，她认识这位说话的少女。 #line:0101Adv02_Narrative022
+
+Ema: （真的假的……[br]　是二阶堂希罗……？） #line:0101Adv02_Ema011
+
+二阶堂希罗—— #line:0101Adv02_Narrative023
+
+是在艾玛的初中时代，令她深陷黑暗的同窗，[br]也是广受众人仰慕，常在人群中心可爱地微笑着的少女…… #line:0101Adv02_Narrative024
+
+// <<modifyCharacterExtended Lazy:0 ScenePosition:50 IdAndAppearance:Hiro.Surprised1>>
+
+和她对上眼的希罗，也大大的瞪圆了眼睛。[br]艾玛还是第一次见有人把眼睛瞪得那么大。 #line:0101Adv02_Narrative025
+
+Hiro: 为什么你会在这里？ #line:0101Adv02_Hiro001
+
+// <<playSfxModified SfxPath:Sfx_178 Volume:1.0 Loop:0 FadeInDuration:0.0>>
+
+希罗轻快地爬下了床，向艾玛问道。 #line:0101Adv02_Narrative026
+
+往日同窗竟出现在眼前，[br]惊慌失措的艾玛哑口无言。 #line:0101Adv02_Narrative027
+
+// <<hideAllCharacters Lazy:0>>
+// <<modifyCharacterExtended Lazy:0 ScenePosition:30 IdAndAppearance:Hiro.Surprised1>>
+// <<modifyCharacterExtended Lazy:0 ScenePosition:70 IdAndAppearance:Ema.Fearful1,ArmR3>>
+
+Ema: 啊…… #line:0101Adv02_Ema012
+
+Hiro: 这是哪里？ #line:0101Adv02_Hiro002
+
+希罗四下张望着，[br]紧张地尖声问道。 #line:0101Adv02_Narrative028
+
+Ema: 我、我说，希罗…… #line:0101Adv02_Ema013
+
+艾玛鼓起勇气，[br]尝试向往日旧识搭话。 #line:0101Adv02_Narrative029
+
+// <<hideAllCharacters Lazy:0>>
+
+这时—— #line:0101Adv02_Narrative030
+
+// <<playSfxModified SfxPath:Sfx_3 Volume:1.0 Loop:0 FadeInDuration:0.0>>
+
+声音从墙壁上的显示屏幕传来。[br]艾玛和希罗吓了一跳，然后望向屏幕。 #line:0101Adv02_Narrative031
+
+// <<resetText>>
+// <<modifyTextPrinter Lazy:0 IdAndAppearance:Normal.Stream MakeDefault:1 HideOther:1>>
+// <<modifyBackgroundExtended Scale:1.3 Lazy:0 AppearanceAndTransition:25_1 SubId:Middle>>
+// <<modifyCharacterExtended Scale:1.4 Lazy:0 IdAndAppearance:Warden.1 SubId:Middle>>
+// <<wait WaitMode:0.3>>
+
+Ema: （欸，怎么回事！？猫、猫头鹰怪物……！？） #line:0101Adv02_Ema014
+
+// ＠備考◆配信中
+Warden: 啊……喂喂……看得见画面吗……？[br]毕竟机器有好些年头了，故障特别多……唉呀呀。 #line:0101Adv02_Warden001
+
+// ＠備考◆配信中
+Warden: 大家好，我是典狱长。 #line:0101Adv02_Warden002
+
+// ＠備考◆配信中
+Warden: 我想给大家作详细说明，[br]请各位到会客厅来集合。 #line:0101Adv02_Warden003
+
+// ＠備考◆配信中
+Warden: 我会给大家打开牢房的锁，[br]之后请大家跟着带路的看守。 #line:0101Adv02_Warden004
+
+// ＠備考◆配信中
+Warden: 想反抗也没问题……[br]只不过小命不保罢了……嗯…… #line:0101Adv02_Warden005
+
+// <<playSfxModified SfxPath:Sfx_3 Volume:1.0 Loop:0 FadeInDuration:0.0>>
+// <<resetText>>
+// <<modifyBackgroundExtended Duration:0.5 Lazy:0 AppearanceAndTransition:SolidColor SubId:Overlay>>
+// <<wait WaitMode:1.8>>
+
+// <<playSfxModified SfxPath:Sfx_4 Volume:1.0 Loop:0 FadeInDuration:0.0>>
+// <<modifyTextPrinter Lazy:0 IdAndAppearance:Normal.Default MakeDefault:1 HideOther:1>>
+
+显示屏幕再次回归一片漆黑。 #line:0101Adv02_Narrative032
+
+// <<resetText>>
+// <<hideActors ActorIds:MainBackground-Middle,Warden-Middle Duration:0 Lazy:0>>
+// <<modifyCharacterExtended Lazy:0 ScenePosition:30 IdAndAppearance:Hiro.Surprised1>>
+// <<modifyCharacterExtended Lazy:0 ScenePosition:70 IdAndAppearance:Ema.Surprised1,ArmR3>>
+// <<modifyBackgroundExtended Duration:0.5 Lazy:0 AppearanceAndTransition:Transparent SubId:Overlay>>
+// <<wait WaitMode:0.3>>
+
+Ema: 典狱长……？看守……？ #line:0101Adv02_Ema015
+
+艾玛似乎思考不太跟得上状况的变化，呆站在原地一动不动——[br]而她身边的希罗也一样。紧接着—— #line:0101Adv02_Narrative033
+
+// <<hideAllCharacters Lazy:0>>
+
+// <<playSfxModified SfxPath:Sfx_5 Volume:1.0 Loop:0 FadeInDuration:0.0>>
+
+从铁栅栏的另一侧——过道处，[br]传来了某样沉重物体的移动声，且愈来愈接近。 #line:0101Adv02_Narrative034
+
+那声音透着一股令人汗毛直竖的感觉，[br]令艾玛她们本能地察觉到了危险。 #line:0101Adv02_Narrative035
+
+艾玛和希罗绷紧了身子，[br]——然后缓慢地将视线挪动到过道上。 #line:0101Adv02_Narrative036
+
+// <<resetText>>
+// <<modifyBackgroundExtended Rotation:,,0 Scale:g_backgroundDefaultScale * 2 Duration:0.6 Lazy:0 ScenePosition:100,40 AppearanceAndTransition:1_1 SubId:Middle>>
+// <<wait WaitMode:1.2>>
+
+// <<hideAllCharacters Duration:0 Lazy:0>>
+// <<modifyBackgroundExtended Rotation:,,0 Scale:g_backgroundDefaultScale * 2 Duration:0 Lazy:0 ScenePosition:100,40 AppearanceAndTransition:1_2>>
+// <<animateActorExtended ActorIds:MainBackground Loop:0 ScenePositionY:45 EasingTypeName:EaseOutQuad Duration:0.8>>
+// <<animateActorExtended ActorIds:MainBackground-Middle Loop:0 ScenePositionY:45 EasingTypeName:EaseOutQuad Duration:0.8>>
+// <<hideActors ActorIds:MainBackground-Middle Duration:0.5 Lazy:0>>
+// <<wait WaitMode:0.6>>
+
+// ========================================
+// [char 看守.差分なし,Center]
+// ========================================
+
+Ema: 噫…… #line:0101Adv02_Ema016
+
+差点惊声大喊的艾玛，用双手捂住了自己的嘴。 #line:0101Adv02_Narrative037
+
+面前出现了披着破烂黑衣的不明物体。[br]那东西大概有两三米高。 #line:0101Adv02_Narrative038
+
+虽然戴着面具，看不见面孔，[br]但从外形看，明显不是人类。 #line:0101Adv02_Narrative039
+
+Ema: 希、希罗…… #line:0101Adv02_Ema017
+
+艾玛在恐惧的驱使下，不禁抓紧了希罗的手臂。[br]就连刚才还很冷静的希罗也望着过道上的异形，呆站着一动不动。 #line:0101Adv02_Narrative040
+
+// ========================================
+// 看守 ＯＵＴ
+// ========================================
+
+// <<modifyBackgroundExtended Rotation:,,0 Scale:g_backgroundDefaultScale Duration:0.6 Lazy:0 ScenePosition:50,50 AppearanceAndTransition:1_1 SubId:Middle>>
+
+// <<playSfxModified SfxPath:Sfx_5 Volume:1.0 Loop:0 FadeInDuration:0.0>>
+
+// <<stopBgm>>
+// <<playBgm BgmPath:Bgm_23_1 Volume:1.0 Loop:1 FadeInDuration:0.0>>
+
+// ＠沢渡ココ
+
+Unknown: 呀啊啊啊！怪物别碰我！好恶心！[br]好了，好了啦，我走就是！！ #line:0101Adv02_Unknown006
+
+艾玛她们听见，其他牢房里[br]有人被怪物强行带走了。 #line:0101Adv02_Narrative041
+
+这让她们两个感到越来越害怕了。 #line:0101Adv02_Narrative042
+
+// <<modifyBackgroundExtended Rotation:,,0 Scale:g_backgroundDefaultScale Duration:0 Lazy:0 ScenePosition:50,50 AppearanceAndTransition:1_1 SubId:Default>>
+// <<hideActors ActorIds:MainBackground-Middle Duration:0 Lazy:0>>
+
+// <<modifyCharacterExtended Lazy:0 ScenePosition:45 IdAndAppearance:Hiro.Head1,Pale1-Off,Sweat1-Off,Cheeks1-Normal,Angle01/Head01/Facial01/Eyes01>Eyes01_Angry_Open,Angle01/Head01/Facial01/Mouth01>Mouth01_Fearful_Open>>
+// <<modifyCharacterExtended Lazy:0 ScenePosition:60 IdAndAppearance:Ema.Fearful1,ArmR1>>
+
+Hiro: 所谓的说明，会解释清楚情况吗。[br]那我得快点过去…… #line:0101Adv02_Hiro003
+
+希罗自言自语着，然后望向身旁的艾玛。 #line:0101Adv02_Narrative043
+
+这时她终于发现，[br]艾玛紧紧抓住了她的手臂。 #line:0101Adv02_Narrative044
+
+// <<playSfxModified SfxPath:Sfx_18 Volume:1.0 Loop:0 FadeInDuration:0.0>>
+// <<modifyCharacterExtended Lazy:0 ScenePosition:40 IdAndAppearance:Hiro.Angry2>>
+// <<modifyCharacterExtended Lazy:0 ScenePosition:80 IdAndAppearance:Ema.Fearful1,ArmR3>>
+
+——唰。[br]她用力地甩开了艾玛的手。 #line:0101Adv02_Narrative045
+
+Ema: ……！ #line:0101Adv02_Ema018
+
+Hiro: 不要随便碰我。[br]你可别忘了，我讨厌你。 #line:0101Adv02_Hiro004
+
+// <<hideActors ActorIds:Hiro Lazy:0>>
+
+希罗的眼神中[br]透着一股深深的厌弃。 #line:0101Adv02_Narrative046
+
+// ========================================
+// 二階堂ヒロ ＯＵＴ
+// ========================================
+
+// <<modifyCharacterExtended Lazy:0 ScenePosition:80 IdAndAppearance:Ema.Fearful1>>
+
+// <<gosub Path:System/System_Subroutine.EndAdv>>
+
+// <<gotoModified Path:Act01_Chapter01/Act01_Chapter01_Adv03 SoftReset:true>>
 ===
+

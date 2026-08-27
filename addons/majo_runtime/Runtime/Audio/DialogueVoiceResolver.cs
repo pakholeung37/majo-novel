@@ -60,7 +60,7 @@ public static class DialogueVoiceResolver
 
         var locale = audio.VoiceLocale;
         var localizedId = $"{locale}/{voiceId}";
-        return audio.VoiceLoader.Exists(localizedId) ? voiceId : null;
+        return audio.VoiceLoader.Exists(localizedId) || audio.VoiceLoader.Exists(voiceId) ? voiceId : null;
     }
 
     public static string? ResolveVoiceId(DialogueLine line)
@@ -78,7 +78,7 @@ public static class DialogueVoiceResolver
                 $"Dialogue line '{line.Id}' contains multiple voice metadata overrides.");
         }
 
-        var voiceId = overrideIds.SingleOrDefault() ?? line.Id;
+        var voiceId = overrideIds.SingleOrDefault() ?? NormalizeLineId(line.Id);
         if (voiceId.Equals("none", StringComparison.OrdinalIgnoreCase))
         {
             return null;
@@ -86,4 +86,9 @@ public static class DialogueVoiceResolver
 
         return voiceId;
     }
+
+    private static string NormalizeLineId(string lineId) =>
+        lineId.StartsWith("line:", StringComparison.OrdinalIgnoreCase)
+            ? lineId["line:".Length..]
+            : lineId;
 }

@@ -208,6 +208,11 @@ public sealed class AudioManagerTests
         Assert.Equal("line-1", presenter.LastVoiceId);
         Assert.Equal("en/line-1", harness.Audio.CurrentVoice?.ClipId);
 
+        var yarnConventional = Line("line:line-1");
+        await presenter.PresentLineAsync(yarnConventional, context);
+        Assert.Equal("line-1", presenter.LastVoiceId);
+        Assert.Equal("en/line-1", harness.Audio.CurrentVoice?.ClipId);
+
         await presenter.PresentLineAsync(Line("line-x", "voice:line-2"), context);
         Assert.Equal("line-2", presenter.LastVoiceId);
         Assert.Equal("en/line-2", harness.Audio.CurrentVoice?.ClipId);
@@ -274,6 +279,52 @@ public sealed class AudioManagerTests
         Assert.False(voiceResult.IsSkipped);
         Assert.Equal("zh-CN/greeting", voiceResult.Playback.ClipId);
 
+        await host.ShutdownAsync();
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task VoicePresenterResolvesConventionalYarnTagWithUnlocalizedResource()
+    {
+        var backend = new FakeAudioBackend();
+        var bgm = new FakeAudioClipLoader("audio/bgm");
+        var sfx = new FakeAudioClipLoader("audio/sfx");
+        var voice = new FakeAudioClipLoader("audio/voice").Register("0101Adv02_Ema001");
+        var missingResources = new MissingResourceReporter();
+        var localeManager = new LocaleManager("en", ["en", "zh-CN"]);
+        var localizedResolver = new LocalizedResourceResolver(new ResolverOnlyResourceManager());
+        var frameClock = new ImmediateFrameClock();
+        var host = new RuntimeServiceRegistry()
+            .AddSingleton<IFrameClock>(_ => frameClock)
+            .AddSingleton<IMissingResourceReporter>(_ => missingResources)
+            .AddSingleton<IOperationScheduler>(
+                resolver => new OperationScheduler(
+                    resolver.Get<IFrameClock>(),
+                    resolver.Get<IRuntimeLifetime>()),
+                typeof(IFrameClock),
+                typeof(IRuntimeLifetime))
+            .AddSingleton<IAudioManager>(
+                resolver => new AudioManager(
+                    backend,
+                    resolver.Get<IOperationScheduler>(),
+                    bgm,
+                    sfx,
+                    voice,
+                    new AudioSettings(),
+                    missingResources: missingResources,
+                    locales: localeManager,
+                    localizedResources: localizedResolver),
+                typeof(IOperationScheduler))
+            .Build();
+        await host.InitializeAsync();
+        var audio = host.Services.Get<IAudioManager>();
+        var presenter = new VoiceDialoguePresenter(audio, localeManager, localizedResolver);
+        var context = PresentationContext();
+
+        var yarnLine = Line("line:0101Adv02_Ema001");
+        await presenter.PresentLineAsync(yarnLine, context);
+
+        Assert.Equal("0101Adv02_Ema001", presenter.LastVoiceId);
+        Assert.Equal("0101Adv02_Ema001", audio.CurrentVoice?.ClipId);
         await host.ShutdownAsync();
     }
 
