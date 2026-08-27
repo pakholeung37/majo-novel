@@ -2,7 +2,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
@@ -13,26 +12,21 @@ namespace Majo.Runtime.Resources.Godot;
 public sealed class GodotProjectResourceProvider : IResourceProvider
 {
     public const string ProviderId = "godot-project";
-    private static readonly string[] DefaultTextureSourceExtensions =
-        ["png", "jpg", "jpeg", "webp", "svg", "bmp", "tga"];
-
-    private readonly string rootPath;
+    private readonly IResourcePathResolver pathResolver;
     private readonly IFrameClock frameClock;
-    private readonly Dictionary<Type, string[]> sourceExtensions = new();
     private bool isInitialized;
 
     public GodotProjectResourceProvider(string rootPath, IFrameClock frameClock)
+        : this(new GodotProjectResourcePathResolver(rootPath), frameClock)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
-        if (!rootPath.StartsWith("res://", StringComparison.Ordinal))
-        {
-            throw new MajoResourceException(
-                "Godot project resource root must start with 'res://'.");
-        }
+    }
 
-        this.rootPath = rootPath.TrimEnd('/');
+    public GodotProjectResourceProvider(
+        IResourcePathResolver pathResolver,
+        IFrameClock frameClock)
+    {
+        this.pathResolver = pathResolver ?? throw new ArgumentNullException(nameof(pathResolver));
         this.frameClock = frameClock ?? throw new ArgumentNullException(nameof(frameClock));
-        sourceExtensions[typeof(Texture2D)] = DefaultTextureSourceExtensions;
     }
 
     public string Id => ProviderId;
@@ -45,59 +39,28 @@ public sealed class GodotProjectResourceProvider : IResourceProvider
         Type resourceType,
         params string[] extensions)
     {
-        ArgumentNullException.ThrowIfNull(resourceType);
-        ArgumentNullException.ThrowIfNull(extensions);
         if (isInitialized)
         {
             throw new MajoResourceException(
                 "Source extensions cannot be changed after provider initialization.");
         }
 
-        var normalized = extensions
-            .Select(extension => extension?.Trim().TrimStart('.') ?? string.Empty)
-            .Where(extension => extension.Length > 0)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        if (normalized.Length == 0)
+        if (pathResolver is not GodotProjectResourcePathResolver defaultResolver)
         {
-            throw new ArgumentException(
-                "At least one source extension is required.", nameof(extensions));
+            throw new MajoResourceException(
+                "Source extensions can only be registered on the default Godot project path resolver.");
         }
 
-        sourceExtensions[resourceType] = sourceExtensions.TryGetValue(
-            resourceType,
-            out var existing)
-            ? existing.Concat(normalized).Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
-            : normalized;
+        defaultResolver.RegisterSourceExtensions(resourceType, extensions);
         return this;
     }
 
     public IReadOnlyList<string> GetCandidatePaths(ResourceRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        if (!string.IsNullOrWhiteSpace(request.OverridePath))
-        {
-            return [ResolveOverride(request.OverridePath)];
-        }
-
-        var basePath = ResourcePath.Combine(rootPath, request.Key.Path);
-        if (HasExtension(basePath))
-        {
-            return [basePath];
-        }
-
-        var registeredExtensions = sourceExtensions.TryGetValue(
-            request.ResourceType,
-            out var configured)
-            ? configured
-            : Array.Empty<string>();
-        var extensions = registeredExtensions
-            .Concat(ResourceLoader.GetRecognizedExtensionsForType(request.ResourceType.Name))
-            .Select(extension => extension.TrimStart('.'))
-            .Where(extension => extension.Length > 0)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        return extensions.Select(extension => $"{basePath}.{extension}").ToArray();
+        return pathResolver.GetCandidatePaths(request) ??
+            throw new MajoResourceException(
+                $"Resource path resolver '{pathResolver.GetType().Name}' returned null.");
     }
 
     public bool TryResolve(ResourceRequest request, out ResourceLocation? location)
@@ -189,10 +152,6 @@ public sealed class GodotProjectResourceProvider : IResourceProvider
         return Task.CompletedTask;
     }
 
-    private string ResolveOverride(string overridePath) => ResourcePath.IsRooted(overridePath)
-        ? overridePath.Replace('\\', '/')
-        : ResourcePath.Combine(rootPath, overridePath);
-
     private static object RequireType(Resource resource, string path, Type expectedType)
     {
         if (expectedType.IsInstanceOfType(resource))
@@ -201,12 +160,6 @@ public sealed class GodotProjectResourceProvider : IResourceProvider
         }
 
         throw new ResourceTypeMismatchException(path, expectedType, resource.GetType());
-    }
-
-    private static bool HasExtension(string path)
-    {
-        var fileName = path[(path.LastIndexOf('/') + 1)..];
-        return fileName.Contains('.', StringComparison.Ordinal);
     }
 
     private void EnsureInitialized()

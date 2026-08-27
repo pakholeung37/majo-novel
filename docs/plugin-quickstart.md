@@ -117,6 +117,23 @@ res://assets/audio/voice/<line-id>.ogg (无 locale 的 fallback)
 与 Voice locale 独立；美术、BGM、SFX 使用 Dialogue locale，Voice 使用 Voice locale。只使用
 无 locale 路径的简单项目无需额外配置。Runtime 自带 UI 是固定英文参考实现，UI 本地化由项目负责。
 
+以上目录只是默认 `GodotProjectResourcePathResolver` 的约定。项目也可以实现
+`IResourcePathResolver`，根据逻辑 key、资源类型和 override path 返回自己的候选物理路径，
+并在 Runtime 启动前传给 Bootstrap：
+
+```csharp
+public sealed class ProjectResourcePathResolver : IResourcePathResolver
+{
+    public IReadOnlyList<string> GetCandidatePaths(ResourceRequest request) =>
+        [$"res://game-content/{request.ResourceType.Name}/{request.Key.Path}.tres"];
+}
+
+runtime.ResourcePathResolver = new ProjectResourcePathResolver();
+```
+
+因此 Runtime 内的 loader、Actor、Audio 和 Yarn 仍只使用稳定的逻辑 key；项目可自由调整实际
+资源目录。Resolver 返回多个路径时会按顺序尝试，首个存在且类型匹配的资源会被加载。
+
 ---
 
 ## 5. Yarn Command 与动画 / 状态支持

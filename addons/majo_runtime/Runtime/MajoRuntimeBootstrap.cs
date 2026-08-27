@@ -88,6 +88,8 @@ public partial class MajoRuntimeBootstrap : Node
 
     public Action<ResourceProviderRegistry>? ConfigureResourceProviders { get; set; }
 
+    public IResourcePathResolver? ResourcePathResolver { get; set; }
+
     public Action<DialoguePresenterRegistry>? ConfigureDialoguePresenters { get; set; }
 
     public Action<DialogueMarkupHandlerRegistry>? ConfigureDialogueMarkupHandlers { get; set; }
@@ -937,20 +939,21 @@ public partial class MajoRuntimeBootstrap : Node
         IFrameClock frameClock,
         IRuntimeLifetime lifetime)
     {
-        var godotProvider = new GodotProjectResourceProvider(
-                Configuration!.Resources!.RootPath,
-                frameClock)
-            .RegisterSourceExtensions<YarnProject>(YarnProject.YARN_PROJECT_EXTENSION)
-            .RegisterSourceExtensions<AudioStream>("wav", "ogg", "mp3");
+        var resourceConfiguration = Configuration!.Resources!;
+        var pathResolver = ResourcePathResolver ??
+            new GodotProjectResourcePathResolver(resourceConfiguration.RootPath)
+                .RegisterSourceExtensions<YarnProject>(YarnProject.YARN_PROJECT_EXTENSION)
+                .RegisterSourceExtensions<AudioStream>("wav", "ogg", "mp3");
+        var godotProvider = new GodotProjectResourceProvider(pathResolver, frameClock);
         var providers = new ResourceProviderRegistry().Register(godotProvider);
         ConfigureResourceProviders?.Invoke(providers);
         return new ResourceManager(
             providers.Providers,
             lifetime,
             Logger,
-            memoryBudgetBytes: (long)Configuration.Resources.MemoryBudgetMiB * 1024 * 1024,
+            memoryBudgetBytes: (long)resourceConfiguration.MemoryBudgetMiB * 1024 * 1024,
             defaultResourceEstimateBytes:
-                (long)Configuration.Resources.DefaultResourceEstimateKiB * 1024);
+                (long)resourceConfiguration.DefaultResourceEstimateKiB * 1024);
     }
 
     private IAudioManager CreateAudioManager(

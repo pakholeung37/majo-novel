@@ -268,6 +268,10 @@ var texture = await resources
 that path only and reports all attempted candidates if it is missing. Custom
 resource providers register through `ConfigureResourceProviders`; higher
 priority providers can replace project assets without changing logical IDs.
+The directory convention itself is replaceable: implement `IResourcePathResolver`
+and assign it to `MajoRuntimeBootstrap.ResourcePathResolver` before startup. The
+resolver receives the logical key, requested resource type, and optional override,
+and may return any ordered set of Godot resource paths.
 
 Missing actor textures use `PlaceholderTexture2D` and emit a deduplicated
 warning unless `ResourceConfiguration.FailOnMissingAssets` enables strict asset
