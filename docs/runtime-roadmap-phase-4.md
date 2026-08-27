@@ -185,6 +185,8 @@ Settings 使用同一个当前 locale、fallback chain 与切换事务。
 
 Camera 第一阶段之后的命名 Rig、Director、Focus/Follow 和多输出 Compositor 方案见
 [`camera-runtime-next-phases.md`](camera-runtime-next-phases.md)。
+单 Camera Pose 的 cut、move、dissolve 实现设计见
+[`camera-view-transition-design.md`](camera-view-transition-design.md)。
 
 ### 6.1 目标
 

@@ -26,6 +26,8 @@ internal sealed class GodotStageBackend : IStageBackend
     private StageCurtainState curtainState = StageCurtainState.Default;
     private ScreenEffectState screen = ScreenEffectState.Default;
     private readonly HashSet<Tween> cameraTweens = new();
+    private Tween? cameraViewTransitionTween;
+    private ImageTexture? cameraViewTransitionTexture;
     private Tween? shakeTween;
     private Tween? transitionTween;
     private Tween? curtainTween;
@@ -65,6 +67,7 @@ internal sealed class GodotStageBackend : IStageBackend
         ApplyCurtain(curtainState);
         ApplyScreenEffect(screen);
         ClearTransition();
+        ClearCameraViewTransition();
         ClearFlash();
         isInitialized = true;
         return Task.CompletedTask;
@@ -81,6 +84,7 @@ internal sealed class GodotStageBackend : IStageBackend
         ApplyCurtain(curtainState);
         ApplyScreenEffect(screen);
         ClearTransition();
+        ClearCameraViewTransition();
         ClearFlash();
         return Task.CompletedTask;
     }
@@ -91,6 +95,7 @@ internal sealed class GodotStageBackend : IStageBackend
         if (!isInitialized) return Task.CompletedTask;
         isInitialized = false;
         KillAllTweens();
+        ClearCameraViewTransition();
         try
         {
             if (GodotObject.IsInstanceValid(owner))
@@ -161,6 +166,88 @@ internal sealed class GodotStageBackend : IStageBackend
             KillTween(tween);
             cameraTweens.Remove(tween);
         }
+    }
+
+    public async Task DissolveCameraAsync(
+        CameraState from,
+        CameraState to,
+        StageOperationSpec operation,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        from.Validate();
+        to.Validate();
+        operation.Validate();
+        ClearCameraViewTransition();
+        if (operation.DurationSeconds <= 0)
+        {
+            ApplyCamera(to);
+            return;
+        }
+
+        var image = CaptureCameraOutput();
+        if (image is null || image.IsEmpty())
+            throw new InvalidOperationException(
+                "Camera output capture returned an empty image.");
+        cameraViewTransitionTexture = ImageTexture.CreateFromImage(image);
+        actors.TransitionSource.Texture = cameraViewTransitionTexture;
+        actors.TransitionSource.Modulate = Colors.White;
+        actors.TransitionSource.Visible = true;
+        ApplyCamera(to);
+
+        cameraViewTransitionTween = owner.CreateTween();
+        var (transition, ease) = ResolveCurve(operation.Curve);
+        cameraViewTransitionTween.SetTrans(transition);
+        cameraViewTransitionTween.SetEase(ease);
+        cameraViewTransitionTween.TweenProperty(
+            actors.TransitionSource,
+            "modulate:a",
+            0,
+            operation.DurationSeconds);
+        try
+        {
+            await WaitForTweenAsync(cameraViewTransitionTween, cancellationToken);
+        }
+        finally
+        {
+            ClearCameraViewTransition();
+        }
+    }
+
+    private Image CaptureCameraOutput()
+    {
+        if (!string.Equals(DisplayServer.GetName(), "headless", StringComparison.OrdinalIgnoreCase))
+            return actors.StageViewport.GetTexture().GetImage();
+
+        // Godot's dummy headless renderer exposes a ViewportTexture but has no
+        // native texture storage to read back. Keep the transition lifecycle
+        // testable without pretending that pixel output exists in this mode.
+        var size = actors.StageViewport.Size;
+        var image = Image.CreateEmpty(
+            Math.Max(size.X, 1),
+            Math.Max(size.Y, 1),
+            false,
+            Image.Format.Rgba8);
+        image.Fill(Colors.Black);
+        return image;
+    }
+
+    public void ClearCameraViewTransition()
+    {
+        KillTween(cameraViewTransitionTween);
+        cameraViewTransitionTween = null;
+        try
+        {
+            if (GodotObject.IsInstanceValid(actors.TransitionSource))
+            {
+                actors.TransitionSource.Visible = false;
+                actors.TransitionSource.Texture = null;
+                actors.TransitionSource.Modulate = Colors.White;
+            }
+        }
+        catch (ObjectDisposedException) { }
+        cameraViewTransitionTexture?.Dispose();
+        cameraViewTransitionTexture = null;
     }
 
     public async Task ShakeAsync(CameraShakeSpec shake, CancellationToken cancellationToken)
@@ -395,13 +482,15 @@ internal sealed class GodotStageBackend : IStageBackend
     {
         foreach (var tween in cameraTweens.ToArray()) KillTween(tween);
         cameraTweens.Clear();
+        KillTween(cameraViewTransitionTween);
         KillTween(shakeTween);
         KillTween(transitionTween);
         KillTween(curtainTween);
         KillTween(overlayTween);
         KillTween(letterboxTween);
         KillTween(flashTween);
-        shakeTween = transitionTween = curtainTween = overlayTween = letterboxTween = flashTween = null;
+        cameraViewTransitionTween = shakeTween = transitionTween = curtainTween = overlayTween =
+            letterboxTween = flashTween = null;
     }
 
     private static void KillTween(Tween? tween)

@@ -46,22 +46,61 @@ internal static class StageCommandExecution
         if (wait) await operation.Completion.WaitAsync(context.CancellationToken);
     }
 
+    public static CameraViewTransitionSpec ViewTransition(
+        CameraViewTransitionCommandArguments arguments,
+        RuntimeCommandContext context)
+    {
+        ArgumentNullException.ThrowIfNull(arguments);
+        ArgumentNullException.ThrowIfNull(context);
+        var duration = arguments.Duration ??
+            (arguments.Via == CameraViewTransitionKind.Cut
+                ? 0
+                : context.Binding?.DefaultAnimationDurationSeconds ??
+                    new StageOperationSpec().DurationSeconds);
+        if (arguments.Via == CameraViewTransitionKind.Cut && duration > 0)
+            throw new RuntimeCommandException(
+                "camera",
+                "camera pose/reset via:cut requires duration:0 or an omitted duration.");
+        return new CameraViewTransitionSpec(
+            arguments.Via,
+            Operation(
+                duration,
+                arguments.Operation,
+                arguments.Group,
+                arguments.Curve)).Validate();
+    }
+
     public static T Require<T>(RuntimeCommandContext context) where T : class =>
         context.Services?.Get<T>() ?? throw new RuntimeCommandException(
             "stage", $"Stage service '{typeof(T).Name}' is not available.");
 }
 
-public abstract class CameraMotionCommandArguments
+public abstract class CameraOperationCommandArguments
+{
+    [CommandParameter("wait", 12)] public bool Wait { get; set; }
+    [CommandParameter("group", 13)] public string? Group { get; set; }
+    [CommandParameter("operation", 14)] public string? Operation { get; set; }
+}
+
+public abstract class CameraMotionCommandArguments : CameraOperationCommandArguments
 {
     [CommandParameter("duration", 10, DefaultSource = CommandDefaultSource.AnimationDuration, Minimum = 0)]
     public double Duration { get; set; }
 
     [CommandParameter("curve", 11, DefaultValue = "linear")]
     public MotionCurve Curve { get; set; }
+}
 
-    [CommandParameter("wait", 12)] public bool Wait { get; set; }
-    [CommandParameter("group", 13)] public string? Group { get; set; }
-    [CommandParameter("operation", 14)] public string? Operation { get; set; }
+public abstract class CameraViewTransitionCommandArguments : CameraOperationCommandArguments
+{
+    [CommandParameter("via", 10, DefaultValue = "cut")]
+    public CameraViewTransitionKind Via { get; set; }
+
+    [CommandParameter("duration", 11, Minimum = 0)]
+    public double? Duration { get; set; }
+
+    [CommandParameter("curve", 15, DefaultValue = "linear")]
+    public MotionCurve Curve { get; set; }
 }
 
 [RuntimeCommand("camera", "move", Category = "Camera", Usage = "camera move to:<x,y> [duration:<seconds>] [curve:<curve>] [wait:<bool>] [group:<id>] [operation:<id>]")]
@@ -111,9 +150,9 @@ public sealed class CameraRotateCommandHandler : IRuntimeCommandHandler<CameraRo
                 StageCommandExecution.Operation(a.Duration, a.Operation, a.Group, a.Curve)), a.Wait, c);
 }
 
-[RuntimeCommand("camera", "pose", Category = "Camera", Usage = "camera pose [center:<x,y>] [zoom:<number>] [rotation:<degrees>] [duration:<seconds>] [curve:<curve>] [wait:<bool>] [group:<id>] [operation:<id>]")]
+[RuntimeCommand("camera", "pose", Category = "Camera", Usage = "camera pose [center:<x,y>] [zoom:<number>] [rotation:<degrees>] [via:<cut|move|dissolve>] [duration:<seconds>] [curve:<curve>] [wait:<bool>] [group:<id>] [operation:<id>]")]
 [CommandParameterSet(CommandParameterSetRule.AtLeastOne, "center", "zoom", "rotation")]
-public sealed class CameraPoseCommandArguments : CameraMotionCommandArguments
+public sealed class CameraPoseCommandArguments : CameraViewTransitionCommandArguments
 {
     [CommandParameter("center", 0)] public Vector2? Center { get; set; }
     [CommandParameter("zoom", 1, Minimum = 0.001)] public double? Zoom { get; set; }
@@ -124,18 +163,19 @@ public sealed class CameraPoseCommandHandler : IRuntimeCommandHandler<CameraPose
 {
     public Task ExecuteAsync(CameraPoseCommandArguments a, RuntimeCommandContext c) =>
         StageCommandExecution.TrackAndWaitAsync(
-            StageCommandExecution.Require<ICameraManager>(c).PoseTo(
-                new CameraPoseUpdate(
+            StageCommandExecution.Require<ICameraManager>(c).TransitionTo(
+                new CameraPoseTransitionRequest(
+                    new CameraPoseUpdate(
                     a.Center,
                     a.Zoom is null ? null : (float)a.Zoom.Value,
                     a.Rotation is null ? null : (float)a.Rotation.Value),
-                StageCommandExecution.Operation(a.Duration, a.Operation, a.Group, a.Curve)),
+                    StageCommandExecution.ViewTransition(a, c))),
             a.Wait,
             c);
 }
 
-[RuntimeCommand("camera", "reset", Category = "Camera", Usage = "camera reset [duration:<seconds>] [curve:<curve>] [wait:<bool>] [group:<id>] [operation:<id>]")]
-public sealed class CameraResetCommandArguments : CameraMotionCommandArguments
+[RuntimeCommand("camera", "reset", Category = "Camera", Usage = "camera reset [via:<cut|move|dissolve>] [duration:<seconds>] [curve:<curve>] [wait:<bool>] [group:<id>] [operation:<id>]")]
+public sealed class CameraResetCommandArguments : CameraViewTransitionCommandArguments
 {
 }
 public sealed class CameraResetCommandHandler : IRuntimeCommandHandler<CameraResetCommandArguments>
@@ -143,7 +183,7 @@ public sealed class CameraResetCommandHandler : IRuntimeCommandHandler<CameraRes
     public Task ExecuteAsync(CameraResetCommandArguments a, RuntimeCommandContext c) =>
         StageCommandExecution.TrackAndWaitAsync(
             StageCommandExecution.Require<ICameraManager>(c).ResetCamera(
-                StageCommandExecution.Operation(a.Duration, a.Operation, a.Group, a.Curve)), a.Wait, c);
+                StageCommandExecution.ViewTransition(a, c)), a.Wait, c);
 }
 
 [RuntimeCommand("camera", "shake", Category = "Camera", Usage = "camera shake [strength:<number>] [frequency:<number>] [duration:<seconds>] [wait:<bool>] [group:<id>] [operation:<id>]")]

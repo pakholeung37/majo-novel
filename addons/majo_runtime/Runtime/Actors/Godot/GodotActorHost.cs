@@ -14,6 +14,15 @@ internal sealed class GodotActorHost : IRuntimeService
     public GodotActorHost(Node owner)
     {
         this.owner = owner ?? throw new ArgumentNullException(nameof(owner));
+        StageViewport = new SubViewport
+        {
+            Name = "MajoStageViewport",
+            Disable3D = true,
+            TransparentBg = false,
+            RenderTargetUpdateMode = SubViewport.UpdateMode.Always,
+            HandleInputLocally = false,
+            GuiDisableInput = true,
+        };
         Root = new CanvasLayer { Name = "MajoActors" };
         BackgroundLayer = new Control
         {
@@ -23,9 +32,25 @@ internal sealed class GodotActorHost : IRuntimeService
         CharacterLayer = new Node2D { Name = "Characters" };
         Root.AddChild(BackgroundLayer);
         Root.AddChild(CharacterLayer);
+        StageViewport.AddChild(Root);
+
+        OutputLayer = new CanvasLayer { Name = "MajoCameraOutput" };
+        LiveOutput = CreateOutputView("LiveOutput");
+        TransitionSource = CreateOutputView("TransitionSource");
+        TransitionSource.Visible = false;
+        OutputLayer.AddChild(LiveOutput);
+        OutputLayer.AddChild(TransitionSource);
     }
 
+    public SubViewport StageViewport { get; }
+
     public CanvasLayer Root { get; }
+
+    public CanvasLayer OutputLayer { get; }
+
+    public TextureRect LiveOutput { get; }
+
+    public TextureRect TransitionSource { get; }
 
     public Control BackgroundLayer { get; }
 
@@ -39,8 +64,12 @@ internal sealed class GodotActorHost : IRuntimeService
             return Task.CompletedTask;
         }
 
-        owner.AddChild(Root);
+        owner.AddChild(StageViewport);
+        owner.AddChild(OutputLayer);
+        ResizeOutput();
+        LiveOutput.Texture = StageViewport.GetTexture();
         BackgroundLayer.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        owner.GetViewport().SizeChanged += ResizeOutput;
         isInitialized = true;
         return Task.CompletedTask;
     }
@@ -54,12 +83,40 @@ internal sealed class GodotActorHost : IRuntimeService
     public Task ShutdownAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (isInitialized && GodotObject.IsInstanceValid(Root))
+        if (isInitialized && GodotObject.IsInstanceValid(owner))
         {
-            Root.QueueFree();
+            owner.GetViewport().SizeChanged -= ResizeOutput;
+        }
+
+        if (isInitialized && GodotObject.IsInstanceValid(OutputLayer))
+        {
+            OutputLayer.QueueFree();
+        }
+
+        if (isInitialized && GodotObject.IsInstanceValid(StageViewport))
+        {
+            StageViewport.QueueFree();
         }
 
         isInitialized = false;
         return Task.CompletedTask;
     }
+
+    private void ResizeOutput()
+    {
+        var visibleSize = owner.GetViewport().GetVisibleRect().Size;
+        StageViewport.Size = new Vector2I(
+            Math.Max(1, Mathf.RoundToInt(visibleSize.X)),
+            Math.Max(1, Mathf.RoundToInt(visibleSize.Y)));
+        LiveOutput.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        TransitionSource.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+    }
+
+    private static TextureRect CreateOutputView(string name) => new()
+    {
+        Name = name,
+        ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+        StretchMode = TextureRect.StretchModeEnum.Scale,
+        MouseFilter = Control.MouseFilterEnum.Ignore,
+    };
 }

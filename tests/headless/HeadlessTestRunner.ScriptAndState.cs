@@ -412,7 +412,7 @@ public partial class HeadlessTestRunner
             await slots.DeleteAsync(slot.Id);
         }
 
-        var actorRoot = bootstrap.GetNode<CanvasLayer>("MajoActors");
+        var actorRoot = bootstrap.GetNode<CanvasLayer>("MajoStageViewport/MajoActors");
         var audioHost = bootstrap.GetNode("MajoAudioHost");
         await bootstrap.RequestShutdownAsync();
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);

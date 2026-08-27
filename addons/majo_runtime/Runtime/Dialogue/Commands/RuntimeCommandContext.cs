@@ -20,12 +20,14 @@ public sealed class RuntimeCommandContext
         IServiceResolver? services,
         CancellationToken cancellationToken,
         Action<IOperationHandle>? operationTracked = null,
-        AwaitScopeCoordinator? awaitScopes = null)
+        AwaitScopeCoordinator? awaitScopes = null,
+        CommandBindingContext? binding = null)
     {
         Actors = actors;
         Operations = operations;
         Services = services;
         CancellationToken = cancellationToken;
+        Binding = binding;
         this.operationTracked = operationTracked;
         this.awaitScopes = awaitScopes;
     }
@@ -37,6 +39,8 @@ public sealed class RuntimeCommandContext
     public IServiceResolver? Services { get; }
 
     public CancellationToken CancellationToken { get; }
+
+    public CommandBindingContext? Binding { get; }
 
     public TService Require<TService>(TService? service, string serviceName)
         where TService : class => service ?? throw new RuntimeCommandException(

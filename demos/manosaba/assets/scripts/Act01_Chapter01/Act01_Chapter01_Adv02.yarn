@@ -16,9 +16,9 @@ Ema: ——不对！ #line:0101Adv02_Ema001
 <<curtain closed duration:0>>
 // <<modifyBackgroundExtended Id:Stills Rotation:,,-10 Scale:g_backgroundDefaultScale * 3 Lazy:0 ScenePosition:80,-35 AppearanceAndTransition:490_1 SubId:Middle>>
 <<back stills appearance:Still_490_001 duration:0>>
-<<camera pose center:42.919,80.99 zoom:3 rotation:-10 duration:0>>
+<<camera pose center:37.384,74.816 zoom:3 rotation:10 via:cut>>
 // <<animateActorExtended ActorIds:Stills-Middle Loop:0 ScenePositionX:60 ScenePositionY:-20 EasingTypeName:EaseOutBack Duration:0.4>>
-<<camera move to:48.996,74.008 duration:0.4 curve:back-out>>
+<<camera move to:44.438,71.950 duration:0.4 curve:back-out>>
 // <<modifyBackgroundExtended TintColor:#000000 Duration:1.2 Lazy:0 AppearanceAndTransition:Transparent SubId:Overlay>>
 <<curtain open duration:1.2 wait:true>>
 // <<wait WaitMode:0.2>>
@@ -31,14 +31,16 @@ Ema: ——不对！ #line:0101Adv02_Ema001
 原来是做梦。她才刚安下心来——[br/]眼前的光景就逐渐清晰了起来。 #line:0101Adv02_Narrative003
 
 // <<playBgm BgmPath:Bgm_21_1 Volume:1.0 Loop:1 FadeInDuration:0.0>>
+<<bgm Bgm_021_001_Loop loop:true>>
 
 Ema: 咦，怎么回事，这里是……？ #line:0101Adv02_Ema002
 
 // <<modifyBackgroundExtended Id:Stills Rotation:,,0 Scale:g_backgroundDefaultScale Duration:0 Lazy:0 ScenePosition:50,50 AppearanceAndTransition:490_1>>
-<<camera reset duration:0>>
+<<back stills appearance:Still_490_001 duration:0>>
+<<camera reset via:dissolve duration:0.6 wait:true>>
 // <<resetText>>
 // <<hideActors ActorIds:Stills-Middle Duration:0.6 Lazy:0>>
-// <<wait WaitMode:0.8>>
+<<wait 0.2>>
 
 醒来的艾玛发现，这里不是她自己的房间。[br/]这是张做工粗糙的双层床，她睡在了这里的下铺。 #line:0101Adv02_Narrative004
 

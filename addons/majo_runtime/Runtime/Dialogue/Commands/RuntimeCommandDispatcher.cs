@@ -125,7 +125,8 @@ public sealed class RuntimeCommandDispatcher : IDisposable
             services,
             cancellationToken,
             TrackOperation,
-            awaitScopes);
+            awaitScopes,
+            binder.Context);
         try
         {
             cancellationToken.ThrowIfCancellationRequested();

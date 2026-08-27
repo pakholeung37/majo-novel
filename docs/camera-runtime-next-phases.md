@@ -9,7 +9,7 @@
 - Yarn 对外统一使用 `camera <verb>`。
 - Camera Rig、画面输出和合成布局是不同领域对象。
 - 精确几何状态使用 `pose`，基于主体自动构图使用 `focus`。
-- 稳定状态与 shake、blend 中间帧等瞬态状态严格分离。
+- 稳定状态与 shake、view transition 中间帧等瞬态状态严格分离。
 - 不为旧的 `cameraMove`、`cameraZoom` 等扁平命令提供兼容层。
 
 ## 2. 已完成基线
@@ -23,9 +23,15 @@
 - Linear、Sine、Cubic、Quint 和 Back motion curve。
 - 不同 Camera 属性并行动画，同属性动画从当前实际帧替换。
 - Camera TargetPose 存档、Skip 终态和 Reduce Motion 基础语义。
-- 单视图 Godot CanvasLayer backend。
+- 单 Camera Output 的 `via:cut|move|dissolve`。
+- 独立于 UI 和 Global Screen FX 的 Stage Viewport、冻结帧 capture 与单 source compositor。
+- Dissolve 的 Operation 终态、Reset/Shutdown 回收，以及 unit 和 Godot headless 覆盖。
 
 当前尚未具备命名 Camera Rig、输出路由、切换、自动构图、持续跟踪和多视图合成。
+
+单 Camera Pose 的 `via:cut|move|dissolve` 脚本契约、已实现范围和剩余验证见
+[`camera-view-transition-design.md`](camera-view-transition-design.md)。该能力是命名 Rig 和多输出
+Compositor 的前置阶段；后续必须复用同一个 View Transition spec。
 
 ## 3. 目标架构
 
@@ -118,26 +124,27 @@ public sealed record CameraCompositionState(
 <<camera pose camera:wide center:50,50 zoom:1>>
 <<camera move camera:closeup to:48,62 duration:0.4>>
 
-<<camera cut to:wide>>
-<<camera blend to:closeup duration:0.6 curve:cubic-in-out>>
+<<camera switch to:wide via:cut>>
+<<camera switch to:closeup via:dissolve duration:0.6 curve:cubic-in-out>>
 ```
 
 不增加 `camera select`。显式 `camera:<id>` 可以避免并行脚本和多输出场景中的隐式编辑上下文。
 
-省略 `camera:` 时，命令作用于 `main` output 的目标 Rig；blend 期间目标 Rig 指 blend target。
+省略 `camera:` 时，命令作用于 `main` output 的目标 Rig；dissolve 期间目标 Rig 指 transition
+target。
 
-### 4.2 Cut 语义
+### 4.2 Switch via Cut 语义
 
 - 立即修改指定 output 的 source。
-- 取消该 output 上正在运行的 blend。
+- 完成并清理该 output 上正在运行的 view transition。
 - 不修改源 Rig 或目标 Rig 的 Pose。
 - 被切走的 Rig 保持自身状态。
 
-### 4.3 Blend 语义
+### 4.3 Switch via Dissolve 语义
 
 - 同时渲染源 Rig 和目标 Rig。
 - 在 compositor 中混合，不通过移动某个 Rig 模拟转场。
-- 新 blend 打断旧 blend 时，捕获当前合成帧作为新 transition source，避免闪回。
+- 新 dissolve 打断旧 dissolve 时，捕获当前合成帧作为新 transition source，避免闪回。
 - Skip 直接落到目标 Rig，并释放临时纹理。
 
 ### 4.4 Operation 通道
@@ -287,7 +294,7 @@ GlobalScreenLayer
 
 - Tween 中间帧。
 - Shake modifier。
-- Blend 权重。
+- View transition 混合权重。
 - Transition capture texture。
 - Operation handle。
 
@@ -307,7 +314,7 @@ GlobalScreenLayer
 ### 8.1 Skip
 
 - Pose motion：落到 TargetPose。
-- Blend：切到目标 Rig。
+- Rig dissolve：切到目标 Rig。
 - Compose：落到目标布局。
 - Shake：清除 modifier。
 - Follow：保持 Driver。
@@ -315,7 +322,7 @@ GlobalScreenLayer
 ### 8.2 Cancel
 
 - Pose motion：冻结当前实际 Pose。
-- Blend：保留当前稳定 routing；下一次路由操作不得闪回。
+- Rig dissolve：落到目标 Rig；下一次 dissolve 替换则从当前合成帧开始，不得闪回。
 - Shake：清除 modifier。
 - Follow：只有 hold 或新 Driver 才停止。
 
@@ -341,8 +348,8 @@ cameraWorldMatrix = inverse(cameraViewMatrix)
 
 1. 引入 `CameraRigState`、Rig registry 和默认 `main` Rig。
 2. 让现有 pose/move/zoom/rotate/shake 支持显式 `camera:<id>`。
-3. 实现 Camera Director、`camera cut` 和稳定 output routing。
-4. 实现双 Rig blend 和 transition frame capture。
+3. 实现 Camera Director、`camera switch ... via:cut` 和稳定 output routing。
+4. 实现双 Rig `camera switch ... via:dissolve` 和 transition frame capture。
 5. 升级 Stage state schema，覆盖多 Rig 和 output routing。
 6. 实现 Actor bounds、focus framing、follow driver 和 hold。
 7. 将 StageWorld 从单 CanvasLayer backend 迁移到 Camera2D/SubViewport render graph。
@@ -353,11 +360,11 @@ cameraWorldMatrix = inverse(cameraViewMatrix)
 
 - 切走再切回后 Rig Pose 完整保留。
 - 新 motion 打断旧 motion不跳帧。
-- Blend 被打断不闪回源 Rig。
+- Dissolve 被打断不闪回源 Rig。
 - Follow 目标消失时冻结并产生 diagnostic。
 - Skip 后稳定状态确定且资源释放完成。
 - Save/Load 不恢复 shake、半帧和 transition texture。
 - 不同窗口比例下参考场景构图一致。
 - 单画面和多画面使用同一渲染路径。
 - Reduce Motion 不改变 Yarn 指令顺序或等待时长。
-- Headless 覆盖状态和 Operation，截图 smoke 覆盖 cut、blend、split 和 picture-in-picture。
+- Headless 覆盖状态和 Operation，截图 smoke 覆盖 cut、dissolve、split 和 picture-in-picture。

@@ -1,5 +1,6 @@
 #nullable enable
 
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
@@ -16,6 +17,11 @@ public sealed class FakeStageBackend : IStageBackend
     public bool IsTransitioning { get; private set; }
     public bool IsFlashing { get; private set; }
     public StageOperationSpec? LastCameraOperation { get; private set; }
+    public CameraViewTransitionKind? LastCameraTransition { get; private set; }
+    public CameraState? LastDissolveSource { get; private set; }
+    public CameraState? LastDissolveTarget { get; private set; }
+    public int ActiveCameraCaptureCount { get; private set; }
+    public List<string> CameraTransitionCalls { get; } = new();
 
     public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     public Task ResetAsync(CancellationToken cancellationToken)
@@ -25,6 +31,10 @@ public sealed class FakeStageBackend : IStageBackend
         ScreenEffect = ScreenEffectState.Default;
         IsShaking = IsTransitioning = IsFlashing = false;
         LastCameraOperation = null;
+        LastCameraTransition = null;
+        LastDissolveSource = LastDissolveTarget = null;
+        ActiveCameraCaptureCount = 0;
+        CameraTransitionCalls.Clear();
         return Task.CompletedTask;
     }
     public Task ShutdownAsync(CancellationToken cancellationToken) => ResetAsync(cancellationToken);
@@ -40,8 +50,35 @@ public sealed class FakeStageBackend : IStageBackend
     {
         cancellationToken.ThrowIfCancellationRequested();
         LastCameraOperation = operation;
+        LastCameraTransition = CameraViewTransitionKind.Move;
         ApplyCameraPose(properties);
         return Task.CompletedTask;
+    }
+    public Task DissolveCameraAsync(
+        CameraState from,
+        CameraState to,
+        StageOperationSpec operation,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        LastCameraOperation = operation;
+        LastCameraTransition = CameraViewTransitionKind.Dissolve;
+        LastDissolveSource = from.Validate();
+        LastDissolveTarget = to.Validate();
+        CameraTransitionCalls.Add("CaptureSource");
+        ActiveCameraCaptureCount++;
+        CameraTransitionCalls.Add("ApplyTargetPose");
+        ApplyCamera(to);
+        CameraTransitionCalls.Add("ShowSourceOverlay");
+        CameraTransitionCalls.Add("AnimateSourceAlpha");
+        ClearCameraViewTransition();
+        return Task.CompletedTask;
+    }
+    public void ClearCameraViewTransition()
+    {
+        if (ActiveCameraCaptureCount > 0)
+            CameraTransitionCalls.Add("ReleaseSource");
+        ActiveCameraCaptureCount = 0;
     }
     public Task ShakeAsync(CameraShakeSpec shake, CancellationToken cancellationToken)
     {

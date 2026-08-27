@@ -18,6 +18,7 @@ public sealed class CameraManager : ICameraManager
     private readonly IOperationScheduler operations;
     private readonly IStageAccessibility accessibility;
     private readonly Dictionary<string, IOperationHandle> propertyOperations = new(StringComparer.Ordinal);
+    private IOperationHandle? viewTransitionOperation;
     private IOperationHandle? shakeOperation;
     private bool isInitialized;
 
@@ -48,6 +49,7 @@ public sealed class CameraManager : ICameraManager
         CancelAll();
         State = TargetState = CameraState.Default;
         backend.ClearShake();
+        backend.ClearCameraViewTransition();
         backend.ApplyCamera(State);
         return Task.CompletedTask;
     }
@@ -57,6 +59,7 @@ public sealed class CameraManager : ICameraManager
         if (!isInitialized) return Task.CompletedTask;
         CancelAll();
         backend.ClearShake();
+        backend.ClearCameraViewTransition();
         isInitialized = false;
         return Task.CompletedTask;
     }
@@ -77,6 +80,21 @@ public sealed class CameraManager : ICameraManager
     {
         if (!float.IsFinite(degrees)) throw new ArgumentOutOfRangeException(nameof(degrees));
         return PoseTo(new CameraPoseUpdate(RotationDegrees: degrees), operation);
+    }
+
+    public IOperationHandle TransitionTo(CameraPoseTransitionRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        request.Validate();
+        return request.Transition.Kind switch
+        {
+            CameraViewTransitionKind.Cut or CameraViewTransitionKind.Move =>
+                PoseTo(request.Target, request.Transition.Operation),
+            CameraViewTransitionKind.Dissolve => DissolveTo(
+                request.Target,
+                request.Transition.Operation),
+            _ => throw new ArgumentOutOfRangeException(nameof(request)),
+        };
     }
 
     public IOperationHandle PoseTo(
@@ -104,12 +122,13 @@ public sealed class CameraManager : ICameraManager
             operation);
     }
 
-    public IOperationHandle ResetCamera(StageOperationSpec? operation = null) => PoseTo(
-        new CameraPoseUpdate(
-            CameraState.Default.Center,
-            CameraState.Default.Zoom,
-            CameraState.Default.RotationDegrees),
-        operation);
+    public IOperationHandle ResetCamera(CameraViewTransitionSpec transition) => TransitionTo(
+        new CameraPoseTransitionRequest(
+            new CameraPoseUpdate(
+                CameraState.Default.Center,
+                CameraState.Default.Zoom,
+                CameraState.Default.RotationDegrees),
+            transition));
 
     public IOperationHandle Shake(CameraShakeSpec shake)
     {
@@ -146,7 +165,70 @@ public sealed class CameraManager : ICameraManager
         state.Validate();
         CancelAll();
         State = TargetState = state;
+        backend.ClearCameraViewTransition();
         backend.ApplyCamera(state);
+    }
+
+    private IOperationHandle DissolveTo(
+        CameraPoseUpdate pose,
+        StageOperationSpec requested)
+    {
+        EnsureInitialized();
+        pose.Validate();
+        var spec = requested.Validate();
+        IOperationHandle[] predecessors;
+        CameraState final;
+        lock (gate)
+        {
+            predecessors = propertyOperations.Values
+                .Append(viewTransitionOperation)
+                .Where(value => value is not null)
+                .Cast<IOperationHandle>()
+                .Distinct()
+                .ToArray();
+            propertyOperations.Clear();
+            viewTransitionOperation = null;
+            foreach (var predecessor in predecessors) predecessor.Complete();
+            shakeOperation?.Complete();
+            final = pose.Apply(TargetState).Validate();
+            TargetState = final;
+        }
+
+        IOperationHandle? handle = null;
+        var definition = new OperationDefinition(
+            async context =>
+            {
+                await AwaitPredecessorsAsync(predecessors, context.CancellationToken);
+                CameraState from;
+                lock (gate) from = State;
+                await backend.DissolveCameraAsync(
+                    from,
+                    final,
+                    spec,
+                    context.CancellationToken);
+                lock (gate) State = final;
+            },
+            spec.OperationId,
+            spec.GroupId,
+            _ =>
+            {
+                backend.ClearCameraViewTransition();
+                backend.ApplyCamera(final);
+                lock (gate) State = TargetState = final;
+                return Task.CompletedTask;
+            },
+            _ =>
+            {
+                backend.ClearCameraViewTransition();
+                backend.ApplyCamera(final);
+                lock (gate) State = TargetState = final;
+                return Task.CompletedTask;
+            },
+            spec.Skippable);
+        handle = operations.Start(definition);
+        lock (gate) viewTransitionOperation = handle;
+        _ = ClearViewTransitionWhenDoneAsync(handle);
+        return handle;
     }
 
     private IOperationHandle StartTransform(
@@ -161,12 +243,20 @@ public sealed class CameraManager : ICameraManager
                 MotionCurve.BackIn or MotionCurve.BackOut or MotionCurve.BackInOut
             ? spec with { Curve = MotionCurve.CubicOut }
             : spec;
+        IOperationHandle? viewPredecessor;
+        lock (gate) viewPredecessor = viewTransitionOperation;
+        viewPredecessor?.Complete();
         IOperationHandle[] predecessors;
         CameraState final;
         lock (gate)
         {
             predecessors = properties.Where(propertyOperations.ContainsKey)
-                .Select(property => propertyOperations[property]).Distinct().ToArray();
+                .Select(property => propertyOperations[property])
+                .Append(viewPredecessor)
+                .Where(value => value is not null)
+                .Cast<IOperationHandle>()
+                .Distinct()
+                .ToArray();
             foreach (var predecessor in predecessors) predecessor.Cancel();
             final = target(TargetState).Validate();
             TargetState = final;
@@ -243,14 +333,24 @@ public sealed class CameraManager : ICameraManager
         lock (gate) if (ReferenceEquals(shakeOperation, handle)) shakeOperation = null;
     }
 
+    private async Task ClearViewTransitionWhenDoneAsync(IOperationHandle handle)
+    {
+        try { await handle.Completion; } catch { }
+        lock (gate)
+            if (ReferenceEquals(viewTransitionOperation, handle))
+                viewTransitionOperation = null;
+    }
+
     private void CancelAll()
     {
         IOperationHandle[] snapshot;
         lock (gate)
         {
             snapshot = propertyOperations.Values.Append(shakeOperation)
+                .Append(viewTransitionOperation)
                 .Where(value => value is not null).Cast<IOperationHandle>().Distinct().ToArray();
             propertyOperations.Clear();
+            viewTransitionOperation = null;
             shakeOperation = null;
         }
         foreach (var operation in snapshot) operation.Cancel();

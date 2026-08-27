@@ -56,6 +56,43 @@ public sealed record CameraPoseUpdate(
     };
 }
 
+public enum CameraViewTransitionKind
+{
+    Cut,
+    Move,
+    Dissolve,
+}
+
+public sealed record CameraViewTransitionSpec(
+    CameraViewTransitionKind Kind,
+    StageOperationSpec Operation)
+{
+    public CameraViewTransitionSpec Validate()
+    {
+        if (!Enum.IsDefined(Kind))
+            throw new ArgumentOutOfRangeException(nameof(Kind));
+        Operation.Validate();
+        if (Kind == CameraViewTransitionKind.Cut && Operation.DurationSeconds > 0)
+            throw new ArgumentException(
+                "Camera cut duration must be zero.", nameof(Operation));
+        return this;
+    }
+}
+
+public sealed record CameraPoseTransitionRequest(
+    CameraPoseUpdate Target,
+    CameraViewTransitionSpec Transition)
+{
+    public CameraPoseTransitionRequest Validate()
+    {
+        ArgumentNullException.ThrowIfNull(Target);
+        ArgumentNullException.ThrowIfNull(Transition);
+        Target.Validate();
+        Transition.Validate();
+        return this;
+    }
+}
+
 public enum MotionCurve
 {
     Linear,

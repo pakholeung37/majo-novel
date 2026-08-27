@@ -7,6 +7,7 @@ using Majo.Runtime.Actors.Godot;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Resources;
+using Majo.Runtime.Stage;
 
 namespace Majo.Runtime.HeadlessTests;
 
@@ -39,7 +40,9 @@ public partial class HeadlessTestRunner
         AddChild(bootstrap);
         await bootstrap.InitializationCompletion;
 
-        var actorRoot = bootstrap.GetNode<CanvasLayer>("MajoActors");
+        var stageViewport = bootstrap.GetNode<SubViewport>("MajoStageViewport");
+        var actorRoot = stageViewport.GetNode<CanvasLayer>("MajoActors");
+        var cameraOutput = bootstrap.GetNode<CanvasLayer>("MajoCameraOutput");
         var backgroundLayer = actorRoot.GetNode<Control>("Backgrounds");
         var characterLayer = actorRoot.GetNode<Node2D>("Characters");
         var manager = bootstrap.Host!.Services.Get<IActorManager>();
@@ -61,6 +64,8 @@ public partial class HeadlessTestRunner
             "Background TextureRect was created under the wrong host.");
         Assert(character.View.Texture is not null, "Character texture was not loaded.");
         Assert(background.CurrentView.Texture is not null, "Background texture was not loaded.");
+        Assert(cameraOutput.GetNode<TextureRect>("LiveOutput").Texture is ViewportTexture,
+            "Camera output did not present the isolated Stage viewport texture.");
         Assert(character.Position.IsEqualApprox(configuration.Actors.LeftPosition),
             "Character did not use the configured left position preset.");
 
@@ -143,6 +148,29 @@ public partial class HeadlessTestRunner
         Assert(background.SceneNode.GetChildCount() == 1,
             "Background crossfade left an extra TextureRect behind.");
 
+        var camera = bootstrap.Host.Services.Get<ICameraManager>();
+        var focusPose = new CameraState(new Vector2(37.384f, 74.816f), 3, 10);
+        camera.ApplyStableState(focusPose);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        var cameraDissolve = camera.ResetCamera(new CameraViewTransitionSpec(
+            CameraViewTransitionKind.Dissolve,
+            new StageOperationSpec(0.2)));
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        var transitionSource = cameraOutput.GetNode<TextureRect>("TransitionSource");
+        Assert(transitionSource.Visible && transitionSource.Texture is ImageTexture,
+            "Camera dissolve did not retain a captured source Camera output.");
+        Assert(transitionSource.Modulate.A is > 0 and < 1,
+            "Camera dissolve did not expose an intermediate mix value.");
+        Assert(camera.TargetState == CameraState.Default,
+            "Camera dissolve did not publish its stable target pose.");
+        await cameraDissolve.Completion;
+        Assert(camera.State == CameraState.Default &&
+                !transitionSource.Visible &&
+                transitionSource.Texture is null,
+            "Camera dissolve did not commit its target and release the source capture.");
+
         var resetOperation = character.ChangePosition(
             CharacterPositionPreset.Left, 10, "reset-character");
         await bootstrap.ResetRuntimeAsync();
@@ -171,6 +199,8 @@ public partial class HeadlessTestRunner
         Assert(!IsInstanceValid(closingBackgroundNode),
             "Runtime shutdown left a Background node behind.");
         Assert(!IsInstanceValid(actorRoot), "Runtime shutdown left the Actor root behind.");
+        Assert(!IsInstanceValid(stageViewport), "Runtime shutdown left the Stage viewport behind.");
+        Assert(!IsInstanceValid(cameraOutput), "Runtime shutdown left the Camera output behind.");
         Assert(!IsInstanceValid(bootstrap), "Actor Runtime node leaked after shutdown.");
     }
 }

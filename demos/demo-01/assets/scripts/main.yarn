@@ -28,7 +28,7 @@ Narrator: M18 显式预取了本章背景、立绘、BGM 与 Voice；preload gro
 <<await group:m19-stage>>
 Narrator: M19 Stage 已汇合 Camera、Transition 与 Screen FX Operation；这些效果可独立等待、取消、Skip，并把稳定终态写入 Game State。 #line:demo-m19-stage
 
-<<camera reset duration:0.2 wait:true operation:demo-stage-camera-reset>>
+<<camera reset via:move duration:0.2 wait:true operation:demo-stage-camera-reset>>
 <<overlay 0 duration:0.2 wait:true operation:demo-stage-overlay-reset>>
 <<letterbox 0 duration:0.2 wait:true operation:demo-stage-letterbox-reset>>
 <<demo_release_preload>>

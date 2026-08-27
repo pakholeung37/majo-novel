@@ -39,6 +39,15 @@ public sealed class StageCommandTests
         Assert.Equal(-35, poseArguments.Center?.Y);
         Assert.Equal(3, poseArguments.Zoom);
         Assert.Equal(-10, poseArguments.Rotation);
+        Assert.Equal(CameraViewTransitionKind.Cut, poseArguments.Via);
+        Assert.Null(poseArguments.Duration);
+
+        var dissolveArguments = binder.Bind<CameraPoseCommandArguments>(
+            pose.Descriptor,
+            new[] { "zoom:1", "via:dissolve", "duration:0.6", "curve:sine-in-out" });
+        Assert.Equal(CameraViewTransitionKind.Dissolve, dissolveArguments.Via);
+        Assert.Equal(0.6, dissolveArguments.Duration);
+        Assert.Equal(MotionCurve.SineInOut, dissolveArguments.Curve);
 
         var curtain = catalog.Get("curtain");
         var curtainArguments = binder.Bind<StageCurtainCommandArguments>(
@@ -46,6 +55,73 @@ public sealed class StageCommandTests
         Assert.Equal(StageCurtainPosition.Closed, curtainArguments.Position);
         Assert.Equal(1.2, curtainArguments.Duration);
         Assert.True(curtainArguments.Wait);
+    }
+
+    [Fact]
+    public void CameraCutRejectsANonZeroDuration()
+    {
+        var exception = Assert.Throws<ArgumentException>(() =>
+            new CameraViewTransitionSpec(
+                CameraViewTransitionKind.Cut,
+                new StageOperationSpec(0.1)).Validate());
+
+        Assert.Contains("duration must be zero", exception.Message);
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task CameraDissolveCapturesAppliesAndReleasesTheTargetView()
+    {
+        var backend = new FakeStageBackend();
+        var registry = new RuntimeServiceRegistry()
+            .AddSingleton<IFrameClock>(_ => new ImmediateFrameClock())
+            .AddSingleton<IOperationScheduler>(
+                resolver => new OperationScheduler(
+                    resolver.Get<IFrameClock>(),
+                    resolver.Get<IRuntimeLifetime>()),
+                typeof(IFrameClock),
+                typeof(IRuntimeLifetime))
+            .AddSingleton<IStageBackend>(_ => backend)
+            .AddSingleton<IStageAccessibility>(_ => new StageAccessibility())
+            .AddSingleton<ICameraManager>(
+                resolver => new CameraManager(
+                    resolver.Get<IStageBackend>(),
+                    resolver.Get<IOperationScheduler>(),
+                    resolver.Get<IStageAccessibility>()),
+                typeof(IStageBackend),
+                typeof(IOperationScheduler),
+                typeof(IStageAccessibility));
+        var host = registry.Build();
+        await host.InitializeAsync();
+        var camera = host.Services.Get<ICameraManager>();
+        var focus = new CameraState(new Godot.Vector2(37.384f, 74.816f), 3, 10);
+        camera.ApplyStableState(focus);
+
+        var operation = camera.TransitionTo(new CameraPoseTransitionRequest(
+            new CameraPoseUpdate(
+                CameraState.Default.Center,
+                CameraState.Default.Zoom,
+                CameraState.Default.RotationDegrees),
+            new CameraViewTransitionSpec(
+                CameraViewTransitionKind.Dissolve,
+                new StageOperationSpec(0.6, Curve: MotionCurve.SineInOut))));
+        await operation.Completion;
+
+        Assert.Equal(CameraState.Default, camera.State);
+        Assert.Equal(CameraState.Default, camera.TargetState);
+        Assert.Equal(focus, backend.LastDissolveSource);
+        Assert.Equal(CameraState.Default, backend.LastDissolveTarget);
+        Assert.Equal(
+            new[]
+            {
+                "CaptureSource",
+                "ApplyTargetPose",
+                "ShowSourceOverlay",
+                "AnimateSourceAlpha",
+                "ReleaseSource",
+            },
+            backend.CameraTransitionCalls);
+        Assert.Equal(0, backend.ActiveCameraCaptureCount);
+        await host.ShutdownAsync();
     }
 
     [Fact(Timeout = 5_000)]

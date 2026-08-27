@@ -132,6 +132,8 @@ public sealed class CommandBinder
         this.converters = converters ?? new CommandValueConverterRegistry();
     }
 
+    public CommandBindingContext Context => context;
+
     public TArguments Bind<TArguments>(
         CommandDescriptor descriptor,
         IReadOnlyList<string> arguments)
