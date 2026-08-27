@@ -16,8 +16,9 @@ Ema: ——不对！ #line:0101Adv02_Ema001
 <<curtain closed duration:0>>
 // <<modifyBackgroundExtended Id:Stills Rotation:,,-10 Scale:g_backgroundDefaultScale * 3 Lazy:0 ScenePosition:80,-35 AppearanceAndTransition:490_1 SubId:Middle>>
 <<back stills appearance:Still_490_001 duration:0>>
+<<camera pose center:42.919,80.99 zoom:3 rotation:-10 duration:0>>
 // <<animateActorExtended ActorIds:Stills-Middle Loop:0 ScenePositionX:60 ScenePositionY:-20 EasingTypeName:EaseOutBack Duration:0.4>>
-
+<<camera move to:48.996,74.008 duration:0.4 curve:back-out>>
 // <<modifyBackgroundExtended TintColor:#000000 Duration:1.2 Lazy:0 AppearanceAndTransition:Transparent SubId:Overlay>>
 <<curtain open duration:1.2 wait:true>>
 // <<wait WaitMode:0.2>>
@@ -34,6 +35,7 @@ Ema: ——不对！ #line:0101Adv02_Ema001
 Ema: 咦，怎么回事，这里是……？ #line:0101Adv02_Ema002
 
 // <<modifyBackgroundExtended Id:Stills Rotation:,,0 Scale:g_backgroundDefaultScale Duration:0 Lazy:0 ScenePosition:50,50 AppearanceAndTransition:490_1>>
+<<camera reset duration:0>>
 // <<resetText>>
 // <<hideActors ActorIds:Stills-Middle Duration:0.6 Lazy:0>>
 // <<wait WaitMode:0.8>>
@@ -303,4 +305,3 @@ Hiro: 不要随便碰我。[br/]你可别忘了，我讨厌你。 #line:0101Adv0
 
 // <<gotoModified Path:Act01_Chapter01/Act01_Chapter01_Adv03 SoftReset:true>>
 ===
-

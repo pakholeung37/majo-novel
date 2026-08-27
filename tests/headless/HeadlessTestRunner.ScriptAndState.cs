@@ -259,7 +259,7 @@ public partial class HeadlessTestRunner
                 restoredHero.Visible &&
                 restoredRoom.Appearance == "dark",
             "M9.6 actor/background state did not round-trip.");
-        Assert(camera.State.Position.IsEqualApprox(new Vector2(123, 234)) &&
+        Assert(camera.State.Center.IsEqualApprox(new Vector2(123, 234)) &&
                 Mathf.IsEqualApprox(camera.State.Zoom, 1.25f) &&
                 Mathf.IsEqualApprox(camera.State.RotationDegrees, 7) &&
                 Mathf.IsEqualApprox(curtain.State.Opacity, 0.75f) &&

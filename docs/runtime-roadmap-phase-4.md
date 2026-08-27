@@ -183,6 +183,9 @@ Settings 使用同一个当前 locale、fallback chain 与切换事务。
 
 ## 6. M19：Camera、Transition & Screen FX
 
+Camera 第一阶段之后的命名 Rig、Director、Focus/Follow 和多输出 Compositor 方案见
+[`camera-runtime-next-phases.md`](camera-runtime-next-phases.md)。
+
 ### 6.1 目标
 
 参考 naninovel 建立统一 Stage 表现服务，覆盖常用 2D Camera、场景转场和屏幕效果，同时保持现有
@@ -215,7 +218,8 @@ Operation、Playback、State 和 Resource 契约。
 - 默认 Godot 2D backend、Fake backend、Camera/Transition/Screen FX manager 和自定义
   transition provider registry 已接入 Runtime service graph。
 - Stage operation 复用现有 scheduler 的 wait/group/Cancel/Complete/Skip 语义，并提供
-  `cameraMove`、`cameraZoom`、`cameraRotate`、`cameraReset`、`cameraShake`、`transition`、
+  `camera pose`、`camera move`、`camera zoom`、`camera rotate`、`camera reset`、
+  `camera shake`、`transition`、
   `overlay`、`letterbox`、`flash` 命令。
 - 稳定 Camera、Screen Effect 和 Stage appearance 已纳入 Game State；headless 已覆盖
   Save/Load round-trip、Reset/Shutdown 和宿主节点提前释放的 teardown 边界。

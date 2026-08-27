@@ -46,17 +46,17 @@ public sealed class StageStateContributor : IStateContributor
 
     public string Key => BuiltInStateKeys.Stage;
     public StateScope Scope => StateScope.Game;
-    public int SchemaVersion => 1;
+    public int SchemaVersion => 2;
     public StateContributorCapability Capability => StateContributorCapability.DurableRollback;
 
     public ValueTask<StateRecord> CaptureAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var state = new StagePayload(
-            camera.State.Position.X,
-            camera.State.Position.Y,
-            camera.State.Zoom,
-            camera.State.RotationDegrees,
+            camera.TargetState.Center.X,
+            camera.TargetState.Center.Y,
+            camera.TargetState.Zoom,
+            camera.TargetState.RotationDegrees,
             curtain.State.Color.R,
             curtain.State.Color.G,
             curtain.State.Color.B,
@@ -85,7 +85,7 @@ public sealed class StageStateContributor : IStateContributor
         cancellationToken.ThrowIfCancellationRequested();
         var payload = Decode(record);
         camera.ApplyStableState(new CameraState(
-            new Vector2(payload.CameraX, payload.CameraY),
+            new Vector2(payload.CameraCenterX, payload.CameraCenterY),
             payload.CameraZoom,
             payload.CameraRotation));
         curtain.ApplyStableState(new StageCurtainState(
@@ -112,7 +112,7 @@ public sealed class StageStateContributor : IStateContributor
     private static StagePayload Decode(StateRecord record)
     {
         var payload = StateJson.Deserialize<StagePayload>(record);
-        if (!float.IsFinite(payload.CameraX) || !float.IsFinite(payload.CameraY) ||
+        if (!float.IsFinite(payload.CameraCenterX) || !float.IsFinite(payload.CameraCenterY) ||
             !float.IsFinite(payload.CameraZoom) || payload.CameraZoom <= 0 ||
             !float.IsFinite(payload.CameraRotation) ||
             !float.IsFinite(payload.CurtainR) || !float.IsFinite(payload.CurtainG) ||
@@ -134,8 +134,8 @@ public sealed class StageStateContributor : IStateContributor
     }
 
     private sealed record StagePayload(
-        float CameraX,
-        float CameraY,
+        float CameraCenterX,
+        float CameraCenterY,
         float CameraZoom,
         float CameraRotation,
         float CurtainR,

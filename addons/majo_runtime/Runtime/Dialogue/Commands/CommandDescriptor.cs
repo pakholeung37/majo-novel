@@ -11,14 +11,14 @@ namespace Majo.Runtime.Dialogue.Commands;
 public sealed class CommandDescriptor
 {
     private CommandDescriptor(
-        string name,
+        IReadOnlyList<string> path,
         string? category,
         Type argumentsType,
         IReadOnlyList<CommandParameterDescriptor> parameters,
         IReadOnlyList<CommandParameterSetDescriptor> parameterSets,
         string usage)
     {
-        Name = name;
+        Path = path;
         Category = category;
         ArgumentsType = argumentsType;
         Parameters = parameters;
@@ -26,7 +26,11 @@ public sealed class CommandDescriptor
         Usage = usage;
     }
 
-    public string Name { get; }
+    public string Name => string.Join(' ', Path);
+
+    public IReadOnlyList<string> Path { get; }
+
+    public string RootName => Path[0];
 
     public string? Category { get; }
 
@@ -89,7 +93,7 @@ public sealed class CommandDescriptor
             ? BuildUsage(command.Name, parameters)
             : command.Usage;
         return new CommandDescriptor(
-            command.Name,
+            command.Path,
             command.Category,
             argumentsType,
             Array.AsReadOnly(parameters),

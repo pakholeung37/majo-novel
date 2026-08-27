@@ -9,20 +9,33 @@ namespace Majo.Runtime.Dialogue.Commands;
 [AttributeUsage(AttributeTargets.Class, Inherited = false)]
 public sealed class RuntimeCommandAttribute : Attribute
 {
-    public RuntimeCommandAttribute(string name)
+    public RuntimeCommandAttribute(params string[] path)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        if (name.Any(char.IsWhiteSpace))
+        if (path is null || path.Length == 0)
         {
             throw new ArgumentException(
-                "Command names cannot contain whitespace.",
-                nameof(name));
+                "Command paths require at least one segment.",
+                nameof(path));
         }
 
-        Name = name;
+        for (var index = 0; index < path.Length; index++)
+        {
+            var segment = path[index];
+            ArgumentException.ThrowIfNullOrWhiteSpace(segment);
+            if (segment.Any(character => char.IsWhiteSpace(character) || character == ':'))
+            {
+                throw new ArgumentException(
+                    "Command path segments cannot contain whitespace or colons.",
+                    nameof(path));
+            }
+        }
+
+        Path = Array.AsReadOnly(path.ToArray());
     }
 
-    public string Name { get; }
+    public IReadOnlyList<string> Path { get; }
+
+    public string Name => string.Join(' ', Path);
 
     public string? Category { get; init; }
 
@@ -97,4 +110,5 @@ public enum CommandParameterSetRule
 {
     AtMostOne,
     ExactlyOne,
+    AtLeastOne,
 }

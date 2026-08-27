@@ -16,6 +16,7 @@ public sealed class StageCommandModule : IRuntimeCommandModule
             .Register(new CameraMoveCommandHandler())
             .Register(new CameraZoomCommandHandler())
             .Register(new CameraRotateCommandHandler())
+            .Register(new CameraPoseCommandHandler())
             .Register(new CameraResetCommandHandler())
             .Register(new CameraShakeCommandHandler())
             .Register(new StageTransitionCommandHandler())
@@ -29,8 +30,12 @@ public sealed class StageCommandModule : IRuntimeCommandModule
 internal static class StageCommandExecution
 {
     public static StageOperationSpec Operation(
-        double duration, string? operation, string? group, bool skippable = true) =>
-        new StageOperationSpec(duration, operation, group, skippable).Validate();
+        double duration,
+        string? operation,
+        string? group,
+        MotionCurve curve = MotionCurve.Linear,
+        bool skippable = true) =>
+        new StageOperationSpec(duration, operation, group, skippable, curve).Validate();
 
     public static async Task TrackAndWaitAsync(
         Majo.Runtime.Operations.IOperationHandle operation,
@@ -46,89 +51,117 @@ internal static class StageCommandExecution
             "stage", $"Stage service '{typeof(T).Name}' is not available.");
 }
 
-[RuntimeCommand("cameraMove", Category = "Stage", Usage = "cameraMove <x> <y> [duration:<seconds>] [wait:<bool>] [group:<id>] [operation:<id>]")]
-public sealed class CameraMoveCommandArguments
+public abstract class CameraMotionCommandArguments
 {
-    [CommandParameter("x", 0, Primary = true, Required = true)] public double X { get; set; }
-    [CommandParameter("y", 1, Required = true)] public double Y { get; set; }
-    [CommandParameter("duration", 2, DefaultValue = "0.35", Minimum = 0)] public double Duration { get; set; }
-    [CommandParameter("wait", 3)] public bool Wait { get; set; }
-    [CommandParameter("group", 4)] public string? Group { get; set; }
-    [CommandParameter("operation", 5)] public string? Operation { get; set; }
+    [CommandParameter("duration", 10, DefaultSource = CommandDefaultSource.AnimationDuration, Minimum = 0)]
+    public double Duration { get; set; }
+
+    [CommandParameter("curve", 11, DefaultValue = "linear")]
+    public MotionCurve Curve { get; set; }
+
+    [CommandParameter("wait", 12)] public bool Wait { get; set; }
+    [CommandParameter("group", 13)] public string? Group { get; set; }
+    [CommandParameter("operation", 14)] public string? Operation { get; set; }
+}
+
+[RuntimeCommand("camera", "move", Category = "Camera", Usage = "camera move to:<x,y> [duration:<seconds>] [curve:<curve>] [wait:<bool>] [group:<id>] [operation:<id>]")]
+public sealed class CameraMoveCommandArguments : CameraMotionCommandArguments
+{
+    [CommandParameter("to", 0, Required = true, ValueHint = "x,y")]
+    public Vector2 To { get; set; }
 }
 
 public sealed class CameraMoveCommandHandler : IRuntimeCommandHandler<CameraMoveCommandArguments>
 {
     public Task ExecuteAsync(CameraMoveCommandArguments a, RuntimeCommandContext c) =>
-        ExecuteAsync(a, c, StageCommandExecution.Require<ICameraManager>(c).MoveTo(
-            new Vector2((float)a.X, (float)a.Y), StageCommandExecution.Operation(a.Duration, a.Operation, a.Group)));
-
-    private static Task ExecuteAsync(CameraMoveCommandArguments a, RuntimeCommandContext c, Majo.Runtime.Operations.IOperationHandle op) =>
-        StageCommandExecution.TrackAndWaitAsync(op, a.Wait, c);
+        StageCommandExecution.TrackAndWaitAsync(
+            StageCommandExecution.Require<ICameraManager>(c).MoveTo(
+                a.To,
+                StageCommandExecution.Operation(
+                    a.Duration, a.Operation, a.Group, a.Curve)),
+            a.Wait,
+            c);
 }
 
-[RuntimeCommand("cameraZoom", Category = "Stage", Usage = "cameraZoom <zoom> [duration:<seconds>] [wait:<bool>] [group:<id>] [operation:<id>]")]
-public sealed class CameraZoomCommandArguments
+[RuntimeCommand("camera", "zoom", Category = "Camera", Usage = "camera zoom to:<zoom> [duration:<seconds>] [curve:<curve>] [wait:<bool>] [group:<id>] [operation:<id>]")]
+public sealed class CameraZoomCommandArguments : CameraMotionCommandArguments
 {
-    [CommandParameter("zoom", 0, Primary = true, Required = true, Minimum = 0.001)] public double Zoom { get; set; }
-    [CommandParameter("duration", 1, DefaultValue = "0.35", Minimum = 0)] public double Duration { get; set; }
-    [CommandParameter("wait", 2)] public bool Wait { get; set; }
-    [CommandParameter("group", 3)] public string? Group { get; set; }
-    [CommandParameter("operation", 4)] public string? Operation { get; set; }
+    [CommandParameter("to", 0, Required = true, Minimum = 0.001)] public double To { get; set; }
 }
 public sealed class CameraZoomCommandHandler : IRuntimeCommandHandler<CameraZoomCommandArguments>
 {
     public Task ExecuteAsync(CameraZoomCommandArguments a, RuntimeCommandContext c) =>
         StageCommandExecution.TrackAndWaitAsync(
-            StageCommandExecution.Require<ICameraManager>(c).ZoomTo((float)a.Zoom, StageCommandExecution.Operation(a.Duration, a.Operation, a.Group)), a.Wait, c);
+            StageCommandExecution.Require<ICameraManager>(c).ZoomTo(
+                (float)a.To,
+                StageCommandExecution.Operation(a.Duration, a.Operation, a.Group, a.Curve)), a.Wait, c);
 }
 
-[RuntimeCommand("cameraRotate", Category = "Stage", Usage = "cameraRotate <degrees> [duration:<seconds>] [wait:<bool>] [group:<id>] [operation:<id>]")]
-public sealed class CameraRotateCommandArguments
+[RuntimeCommand("camera", "rotate", Category = "Camera", Usage = "camera rotate to:<degrees> [duration:<seconds>] [curve:<curve>] [wait:<bool>] [group:<id>] [operation:<id>]")]
+public sealed class CameraRotateCommandArguments : CameraMotionCommandArguments
 {
-    [CommandParameter("degrees", 0, Primary = true, Required = true)] public double Degrees { get; set; }
-    [CommandParameter("duration", 1, DefaultValue = "0.35", Minimum = 0)] public double Duration { get; set; }
-    [CommandParameter("wait", 2)] public bool Wait { get; set; }
-    [CommandParameter("group", 3)] public string? Group { get; set; }
-    [CommandParameter("operation", 4)] public string? Operation { get; set; }
+    [CommandParameter("to", 0, Required = true)] public double To { get; set; }
 }
 public sealed class CameraRotateCommandHandler : IRuntimeCommandHandler<CameraRotateCommandArguments>
 {
     public Task ExecuteAsync(CameraRotateCommandArguments a, RuntimeCommandContext c) =>
         StageCommandExecution.TrackAndWaitAsync(
-            StageCommandExecution.Require<ICameraManager>(c).RotateTo((float)a.Degrees, StageCommandExecution.Operation(a.Duration, a.Operation, a.Group)), a.Wait, c);
+            StageCommandExecution.Require<ICameraManager>(c).RotateTo(
+                (float)a.To,
+                StageCommandExecution.Operation(a.Duration, a.Operation, a.Group, a.Curve)), a.Wait, c);
 }
 
-[RuntimeCommand("cameraReset", Category = "Stage", Usage = "cameraReset [duration:<seconds>] [wait:<bool>] [group:<id>] [operation:<id>]")]
-public sealed class CameraResetCommandArguments
+[RuntimeCommand("camera", "pose", Category = "Camera", Usage = "camera pose [center:<x,y>] [zoom:<number>] [rotation:<degrees>] [duration:<seconds>] [curve:<curve>] [wait:<bool>] [group:<id>] [operation:<id>]")]
+[CommandParameterSet(CommandParameterSetRule.AtLeastOne, "center", "zoom", "rotation")]
+public sealed class CameraPoseCommandArguments : CameraMotionCommandArguments
 {
-    [CommandParameter("duration", 0, DefaultValue = "0.35", Minimum = 0)] public double Duration { get; set; }
-    [CommandParameter("wait", 1)] public bool Wait { get; set; }
-    [CommandParameter("group", 2)] public string? Group { get; set; }
-    [CommandParameter("operation", 3)] public string? Operation { get; set; }
+    [CommandParameter("center", 0)] public Vector2? Center { get; set; }
+    [CommandParameter("zoom", 1, Minimum = 0.001)] public double? Zoom { get; set; }
+    [CommandParameter("rotation", 2)] public double? Rotation { get; set; }
+}
+
+public sealed class CameraPoseCommandHandler : IRuntimeCommandHandler<CameraPoseCommandArguments>
+{
+    public Task ExecuteAsync(CameraPoseCommandArguments a, RuntimeCommandContext c) =>
+        StageCommandExecution.TrackAndWaitAsync(
+            StageCommandExecution.Require<ICameraManager>(c).PoseTo(
+                new CameraPoseUpdate(
+                    a.Center,
+                    a.Zoom is null ? null : (float)a.Zoom.Value,
+                    a.Rotation is null ? null : (float)a.Rotation.Value),
+                StageCommandExecution.Operation(a.Duration, a.Operation, a.Group, a.Curve)),
+            a.Wait,
+            c);
+}
+
+[RuntimeCommand("camera", "reset", Category = "Camera", Usage = "camera reset [duration:<seconds>] [curve:<curve>] [wait:<bool>] [group:<id>] [operation:<id>]")]
+public sealed class CameraResetCommandArguments : CameraMotionCommandArguments
+{
 }
 public sealed class CameraResetCommandHandler : IRuntimeCommandHandler<CameraResetCommandArguments>
 {
     public Task ExecuteAsync(CameraResetCommandArguments a, RuntimeCommandContext c) =>
         StageCommandExecution.TrackAndWaitAsync(
-            StageCommandExecution.Require<ICameraManager>(c).ResetCamera(StageCommandExecution.Operation(a.Duration, a.Operation, a.Group)), a.Wait, c);
+            StageCommandExecution.Require<ICameraManager>(c).ResetCamera(
+                StageCommandExecution.Operation(a.Duration, a.Operation, a.Group, a.Curve)), a.Wait, c);
 }
 
-[RuntimeCommand("cameraShake", Category = "Stage", Usage = "cameraShake [strength:<number>] [duration:<seconds>] [wait:<bool>] [group:<id>] [operation:<id>]")]
+[RuntimeCommand("camera", "shake", Category = "Camera", Usage = "camera shake [strength:<number>] [frequency:<number>] [duration:<seconds>] [wait:<bool>] [group:<id>] [operation:<id>]")]
 public sealed class CameraShakeCommandArguments
 {
     [CommandParameter("strength", 0, DefaultValue = "8", Minimum = 0)] public double Strength { get; set; }
-    [CommandParameter("duration", 1, DefaultValue = "0.4", Minimum = 0)] public double Duration { get; set; }
-    [CommandParameter("wait", 2)] public bool Wait { get; set; }
-    [CommandParameter("group", 3)] public string? Group { get; set; }
-    [CommandParameter("operation", 4)] public string? Operation { get; set; }
+    [CommandParameter("frequency", 1, DefaultValue = "20", Minimum = 0.001)] public double Frequency { get; set; }
+    [CommandParameter("duration", 2, DefaultValue = "0.4", Minimum = 0)] public double Duration { get; set; }
+    [CommandParameter("wait", 3)] public bool Wait { get; set; }
+    [CommandParameter("group", 4)] public string? Group { get; set; }
+    [CommandParameter("operation", 5)] public string? Operation { get; set; }
 }
 public sealed class CameraShakeCommandHandler : IRuntimeCommandHandler<CameraShakeCommandArguments>
 {
     public Task ExecuteAsync(CameraShakeCommandArguments a, RuntimeCommandContext c) =>
         StageCommandExecution.TrackAndWaitAsync(
             StageCommandExecution.Require<ICameraManager>(c).Shake(new CameraShakeSpec(
-                new Vector2((float)a.Strength, (float)a.Strength), 20,
+                new Vector2((float)a.Strength, (float)a.Strength), a.Frequency,
                 StageCommandExecution.Operation(a.Duration, a.Operation, a.Group))), a.Wait, c);
 }
 

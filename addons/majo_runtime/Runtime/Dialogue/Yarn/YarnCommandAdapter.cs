@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Majo.Runtime.Dialogue.Commands;
@@ -71,15 +72,18 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
             dispatcher.Validate(catalog);
             dispatcher.CommandFailed += HandleCommandFailed;
             registry.UnhandledCommand += HandleUnhandledCommand;
-            foreach (var command in catalog.Commands)
+            foreach (var group in catalog.Commands.GroupBy(
+                         command => command.RootName,
+                         StringComparer.OrdinalIgnoreCase))
             {
                 var handler = new CatalogCommandHandler(
-                    command,
+                    group.Key,
+                    group.ToArray(),
                     dispatcher,
                     registry,
                     abortOnRecoverableFailure);
                 commandHandlers.Add(handler);
-                Register(command.Name, (Func<string[], Task>)handler.ExecuteAsync);
+                Register(group.Key, (Func<string[], Task>)handler.ExecuteAsync);
             }
 
             isInitialized = true;
@@ -181,18 +185,21 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
 
     private sealed class CatalogCommandHandler
     {
-        private readonly RuntimeCommandRegistration command;
+        private readonly string rootName;
+        private readonly IReadOnlyList<RuntimeCommandRegistration> commands;
         private readonly RuntimeCommandDispatcher dispatcher;
         private readonly IYarnCommandRegistry registry;
         private readonly bool abortOnRecoverableFailure;
 
         public CatalogCommandHandler(
-            RuntimeCommandRegistration command,
+            string rootName,
+            IReadOnlyList<RuntimeCommandRegistration> commands,
             RuntimeCommandDispatcher dispatcher,
             IYarnCommandRegistry registry,
             bool abortOnRecoverableFailure)
         {
-            this.command = command;
+            this.rootName = rootName;
+            this.commands = commands;
             this.dispatcher = dispatcher;
             this.registry = registry;
             this.abortOnRecoverableFailure = abortOnRecoverableFailure;
@@ -202,9 +209,17 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
         {
             try
             {
+                var command = Resolve(arguments, out var consumedSegments);
+                if (command is null)
+                {
+                    dispatcher.ReportUnknownCommand(string.Join(
+                        ' ', new[] { rootName }.Concat(arguments)));
+                    return;
+                }
+
                 await dispatcher.ExecuteAsync(
                     command,
-                    arguments,
+                    arguments.Skip(consumedSegments).ToArray(),
                     registry.DialogueCancellationToken);
             }
             catch (RuntimeCommandException exception) when (
@@ -213,6 +228,34 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
                 // The dispatcher already recorded and published the failure. Returning a
                 // completed task lets Yarn advance to the next instruction.
             }
+        }
+
+        private RuntimeCommandRegistration? Resolve(
+            IReadOnlyList<string> arguments,
+            out int consumedSegments)
+        {
+            RuntimeCommandRegistration? result = null;
+            consumedSegments = 0;
+            foreach (var candidate in commands)
+            {
+                var childSegments = candidate.Descriptor.Path.Skip(1).ToArray();
+                if (childSegments.Length > arguments.Count ||
+                    !childSegments.Select((segment, index) => segment.Equals(
+                        arguments[index], StringComparison.OrdinalIgnoreCase)).All(value => value))
+                {
+                    continue;
+                }
+
+                if (childSegments.Length < consumedSegments)
+                {
+                    continue;
+                }
+
+                result = candidate;
+                consumedSegments = childSegments.Length;
+            }
+
+            return result;
         }
     }
 }

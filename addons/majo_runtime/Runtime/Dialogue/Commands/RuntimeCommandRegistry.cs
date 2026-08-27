@@ -58,7 +58,7 @@ public sealed class RuntimeCommandRegistry : IRuntimeCommandRegistrar
         ArgumentNullException.ThrowIfNull(handler);
         EnsureMutable();
         var descriptor = CommandDescriptor.Create<TArguments>();
-        if (YarnReservedNames.Contains(descriptor.Name))
+        if (YarnReservedNames.Contains(descriptor.RootName))
         {
             throw new RuntimeCommandException(
                 descriptor.Name,
@@ -134,6 +134,8 @@ public abstract class RuntimeCommandRegistration
     }
 
     public string Name => Descriptor.Name;
+
+    public string RootName => Descriptor.RootName;
 
     public CommandDescriptor Descriptor { get; }
 

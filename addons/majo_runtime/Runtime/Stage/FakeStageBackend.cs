@@ -9,11 +9,13 @@ namespace Majo.Runtime.Stage;
 public sealed class FakeStageBackend : IStageBackend
 {
     public CameraState Camera { get; private set; } = CameraState.Default;
+    public CameraState RenderedCamera => Camera;
     public StageCurtainState Curtain { get; private set; } = StageCurtainState.Default;
     public ScreenEffectState ScreenEffect { get; private set; } = ScreenEffectState.Default;
     public bool IsShaking { get; private set; }
     public bool IsTransitioning { get; private set; }
     public bool IsFlashing { get; private set; }
+    public StageOperationSpec? LastCameraOperation { get; private set; }
 
     public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     public Task ResetAsync(CancellationToken cancellationToken)
@@ -22,26 +24,23 @@ public sealed class FakeStageBackend : IStageBackend
         Curtain = StageCurtainState.Default;
         ScreenEffect = ScreenEffectState.Default;
         IsShaking = IsTransitioning = IsFlashing = false;
+        LastCameraOperation = null;
         return Task.CompletedTask;
     }
     public Task ShutdownAsync(CancellationToken cancellationToken) => ResetAsync(cancellationToken);
     public void ApplyCamera(CameraState state) => Camera = state.Validate();
-    public Task AnimateCameraPositionAsync(Vector2 from, Vector2 to, double duration, CancellationToken cancellationToken)
+    public void ApplyCameraPose(CameraPoseUpdate pose) =>
+        Camera = pose.Validate().Apply(Camera).Validate();
+    public Task AnimateCameraAsync(
+        CameraState from,
+        CameraState to,
+        CameraPoseUpdate properties,
+        StageOperationSpec operation,
+        CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        Camera = Camera with { Position = to };
-        return Task.CompletedTask;
-    }
-    public Task AnimateCameraZoomAsync(float from, float to, double duration, CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        Camera = Camera with { Zoom = to };
-        return Task.CompletedTask;
-    }
-    public Task AnimateCameraRotationAsync(float from, float to, double duration, CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        Camera = Camera with { RotationDegrees = to };
+        LastCameraOperation = operation;
+        ApplyCameraPose(properties);
         return Task.CompletedTask;
     }
     public Task ShakeAsync(CameraShakeSpec shake, CancellationToken cancellationToken)

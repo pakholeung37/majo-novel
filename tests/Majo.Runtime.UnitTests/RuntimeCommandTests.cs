@@ -307,7 +307,10 @@ public sealed class RuntimeCommandTests
 
         await adapter.InitializeAsync(CancellationToken.None);
 
-        Assert.Equal(catalog.Commands.Select(command => command.Name), registry.Handlers.Keys);
+        Assert.Equal(
+            catalog.Commands.Select(command => command.RootName).Distinct(
+                StringComparer.OrdinalIgnoreCase),
+            registry.Handlers.Keys);
         Assert.DoesNotContain("wait", registry.Handlers.Keys);
         Assert.DoesNotContain("stop", registry.Handlers.Keys);
         Assert.All(registry.Handlers.Values, handler =>
@@ -324,8 +327,36 @@ public sealed class RuntimeCommandTests
         await adapter.ShutdownAsync(CancellationToken.None);
         Assert.Empty(registry.Handlers);
         Assert.Equal(
-            catalog.Commands.Select(command => command.Name).Reverse(),
+            catalog.Commands.Select(command => command.RootName).Distinct(
+                StringComparer.OrdinalIgnoreCase).Reverse(),
             registry.RemovedCommands);
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task AdapterDispatchesHierarchicalCommandToItsOwnDescriptor()
+    {
+        var registry = new FakeCommandRegistry();
+        HierarchicalProbeArguments? received = null;
+        var adapter = CreateAdapter(
+            registry,
+            new RecordingCommandService(),
+            out var catalog,
+            configure: commands => commands.Register<HierarchicalProbeArguments>(
+                (arguments, _) =>
+                {
+                    received = arguments;
+                    return Task.CompletedTask;
+                }));
+
+        await adapter.InitializeAsync(CancellationToken.None);
+
+        Assert.Equal("camera probe", catalog.Get("camera probe").Name);
+        var handler = Assert.IsType<Func<string[], Task>>(registry.Handlers["camera"]);
+        await handler(["probe", "sample", "detail:value"]);
+
+        Assert.Equal("sample", received?.Value);
+        Assert.Equal("value", received?.Detail);
+        await adapter.ShutdownAsync(CancellationToken.None);
     }
 
     [Fact(Timeout = 5_000)]
@@ -777,6 +808,16 @@ public sealed class RuntimeCommandTests
 
     [RuntimeCommand("probe", Category = "Test", Usage = "probe <value> detail:<value>")]
     private sealed class ProbeCommandArguments
+    {
+        [CommandParameter("value", 0, Primary = true, Required = true)]
+        public string Value { get; set; } = string.Empty;
+
+        [CommandParameter("detail", 1, Required = true)]
+        public string Detail { get; set; } = string.Empty;
+    }
+
+    [RuntimeCommand("camera", "probe", Category = "Test")]
+    private sealed class HierarchicalProbeArguments
     {
         [CommandParameter("value", 0, Primary = true, Required = true)]
         public string Value { get; set; } = string.Empty;

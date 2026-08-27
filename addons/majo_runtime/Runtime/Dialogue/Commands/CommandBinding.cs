@@ -4,6 +4,8 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using Godot;
+using Majo.Runtime.Stage;
 
 namespace Majo.Runtime.Dialogue.Commands;
 
@@ -52,6 +54,14 @@ public sealed class CommandValueConverterRegistry
             double.IsFinite(result)
                 ? result
                 : throw new FormatException("must be a finite number"));
+        Register<Vector2>(ParseVector2);
+        Register<MotionCurve>(value => Enum.TryParse<MotionCurve>(
+                value.Replace("-", string.Empty, StringComparison.Ordinal),
+                ignoreCase: true,
+                out var result)
+            ? result
+            : throw new FormatException(
+                "must be a supported motion curve such as linear, cubic-out, or back-out"));
     }
 
     public CommandValueConverterRegistry Register<TValue>(Func<string, TValue> converter)
@@ -92,6 +102,20 @@ public sealed class CommandValueConverterRegistry
     {
         var targetType = Nullable.GetUnderlyingType(valueType) ?? valueType;
         return targetType.IsEnum || converters.ContainsKey(targetType);
+    }
+
+    private static Vector2 ParseVector2(string value)
+    {
+        var components = value.Split(',', StringSplitOptions.TrimEntries);
+        if (components.Length != 2 ||
+            !float.TryParse(components[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var x) ||
+            !float.TryParse(components[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var y) ||
+            !float.IsFinite(x) || !float.IsFinite(y))
+        {
+            throw new FormatException("must be a finite x,y vector");
+        }
+
+        return new Vector2(x, y);
     }
 }
 
@@ -297,7 +321,8 @@ public sealed class CommandBinder
         foreach (var set in descriptor.ParameterSets)
         {
             var count = set.Parameters.Count(assignedNames.Contains);
-            if (count > 1)
+            if (set.Rule is (CommandParameterSetRule.AtMostOne or
+                    CommandParameterSetRule.ExactlyOne) && count > 1)
             {
                 throw Invalid(
                     descriptor,
@@ -309,6 +334,13 @@ public sealed class CommandBinder
                 throw Invalid(
                     descriptor,
                     $"either {string.Join(" or ", set.Parameters)} is required");
+            }
+
+            if (set.Rule == CommandParameterSetRule.AtLeastOne && count == 0)
+            {
+                throw Invalid(
+                    descriptor,
+                    $"at least one of {string.Join(", ", set.Parameters)} is required");
             }
         }
     }

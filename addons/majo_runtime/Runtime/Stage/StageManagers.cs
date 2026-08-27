@@ -64,56 +64,51 @@ public sealed class CameraManager : ICameraManager
     public IOperationHandle MoveTo(Vector2 position, StageOperationSpec? operation = null)
     {
         ValidatePosition(position);
-        return StartTransform(
-            ["position"],
-            state => state with { Position = position },
-            (from, to, duration, token) => backend.AnimateCameraPositionAsync(
-                from.Position, to.Position, duration, token),
-            operation);
+        return PoseTo(new CameraPoseUpdate(Center: position), operation);
     }
 
     public IOperationHandle ZoomTo(float zoom, StageOperationSpec? operation = null)
     {
         if (!float.IsFinite(zoom) || zoom <= 0) throw new ArgumentOutOfRangeException(nameof(zoom));
-        return StartTransform(
-            ["zoom"],
-            state => state with { Zoom = zoom },
-            (from, to, duration, token) => backend.AnimateCameraZoomAsync(
-                from.Zoom, to.Zoom, duration, token),
-            operation);
+        return PoseTo(new CameraPoseUpdate(Zoom: zoom), operation);
     }
 
     public IOperationHandle RotateTo(float degrees, StageOperationSpec? operation = null)
     {
         if (!float.IsFinite(degrees)) throw new ArgumentOutOfRangeException(nameof(degrees));
-        return StartTransform(
-            ["rotation"],
-            state => state with { RotationDegrees = degrees },
-            (from, to, duration, token) => backend.AnimateCameraRotationAsync(
-                from.RotationDegrees, to.RotationDegrees, duration, token),
-            operation);
+        return PoseTo(new CameraPoseUpdate(RotationDegrees: degrees), operation);
     }
 
-    public IOperationHandle Focus(Vector2 position, float zoom, StageOperationSpec? operation = null)
+    public IOperationHandle PoseTo(
+        CameraPoseUpdate pose,
+        StageOperationSpec? operation = null)
     {
-        ValidatePosition(position);
-        if (!float.IsFinite(zoom) || zoom <= 0) throw new ArgumentOutOfRangeException(nameof(zoom));
+        ArgumentNullException.ThrowIfNull(pose);
+        pose.Validate();
+        var properties = new List<string>(3);
+        if (pose.Center is not null) properties.Add("center");
+        if (pose.Zoom is not null) properties.Add("zoom");
+        if (pose.RotationDegrees is not null) properties.Add("rotation");
         return StartTransform(
-            ["position", "zoom"],
-            state => state with { Position = position, Zoom = zoom },
-            (from, to, duration, token) => Task.WhenAll(
-                backend.AnimateCameraPositionAsync(from.Position, to.Position, duration, token),
-                backend.AnimateCameraZoomAsync(from.Zoom, to.Zoom, duration, token)),
+            properties,
+            pose.Apply,
+            (from, to, spec, token) => backend.AnimateCameraAsync(
+                from,
+                to,
+                new CameraPoseUpdate(
+                    properties.Contains("center") ? to.Center : null,
+                    properties.Contains("zoom") ? to.Zoom : null,
+                    properties.Contains("rotation") ? to.RotationDegrees : null),
+                spec,
+                token),
             operation);
     }
 
-    public IOperationHandle ResetCamera(StageOperationSpec? operation = null) => StartTransform(
-        ["position", "zoom", "rotation"],
-        _ => CameraState.Default,
-        (from, to, duration, token) => Task.WhenAll(
-            backend.AnimateCameraPositionAsync(from.Position, to.Position, duration, token),
-            backend.AnimateCameraZoomAsync(from.Zoom, to.Zoom, duration, token),
-            backend.AnimateCameraRotationAsync(from.RotationDegrees, to.RotationDegrees, duration, token)),
+    public IOperationHandle ResetCamera(StageOperationSpec? operation = null) => PoseTo(
+        new CameraPoseUpdate(
+            CameraState.Default.Center,
+            CameraState.Default.Zoom,
+            CameraState.Default.RotationDegrees),
         operation);
 
     public IOperationHandle Shake(CameraShakeSpec shake)
@@ -128,6 +123,10 @@ public sealed class CameraManager : ICameraManager
             {
                 if (!accessibility.ReduceMotion)
                     await backend.ShakeAsync(shake, context.CancellationToken);
+                else
+                    await context.FrameClock.DelayAsync(
+                        TimeSpan.FromSeconds(spec.DurationSeconds),
+                        context.CancellationToken);
                 backend.ClearShake();
             },
             spec.OperationId,
@@ -153,18 +152,22 @@ public sealed class CameraManager : ICameraManager
     private IOperationHandle StartTransform(
         IReadOnlyList<string> properties,
         Func<CameraState, CameraState> target,
-        Func<CameraState, CameraState, double, CancellationToken, Task> animate,
+        Func<CameraState, CameraState, StageOperationSpec, CancellationToken, Task> animate,
         StageOperationSpec? requested)
     {
         EnsureInitialized();
         var spec = (requested ?? new StageOperationSpec()).Validate();
+        var playbackSpec = accessibility.ReduceMotion && spec.Curve is
+                MotionCurve.BackIn or MotionCurve.BackOut or MotionCurve.BackInOut
+            ? spec with { Curve = MotionCurve.CubicOut }
+            : spec;
         IOperationHandle[] predecessors;
         CameraState final;
         lock (gate)
         {
             predecessors = properties.Where(propertyOperations.ContainsKey)
                 .Select(property => propertyOperations[property]).Distinct().ToArray();
-            foreach (var predecessor in predecessors) predecessor.Complete();
+            foreach (var predecessor in predecessors) predecessor.Cancel();
             final = target(TargetState).Validate();
             TargetState = final;
         }
@@ -176,7 +179,7 @@ public sealed class CameraManager : ICameraManager
                 await AwaitPredecessorsAsync(predecessors, context.CancellationToken);
                 CameraState from;
                 lock (gate) from = State;
-                await animate(from, final, spec.DurationSeconds, context.CancellationToken);
+                await animate(from, final, playbackSpec, context.CancellationToken);
                 lock (gate) State = MergeProperties(State, final, properties);
             },
             spec.OperationId,
@@ -184,13 +187,17 @@ public sealed class CameraManager : ICameraManager
             _ =>
             {
                 lock (gate) State = MergeProperties(State, final, properties);
-                backend.ApplyCamera(TargetState);
+                backend.ApplyCameraPose(CreatePoseUpdate(final, properties));
                 return Task.CompletedTask;
             },
             _ =>
             {
-                lock (gate) TargetState = MergeProperties(TargetState, State, properties);
-                backend.ApplyCamera(State);
+                var sampled = backend.RenderedCamera;
+                lock (gate)
+                {
+                    State = MergeProperties(State, sampled, properties);
+                    TargetState = MergeProperties(TargetState, sampled, properties);
+                }
                 return Task.CompletedTask;
             },
             spec.Skippable);
@@ -205,12 +212,19 @@ public sealed class CameraManager : ICameraManager
         CameraState source,
         IReadOnlyCollection<string> properties) => current with
     {
-        Position = properties.Contains("position") ? source.Position : current.Position,
+        Center = properties.Contains("center") ? source.Center : current.Center,
         Zoom = properties.Contains("zoom") ? source.Zoom : current.Zoom,
         RotationDegrees = properties.Contains("rotation")
             ? source.RotationDegrees
             : current.RotationDegrees,
     };
+
+    private static CameraPoseUpdate CreatePoseUpdate(
+        CameraState state,
+        IReadOnlyCollection<string> properties) => new(
+        properties.Contains("center") ? state.Center : null,
+        properties.Contains("zoom") ? state.Zoom : null,
+        properties.Contains("rotation") ? state.RotationDegrees : null);
 
     private async Task ClearPropertiesWhenDoneAsync(
         IOperationHandle handle,
@@ -247,7 +261,17 @@ public sealed class CameraManager : ICameraManager
         CancellationToken cancellationToken)
     {
         foreach (var predecessor in predecessors)
-            await predecessor.Completion.WaitAsync(cancellationToken);
+        {
+            try
+            {
+                await predecessor.Completion.WaitAsync(cancellationToken);
+            }
+            catch (OperationCanceledException) when (
+                predecessor.State == OperationState.Cancelled &&
+                !cancellationToken.IsCancellationRequested)
+            {
+            }
+        }
     }
 
     private static void ValidatePosition(Vector2 value)

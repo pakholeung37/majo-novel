@@ -19,10 +19,10 @@ public interface ICameraManager : IRuntimeService
 {
     CameraState State { get; }
     CameraState TargetState { get; }
+    IOperationHandle PoseTo(CameraPoseUpdate pose, StageOperationSpec? operation = null);
     IOperationHandle MoveTo(Vector2 position, StageOperationSpec? operation = null);
     IOperationHandle ZoomTo(float zoom, StageOperationSpec? operation = null);
     IOperationHandle RotateTo(float degrees, StageOperationSpec? operation = null);
-    IOperationHandle Focus(Vector2 position, float zoom, StageOperationSpec? operation = null);
     IOperationHandle ResetCamera(StageOperationSpec? operation = null);
     IOperationHandle Shake(CameraShakeSpec shake);
     void ApplyStableState(CameraState state);
@@ -76,10 +76,15 @@ public interface IStageTransitionProvider
 
 public interface IStageBackend : IRuntimeService
 {
+    CameraState RenderedCamera { get; }
     void ApplyCamera(CameraState state);
-    Task AnimateCameraPositionAsync(Vector2 from, Vector2 to, double duration, CancellationToken cancellationToken);
-    Task AnimateCameraZoomAsync(float from, float to, double duration, CancellationToken cancellationToken);
-    Task AnimateCameraRotationAsync(float from, float to, double duration, CancellationToken cancellationToken);
+    void ApplyCameraPose(CameraPoseUpdate pose);
+    Task AnimateCameraAsync(
+        CameraState from,
+        CameraState to,
+        CameraPoseUpdate properties,
+        StageOperationSpec operation,
+        CancellationToken cancellationToken);
     Task ShakeAsync(CameraShakeSpec shake, CancellationToken cancellationToken);
     void ClearShake();
     Task RunTransitionAsync(StageTransitionRequest request, CancellationToken cancellationToken);

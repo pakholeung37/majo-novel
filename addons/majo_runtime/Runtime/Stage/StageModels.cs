@@ -6,16 +6,20 @@ using Majo.Runtime.Resources;
 
 namespace Majo.Runtime.Stage;
 
+/// <param name="Center">
+/// Observation center in reference-scene percentages: 0,0 is bottom-left and
+/// 50,50 is the center. Values outside the scene are valid.
+/// </param>
 public sealed record CameraState(
-    Vector2 Position,
+    Vector2 Center,
     float Zoom,
     float RotationDegrees)
 {
-    public static CameraState Default { get; } = new(Vector2.Zero, 1, 0);
+    public static CameraState Default { get; } = new(new Vector2(50, 50), 1, 0);
 
     public CameraState Validate()
     {
-        if (!float.IsFinite(Position.X) || !float.IsFinite(Position.Y) ||
+        if (!float.IsFinite(Center.X) || !float.IsFinite(Center.Y) ||
             !float.IsFinite(Zoom) || Zoom <= 0 ||
             !float.IsFinite(RotationDegrees))
         {
@@ -23,6 +27,50 @@ public sealed record CameraState(
         }
         return this;
     }
+}
+
+public sealed record CameraPoseUpdate(
+    Vector2? Center = null,
+    float? Zoom = null,
+    float? RotationDegrees = null)
+{
+    public CameraPoseUpdate Validate()
+    {
+        if (Center is { } center &&
+            (!float.IsFinite(center.X) || !float.IsFinite(center.Y)))
+            throw new ArgumentException("Camera center must be finite.");
+        if (Zoom is { } zoom && (!float.IsFinite(zoom) || zoom <= 0))
+            throw new ArgumentOutOfRangeException(nameof(Zoom));
+        if (RotationDegrees is { } rotation && !float.IsFinite(rotation))
+            throw new ArgumentOutOfRangeException(nameof(RotationDegrees));
+        if (Center is null && Zoom is null && RotationDegrees is null)
+            throw new ArgumentException("Camera pose must change at least one property.");
+        return this;
+    }
+
+    public CameraState Apply(CameraState state) => state with
+    {
+        Center = Center ?? state.Center,
+        Zoom = Zoom ?? state.Zoom,
+        RotationDegrees = RotationDegrees ?? state.RotationDegrees,
+    };
+}
+
+public enum MotionCurve
+{
+    Linear,
+    SineIn,
+    SineOut,
+    SineInOut,
+    CubicIn,
+    CubicOut,
+    CubicInOut,
+    QuintIn,
+    QuintOut,
+    QuintInOut,
+    BackIn,
+    BackOut,
+    BackInOut,
 }
 
 public sealed record ScreenEffectState(
@@ -80,7 +128,8 @@ public sealed record StageOperationSpec(
     double DurationSeconds = 0.35,
     string? OperationId = null,
     string? GroupId = null,
-    bool Skippable = true)
+    bool Skippable = true,
+    MotionCurve Curve = MotionCurve.Linear)
 {
     public StageOperationSpec Validate()
     {
@@ -91,6 +140,8 @@ public sealed record StageOperationSpec(
             throw new ArgumentException("Operation ID cannot be blank.");
         if (GroupId is not null && string.IsNullOrWhiteSpace(GroupId))
             throw new ArgumentException("Group ID cannot be blank.");
+        if (!Enum.IsDefined(Curve))
+            throw new ArgumentOutOfRangeException(nameof(Curve));
         return this;
     }
 }

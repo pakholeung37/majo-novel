@@ -1,6 +1,8 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
@@ -23,9 +25,7 @@ internal sealed class GodotStageBackend : IStageBackend
     private CameraState camera = CameraState.Default;
     private StageCurtainState curtainState = StageCurtainState.Default;
     private ScreenEffectState screen = ScreenEffectState.Default;
-    private Tween? cameraPositionTween;
-    private Tween? cameraZoomTween;
-    private Tween? cameraRotationTween;
+    private readonly HashSet<Tween> cameraTweens = new();
     private Tween? shakeTween;
     private Tween? transitionTween;
     private Tween? curtainTween;
@@ -109,38 +109,59 @@ internal sealed class GodotStageBackend : IStageBackend
     public void ApplyCamera(CameraState state)
     {
         camera = state.Validate();
-        actors.Root.Transform = CreateTransform(camera);
+        actors.Root.Transform = CreateTransform(
+            camera,
+            owner.GetViewport().GetVisibleRect().Size);
     }
 
-    public Task AnimateCameraPositionAsync(
-        Vector2 from, Vector2 to, double duration, CancellationToken cancellationToken) =>
-        AnimateAsync(
-            cameraPositionTween,
-            value => cameraPositionTween = value,
-            duration,
-            progress => ApplyCamera(camera with { Position = from.Lerp(to, progress) }),
-            cancellationToken);
+    public CameraState RenderedCamera => camera;
 
-    public Task AnimateCameraZoomAsync(
-        float from, float to, double duration, CancellationToken cancellationToken) =>
-        AnimateAsync(
-            cameraZoomTween,
-            value => cameraZoomTween = value,
-            duration,
-            progress => ApplyCamera(camera with { Zoom = Mathf.Lerp(from, to, progress) }),
-            cancellationToken);
+    public void ApplyCameraPose(CameraPoseUpdate pose) =>
+        ApplyCamera(pose.Validate().Apply(camera));
 
-    public Task AnimateCameraRotationAsync(
-        float from, float to, double duration, CancellationToken cancellationToken) =>
-        AnimateAsync(
-            cameraRotationTween,
-            value => cameraRotationTween = value,
-            duration,
-            progress => ApplyCamera(camera with
-            {
-                RotationDegrees = Mathf.Lerp(from, to, progress),
-            }),
-            cancellationToken);
+    public async Task AnimateCameraAsync(
+        CameraState from,
+        CameraState to,
+        CameraPoseUpdate properties,
+        StageOperationSpec operation,
+        CancellationToken cancellationToken)
+    {
+        void Apply(float progress) => ApplyCamera(new CameraState(
+                properties.Center is not null
+                    ? from.Center.Lerp(to.Center, progress)
+                    : camera.Center,
+                properties.Zoom is not null
+                    ? Mathf.Lerp(from.Zoom, to.Zoom, progress)
+                    : camera.Zoom,
+                properties.RotationDegrees is not null
+                    ? Mathf.LerpAngle(
+                        Mathf.DegToRad(from.RotationDegrees),
+                        Mathf.DegToRad(to.RotationDegrees),
+                        progress) * 180 / Mathf.Pi
+                    : camera.RotationDegrees));
+
+        if (operation.DurationSeconds <= 0)
+        {
+            Apply(1);
+            return;
+        }
+
+        var tween = owner.CreateTween();
+        var (transition, ease) = ResolveCurve(operation.Curve);
+        tween.SetTrans(transition);
+        tween.SetEase(ease);
+        cameraTweens.Add(tween);
+        tween.TweenMethod(Callable.From<float>(Apply), 0.0f, 1.0f, operation.DurationSeconds);
+        try
+        {
+            await WaitForTweenAsync(tween, cancellationToken);
+        }
+        finally
+        {
+            KillTween(tween);
+            cameraTweens.Remove(tween);
+        }
+    }
 
     public async Task ShakeAsync(CameraShakeSpec shake, CancellationToken cancellationToken)
     {
@@ -321,7 +342,8 @@ internal sealed class GodotStageBackend : IStageBackend
         Action<Tween?> setSlot,
         double duration,
         Action<float> apply,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        MotionCurve curve = MotionCurve.Linear)
     {
         KillTween(existing);
         if (duration <= 0)
@@ -330,6 +352,9 @@ internal sealed class GodotStageBackend : IStageBackend
             return;
         }
         var tween = owner.CreateTween();
+        var (transition, ease) = ResolveCurve(curve);
+        tween.SetTrans(transition);
+        tween.SetEase(ease);
         setSlot(tween);
         // Keep the tween values typed as floats. Integer Variants are interpolated
         // discretely by Godot, which makes fades hold at 0 and jump to 1 at the end.
@@ -360,20 +385,22 @@ internal sealed class GodotStageBackend : IStageBackend
         letterboxTop.Visible = letterboxBottom.Visible = height > 0;
     }
 
-    private void HandleViewportSizeChanged() => ApplyLetterbox(screen.LetterboxRatio);
+    private void HandleViewportSizeChanged()
+    {
+        ApplyLetterbox(screen.LetterboxRatio);
+        ApplyCamera(camera);
+    }
 
     private void KillAllTweens()
     {
-        KillTween(cameraPositionTween);
-        KillTween(cameraZoomTween);
-        KillTween(cameraRotationTween);
+        foreach (var tween in cameraTweens.ToArray()) KillTween(tween);
+        cameraTweens.Clear();
         KillTween(shakeTween);
         KillTween(transitionTween);
         KillTween(curtainTween);
         KillTween(overlayTween);
         KillTween(letterboxTween);
         KillTween(flashTween);
-        cameraPositionTween = cameraZoomTween = cameraRotationTween = null;
         shakeTween = transitionTween = curtainTween = overlayTween = letterboxTween = flashTween = null;
     }
 
@@ -382,11 +409,41 @@ internal sealed class GodotStageBackend : IStageBackend
         if (tween is not null && GodotObject.IsInstanceValid(tween)) tween.Kill();
     }
 
-    private static Transform2D CreateTransform(CameraState state) => new(
-        Mathf.DegToRad(state.RotationDegrees),
-        new Vector2(state.Zoom, state.Zoom),
-        0,
-        state.Position);
+    private static Transform2D CreateTransform(CameraState state, Vector2 viewportSize)
+    {
+        var basis = new Transform2D(
+            Mathf.DegToRad(state.RotationDegrees),
+            new Vector2(state.Zoom, state.Zoom),
+            0,
+            Vector2.Zero);
+        var sceneCenter = new Vector2(
+            viewportSize.X * state.Center.X / 100,
+            viewportSize.Y * (1 - state.Center.Y / 100));
+        var viewportCenter = viewportSize / 2;
+        return new Transform2D(
+            basis.X,
+            basis.Y,
+            viewportCenter - basis * sceneCenter);
+    }
+
+    private static (Tween.TransitionType Transition, Tween.EaseType Ease) ResolveCurve(
+        MotionCurve curve) => curve switch
+    {
+        MotionCurve.Linear => (Tween.TransitionType.Linear, Tween.EaseType.InOut),
+        MotionCurve.SineIn => (Tween.TransitionType.Sine, Tween.EaseType.In),
+        MotionCurve.SineOut => (Tween.TransitionType.Sine, Tween.EaseType.Out),
+        MotionCurve.SineInOut => (Tween.TransitionType.Sine, Tween.EaseType.InOut),
+        MotionCurve.CubicIn => (Tween.TransitionType.Cubic, Tween.EaseType.In),
+        MotionCurve.CubicOut => (Tween.TransitionType.Cubic, Tween.EaseType.Out),
+        MotionCurve.CubicInOut => (Tween.TransitionType.Cubic, Tween.EaseType.InOut),
+        MotionCurve.QuintIn => (Tween.TransitionType.Quint, Tween.EaseType.In),
+        MotionCurve.QuintOut => (Tween.TransitionType.Quint, Tween.EaseType.Out),
+        MotionCurve.QuintInOut => (Tween.TransitionType.Quint, Tween.EaseType.InOut),
+        MotionCurve.BackIn => (Tween.TransitionType.Back, Tween.EaseType.In),
+        MotionCurve.BackOut => (Tween.TransitionType.Back, Tween.EaseType.Out),
+        MotionCurve.BackInOut => (Tween.TransitionType.Back, Tween.EaseType.InOut),
+        _ => throw new ArgumentOutOfRangeException(nameof(curve)),
+    };
 
     private static ColorRect CreateFullRect(string name)
     {
