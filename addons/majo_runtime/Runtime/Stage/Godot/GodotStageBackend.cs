@@ -12,19 +12,23 @@ internal sealed class GodotStageBackend : IStageBackend
 {
     private readonly Node owner;
     private readonly GodotActorHost actors;
+    private readonly CanvasLayer curtainLayer;
     private readonly CanvasLayer effectLayer;
+    private readonly ColorRect curtain;
     private readonly ColorRect transition;
     private readonly ColorRect overlay;
     private readonly ColorRect flash;
     private readonly ColorRect letterboxTop;
     private readonly ColorRect letterboxBottom;
     private CameraState camera = CameraState.Default;
+    private StageCurtainState curtainState = StageCurtainState.Default;
     private ScreenEffectState screen = ScreenEffectState.Default;
     private Tween? cameraPositionTween;
     private Tween? cameraZoomTween;
     private Tween? cameraRotationTween;
     private Tween? shakeTween;
     private Tween? transitionTween;
+    private Tween? curtainTween;
     private Tween? overlayTween;
     private Tween? letterboxTween;
     private Tween? flashTween;
@@ -34,12 +38,15 @@ internal sealed class GodotStageBackend : IStageBackend
     {
         this.owner = owner ?? throw new ArgumentNullException(nameof(owner));
         this.actors = actors ?? throw new ArgumentNullException(nameof(actors));
+        curtainLayer = new CanvasLayer { Name = "MajoStageCurtain", Layer = 10 };
         effectLayer = new CanvasLayer { Name = "MajoStageEffects", Layer = 90 };
+        curtain = CreateFullRect("Curtain");
         transition = CreateFullRect("Transition");
         overlay = CreateFullRect("Overlay");
         flash = CreateFullRect("Flash");
         letterboxTop = CreateLetterbox("LetterboxTop", top: true);
         letterboxBottom = CreateLetterbox("LetterboxBottom", top: false);
+        curtainLayer.AddChild(curtain);
         effectLayer.AddChild(transition);
         effectLayer.AddChild(overlay);
         effectLayer.AddChild(flash);
@@ -51,9 +58,11 @@ internal sealed class GodotStageBackend : IStageBackend
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (isInitialized) return Task.CompletedTask;
+        owner.AddChild(curtainLayer);
         owner.AddChild(effectLayer);
         owner.GetViewport().SizeChanged += HandleViewportSizeChanged;
         ApplyCamera(camera);
+        ApplyCurtain(curtainState);
         ApplyScreenEffect(screen);
         ClearTransition();
         ClearFlash();
@@ -66,8 +75,10 @@ internal sealed class GodotStageBackend : IStageBackend
         cancellationToken.ThrowIfCancellationRequested();
         KillAllTweens();
         camera = CameraState.Default;
+        curtainState = StageCurtainState.Default;
         screen = ScreenEffectState.Default;
         ApplyCamera(camera);
+        ApplyCurtain(curtainState);
         ApplyScreenEffect(screen);
         ClearTransition();
         ClearFlash();
@@ -88,6 +99,7 @@ internal sealed class GodotStageBackend : IStageBackend
         catch (ObjectDisposedException) { }
         try
         {
+            if (GodotObject.IsInstanceValid(curtainLayer)) curtainLayer.QueueFree();
             if (GodotObject.IsInstanceValid(effectLayer)) effectLayer.QueueFree();
         }
         catch (ObjectDisposedException) { }
@@ -206,6 +218,35 @@ internal sealed class GodotStageBackend : IStageBackend
         catch (ObjectDisposedException) { }
     }
 
+    public void ApplyCurtain(StageCurtainState state)
+    {
+        curtainState = state.Validate();
+        try
+        {
+            if (!GodotObject.IsInstanceValid(curtain)) return;
+            curtain.Color = new Color(
+                curtainState.Color.R,
+                curtainState.Color.G,
+                curtainState.Color.B,
+                curtainState.Opacity);
+            curtain.Visible = curtainState.Opacity > 0;
+        }
+        catch (ObjectDisposedException) { }
+    }
+
+    public Task AnimateCurtainAsync(
+        StageCurtainState from,
+        StageCurtainState to,
+        double duration,
+        CancellationToken cancellationToken) => AnimateAsync(
+            curtainTween,
+            value => curtainTween = value,
+            duration,
+            progress => ApplyCurtain(new StageCurtainState(
+                from.Color.Lerp(to.Color, progress),
+                Mathf.Lerp(from.Opacity, to.Opacity, progress))),
+            cancellationToken);
+
     public void ApplyScreenEffect(ScreenEffectState state)
     {
         screen = state.Validate();
@@ -290,7 +331,9 @@ internal sealed class GodotStageBackend : IStageBackend
         }
         var tween = owner.CreateTween();
         setSlot(tween);
-        tween.TweenMethod(Callable.From<float>(apply), 0, 1, duration);
+        // Keep the tween values typed as floats. Integer Variants are interpolated
+        // discretely by Godot, which makes fades hold at 0 and jump to 1 at the end.
+        tween.TweenMethod(Callable.From<float>(apply), 0.0f, 1.0f, duration);
         await WaitForTweenAsync(tween, cancellationToken);
         setSlot(null);
     }
@@ -326,11 +369,12 @@ internal sealed class GodotStageBackend : IStageBackend
         KillTween(cameraRotationTween);
         KillTween(shakeTween);
         KillTween(transitionTween);
+        KillTween(curtainTween);
         KillTween(overlayTween);
         KillTween(letterboxTween);
         KillTween(flashTween);
         cameraPositionTween = cameraZoomTween = cameraRotationTween = null;
-        shakeTween = transitionTween = overlayTween = letterboxTween = flashTween = null;
+        shakeTween = transitionTween = curtainTween = overlayTween = letterboxTween = flashTween = null;
     }
 
     private static void KillTween(Tween? tween)

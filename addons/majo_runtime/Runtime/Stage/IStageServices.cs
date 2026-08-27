@@ -36,6 +36,17 @@ public interface IStageTransitionManager : IRuntimeService
     void ApplyStableAppearance(string? appearance);
 }
 
+public interface IStageCurtainManager : IRuntimeService
+{
+    StageCurtainState State { get; }
+    StageCurtainState TargetState { get; }
+    IOperationHandle SetCurtain(
+        Color color,
+        float opacity,
+        StageOperationSpec? operation = null);
+    void ApplyStableState(StageCurtainState state);
+}
+
 public interface IScreenEffectManager : IRuntimeService
 {
     ScreenEffectState State { get; }
@@ -73,6 +84,12 @@ public interface IStageBackend : IRuntimeService
     void ClearShake();
     Task RunTransitionAsync(StageTransitionRequest request, CancellationToken cancellationToken);
     void ClearTransition();
+    void ApplyCurtain(StageCurtainState state);
+    Task AnimateCurtainAsync(
+        StageCurtainState from,
+        StageCurtainState to,
+        double duration,
+        CancellationToken cancellationToken);
     void ApplyScreenEffect(ScreenEffectState state);
     Task AnimateOverlayAsync(
         ScreenEffectState from,

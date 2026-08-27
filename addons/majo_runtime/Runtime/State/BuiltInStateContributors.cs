@@ -28,15 +28,18 @@ public static class BuiltInStateKeys
 public sealed class StageStateContributor : IStateContributor
 {
     private readonly ICameraManager camera;
+    private readonly IStageCurtainManager curtain;
     private readonly IScreenEffectManager effects;
     private readonly IStageTransitionManager transitions;
 
     public StageStateContributor(
         ICameraManager camera,
+        IStageCurtainManager curtain,
         IScreenEffectManager effects,
         IStageTransitionManager transitions)
     {
         this.camera = camera ?? throw new ArgumentNullException(nameof(camera));
+        this.curtain = curtain ?? throw new ArgumentNullException(nameof(curtain));
         this.effects = effects ?? throw new ArgumentNullException(nameof(effects));
         this.transitions = transitions ?? throw new ArgumentNullException(nameof(transitions));
     }
@@ -54,6 +57,11 @@ public sealed class StageStateContributor : IStateContributor
             camera.State.Position.Y,
             camera.State.Zoom,
             camera.State.RotationDegrees,
+            curtain.State.Color.R,
+            curtain.State.Color.G,
+            curtain.State.Color.B,
+            curtain.State.Color.A,
+            curtain.State.Opacity,
             effects.State.OverlayColor.R,
             effects.State.OverlayColor.G,
             effects.State.OverlayColor.B,
@@ -80,6 +88,9 @@ public sealed class StageStateContributor : IStateContributor
             new Vector2(payload.CameraX, payload.CameraY),
             payload.CameraZoom,
             payload.CameraRotation));
+        curtain.ApplyStableState(new StageCurtainState(
+            new Color(payload.CurtainR, payload.CurtainG, payload.CurtainB, payload.CurtainAlpha),
+            payload.CurtainOpacity));
         effects.ApplyStableState(new ScreenEffectState(
             new Color(payload.OverlayR, payload.OverlayG, payload.OverlayB, payload.OverlayAlpha),
             payload.OverlayOpacity,
@@ -92,6 +103,7 @@ public sealed class StageStateContributor : IStateContributor
     {
         cancellationToken.ThrowIfCancellationRequested();
         camera.ApplyStableState(CameraState.Default);
+        curtain.ApplyStableState(StageCurtainState.Default);
         effects.ApplyStableState(ScreenEffectState.Default);
         transitions.ApplyStableAppearance(null);
         return ValueTask.CompletedTask;
@@ -103,6 +115,11 @@ public sealed class StageStateContributor : IStateContributor
         if (!float.IsFinite(payload.CameraX) || !float.IsFinite(payload.CameraY) ||
             !float.IsFinite(payload.CameraZoom) || payload.CameraZoom <= 0 ||
             !float.IsFinite(payload.CameraRotation) ||
+            !float.IsFinite(payload.CurtainR) || !float.IsFinite(payload.CurtainG) ||
+            !float.IsFinite(payload.CurtainB) || !float.IsFinite(payload.CurtainAlpha) ||
+            payload.CurtainAlpha is < 0 or > 1 ||
+            !float.IsFinite(payload.CurtainOpacity) ||
+            payload.CurtainOpacity is < 0 or > 1 ||
             !float.IsFinite(payload.OverlayR) || !float.IsFinite(payload.OverlayG) ||
             !float.IsFinite(payload.OverlayB) || !float.IsFinite(payload.OverlayAlpha) ||
             payload.OverlayAlpha is < 0 or > 1 ||
@@ -121,6 +138,11 @@ public sealed class StageStateContributor : IStateContributor
         float CameraY,
         float CameraZoom,
         float CameraRotation,
+        float CurtainR,
+        float CurtainG,
+        float CurtainB,
+        float CurtainAlpha,
+        float CurtainOpacity,
         float OverlayR,
         float OverlayG,
         float OverlayB,

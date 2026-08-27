@@ -8,6 +8,7 @@ using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Dialogue.Yarn;
 using Majo.Runtime.Operations;
+using Majo.Runtime.Stage;
 using YarnSpinnerGodot;
 
 namespace Majo.Runtime.HeadlessTests;
@@ -71,12 +72,17 @@ public partial class HeadlessTestRunner
         var runner = yarnBackend.Runner;
 
         var manager = bootstrap.Host!.Services.Get<IActorManager>();
+        var curtain = bootstrap.Host.Services.Get<IStageCurtainManager>();
         var scheduler = bootstrap.Host.Services.Get<IOperationScheduler>();
         var adapter = bootstrap.Host.Services.Get<IYarnCommandAdapter>();
         var joinedAtFinalState = false;
         var waitedAtFinalState = false;
         var cancelKeptCharacterVisible = false;
         var completeAppliedHiddenState = false;
+        var curtainClosedAtFinalState = false;
+        var curtainOpenedAtFinalState = false;
+        var curtainCancelKeptOpenState = false;
+        var curtainCompleteAppliedClosedState = false;
         presenter.LinePresented += line =>
         {
             var character = manager.Get<ICharacterActor>("hero");
@@ -101,6 +107,24 @@ public partial class HeadlessTestRunner
                     completeAppliedHiddenState =
                         !character.Visible && Mathf.IsZeroApprox(character.Opacity);
                     break;
+                case "line:m4-after-curtain-close":
+                    curtainClosedAtFinalState =
+                        Mathf.IsEqualApprox(curtain.State.Opacity, 1) &&
+                        scheduler.ActiveOperations.Count == 0;
+                    break;
+                case "line:m4-after-curtain-open":
+                    curtainOpenedAtFinalState =
+                        Mathf.IsZeroApprox(curtain.State.Opacity) &&
+                        scheduler.ActiveOperations.Count == 0;
+                    break;
+                case "line:m4-after-curtain-cancel":
+                    curtainCancelKeptOpenState =
+                        Mathf.IsZeroApprox(curtain.State.Opacity);
+                    break;
+                case "line:m4-after-curtain-complete":
+                    curtainCompleteAppliedClosedState =
+                        Mathf.IsEqualApprox(curtain.State.Opacity, 1);
+                    break;
             }
         };
 
@@ -118,6 +142,10 @@ public partial class HeadlessTestRunner
                 "after wait",
                 "after cancel",
                 "after complete",
+                "after curtain close",
+                "after curtain open",
+                "after curtain cancel",
+                "after curtain complete",
             }),
             "Yarn command test lines were delivered out of order.");
         Assert(joinedAtFinalState,
@@ -128,6 +156,14 @@ public partial class HeadlessTestRunner
             "cancel incorrectly applied the hide operation's final state.");
         Assert(completeAppliedHiddenState,
             "await complete did not apply the hide operation's final state.");
+        Assert(curtainClosedAtFinalState,
+            "Waiting curtain close did not reach its stable opaque state.");
+        Assert(curtainOpenedAtFinalState,
+            "Waiting curtain open did not reach its stable transparent state.");
+        Assert(curtainCancelKeptOpenState,
+            "Cancelling curtain close did not preserve the previous open state.");
+        Assert(curtainCompleteAppliedClosedState,
+            "Completing curtain close did not apply the opaque target state.");
         Assert(scheduler.ActiveOperations.Count == 0,
             "Completed Yarn dialogue left active operations.");
 

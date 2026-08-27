@@ -19,6 +19,7 @@ public sealed class StageCommandModule : IRuntimeCommandModule
             .Register(new CameraResetCommandHandler())
             .Register(new CameraShakeCommandHandler())
             .Register(new StageTransitionCommandHandler())
+            .Register(new StageCurtainCommandHandler())
             .Register(new StageOverlayCommandHandler())
             .Register(new StageLetterboxCommandHandler())
             .Register(new StageFlashCommandHandler());
@@ -147,6 +148,25 @@ public sealed class StageTransitionCommandHandler : IRuntimeCommandHandler<Stage
         StageCommandExecution.TrackAndWaitAsync(
             StageCommandExecution.Require<IStageTransitionManager>(c).Run(new StageTransitionRequest(
                 a.Kind, Colors.Black, StageCommandExecution.Operation(a.Duration, a.Operation, a.Group), a.Appearance)), a.Wait, c);
+}
+
+[RuntimeCommand("curtain", Category = "Stage", Usage = "curtain <open|closed> [duration:<seconds>] [wait:<bool>] [group:<id>] [operation:<id>]")]
+public sealed class StageCurtainCommandArguments
+{
+    [CommandParameter("state", 0, Primary = true, Required = true)] public StageCurtainPosition Position { get; set; }
+    [CommandParameter("duration", 1, DefaultSource = CommandDefaultSource.AnimationDuration, Minimum = 0)] public double Duration { get; set; }
+    [CommandParameter("wait", 2)] public bool Wait { get; set; }
+    [CommandParameter("group", 3)] public string? Group { get; set; }
+    [CommandParameter("operation", 4)] public string? Operation { get; set; }
+}
+public sealed class StageCurtainCommandHandler : IRuntimeCommandHandler<StageCurtainCommandArguments>
+{
+    public Task ExecuteAsync(StageCurtainCommandArguments a, RuntimeCommandContext c) =>
+        StageCommandExecution.TrackAndWaitAsync(
+            StageCommandExecution.Require<IStageCurtainManager>(c).SetCurtain(
+                Colors.Black,
+                a.Position == StageCurtainPosition.Closed ? 1 : 0,
+                StageCommandExecution.Operation(a.Duration, a.Operation, a.Group)), a.Wait, c);
 }
 
 [RuntimeCommand("overlay", Category = "Stage", Usage = "overlay <opacity> [duration:<seconds>] [wait:<bool>] [group:<id>] [operation:<id>]")]

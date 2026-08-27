@@ -14,6 +14,17 @@ Narrator: after cancel #line:m4-after-cancel
 <<hide hero duration:1 operation:completed-hide>>
 <<await operation:completed-hide complete:true>>
 Narrator: after complete #line:m4-after-complete
+<<curtain closed duration:0.12 wait:true operation:curtain-close>>
+Narrator: after curtain close #line:m4-after-curtain-close
+<<curtain open duration:0.08 wait:true operation:curtain-open>>
+Narrator: after curtain open #line:m4-after-curtain-open
+<<curtain closed duration:1 operation:cancelled-curtain>>
+<<cancel operation:cancelled-curtain>>
+Narrator: after curtain cancel #line:m4-after-curtain-cancel
+<<curtain closed duration:1 operation:completed-curtain>>
+<<await operation:completed-curtain complete:true>>
+Narrator: after curtain complete #line:m4-after-curtain-complete
+<<curtain open duration:0 wait:true operation:curtain-reset>>
 ===
 
 title: BadArguments

@@ -9,6 +9,7 @@ namespace Majo.Runtime.Stage;
 public sealed class FakeStageBackend : IStageBackend
 {
     public CameraState Camera { get; private set; } = CameraState.Default;
+    public StageCurtainState Curtain { get; private set; } = StageCurtainState.Default;
     public ScreenEffectState ScreenEffect { get; private set; } = ScreenEffectState.Default;
     public bool IsShaking { get; private set; }
     public bool IsTransitioning { get; private set; }
@@ -18,6 +19,7 @@ public sealed class FakeStageBackend : IStageBackend
     public Task ResetAsync(CancellationToken cancellationToken)
     {
         Camera = CameraState.Default;
+        Curtain = StageCurtainState.Default;
         ScreenEffect = ScreenEffectState.Default;
         IsShaking = IsTransitioning = IsFlashing = false;
         return Task.CompletedTask;
@@ -58,6 +60,17 @@ public sealed class FakeStageBackend : IStageBackend
         return Task.CompletedTask;
     }
     public void ClearTransition() => IsTransitioning = false;
+    public void ApplyCurtain(StageCurtainState state) => Curtain = state.Validate();
+    public Task AnimateCurtainAsync(
+        StageCurtainState from,
+        StageCurtainState to,
+        double duration,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        Curtain = to.Validate();
+        return Task.CompletedTask;
+    }
     public void ApplyScreenEffect(ScreenEffectState state) => ScreenEffect = state.Validate();
     public Task AnimateOverlayAsync(ScreenEffectState from, ScreenEffectState to, double duration, CancellationToken cancellationToken)
     {

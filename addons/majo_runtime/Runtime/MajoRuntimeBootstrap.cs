@@ -362,6 +362,12 @@ public partial class MajoRuntimeBootstrap : Node
                 },
                 typeof(IStageBackend),
                 typeof(IOperationScheduler))
+            .AddSingleton<IStageCurtainManager>(
+                resolver => new StageCurtainManager(
+                    resolver.Get<IStageBackend>(),
+                    resolver.Get<IOperationScheduler>()),
+                typeof(IStageBackend),
+                typeof(IOperationScheduler))
             .AddSingleton<IScreenEffectManager>(
                 resolver => new ScreenEffectManager(
                     resolver.Get<IStageBackend>(),
@@ -685,6 +691,7 @@ public partial class MajoRuntimeBootstrap : Node
                     resolver.Get<IAudioManager>(),
                     resolver.Get<IHistoryManager>(),
                     resolver.Get<ICameraManager>(),
+                    resolver.Get<IStageCurtainManager>(),
                     resolver.Get<IScreenEffectManager>(),
                     resolver.Get<IStageTransitionManager>(),
                     resolver.Get<IScriptPlayback>(),
@@ -700,6 +707,7 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(IAudioManager),
                 typeof(IHistoryManager),
                 typeof(ICameraManager),
+                typeof(IStageCurtainManager),
                 typeof(IScreenEffectManager),
                 typeof(IStageTransitionManager),
                 typeof(IScriptPlayback),
@@ -800,6 +808,7 @@ public partial class MajoRuntimeBootstrap : Node
         IAudioManager audio,
         IHistoryManager history,
         ICameraManager camera,
+        IStageCurtainManager curtain,
         IScreenEffectManager effects,
         IStageTransitionManager transitions,
         IScriptPlayback scriptPlayback,
@@ -814,7 +823,7 @@ public partial class MajoRuntimeBootstrap : Node
             .Register(new DialogueVariablesStateContributor(variables))
             .Register(new ActorStateContributor(actors))
             .Register(new AudioStateContributor(audio))
-            .Register(new StageStateContributor(camera, effects, transitions))
+            .Register(new StageStateContributor(camera, curtain, effects, transitions))
             .Register(new SessionHistoryStateContributor(history));
         foreach (var contributor in customContributors)
         {

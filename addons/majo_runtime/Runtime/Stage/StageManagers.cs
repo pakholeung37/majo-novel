@@ -373,6 +373,130 @@ public sealed class StageTransitionManager : IStageTransitionManager
     }
 }
 
+public sealed class StageCurtainManager : IStageCurtainManager
+{
+    private readonly object gate = new();
+    private readonly IStageBackend backend;
+    private readonly IOperationScheduler operations;
+    private IOperationHandle? active;
+    private bool isInitialized;
+
+    public StageCurtainManager(
+        IStageBackend backend,
+        IOperationScheduler operations)
+    {
+        this.backend = backend ?? throw new ArgumentNullException(nameof(backend));
+        this.operations = operations ?? throw new ArgumentNullException(nameof(operations));
+    }
+
+    public StageCurtainState State { get; private set; } = StageCurtainState.Default;
+    public StageCurtainState TargetState { get; private set; } = StageCurtainState.Default;
+
+    public Task InitializeAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        backend.ApplyCurtain(State);
+        isInitialized = true;
+        return Task.CompletedTask;
+    }
+
+    public Task ResetAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        active?.Cancel();
+        active = null;
+        State = TargetState = StageCurtainState.Default;
+        backend.ApplyCurtain(State);
+        return Task.CompletedTask;
+    }
+
+    public Task ShutdownAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!isInitialized) return Task.CompletedTask;
+        active?.Cancel();
+        active = null;
+        State = TargetState = StageCurtainState.Default;
+        isInitialized = false;
+        return Task.CompletedTask;
+    }
+
+    public IOperationHandle SetCurtain(
+        Color color,
+        float opacity,
+        StageOperationSpec? operation = null)
+    {
+        EnsureInitialized();
+        var target = new StageCurtainState(color, opacity).Validate();
+        var spec = (operation ?? new StageOperationSpec()).Validate();
+        IOperationHandle? predecessor;
+        lock (gate)
+        {
+            predecessor = active;
+            predecessor?.Complete();
+            TargetState = target;
+        }
+
+        IOperationHandle? handle = null;
+        handle = operations.Start(new OperationDefinition(
+            async context =>
+            {
+                if (predecessor is not null)
+                    await predecessor.Completion.WaitAsync(context.CancellationToken);
+                StageCurtainState from;
+                lock (gate) from = State;
+                await backend.AnimateCurtainAsync(
+                    from, target, spec.DurationSeconds, context.CancellationToken);
+                lock (gate) State = target;
+            },
+            spec.OperationId,
+            spec.GroupId,
+            _ =>
+            {
+                lock (gate) State = target;
+                backend.ApplyCurtain(target);
+                return Task.CompletedTask;
+            },
+            _ =>
+            {
+                StageCurtainState stable;
+                lock (gate)
+                {
+                    stable = State;
+                    if (ReferenceEquals(active, handle)) TargetState = stable;
+                }
+                backend.ApplyCurtain(stable);
+                return Task.CompletedTask;
+            },
+            spec.Skippable));
+        lock (gate) active = handle;
+        _ = ClearWhenDoneAsync(handle);
+        return handle;
+    }
+
+    public void ApplyStableState(StageCurtainState state)
+    {
+        EnsureInitialized();
+        state.Validate();
+        active?.Cancel();
+        active = null;
+        State = TargetState = state;
+        backend.ApplyCurtain(state);
+    }
+
+    private async Task ClearWhenDoneAsync(IOperationHandle handle)
+    {
+        try { await handle.Completion; } catch { }
+        lock (gate) if (ReferenceEquals(active, handle)) active = null;
+    }
+
+    private void EnsureInitialized()
+    {
+        if (!isInitialized) throw new InvalidOperationException(
+            "StageCurtainManager is not initialized.");
+    }
+}
+
 public sealed class ScreenEffectManager : IScreenEffectManager
 {
     private readonly object gate = new();

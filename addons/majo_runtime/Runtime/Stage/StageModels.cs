@@ -43,6 +43,30 @@ public sealed record ScreenEffectState(
     }
 }
 
+public enum StageCurtainPosition
+{
+    Open,
+    Closed,
+}
+
+public sealed record StageCurtainState(
+    Color Color,
+    float Opacity)
+{
+    public static StageCurtainState Default { get; } = new(Colors.Black, 0);
+
+    public StageCurtainState Validate()
+    {
+        if (!float.IsFinite(Color.R) || !float.IsFinite(Color.G) ||
+            !float.IsFinite(Color.B) || !float.IsFinite(Color.A) ||
+            !float.IsFinite(Opacity) || Opacity is < 0 or > 1)
+        {
+            throw new ArgumentException("Curtain color or opacity is out of range.");
+        }
+        return this;
+    }
+}
+
 public enum StageTransitionKind
 {
     Fade,
@@ -108,4 +132,14 @@ public sealed record StageTransitionRequest(
 public sealed record StageStableState(
     CameraState Camera,
     ScreenEffectState ScreenEffect,
-    string? Appearance);
+    StageCurtainState Curtain,
+    string? Appearance)
+{
+    public StageStableState(
+        CameraState camera,
+        ScreenEffectState screenEffect,
+        string? appearance)
+        : this(camera, screenEffect, StageCurtainState.Default, appearance)
+    {
+    }
+}
