@@ -256,13 +256,40 @@ internal sealed class GodotStageBackend : IStageBackend
         shakeTween = owner.CreateTween();
         var samples = Math.Max(1, (int)Math.Ceiling(
             shake.EffectiveOperation.DurationSeconds * shake.Frequency));
-        var random = new Random(31);
+        var random = Random.Shared;
         var sampleDuration = shake.EffectiveOperation.DurationSeconds / samples;
+        var initialSign = random.Next(2) == 0 ? 1f : -1f;
+        var initialAngle = (float)(random.NextDouble() * Math.PI * 2);
+
         for (var index = 0; index < samples; index++)
         {
-            var offset = new Vector2(
-                ((float)random.NextDouble() * 2 - 1) * shake.Strength.X,
-                ((float)random.NextDouble() * 2 - 1) * shake.Strength.Y);
+            var progress = (float)index / samples;
+            var decay = (1f - progress) * (1f - progress);
+            var sign = (index % 2 == 0 ? 1f : -1f) * initialSign;
+            var noise = 0.7f + 0.3f * (float)random.NextDouble();
+            var t = sign * noise * shake.Strength * decay;
+
+            Vector2 offset;
+            switch (shake.Axis)
+            {
+                case CameraShakeAxis.X:
+                    offset = new Vector2(t, 0);
+                    break;
+                case CameraShakeAxis.Y:
+                    offset = new Vector2(0, t);
+                    break;
+                case CameraShakeAxis.Diagonal:
+                    offset = new Vector2(t, t);
+                    break;
+                default:
+                {
+                    var angle = initialAngle + index * MathF.PI + (float)((random.NextDouble() * 0.6) - 0.3);
+                    var radius = noise * shake.Strength * decay;
+                    offset = new Vector2(MathF.Cos(angle) * radius, MathF.Sin(angle) * radius);
+                    break;
+                }
+            }
+
             shakeTween.TweenProperty(actors.Root, "offset", offset, sampleDuration);
         }
         shakeTween.TweenProperty(actors.Root, "offset", Vector2.Zero, sampleDuration);

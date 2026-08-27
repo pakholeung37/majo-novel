@@ -183,8 +183,17 @@ public sealed record StageOperationSpec(
     }
 }
 
+public enum CameraShakeAxis
+{
+    All,
+    X,
+    Y,
+    Diagonal,
+}
+
 public sealed record CameraShakeSpec(
-    Vector2 Strength,
+    float Strength,
+    CameraShakeAxis Axis = CameraShakeAxis.All,
     double Frequency = 20,
     StageOperationSpec? Operation = null)
 {
@@ -193,9 +202,12 @@ public sealed record CameraShakeSpec(
     public CameraShakeSpec Validate()
     {
         EffectiveOperation.Validate();
-        if (!float.IsFinite(Strength.X) || !float.IsFinite(Strength.Y) ||
+        if (!float.IsFinite(Strength) || Strength < 0 ||
+            !Enum.IsDefined(Axis) ||
             !double.IsFinite(Frequency) || Frequency <= 0)
+        {
             throw new ArgumentException("Shake strength and frequency must be finite and positive.");
+        }
         return this;
     }
 }

@@ -56,6 +56,43 @@ public sealed class StageCommandTests
         Assert.Equal(StageCurtainPosition.Closed, curtainArguments.Position);
         Assert.Equal(1.2, curtainArguments.Duration);
         Assert.True(curtainArguments.Wait);
+
+        var shake = catalog.Get("camera shake");
+        var defaultShake = binder.Bind<CameraShakeCommandArguments>(
+            shake.Descriptor, Array.Empty<string>());
+        Assert.Equal(8, defaultShake.Strength);
+        Assert.Equal(CameraShakeAxis.All, defaultShake.Axis);
+        Assert.Equal(20, defaultShake.Frequency);
+        Assert.Equal(0.4, defaultShake.Duration);
+        Assert.False(defaultShake.Wait);
+
+        var allShake = binder.Bind<CameraShakeCommandArguments>(
+            shake.Descriptor, new[] { "axis:all" });
+        Assert.Equal(CameraShakeAxis.All, allShake.Axis);
+
+        var bothShake = binder.Bind<CameraShakeCommandArguments>(
+            shake.Descriptor, new[] { "axis:both" });
+        Assert.Equal(CameraShakeAxis.All, bothShake.Axis);
+
+        var diagShake = binder.Bind<CameraShakeCommandArguments>(
+            shake.Descriptor, new[] { "strength:15", "axis:diagonal", "frequency:30", "duration:0.8", "wait:true" });
+        Assert.Equal(15, diagShake.Strength);
+        Assert.Equal(CameraShakeAxis.Diagonal, diagShake.Axis);
+        Assert.Equal(30, diagShake.Frequency);
+        Assert.Equal(0.8, diagShake.Duration);
+        Assert.True(diagShake.Wait);
+
+        var xShake = binder.Bind<CameraShakeCommandArguments>(
+            shake.Descriptor, new[] { "axis:x" });
+        Assert.Equal(CameraShakeAxis.X, xShake.Axis);
+
+        var yShake = binder.Bind<CameraShakeCommandArguments>(
+            shake.Descriptor, new[] { "axis:y" });
+        Assert.Equal(CameraShakeAxis.Y, yShake.Axis);
+
+        var shortDiagShake = binder.Bind<CameraShakeCommandArguments>(
+            shake.Descriptor, new[] { "axis:diag" });
+        Assert.Equal(CameraShakeAxis.Diagonal, shortDiagShake.Axis);
     }
 
     [Fact]
@@ -161,6 +198,43 @@ public sealed class StageCommandTests
         Assert.Equal(-10, camera.State.RotationDegrees);
         Assert.Equal(camera.State, backend.Camera);
         Assert.Equal(MotionCurve.BackOut, backend.LastCameraOperation?.Curve);
+        await host.ShutdownAsync();
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task CameraShakeDispatchesStrengthBasedOnAxis()
+    {
+        var backend = new FakeStageBackend();
+        var registry = new RuntimeServiceRegistry()
+            .AddSingleton<IFrameClock>(_ => new ImmediateFrameClock())
+            .AddSingleton<IOperationScheduler>(
+                resolver => new OperationScheduler(
+                    resolver.Get<IFrameClock>(),
+                    resolver.Get<IRuntimeLifetime>()),
+                typeof(IFrameClock),
+                typeof(IRuntimeLifetime))
+            .AddSingleton<IStageBackend>(_ => backend)
+            .AddSingleton<IStageAccessibility>(_ => new StageAccessibility())
+            .AddSingleton<ICameraManager>(
+                resolver => new CameraManager(
+                    resolver.Get<IStageBackend>(),
+                    resolver.Get<IOperationScheduler>(),
+                    resolver.Get<IStageAccessibility>()),
+                typeof(IStageBackend),
+                typeof(IOperationScheduler),
+                typeof(IStageAccessibility));
+        var host = registry.Build();
+        await host.InitializeAsync();
+        var camera = host.Services.Get<ICameraManager>();
+
+        var operation = camera.Shake(new CameraShakeSpec(16f, CameraShakeAxis.X, 25, new StageOperationSpec(0.5)));
+        await operation.Completion;
+
+        Assert.NotNull(backend.LastShake);
+        Assert.Equal(16f, backend.LastShake!.Strength);
+        Assert.Equal(CameraShakeAxis.X, backend.LastShake.Axis);
+        Assert.Equal(25, backend.LastShake.Frequency);
+        Assert.Equal(0.5, backend.LastShake.EffectiveOperation.DurationSeconds);
         await host.ShutdownAsync();
     }
 

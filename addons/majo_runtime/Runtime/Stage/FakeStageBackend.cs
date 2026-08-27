@@ -14,6 +14,7 @@ public sealed class FakeStageBackend : IStageBackend
     public StageCurtainState Curtain { get; private set; } = StageCurtainState.Default;
     public ScreenEffectState ScreenEffect { get; private set; } = ScreenEffectState.Default;
     public bool IsShaking { get; private set; }
+    public CameraShakeSpec? LastShake { get; private set; }
     public bool IsTransitioning { get; private set; }
     public bool IsFlashing { get; private set; }
     public StageOperationSpec? LastCameraOperation { get; private set; }
@@ -30,6 +31,7 @@ public sealed class FakeStageBackend : IStageBackend
         Curtain = StageCurtainState.Default;
         ScreenEffect = ScreenEffectState.Default;
         IsShaking = IsTransitioning = IsFlashing = false;
+        LastShake = null;
         LastCameraOperation = null;
         LastCameraTransition = null;
         LastDissolveSource = LastDissolveTarget = null;
@@ -83,6 +85,7 @@ public sealed class FakeStageBackend : IStageBackend
     public Task ShakeAsync(CameraShakeSpec shake, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        LastShake = shake;
         IsShaking = true;
         IsShaking = false;
         return Task.CompletedTask;

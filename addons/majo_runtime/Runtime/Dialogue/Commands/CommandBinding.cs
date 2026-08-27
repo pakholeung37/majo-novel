@@ -62,6 +62,14 @@ public sealed class CommandValueConverterRegistry
             ? result
             : throw new FormatException(
                 "must be a supported motion curve such as linear, cubic-out, or back-out"));
+        Register<CameraShakeAxis>(value => value.Trim().ToLowerInvariant() switch
+        {
+            "all" or "both" => CameraShakeAxis.All,
+            "x" => CameraShakeAxis.X,
+            "y" => CameraShakeAxis.Y,
+            "diagonal" or "diag" => CameraShakeAxis.Diagonal,
+            _ => throw new FormatException("must be 'all', 'x', 'y', or 'diagonal'"),
+        });
     }
 
     public CommandValueConverterRegistry Register<TValue>(Func<string, TValue> converter)

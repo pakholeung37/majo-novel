@@ -9,79 +9,79 @@ namespace YarnSpinnerGodot;
 
 public partial struct YarnTask
 {
-    public TaskAwaiter GetAwaiter() => Task.GetAwaiter();
+	public TaskAwaiter GetAwaiter() => Task.GetAwaiter();
 
-    Task Task;
-    readonly public bool IsCompleted() => Task.IsCompleted;
-    readonly public bool IsCompletedSuccessfully() => Task.IsCompletedSuccessfully;
+	Task Task;
+	readonly public bool IsCompleted() => Task.IsCompleted;
+	readonly public bool IsCompletedSuccessfully() => Task.IsCompletedSuccessfully;
 
-    public static implicit operator Task(YarnTask YarnTask)
-    {
-        return YarnTask.Task;
-    }
+	public static implicit operator Task(YarnTask YarnTask)
+	{
+		return YarnTask.Task;
+	}
 
-    public static implicit operator YarnTask(Task task)
-    {
-        return new YarnTask { Task = task };
-    }
+	public static implicit operator YarnTask(Task task)
+	{
+		return new YarnTask { Task = task };
+	}
 
-    readonly public async void Forget()
-    {
-        try
-        {
-            await Task;
-        }
-        catch (System.Exception e)
-        {
-            GD.PushError(e);
-        }
-    }
+	readonly public async void Forget()
+	{
+		try
+		{
+			await Task;
+		}
+		catch (System.Exception e)
+		{
+			GD.PushError(e);
+		}
+	}
 
-    public static partial async YarnTask WaitUntilCanceled(System.Threading.CancellationToken token)
-    {
-        while (!token.IsCancellationRequested)
-        {
-            await DefaultActions.Wait(0.01);
-        }
-    }
+	public static partial async YarnTask WaitUntilCanceled(System.Threading.CancellationToken token)
+	{
+		while (!token.IsCancellationRequested)
+		{
+			await DefaultActions.Wait(0.01);
+		}
+	}
 
-    public static YarnTask CompletedTask => Task.CompletedTask;
+	public static YarnTask CompletedTask => Task.CompletedTask;
 
-    /// <summary>
-    /// Creates a <see cref="YarnTask"/> that delays for the time indicated
-    /// by <paramref name="timeSpan"/>, and then returns.
-    /// </summary>
-    /// <param name="timeSpan">The amount of time to wait.</param>
-    /// <param name="token">A token that can be used to cancel the
-    /// task.</param>
-    /// <returns>A new <see cref="YarnTask"/>.</returns>
-    public static partial YarnTask Delay(TimeSpan timeSpan, CancellationToken token)
-    {
-        return Task.Delay(timeSpan, token);
-    }
+	/// <summary>
+	/// Creates a <see cref="YarnTask"/> that delays for the time indicated
+	/// by <paramref name="timeSpan"/>, and then returns.
+	/// </summary>
+	/// <param name="timeSpan">The amount of time to wait.</param>
+	/// <param name="token">A token that can be used to cancel the
+	/// task.</param>
+	/// <returns>A new <see cref="YarnTask"/>.</returns>
+	public static partial YarnTask Delay(TimeSpan timeSpan, CancellationToken token)
+	{
+		return Task.Delay(timeSpan, token);
+	}
 
-    public static partial async YarnTask WaitUntil(System.Func<bool> predicate,
-        System.Threading.CancellationToken token)
-    {
-        while (!token.IsCancellationRequested && predicate() == false)
-        {
-            await NextFrame();
-        }
-    }
+	public static partial async YarnTask WaitUntil(System.Func<bool> predicate,
+		System.Threading.CancellationToken token)
+	{
+		while (!token.IsCancellationRequested && predicate() == false)
+		{
+			await NextFrame();
+		}
+	}
 
-    public static partial async YarnTask Yield()
-    {
-        await NextFrame();
-    }
+	public static partial async YarnTask Yield()
+	{
+		await NextFrame();
+	}
 
-    public static partial YarnTask WhenAll(params YarnTask[] tasks)
-    {
-        return WhenAll((IEnumerable<YarnTask>)tasks);
-    }
+	public static partial YarnTask WhenAll(params YarnTask[] tasks)
+	{
+		return WhenAll((IEnumerable<YarnTask>)tasks);
+	}
 
-    public static partial async YarnTask WhenAll(IEnumerable<YarnTask> tasks)
-    {
-        // Don't love this allocation here; try and find a better approach
+	public static partial async YarnTask WhenAll(IEnumerable<YarnTask> tasks)
+	{
+		// Don't love this allocation here; try and find a better approach
         List<Task> taskList = new List<Task>();
         foreach (var task in tasks)
         {

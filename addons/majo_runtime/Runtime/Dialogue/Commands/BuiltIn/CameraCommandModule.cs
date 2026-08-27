@@ -160,21 +160,22 @@ public sealed class CameraResetCommandHandler : IRuntimeCommandHandler<CameraRes
                 CameraCommandExecution.ViewTransition(a, c)), a.Wait, c);
 }
 
-[RuntimeCommand("camera", "shake", Category = "Camera", Usage = "camera shake [strength:<number>] [frequency:<number>] [duration:<seconds>] [wait:<bool>] [group:<id>] [operation:<id>]")]
+[RuntimeCommand("camera", "shake", Category = "Camera", Usage = "camera shake [strength:<number>] [axis:<all|x|y|diagonal>] [frequency:<number>] [duration:<seconds>] [wait:<bool>] [group:<id>] [operation:<id>]")]
 public sealed class CameraShakeCommandArguments
 {
     [CommandParameter("strength", 0, DefaultValue = "8", Minimum = 0)] public double Strength { get; set; }
-    [CommandParameter("frequency", 1, DefaultValue = "20", Minimum = 0.001)] public double Frequency { get; set; }
-    [CommandParameter("duration", 2, DefaultValue = "0.4", Minimum = 0)] public double Duration { get; set; }
-    [CommandParameter("wait", 3)] public bool Wait { get; set; }
-    [CommandParameter("group", 4)] public string? Group { get; set; }
-    [CommandParameter("operation", 5)] public string? Operation { get; set; }
+    [CommandParameter("axis", 1, DefaultValue = "all")] public CameraShakeAxis Axis { get; set; }
+    [CommandParameter("frequency", 2, DefaultValue = "20", Minimum = 0.001)] public double Frequency { get; set; }
+    [CommandParameter("duration", 3, DefaultValue = "0.4", Minimum = 0)] public double Duration { get; set; }
+    [CommandParameter("wait", 4)] public bool Wait { get; set; }
+    [CommandParameter("group", 5)] public string? Group { get; set; }
+    [CommandParameter("operation", 6)] public string? Operation { get; set; }
 }
 public sealed class CameraShakeCommandHandler : IRuntimeCommandHandler<CameraShakeCommandArguments>
 {
     public Task ExecuteAsync(CameraShakeCommandArguments a, RuntimeCommandContext c) =>
         StageCommandExecution.TrackAndWaitAsync(
             StageCommandExecution.Require<ICameraManager>(c).Shake(new CameraShakeSpec(
-                new Vector2((float)a.Strength, (float)a.Strength), a.Frequency,
+                (float)a.Strength, a.Axis, a.Frequency,
                 StageCommandExecution.Operation(a.Duration, a.Operation, a.Group))), a.Wait, c);
 }
