@@ -352,7 +352,7 @@ public sealed class ResourceManager : IResourceManager
             _ = CompleteLoadAsync(
                 resolved.Provider, resolved.Location!, resourceType, cacheKey,
                 logicalKey.Path, estimatedBytes, completion,
-                loadLifetime?.Token ?? lifetime.SessionCancellationToken);
+                loadLifetime?.Token ?? lifetime.RuntimeCancellationToken);
             return completion.Task;
         }
     }
@@ -525,7 +525,7 @@ public sealed class ResourceManager : IResourceManager
     {
         loadLifetime?.Dispose();
         loadLifetime = CancellationTokenSource.CreateLinkedTokenSource(
-            lifetime.SessionCancellationToken, lifetime.RuntimeCancellationToken);
+            lifetime.RuntimeCancellationToken);
     }
 
     private void CancelLoadLifetime()

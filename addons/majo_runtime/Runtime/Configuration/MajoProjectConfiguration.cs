@@ -236,14 +236,6 @@ public partial class MajoProjectConfiguration : Resource
         if (Script is null)
         {
             issues.Add(new ConfigurationIssue(nameof(Script), "Configuration is required."));
-            return;
-        }
-
-        if (!Script.RequireExactProgramFingerprint)
-        {
-            issues.Add(new ConfigurationIssue(
-                $"{nameof(Script)}.{nameof(Script.RequireExactProgramFingerprint)}",
-                "Exact program fingerprint validation is required by checkpoint format v1."));
         }
     }
 

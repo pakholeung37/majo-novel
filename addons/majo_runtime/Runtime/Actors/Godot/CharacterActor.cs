@@ -39,6 +39,15 @@ public sealed class CharacterActor : ActorBase, ICharacterActor
         View.Scale = scale;
     }
 
+    public void SetScenePosition(Vector2 scenePosition) =>
+        SetPosition(positions.GetScenePosition(scenePosition));
+
+    public void SetPosition(CharacterPositionPreset preset)
+    {
+        PositionPreset = preset;
+        SetPosition(positions.Get(preset));
+    }
+
     public IOperationHandle ChangeAppearance(
         string appearance,
         double durationSeconds,

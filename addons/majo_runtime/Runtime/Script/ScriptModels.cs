@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 
 namespace Majo.Runtime.Script;
@@ -28,7 +29,8 @@ public sealed record ScriptDescriptor
     public ScriptDescriptor(
         ScriptId id,
         string programFingerprint,
-        IEnumerable<string> lineIds)
+        IEnumerable<string> lineIds,
+        IReadOnlyDictionary<string, int>? lineSubstitutionCounts = null)
     {
         Id = id ?? throw new ArgumentNullException(nameof(id));
         ArgumentException.ThrowIfNullOrWhiteSpace(programFingerprint);
@@ -46,6 +48,29 @@ public sealed record ScriptDescriptor
         }
 
         LineIds = Array.AsReadOnly(normalized);
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        if (lineSubstitutionCounts is not null)
+        {
+            foreach (var pair in lineSubstitutionCounts)
+            {
+                ArgumentException.ThrowIfNullOrWhiteSpace(pair.Key);
+                var lineId = pair.Key.Trim();
+                if (!LineIds.Contains(lineId, StringComparer.Ordinal))
+                {
+                    throw new ScriptCheckpointException(
+                        $"Script '{id}' contains substitution metadata for unknown line ID '{lineId}'.");
+                }
+                if (pair.Value < 0)
+                {
+                    throw new ScriptCheckpointException(
+                        $"Line '{lineId}' has a negative substitution count.");
+                }
+
+                counts.Add(lineId, pair.Value);
+            }
+        }
+
+        LineSubstitutionCounts = new ReadOnlyDictionary<string, int>(counts);
     }
 
     public ScriptId Id { get; }
@@ -53,6 +78,8 @@ public sealed record ScriptDescriptor
     public string ProgramFingerprint { get; }
 
     public IReadOnlyList<string> LineIds { get; }
+
+    public IReadOnlyDictionary<string, int> LineSubstitutionCounts { get; }
 }
 
 public enum ScriptPlaybackPhase

@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Godot;
 using Google.Protobuf;
+using Majo.Runtime.Core;
 using Majo.Runtime.Script;
 using Majo.YarnBridge;
 using Majo.Runtime.Dialogue.Commands;
@@ -27,6 +28,8 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
     private readonly IReadOnlyList<IDialoguePresenter> presenters;
     private readonly ILocaleManager? localeManager;
     private readonly DialogueSpeakerNameResolver? speakerNameResolver;
+    private readonly IRuntimeLogger logger;
+    private readonly bool requireExactProgramFingerprint;
     private readonly YarnVmStateBridge stateBridge = new();
     private readonly YarnDialogueVariableStore variableStore = new();
     private readonly object sync = new();
@@ -59,7 +62,9 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
         string scriptsPath,
         IReadOnlyList<IDialoguePresenter> presenters,
         ILocaleManager? localeManager = null,
-        DialogueSpeakerNameResolver? speakerNameResolver = null)
+        DialogueSpeakerNameResolver? speakerNameResolver = null,
+        IRuntimeLogger? logger = null,
+        bool requireExactProgramFingerprint = false)
     {
         this.owner = owner ?? throw new ArgumentNullException(nameof(owner));
         ArgumentNullException.ThrowIfNull(resources);
@@ -67,6 +72,8 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
         this.presenters = presenters ?? throw new ArgumentNullException(nameof(presenters));
         this.localeManager = localeManager;
         this.speakerNameResolver = speakerNameResolver;
+        this.logger = logger ?? NullRuntimeLogger.Instance;
+        this.requireExactProgramFingerprint = requireExactProgramFingerprint;
     }
 
     public event Action<string>? NodeEntered;
@@ -408,21 +415,50 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
         }
 
         var descriptor = await ResolveAsync(checkpoint.Spot.Script, cancellationToken);
-        if (!string.Equals(
-                descriptor.ProgramFingerprint,
-                checkpoint.ProgramFingerprint,
-                StringComparison.Ordinal))
-        {
-            throw new ScriptCheckpointException(
-                $"Script '{checkpoint.Spot.Script}' no longer matches checkpoint fingerprint.");
-        }
-
         if (!descriptor.LineIds.Contains(checkpoint.Spot.LineId, StringComparer.Ordinal))
         {
             throw new ScriptCheckpointException(
                 $"Line '{checkpoint.Spot.LineId}' does not exist in script " +
                 $"'{checkpoint.Spot.Script}'.");
         }
+
+        if (descriptor.LineSubstitutionCounts.TryGetValue(
+                checkpoint.Spot.LineId,
+                out var substitutionCount) &&
+            substitutionCount != checkpoint.ResolvedSubstitutions.Count)
+        {
+            throw new ScriptCheckpointException(
+                $"Line '{checkpoint.Spot.LineId}' now requires {substitutionCount} substitutions, " +
+                $"but the checkpoint contains {checkpoint.ResolvedSubstitutions.Count}.");
+        }
+
+        if (string.Equals(
+                descriptor.ProgramFingerprint,
+                checkpoint.ProgramFingerprint,
+                StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (requireExactProgramFingerprint)
+        {
+            throw new ScriptCheckpointException(
+                $"Script '{checkpoint.Spot.Script}' no longer matches checkpoint fingerprint.");
+        }
+
+        logger.Warning(
+            "script",
+            "script.checkpoint_program_changed",
+            $"Script '{checkpoint.Spot.Script}' changed after the checkpoint was captured; " +
+            "restore will continue using its stable line ID.",
+            properties: new Dictionary<string, object?>
+            {
+                ["projectId"] = checkpoint.Spot.Script.ProjectId,
+                ["nodeName"] = checkpoint.Spot.Script.NodeName,
+                ["lineId"] = checkpoint.Spot.LineId,
+                ["checkpointFingerprint"] = checkpoint.ProgramFingerprint,
+                ["currentFingerprint"] = descriptor.ProgramFingerprint,
+            });
     }
 
     public void PrepareRestore(ScriptCheckpoint checkpoint)
@@ -821,9 +857,16 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
                 global::Yarn.Instruction.InstructionTypeOneofCase.RunLine)
             .Select(instruction => instruction.RunLine.LineID)
             .ToArray();
+        var lineSubstitutionCounts = node.Instructions
+            .Where(instruction => instruction.InstructionTypeCase ==
+                global::Yarn.Instruction.InstructionTypeOneofCase.RunLine)
+            .ToDictionary(
+                instruction => instruction.RunLine.LineID,
+                instruction => instruction.RunLine.SubstitutionCount,
+                StringComparer.Ordinal);
         var fingerprint = Convert.ToHexString(
             SHA256.HashData(project.Program.ToByteArray())).ToLowerInvariant();
-        return new ScriptDescriptor(id, fingerprint, lineIds);
+        return new ScriptDescriptor(id, fingerprint, lineIds, lineSubstitutionCounts);
     }
 
     private void EnsureInitialized()

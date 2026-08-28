@@ -104,6 +104,23 @@ public sealed class ResourceManagerTests
     }
 
     [Fact(Timeout = 5_000)]
+    public async Task SessionReplacementDoesNotCancelSubsequentResourceLoads()
+    {
+        using var lifetime = new TestRuntimeLifetime();
+        var asset = new TestAsset("new-session");
+        var provider = new MemoryProvider("memory")
+            .Add("memory://audio/bgm", asset);
+        var manager = new ResourceManager([provider], lifetime);
+        await manager.InitializeAsync(CancellationToken.None);
+
+        lifetime.BeginSession();
+
+        var loaded = await manager.LoadAsync<TestAsset>(new ResourceKey("audio/bgm"));
+        Assert.Same(asset, loaded);
+        await manager.ShutdownAsync(CancellationToken.None);
+    }
+
+    [Fact(Timeout = 5_000)]
     public async Task ConcurrentLeasesDeduplicateAndCallerCancellationIsIndependent()
     {
         using var lifetime = new TestRuntimeLifetime();
@@ -369,11 +386,19 @@ public sealed class ResourceManagerTests
     private sealed class TestRuntimeLifetime : IRuntimeLifetime, IDisposable
     {
         private readonly CancellationTokenSource runtime = new();
-        private readonly CancellationTokenSource session = new();
+        private CancellationTokenSource session = new();
 
         public CancellationToken RuntimeCancellationToken => runtime.Token;
 
         public CancellationToken SessionCancellationToken => session.Token;
+
+        public void BeginSession()
+        {
+            var previous = session;
+            session = new CancellationTokenSource();
+            previous.Cancel();
+            previous.Dispose();
+        }
 
         public void Dispose()
         {

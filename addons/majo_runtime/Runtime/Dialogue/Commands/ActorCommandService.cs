@@ -128,6 +128,7 @@ public sealed class ActorCommandService : IActorCommandService
                     actor.SetOpacity(0);
                     appearanceOperation = actor.Show(
                         command.DurationSeconds,
+                        command.OperationId,
                         groupId: command.GroupId);
                 }
                 else if (string.Equals(
@@ -139,6 +140,7 @@ public sealed class ActorCommandService : IActorCommandService
                     appearanceOperation = actor.ChangeOpacity(
                         1,
                         command.DurationSeconds,
+                        command.OperationId,
                         groupId: command.GroupId);
                 }
                 else
@@ -146,28 +148,24 @@ public sealed class ActorCommandService : IActorCommandService
                     appearanceOperation = actor.ChangeAppearance(
                         command.Appearance,
                         command.DurationSeconds,
+                        command.OperationId,
                         groupId: command.GroupId);
                 }
 
-                var positionOperation = command.ScenePosition is { } scenePosition
-                    ? actor.ChangeScenePosition(
-                        scenePosition,
-                        command.DurationSeconds,
-                        command.OperationId,
-                        command.GroupId)
-                    : actor.ChangePosition(
-                        command.Position,
-                        command.DurationSeconds,
-                        command.OperationId,
-                        command.GroupId);
+                if (command.ScenePosition is { } scenePosition)
+                {
+                    actor.SetScenePosition(scenePosition);
+                }
+                else
+                {
+                    actor.SetPosition(command.Position);
+                }
+
                 context.Track(appearanceOperation);
-                context.Track(positionOperation);
                 operationScheduled = true;
                 if (command.Wait)
                 {
-                    await Task.WhenAll(
-                        appearanceOperation.Completion.WaitAsync(context.CancellationToken),
-                        positionOperation.Completion.WaitAsync(context.CancellationToken));
+                    await appearanceOperation.Completion.WaitAsync(context.CancellationToken);
                 }
             }
             catch

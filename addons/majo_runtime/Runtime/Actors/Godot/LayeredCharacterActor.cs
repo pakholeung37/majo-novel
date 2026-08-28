@@ -85,6 +85,15 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor
 
     public CharacterPositionPreset PositionPreset { get; private set; }
 
+    public void SetScenePosition(Vector2 scenePosition) =>
+        SetPosition(positions.GetScenePosition(scenePosition));
+
+    public void SetPosition(CharacterPositionPreset preset)
+    {
+        PositionPreset = preset;
+        SetPosition(positions.Get(preset));
+    }
+
     public override void SetOpacity(float opacity)
     {
         ValidateOpacity(opacity);

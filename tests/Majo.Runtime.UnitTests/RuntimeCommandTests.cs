@@ -1133,6 +1133,13 @@ public sealed class RuntimeCommandTests
 
         public void SetScale(Vector2 scale) => Scale = scale;
 
+        public void SetScenePosition(Vector2 scenePosition) => Position = scenePosition;
+
+        public void SetPosition(CharacterPositionPreset preset)
+        {
+            PositionPreset = preset;
+        }
+
         public IOperationHandle ChangeAppearance(
             string appearance,
             double durationSeconds,
@@ -1140,9 +1147,7 @@ public sealed class RuntimeCommandTests
             string? groupId = null)
         {
             Appearance = appearance;
-            var operation = new FakeOperationHandle(operationId, groupId);
-            operation.Complete();
-            return operation;
+            return LastOperation = new FakeOperationHandle(operationId, groupId);
         }
 
         public IOperationHandle ChangeScenePosition(

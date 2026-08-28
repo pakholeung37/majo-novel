@@ -475,7 +475,9 @@ public partial class MajoRuntimeBootstrap : Node
                                     resolver.Get<ILocalizedResourceResolver>())])
                             .ToArray(),
                         resolver.Get<ILocaleManager>(),
-                        ResolveSpeakerName);
+                        ResolveSpeakerName,
+                        Logger,
+                        Configuration.Script!.RequireExactProgramFingerprint);
                     return yarnDialogueBackend;
                 },
                 typeof(IResourceManager),

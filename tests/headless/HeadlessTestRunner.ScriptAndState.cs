@@ -11,6 +11,7 @@ using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Presentation;
+using Majo.Runtime.Dialogue.Yarn;
 using Majo.Runtime.Input;
 using Majo.Runtime.History;
 using Majo.Runtime.Operations;
@@ -76,6 +77,7 @@ public partial class HeadlessTestRunner
 
         var services = bootstrap.Host!.Services;
         var dialogue = services.Get<IDialoguePlayer>();
+        var yarnBackend = services.Get<IYarnDialogueBackend>();
         var presentation = services.Get<IDialoguePresentation>();
         var scriptManager = services.Get<IScriptManager>();
         var script = services.Get<IScriptPlayback>();
@@ -161,6 +163,34 @@ public partial class HeadlessTestRunner
                 script.CanCaptureCheckpoint &&
                 script.CurrentSpot?.LineId == "line:m95-state-current",
             "M9.5 ScriptPlayback did not expose the safe line checkpoint boundary.");
+
+        var capturedCheckpoint = script.CaptureCheckpoint();
+        var changedProgramCheckpoint = new ScriptCheckpoint(
+            capturedCheckpoint.FormatVersion,
+            new string('0', 64),
+            capturedCheckpoint.Spot,
+            capturedCheckpoint.ResolvedSubstitutions);
+        await yarnBackend.ValidateCheckpointAsync(changedProgramCheckpoint);
+        Assert(bootstrap.RingBuffer!.RecentEvents.Any(logEvent =>
+                logEvent.EventId == "script.checkpoint_program_changed"),
+            "A changed Yarn program fingerprint should warn while preserving a valid line checkpoint.");
+
+        var incompatibleSubstitutions = new ScriptCheckpoint(
+            capturedCheckpoint.FormatVersion,
+            capturedCheckpoint.ProgramFingerprint,
+            capturedCheckpoint.Spot,
+            Array.Empty<string>());
+        var rejectedIncompatibleSubstitutions = false;
+        try
+        {
+            await yarnBackend.ValidateCheckpointAsync(incompatibleSubstitutions);
+        }
+        catch (ScriptCheckpointException)
+        {
+            rejectedIncompatibleSubstitutions = true;
+        }
+        Assert(rejectedIncompatibleSubstitutions,
+            "Checkpoint validation should reject a changed Yarn line substitution shape.");
 
         variables.SetString("name", "Maya");
         variables.SetNumber("score", 7);

@@ -160,7 +160,6 @@ Hiro: 为什么你会在这里？ #line:0101Adv02_Hiro001
 // <<hideAllCharacters Lazy:0>>
 // <<modifyCharacterExtended Lazy:0 ScenePosition:30 IdAndAppearance:Hiro.Surprised1>>
 // <<modifyCharacterExtended Lazy:0 ScenePosition:70 IdAndAppearance:Ema.Fearful1,ArmR3>>
-// <<hide Hiro>>
 <<char Hiro appearance:Surprised1 position:left scenePosition:30,0>>
 <<char Ema appearance:Surprised1 position:right scenePosition:70,0>>
 
@@ -181,12 +180,13 @@ Ema: 我、我说，希罗…… #line:0101Adv02_Ema013
 这时—— #line:0101Adv02_Narrative030
 
 // <<playSfxModified SfxPath:Sfx_3 Volume:1.0 Loop:0 FadeInDuration:0.0>>
-
+<<sfx Sfx_Scenario_003>>
 声音从墙壁上的显示屏幕传来。[br/]艾玛和希罗吓了一跳，然后望向屏幕。 #line:0101Adv02_Narrative031
 
 // <<resetText>>
 // <<modifyTextPrinter Lazy:0 IdAndAppearance:Normal.Stream MakeDefault:1 HideOther:1>>
 // <<modifyBackgroundExtended Scale:1.3 Lazy:0 AppearanceAndTransition:25_1 SubId:Middle>>
+<<back scenes appearance:Background_025_001>>
 // <<modifyCharacterExtended Scale:1.4 Lazy:0 IdAndAppearance:Warden.1 SubId:Middle>>
 <<char Warden appearance:1 position:center scale:0.56>>
 // <<wait WaitMode:0.3>>

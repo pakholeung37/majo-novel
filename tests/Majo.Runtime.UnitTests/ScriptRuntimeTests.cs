@@ -64,6 +64,21 @@ public sealed class ScriptRuntimeTests
     }
 
     [Fact]
+    public void ScriptDescriptorCarriesLineSubstitutionShape()
+    {
+        var descriptor = new ScriptDescriptor(
+            new ScriptId("chapter", "Start"),
+            "fingerprint",
+            ["line:intro"],
+            new Dictionary<string, int>(StringComparer.Ordinal)
+            {
+                ["line:intro"] = 2,
+            });
+
+        Assert.Equal(2, descriptor.LineSubstitutionCounts["line:intro"]);
+    }
+
+    [Fact]
     public void ScriptStateAutoAndHistoryPublicContractsDoNotExposeBackendTypes()
     {
         var stableNamespaces = new HashSet<string>(StringComparer.Ordinal)
