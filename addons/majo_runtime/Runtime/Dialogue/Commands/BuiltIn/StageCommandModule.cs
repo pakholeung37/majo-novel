@@ -2,6 +2,7 @@
 
 using System;
 using System.Threading.Tasks;
+using Majo.Runtime.Configuration;
 using Godot;
 using Majo.Runtime.Stage;
 
@@ -50,7 +51,7 @@ public sealed class StageTransitionCommandArguments
 {
     [CommandParameter("kind", 0, Primary = true, Required = true)] public StageTransitionKind Kind { get; set; }
     [CommandParameter("appearance", 1)] public string? Appearance { get; set; }
-    [CommandParameter("duration", 2, DefaultValue = "0.5", Minimum = 0)] public double Duration { get; set; }
+    [CommandParameter("duration", 2, DefaultValue = RuntimeDefaults.TransitionDurationSecondsText, Minimum = 0)] public double Duration { get; set; }
     [CommandParameter("wait", 3)] public bool Wait { get; set; }
     [CommandParameter("group", 4)] public string? Group { get; set; }
     [CommandParameter("operation", 5)] public string? Operation { get; set; }
@@ -86,7 +87,7 @@ public sealed class StageCurtainCommandHandler : IRuntimeCommandHandler<StageCur
 public sealed class StageOverlayCommandArguments
 {
     [CommandParameter("opacity", 0, Primary = true, Required = true, Minimum = 0)] public double Opacity { get; set; }
-    [CommandParameter("duration", 1, DefaultValue = "0.35", Minimum = 0)] public double Duration { get; set; }
+    [CommandParameter("duration", 1, DefaultValue = RuntimeDefaults.AnimationDurationSecondsText, Minimum = 0)] public double Duration { get; set; }
     [CommandParameter("wait", 2)] public bool Wait { get; set; }
     [CommandParameter("group", 3)] public string? Group { get; set; }
     [CommandParameter("operation", 4)] public string? Operation { get; set; }
@@ -103,7 +104,7 @@ public sealed class StageOverlayCommandHandler : IRuntimeCommandHandler<StageOve
 public sealed class StageLetterboxCommandArguments
 {
     [CommandParameter("ratio", 0, Primary = true, Required = true, Minimum = 0)] public double Ratio { get; set; }
-    [CommandParameter("duration", 1, DefaultValue = "0.35", Minimum = 0)] public double Duration { get; set; }
+    [CommandParameter("duration", 1, DefaultValue = RuntimeDefaults.AnimationDurationSecondsText, Minimum = 0)] public double Duration { get; set; }
     [CommandParameter("wait", 2)] public bool Wait { get; set; }
     [CommandParameter("group", 3)] public string? Group { get; set; }
     [CommandParameter("operation", 4)] public string? Operation { get; set; }
@@ -119,7 +120,7 @@ public sealed class StageLetterboxCommandHandler : IRuntimeCommandHandler<StageL
 public sealed class StageFlashCommandArguments
 {
     [CommandParameter("intensity", 0, DefaultValue = "1", Minimum = 0)] public double Intensity { get; set; }
-    [CommandParameter("duration", 1, DefaultValue = "0.2", Minimum = 0)] public double Duration { get; set; }
+    [CommandParameter("duration", 1, DefaultValue = RuntimeDefaults.FlashDurationSecondsText, Minimum = 0)] public double Duration { get; set; }
     [CommandParameter("wait", 2)] public bool Wait { get; set; }
     [CommandParameter("group", 3)] public string? Group { get; set; }
     [CommandParameter("operation", 4)] public string? Operation { get; set; }

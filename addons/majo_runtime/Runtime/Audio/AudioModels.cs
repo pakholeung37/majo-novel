@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using Majo.Runtime.Configuration;
 using System.Threading.Tasks;
 using Majo.Runtime.Operations;
 
@@ -33,7 +34,7 @@ public sealed record AudioSettings(
     bool FailOnMissingClips = false);
 
 public readonly record struct AudioFade(
-    double DurationSeconds = 0,
+    double DurationSeconds = RuntimeDefaults.ImmediateDurationSeconds,
     string? OperationId = null,
     string? GroupId = null)
 {

@@ -2,6 +2,7 @@
 
 using System;
 using System.Threading.Tasks;
+using Majo.Runtime.Configuration;
 using Majo.Runtime.Audio;
 
 namespace Majo.Runtime.Dialogue.Commands.Audio;
@@ -18,7 +19,7 @@ public sealed class PlayVoiceCommandArguments
     [CommandParameter("volume", 1, DefaultValue = "1", Minimum = 0)]
     public double Volume { get; set; }
 
-    [CommandParameter("duration", 2, DefaultValue = "0", Minimum = 0)]
+    [CommandParameter("duration", 2, DefaultValue = RuntimeDefaults.ImmediateDurationSecondsText, Minimum = 0)]
     public double Duration { get; set; }
 
     [CommandParameter("wait", 3)]

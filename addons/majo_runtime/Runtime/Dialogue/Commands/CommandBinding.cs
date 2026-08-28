@@ -5,14 +5,15 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using Godot;
+using Majo.Runtime.Configuration;
 using Majo.Runtime.Stage;
 
 namespace Majo.Runtime.Dialogue.Commands;
 
 public sealed record CommandBindingContext(
     double DefaultAnimationDurationSeconds,
-    double DefaultAudioFadeDurationSeconds = 0.35,
-    double DefaultCharacterAnimationDurationSeconds = 0.1)
+    double DefaultAudioFadeDurationSeconds = RuntimeDefaults.AnimationDurationSeconds,
+    double DefaultCharacterAnimationDurationSeconds = RuntimeDefaults.CommandBindingCharacterAnimationDurationSeconds)
 {
     public CommandBindingContext Validate()
     {

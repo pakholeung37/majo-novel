@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Majo.Runtime.Audio;
+using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Presentation;
@@ -96,7 +97,7 @@ public sealed class PlaybackModeManager : IPlaybackModeManager
 
 		ExtraDelay = extraDelay;
 		WaitForVoice = waitForVoice;
-		SkipDelay = skipDelay ?? TimeSpan.FromMilliseconds(50);
+		SkipDelay = skipDelay ?? TimeSpan.FromSeconds(RuntimeDefaults.SkipDelaySeconds);
 		ValidateSkipMode(defaultSkipMode);
 		DefaultSkipMode = defaultSkipMode;
 	}

@@ -12,7 +12,7 @@ public partial class SettingsConfiguration : Resource
     public bool Enabled { get; set; } = true;
 
     [Export(PropertyHint.Range, "0,5,0.05,or_greater")]
-    public double FlushDebounceSeconds { get; set; } = 0.35;
+    public double FlushDebounceSeconds { get; set; } = RuntimeDefaults.SettingsFlushDebounceSeconds;
 
     [Export]
     public bool ShowDefaultUi { get; set; } = true;
@@ -42,7 +42,7 @@ public partial class SettingsConfiguration : Resource
     public SkipDefaultMode SkipDefaultMode { get; set; } = SkipDefaultMode.ReadOnly;
 
     [Export(PropertyHint.Range, "0,5,0.01,or_greater")]
-    public double SkipDelaySeconds { get; set; } = 0.05;
+    public double SkipDelaySeconds { get; set; } = RuntimeDefaults.SkipDelaySeconds;
 
     [Export]
     public bool ReduceMotion { get; set; }

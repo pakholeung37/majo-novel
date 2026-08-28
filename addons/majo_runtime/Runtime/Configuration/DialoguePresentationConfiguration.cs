@@ -29,8 +29,8 @@ public partial class DialoguePresentationConfiguration : Resource
     public bool UseFadeEffect { get; set; }
 
     [Export(PropertyHint.Range, "0,5,0.01,or_greater")]
-    public double FadeUpDurationSeconds { get; set; } = 0.1;
+    public double FadeUpDurationSeconds { get; set; } = RuntimeDefaults.PresentationFadeDurationSeconds;
 
     [Export(PropertyHint.Range, "0,5,0.01,or_greater")]
-    public double FadeDownDurationSeconds { get; set; } = 0.1;
+    public double FadeDownDurationSeconds { get; set; } = RuntimeDefaults.PresentationFadeDurationSeconds;
 }

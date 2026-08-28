@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using Majo.Runtime.Configuration;
 
 namespace Majo.Runtime.Settings;
 
@@ -20,10 +21,10 @@ public sealed record RuntimeSettings(
     bool SfxMuted = false,
     bool VoiceMuted = false,
     int LettersPerSecond = 32,
-    double AutoExtraDelaySeconds = 1,
+    double AutoExtraDelaySeconds = RuntimeDefaults.AutoExtraDelaySeconds,
     bool AutoWaitForVoice = true,
     SkipDefaultMode SkipDefaultMode = SkipDefaultMode.ReadOnly,
-    double SkipDelaySeconds = 0.05,
+    double SkipDelaySeconds = RuntimeDefaults.SkipDelaySeconds,
     bool ShowSpeakerName = true,
     bool ShowTextBox = true,
     string DialogueLocale = "en",

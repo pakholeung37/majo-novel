@@ -2,6 +2,7 @@
 
 using System;
 using Godot;
+using Majo.Runtime.Configuration;
 using Majo.Runtime.Resources;
 
 namespace Majo.Runtime.Stage;
@@ -162,7 +163,7 @@ public enum StageTransitionKind
 }
 
 public sealed record StageOperationSpec(
-    double DurationSeconds = 0.35,
+    double DurationSeconds = RuntimeDefaults.AnimationDurationSeconds,
     string? OperationId = null,
     string? GroupId = null,
     bool Skippable = true,

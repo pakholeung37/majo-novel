@@ -14,5 +14,5 @@ public partial class GlobalStateConfiguration : Resource
     public bool StrictRecovery { get; set; }
 
     [Export(PropertyHint.Range, "0,5,0.05,or_greater")]
-    public double FlushDebounceSeconds { get; set; } = 0.5;
+    public double FlushDebounceSeconds { get; set; } = RuntimeDefaults.GlobalStateFlushDebounceSeconds;
 }

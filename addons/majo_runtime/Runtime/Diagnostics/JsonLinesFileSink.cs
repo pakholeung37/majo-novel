@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
 
 namespace Majo.Runtime.Diagnostics;
@@ -86,7 +87,7 @@ public sealed class JsonLinesFileSink : IRuntimeLogSink
     {
         // Give background queue brief time to drain
         var spin = new SpinWait();
-        var timeout = DateTime.UtcNow.AddMilliseconds(500);
+        var timeout = DateTime.UtcNow.AddMilliseconds(RuntimeDefaults.DiagnosticsFlushTimeoutMilliseconds);
         while (queue.Count > 0 && DateTime.UtcNow < timeout)
         {
             spin.SpinOnce();
@@ -109,10 +110,10 @@ public sealed class JsonLinesFileSink : IRuntimeLogSink
         try
         {
             queue.CompleteAdding();
-            if (!workerThread.Join(TimeSpan.FromSeconds(2)))
+            if (!workerThread.Join(TimeSpan.FromSeconds(RuntimeDefaults.DiagnosticsShutdownTimeoutSeconds)))
             {
                 cancellation.Cancel();
-                workerThread.Join(TimeSpan.FromMilliseconds(500));
+                workerThread.Join(TimeSpan.FromMilliseconds(RuntimeDefaults.DiagnosticsForcedShutdownTimeoutMilliseconds));
             }
         }
         catch

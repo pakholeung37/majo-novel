@@ -8,7 +8,7 @@ namespace Majo.Runtime.Configuration;
 public partial class AutoConfiguration : Resource
 {
     [Export(PropertyHint.Range, "0,30,0.05,or_greater")]
-    public double ExtraDelaySeconds { get; set; } = 1;
+    public double ExtraDelaySeconds { get; set; } = RuntimeDefaults.AutoExtraDelaySeconds;
 
     [Export]
     public bool WaitForVoice { get; set; } = true;

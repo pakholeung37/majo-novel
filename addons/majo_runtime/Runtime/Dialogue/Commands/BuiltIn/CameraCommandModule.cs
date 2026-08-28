@@ -2,6 +2,7 @@
 
 using System;
 using System.Threading.Tasks;
+using Majo.Runtime.Configuration;
 using Godot;
 using Majo.Runtime.Stage;
 
@@ -166,7 +167,7 @@ public sealed class CameraShakeCommandArguments
     [CommandParameter("strength", 0, DefaultValue = "8", Minimum = 0)] public double Strength { get; set; }
     [CommandParameter("axis", 1, DefaultValue = "all")] public CameraShakeAxis Axis { get; set; }
     [CommandParameter("frequency", 2, DefaultValue = "20", Minimum = 0.001)] public double Frequency { get; set; }
-    [CommandParameter("duration", 3, DefaultValue = "0.4", Minimum = 0)] public double Duration { get; set; }
+    [CommandParameter("duration", 3, DefaultValue = RuntimeDefaults.CameraShakeDurationSecondsText, Minimum = 0)] public double Duration { get; set; }
     [CommandParameter("wait", 4)] public bool Wait { get; set; }
     [CommandParameter("group", 5)] public string? Group { get; set; }
     [CommandParameter("operation", 6)] public string? Operation { get; set; }
