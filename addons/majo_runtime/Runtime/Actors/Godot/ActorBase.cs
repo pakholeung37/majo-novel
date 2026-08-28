@@ -344,31 +344,68 @@ public abstract class ActorBase : IActor, IGodotActorView
 
     protected void CancelPropertyAnimation(string property) => CancelProperty(property);
 
-    protected IOperationHandle FadeToAppearance(
+    protected IOperationHandle CrossFadeToAppearance(
         string appearance,
         Action applyAppearance,
         double durationSeconds,
         string? operationId = null,
-        string? groupId = null)
+        string? groupId = null,
+        CanvasItem? compositeView = null)
     {
         EnsureAlive();
         ArgumentException.ThrowIfNullOrWhiteSpace(appearance);
         ArgumentNullException.ThrowIfNull(applyAppearance);
-        var halfDuration = durationSeconds / 2;
-        var fadeOut = CreateOpacityTween(0, new AnimationSpec(halfDuration));
-        var fadeIn = CreateOpacityTween(1, new AnimationSpec(halfDuration));
+        var animation = new AnimationSpec(durationSeconds);
+        var transitionView = compositeView ?? View;
+        CanvasItem? previousView = null;
+        CanvasItem? previousTransitionView = null;
+        OperationDefinition? fadeOut = null;
+        OperationDefinition? fadeIn = null;
         var appearanceApplied = false;
 
-        void ApplyAppearance()
+        void PrepareTransition()
         {
             if (appearanceApplied)
             {
                 return;
             }
 
+            var parent = View.GetParent() ?? throw new ActorException(
+                $"Actor '{Id}' must be attached before changing appearance.");
+            previousView = View.Duplicate() as CanvasItem ?? throw new ActorException(
+                $"Actor '{Id}' could not duplicate its current appearance.");
+            previousView.Name = $"{View.Name}_CrossfadePrevious";
+            parent.AddChild(previousView);
+            previousTransitionView = ReferenceEquals(transitionView, View)
+                ? previousView
+                : previousView.GetNode<CanvasItem>(View.GetPathTo(transitionView));
             applyAppearance();
             Appearance = appearance;
+            var color = transitionView.Modulate;
+            transitionView.Modulate = new Color(color.R, color.G, color.B, 0);
+            View.Visible = true;
+            fadeOut = CreateOpacityTween(previousTransitionView, 0, animation);
+            fadeIn = CreateOpacityTween(transitionView, 1, animation);
             appearanceApplied = true;
+        }
+
+        void CleanupPreviousView()
+        {
+            if (previousView is not null && GodotObject.IsInstanceValid(previousView))
+            {
+                previousView.Free();
+            }
+
+            previousView = null;
+        }
+
+        void RestoreFinalState()
+        {
+            PrepareTransition();
+            var color = transitionView.Modulate;
+            transitionView.Modulate = new Color(color.R, color.G, color.B, 1);
+            View.Visible = true;
+            CleanupPreviousView();
         }
 
         TargetAppearance = appearance;
@@ -377,26 +414,30 @@ public abstract class ActorBase : IActor, IGodotActorView
         var transition = new OperationDefinition(
             async context =>
             {
-                View.Visible = true;
-                await fadeOut.ExecuteAsync(context);
-                ApplyAppearance();
-                await fadeIn.ExecuteAsync(context);
+                PrepareTransition();
+                await Task.WhenAll(
+                    fadeOut!.ExecuteAsync(context),
+                    fadeIn!.ExecuteAsync(context));
+                CleanupPreviousView();
             },
             completeAsync: async cancellationToken =>
             {
-                View.Visible = true;
-                await fadeOut.CompleteAsync(cancellationToken);
-                ApplyAppearance();
-                await fadeIn.CompleteAsync(cancellationToken);
+                PrepareTransition();
+                await Task.WhenAll(
+                    fadeOut!.CompleteAsync(cancellationToken),
+                    fadeIn!.CompleteAsync(cancellationToken));
+                CleanupPreviousView();
             },
             cancelAsync: async cancellationToken =>
             {
-                await fadeOut.CancelAsync(cancellationToken);
-                await fadeIn.CancelAsync(cancellationToken);
-                var color = View.Modulate;
-                View.Modulate = new Color(color.R, color.G, color.B, 1);
-                View.Visible = true;
-                TargetAppearance = Appearance;
+                if (fadeOut is not null && fadeIn is not null)
+                {
+                    await Task.WhenAll(
+                        fadeOut.CancelAsync(cancellationToken),
+                        fadeIn.CancelAsync(cancellationToken));
+                }
+
+                RestoreFinalState();
                 TargetOpacity = 1;
                 TargetVisible = true;
             },
@@ -467,9 +508,15 @@ public abstract class ActorBase : IActor, IGodotActorView
         state is OperationState.Completed or OperationState.Cancelled or OperationState.Faulted;
 
     private OperationDefinition CreateOpacityTween(float opacity, AnimationSpec animation) =>
+        CreateOpacityTween(View, opacity, animation);
+
+    private OperationDefinition CreateOpacityTween(
+        CanvasItem target,
+        float opacity,
+        AnimationSpec animation) =>
         GodotTweenOperation.CreatePropertyTween(
             View,
-            View,
+            target,
             new NodePath("modulate:a"),
             opacity,
             animation.DurationSeconds,

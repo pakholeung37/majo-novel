@@ -48,7 +48,7 @@ public sealed class CharacterActor : ActorBase, ICharacterActor
         var texture = TextureLoader.Load(
             Definition.GetAppearanceResourceKey(appearance),
             Definition.GetAppearanceOverride(appearance));
-        return FadeToAppearance(
+        return CrossFadeToAppearance(
             appearance,
             () => ApplyTexture(texture),
             durationSeconds,

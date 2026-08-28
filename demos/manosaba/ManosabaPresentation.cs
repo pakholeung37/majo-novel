@@ -221,7 +221,7 @@ public partial class ManosabaPresentation : Control
 			}
 			AnimateMenuButtonScale(Vector2.One);
 			AnimateAutoButtonScale(AutoButtonBaseScale);
-			menuPause = playback?.AcquirePause(PlaybackPauseReason.Modal);
+			menuPause = playback?.AcquirePause(PlaybackPauseReason.External);
 			if (menuStatus is not null)
 			{
 				menuStatus.Text = "右键或 Esc 关闭";

@@ -160,9 +160,9 @@ Hiro: 为什么你会在这里？ #line:0101Adv02_Hiro001
 // <<hideAllCharacters Lazy:0>>
 // <<modifyCharacterExtended Lazy:0 ScenePosition:30 IdAndAppearance:Hiro.Surprised1>>
 // <<modifyCharacterExtended Lazy:0 ScenePosition:70 IdAndAppearance:Ema.Fearful1,ArmR3>>
-<<hide Hiro>>
+// <<hide Hiro>>
 <<char Hiro appearance:Surprised1 position:left scenePosition:30,0>>
-<<char Ema appearance:"Fearful1,ArmR3" position:right scenePosition:70,0>>
+<<char Ema appearance:Surprised1 position:right scenePosition:70,0>>
 
 Ema: 啊…… #line:0101Adv02_Ema012
 

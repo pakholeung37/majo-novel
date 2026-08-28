@@ -34,7 +34,8 @@ public partial class HeadlessTestRunner
             ActorFactoryIds.Character,
             "Default",
             CharacterPositionPreset.Center));
-        var layers = character.View.GetChildren().OfType<Sprite2D>().ToArray();
+        var layerComposite = character.View.GetNode<CanvasGroup>("LayerComposite");
+        var layers = layerComposite.GetChildren().OfType<Sprite2D>().ToArray();
         Assert(character.FactoryId == ActorFactoryIds.LayeredCharacter,
             "Layered character used the wrong actor factory.");
         Assert(layers.Length == 126,
@@ -76,14 +77,26 @@ public partial class HeadlessTestRunner
             "Camera pose did not use the configured Stage reference resolution.");
 
         var previousAppearance = character.Appearance;
+        var actorHost = character.View.GetParent();
+        var nodesBeforeTransition = actorHost.GetChildren().ToHashSet();
         var appearanceTransition = character.ChangeAppearance("Surprised1", 0.2);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        Assert(character.Opacity < 1 && character.Appearance == previousAppearance,
-            "Layered character appearance change did not expose its fade-out phase.");
+        var previousView = actorHost.GetChildren()
+            .OfType<CanvasItem>()
+            .Single(node => !nodesBeforeTransition.Contains(node));
+        var previousComposite = previousView.GetNode<CanvasGroup>("LayerComposite");
+        Assert(character.Appearance != previousAppearance &&
+                layerComposite.Modulate.A is > 0 and < 1 &&
+                previousComposite.Modulate.A is > 0 and < 1 &&
+                layerComposite.Modulate.A + previousComposite.Modulate.A > 0.9f,
+            "Layered character appearance change did not crossfade both appearances.");
         await appearanceTransition.Completion;
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         Assert(Mathf.IsEqualApprox(character.Opacity, 1),
             "Layered character appearance change did not finish its fade-in phase.");
+        Assert(actorHost.GetChildren().All(nodesBeforeTransition.Contains),
+            "Layered character appearance change did not release its previous view.");
         Assert(LayerVisible(layers,
                 "Angle01_Head01_Facial01_Eyes01_Eyes01_Surprised_Open01") &&
             !LayerVisible(layers,

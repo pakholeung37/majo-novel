@@ -19,6 +19,7 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor
     private readonly CharacterPositionMap positions;
     private readonly LayerCompositionResolver resolver;
     private readonly HashSet<string> activeLayers;
+    private readonly CanvasGroup layerComposite;
     private readonly ShaderMaterial multiplyMaterial;
     private readonly Dictionary<string, Sprite2D> layerViews =
         new(StringComparer.Ordinal);
@@ -45,6 +46,11 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor
         ArgumentNullException.ThrowIfNull(manifest);
         ArgumentException.ThrowIfNullOrWhiteSpace(manifestPath);
         this.multiplyMaterial = multiplyMaterial ?? CreateAlphaAwareMultiplyMaterial();
+        layerComposite = new CanvasGroup
+        {
+            Name = "LayerComposite",
+        };
+        View.AddChild(layerComposite);
         resolver = new LayerCompositionResolver(manifest);
         activeLayers = resolver.CreateDefaultState();
         if (buildLayerViews)
@@ -82,7 +88,7 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor
         var nextLayers = new HashSet<string>(activeLayers, StringComparer.Ordinal);
         resolver.Apply(nextLayers, appearance);
         var canonicalAppearance = resolver.Canonicalize(nextLayers);
-        return FadeToAppearance(
+        return CrossFadeToAppearance(
             canonicalAppearance,
             () =>
             {
@@ -92,7 +98,8 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor
             },
             durationSeconds,
             operationId,
-            groupId);
+            groupId,
+            layerComposite);
     }
 
     public IOperationHandle ChangeScenePosition(
@@ -252,7 +259,7 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor
             layerView.Material = multiplyMaterial;
         }
 
-        View.AddChild(layerView);
+        layerComposite.AddChild(layerView);
         layerViews.Add(layer.Path, layerView);
     }
 
