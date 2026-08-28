@@ -19,6 +19,7 @@ public sealed class ActorManager : IActorManager
         new(StringComparer.Ordinal);
     private readonly Dictionary<string, IActor> actors =
         new(StringComparer.Ordinal);
+    private readonly List<string> actorOrder = new();
     private readonly Dictionary<string, Task<IActor>> pendingActors =
         new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> pendingActorFactories =
@@ -65,7 +66,7 @@ public sealed class ActorManager : IActorManager
         {
             lock (gate)
             {
-                return actors.Values.ToArray();
+                return actorOrder.Select(id => actors[id]).ToArray();
             }
         }
     }
@@ -175,6 +176,7 @@ public sealed class ActorManager : IActorManager
         lock (gate)
         {
             actors.Add(actorId, actor);
+            actorOrder.Add(actorId);
         }
         return actor;
     }
@@ -252,6 +254,7 @@ public sealed class ActorManager : IActorManager
         lock (gate)
         {
             actors.Add(request.ActorId, actor);
+            actorOrder.Add(request.ActorId);
         }
 
         return actor;
@@ -342,6 +345,8 @@ public sealed class ActorManager : IActorManager
             {
                 return false;
             }
+
+            actorOrder.Remove(actorId);
         }
 
         actor.Destroy();
@@ -486,8 +491,9 @@ public sealed class ActorManager : IActorManager
         IActor[] snapshot;
         lock (gate)
         {
-            snapshot = actors.Values.Reverse().ToArray();
+            snapshot = actorOrder.AsEnumerable().Reverse().Select(id => actors[id]).ToArray();
             actors.Clear();
+            actorOrder.Clear();
         }
         var exceptions = new List<Exception>();
         foreach (var actor in snapshot)
@@ -551,6 +557,7 @@ public sealed class ActorManager : IActorManager
             lock (gate)
             {
                 actors.Add(actorId, actor);
+                actorOrder.Add(actorId);
             }
 
             completion.TrySetResult(actor);

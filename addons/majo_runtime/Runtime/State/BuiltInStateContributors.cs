@@ -316,7 +316,6 @@ public sealed class ActorStateContributor : IStateContributor
     {
         cancellationToken.ThrowIfCancellationRequested();
         var entries = actors.Actors
-            .OrderBy(actor => actor.Id, StringComparer.Ordinal)
             .Select(actor => new ActorEntry(
                 actor.Id,
                 actor.FactoryId,

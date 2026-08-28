@@ -45,6 +45,30 @@ public sealed class ActorManagerTests
         await manager.ShutdownAsync(CancellationToken.None);
     }
 
+    [Fact(Timeout = 5_000)]
+    public async Task ManagerPreservesExactActorCreationOrderAcrossCreationsAndRemovals()
+    {
+        var factory = new FakeActorFactory("test");
+        var manager = new ActorManager(
+            [CreateDefinition("stills"), CreateDefinition("scenes"), CreateDefinition("hero")],
+            [factory]);
+        await manager.InitializeAsync(CancellationToken.None);
+
+        manager.Create("stills");
+        manager.Create("scenes");
+        manager.Create("hero");
+
+        Assert.Equal(["stills", "scenes", "hero"], manager.Actors.Select(a => a.Id));
+
+        manager.Remove("scenes");
+        Assert.Equal(["stills", "hero"], manager.Actors.Select(a => a.Id));
+
+        manager.Create("scenes");
+        Assert.Equal(["stills", "hero", "scenes"], manager.Actors.Select(a => a.Id));
+
+        await manager.ShutdownAsync(CancellationToken.None);
+    }
+
     [Fact]
     public void ManagerRejectsDuplicateDefinitions()
     {

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Majo.Runtime.Actors;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Input;
 using Majo.Runtime.Operations;
@@ -299,6 +300,84 @@ public sealed class StateManagerTests
             manager.RestoreTransaction.ExecuteAsync(plan));
         Assert.Empty(events);
         Assert.Equal(StateManagerStatus.Idle, manager.Status);
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task ActorStateContributorPreservesVisualCreationOrder()
+    {
+        var factory = new FakeActorFactory("test");
+        var definitions = new[]
+        {
+            new ActorDefinition("stills", "test", "default", []),
+            new ActorDefinition("scenes", "test", "default", []),
+            new ActorDefinition("hero", "test", "default", []),
+        };
+        var manager = new ActorManager(definitions, [factory]);
+        await manager.InitializeAsync(CancellationToken.None);
+
+        manager.Create("stills");
+        manager.Create("scenes");
+        manager.Create("hero");
+
+        var contributor = new ActorStateContributor(manager);
+        var record = await contributor.CaptureAsync(CancellationToken.None);
+
+        // Reset and verify order is restored as stills -> scenes -> hero (not alphabetical scenes -> stills -> hero)
+        await manager.ResetAsync(CancellationToken.None);
+        Assert.Empty(manager.Actors);
+
+        await contributor.RestoreAsync(record, CancellationToken.None);
+        Assert.Equal(["stills", "scenes", "hero"], manager.Actors.Select(a => a.Id));
+
+        await manager.ShutdownAsync(CancellationToken.None);
+    }
+
+    private sealed class FakeActorFactory : IActorFactory
+    {
+        public FakeActorFactory(string factoryId) => FactoryId = factoryId;
+        public string FactoryId { get; }
+        public void ValidateDefinition(ActorDefinition definition) { }
+        public IActor Create(ActorDefinition definition) => new FakeActor(definition.Id, definition.DefaultAppearance);
+        public IActor Create(ActorDefinition definition, ActorCreationMode mode) =>
+            new FakeActor(definition.Id, definition.DefaultAppearance, mode == ActorCreationMode.Active);
+    }
+
+    private sealed class FakeActor : IActor
+    {
+        public FakeActor(string id, string appearance, bool visible = true)
+        {
+            Id = id;
+            Appearance = TargetAppearance = appearance;
+            Visible = TargetVisible = visible;
+        }
+
+        public string Id { get; }
+        public string FactoryId => "test";
+        public string Appearance { get; set; }
+        public string TargetAppearance { get; }
+        public bool Visible { get; set; }
+        public bool TargetVisible { get; }
+        public Godot.Vector2 Position => Godot.Vector2.Zero;
+        public Godot.Vector2 TargetPosition => Godot.Vector2.Zero;
+        public Godot.Color Tint => Godot.Colors.White;
+        public float Opacity { get; set; } = 1f;
+        public float TargetOpacity => 1f;
+
+        public void SetAppearance(string appearance) => Appearance = appearance;
+        public Task PrepareAppearanceAsync(string appearance, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public void SetVisible(bool visible) => Visible = visible;
+        public void SetPosition(Godot.Vector2 position) { }
+        public void SetTint(Godot.Color tint) { }
+        public void SetOpacity(float opacity) => Opacity = opacity;
+        public IOperationHandle ChangePosition(Godot.Vector2 position, double durationSeconds, string? operationId = null, string? groupId = null) => throw new NotImplementedException();
+        public IOperationHandle ChangePosition(Godot.Vector2 position, AnimationSpec animation, string? operationId = null, string? groupId = null) => throw new NotImplementedException();
+        public IOperationHandle ChangeOpacity(float opacity, double durationSeconds, string? operationId = null, string? groupId = null) => throw new NotImplementedException();
+        public IOperationHandle ChangeOpacity(float opacity, AnimationSpec animation, string? operationId = null, string? groupId = null) => throw new NotImplementedException();
+        public IOperationHandle Show(double durationSeconds, string? operationId = null, string? groupId = null) => throw new NotImplementedException();
+        public IOperationHandle Show(AnimationSpec animation, string? operationId = null, string? groupId = null) => throw new NotImplementedException();
+        public IOperationHandle Hide(double durationSeconds, string? operationId = null, string? groupId = null) => throw new NotImplementedException();
+        public IOperationHandle Hide(AnimationSpec animation, string? operationId = null, string? groupId = null) => throw new NotImplementedException();
+        public void Destroy() { }
     }
 
     private static StateManager CreateManager(
