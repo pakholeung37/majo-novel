@@ -1,5 +1,6 @@
 #nullable enable
 
+using Godot;
 using Majo.Runtime.Actors;
 
 namespace Majo.Runtime.Dialogue.Commands;
@@ -19,7 +20,9 @@ public sealed record CharacterCommand(
     double DurationSeconds,
     bool Wait,
     string? GroupId,
-    string? OperationId);
+    string? OperationId,
+    Vector2? ScenePosition = null,
+    float? Scale = null);
 
 public sealed record HideCommand(
     string ActorId,

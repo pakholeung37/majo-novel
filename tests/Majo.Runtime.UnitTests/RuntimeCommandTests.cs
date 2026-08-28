@@ -24,6 +24,8 @@ public sealed class RuntimeCommandTests
                 "duration:0.5",
                 "appearance:happy",
                 "group:setup",
+                "scenePosition:45,0",
+                "scale:0.75",
             ]);
 
         Assert.Equal("maya", character.Actor);
@@ -33,6 +35,8 @@ public sealed class RuntimeCommandTests
         Assert.True(character.Wait);
         Assert.Equal("setup", character.Group);
         Assert.Equal("maya-move", character.Operation);
+        Assert.Equal(new Vector2(45, 0), character.ScenePosition);
+        Assert.Equal(0.75, character.Scale);
     }
 
     [Fact]
@@ -133,6 +137,30 @@ public sealed class RuntimeCommandTests
         Assert.Equal(CharacterPositionPreset.Left, actor.PositionPreset);
         Assert.Equal("setup", actor.LastOperation.GroupId);
         Assert.Equal("move", actor.LastOperation.Id);
+        actor.LastOperation.Complete();
+        await actor.LastOperation.Completion;
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task CharacterCommandAppliesScenePositionAndRootScale()
+    {
+        var actor = new FakeCharacterActor("hero", "idle");
+        var service = CreateService(actor);
+
+        var task = service.CharacterAsync(new CharacterCommand(
+            "hero",
+            "happy",
+            CharacterPositionPreset.Center,
+            1,
+            false,
+            null,
+            "scene-move",
+            new Vector2(45, 0),
+            0.75f));
+
+        Assert.True(task.IsCompletedSuccessfully);
+        Assert.Equal(new Vector2(45, 0), actor.Position);
+        Assert.Equal(new Vector2(0.75f, 0.75f), actor.Scale);
         actor.LastOperation.Complete();
         await actor.LastOperation.Completion;
     }
@@ -1078,7 +1106,21 @@ public sealed class RuntimeCommandTests
 
         public Sprite2D View => null!;
 
+        public Vector2 Scale { get; private set; } = Vector2.One;
+
         public CharacterPositionPreset PositionPreset { get; private set; }
+
+        public void SetScale(Vector2 scale) => Scale = scale;
+
+        public IOperationHandle ChangeScenePosition(
+            Vector2 scenePosition,
+            double durationSeconds,
+            string? operationId = null,
+            string? groupId = null)
+        {
+            Position = scenePosition;
+            return LastOperation = new FakeOperationHandle(operationId, groupId);
+        }
 
         public IOperationHandle ChangePosition(
             CharacterPositionPreset preset,

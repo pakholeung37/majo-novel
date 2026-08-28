@@ -324,6 +324,8 @@ public sealed class ActorStateContributor : IStateContributor
                 actor.Visible,
                 actor.Position.X,
                 actor.Position.Y,
+                actor is ICharacterActor character ? character.Scale.X : null,
+                actor is ICharacterActor scaledCharacter ? scaledCharacter.Scale.Y : null,
                 actor.Tint.R,
                 actor.Tint.G,
                 actor.Tint.B,
@@ -357,6 +359,11 @@ public sealed class ActorStateContributor : IStateContributor
                 cancellationToken);
             actor.SetAppearance(entry.Appearance);
             actor.SetPosition(new Vector2(entry.PositionX, entry.PositionY));
+            if (actor is ICharacterActor character &&
+                entry.ScaleX is { } scaleX && entry.ScaleY is { } scaleY)
+            {
+                character.SetScale(new Vector2(scaleX, scaleY));
+            }
             actor.SetTint(new Color(entry.TintR, entry.TintG, entry.TintB));
             actor.SetOpacity(entry.Opacity);
             actor.SetVisible(entry.Visible);
@@ -389,6 +396,8 @@ public sealed class ActorStateContributor : IStateContributor
             }
 
             if (!float.IsFinite(entry.PositionX) || !float.IsFinite(entry.PositionY) ||
+                entry.ScaleX is { } scaleX && (!float.IsFinite(scaleX) || scaleX <= 0) ||
+                entry.ScaleY is { } scaleY && (!float.IsFinite(scaleY) || scaleY <= 0) ||
                 !float.IsFinite(entry.TintR) || !float.IsFinite(entry.TintG) ||
                 !float.IsFinite(entry.TintB) || !float.IsFinite(entry.Opacity) ||
                 entry.Opacity is < 0 or > 1)
@@ -410,6 +419,8 @@ public sealed class ActorStateContributor : IStateContributor
         bool Visible,
         float PositionX,
         float PositionY,
+        float? ScaleX,
+        float? ScaleY,
         float TintR,
         float TintG,
         float TintB,

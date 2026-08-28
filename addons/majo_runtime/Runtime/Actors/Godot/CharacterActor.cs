@@ -29,7 +29,25 @@ public sealed class CharacterActor : ActorBase, ICharacterActor
 
     public override Vector2 Position => View.Position;
 
+    public Vector2 Scale => View.Scale;
+
     public CharacterPositionPreset PositionPreset { get; private set; }
+
+    public void SetScale(Vector2 scale)
+    {
+        ValidateScale(scale);
+        View.Scale = scale;
+    }
+
+    public IOperationHandle ChangeScenePosition(
+        Vector2 scenePosition,
+        double durationSeconds,
+        string? operationId = null,
+        string? groupId = null) => ChangePosition(
+            positions.GetScenePosition(scenePosition),
+            durationSeconds,
+            operationId,
+            groupId);
 
     public IOperationHandle ChangePosition(
         CharacterPositionPreset preset,
@@ -60,5 +78,14 @@ public sealed class CharacterActor : ActorBase, ICharacterActor
     protected override void ApplyPosition(Vector2 position)
     {
         View.Position = position;
+    }
+
+    private static void ValidateScale(Vector2 scale)
+    {
+        if (!float.IsFinite(scale.X) || !float.IsFinite(scale.Y) ||
+            scale.X <= 0 || scale.Y <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(scale), "Scale must be positive and finite.");
+        }
     }
 }

@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
+using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
 
 namespace Majo.Runtime.Actors.Godot;
@@ -9,11 +10,14 @@ namespace Majo.Runtime.Actors.Godot;
 internal sealed class GodotActorHost : IRuntimeService
 {
     private readonly Node owner;
+    private readonly Vector2I referenceResolution;
     private bool isInitialized;
 
-    public GodotActorHost(Node owner)
+    public GodotActorHost(Node owner, ActorConfiguration configuration)
     {
         this.owner = owner ?? throw new ArgumentNullException(nameof(owner));
+        ArgumentNullException.ThrowIfNull(configuration);
+        referenceResolution = configuration.ReferenceResolution;
         StageViewport = new SubViewport
         {
             Name = "MajoStageViewport",
@@ -123,9 +127,11 @@ internal sealed class GodotActorHost : IRuntimeService
     private void ResizeOutput()
     {
         var visibleSize = owner.GetViewport().GetVisibleRect().Size;
-        StageViewport.Size = new Vector2I(
-            Math.Max(1, Mathf.RoundToInt(visibleSize.X)),
-            Math.Max(1, Mathf.RoundToInt(visibleSize.Y)));
+        StageViewport.Size = referenceResolution.X > 0 && referenceResolution.Y > 0
+            ? referenceResolution
+            : new Vector2I(
+                Math.Max(1, Mathf.RoundToInt(visibleSize.X)),
+                Math.Max(1, Mathf.RoundToInt(visibleSize.Y)));
         LiveOutput.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         TransitionSource.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
     }

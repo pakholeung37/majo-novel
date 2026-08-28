@@ -88,6 +88,7 @@ Ema: （这是噩梦的后续……？） #line:0101Adv02_Ema007
 // <<modifyBackgroundExtended Scale:g_backgroundDefaultScale Lazy:0 AppearanceAndTransition:1_1>>
 <<back scenes appearance:Background_001_001>>
 // <<modifyCharacterExtended Lazy:0 ScenePosition:50 IdAndAppearance:Ema.Surprised1>>
+<<char Ema appearance:Surprised1 position:center>>
 
 Ema: 我说，这里究竟是什么地方！？ #line:0101Adv02_Ema008
 
@@ -96,6 +97,7 @@ Ema: 我说，这里究竟是什么地方！？ #line:0101Adv02_Ema008
 紧接着，远远地从其他地方传来了[br/]其他少女们的叫喊声。 #line:0101Adv02_Narrative018
 
 // <<hideAllCharacters Lazy:0>>
+<<hide Ema duration:0>>
 
 // ＠遠野ハンナ
 Unknown: 竟把本小姐关在这种地方！[br/]究竟是什么意思啊！？ #line:0101Adv02_Unknown001
@@ -107,12 +109,14 @@ Unknown: 监禁少女可是犯罪欸！虽然不知是谁，[br/]可干出来这
 Unknown: 喂，开什么玩笑，我要杀了你！放我出去！！ #line:0101Adv02_Unknown003
 
 // <<modifyCharacterExtended Lazy:0 ScenePosition:50 IdAndAppearance:Ema.Normal1,ArmR3>>
+<<char Ema appearance:"Normal1,ArmR3" position:center>>
 
 Ema: （……太好了，被关进来的[br/]　不止我一个人） #line:0101Adv02_Ema009
 
 现场忽然吵闹起来，[br/]艾玛的脸上露出了安心。紧接着—— #line:0101Adv02_Narrative019
 
 // <<hideAllCharacters Lazy:0>>
+<<hide Ema duration:0>>
 
 // ＠二階堂ヒロ
 Unknown: ——能不能给我安静一下？ #line:0101Adv02_Unknown004
@@ -124,6 +128,7 @@ Unknown: ——能不能给我安静一下？ #line:0101Adv02_Unknown004
 艾玛顺着声音望去，[br/]发现双层床的上铺有个刚起身的人。 #line:0101Adv02_Narrative021
 
 // <<modifyCharacterExtended Lazy:0 ScenePosition:50 IdAndAppearance:Hiro.Angry1>>
+<<char Hiro appearance:Angry1 position:center>>
 
 // ＠二階堂ヒロ
 Unknown: 大吵大闹是不对的。 #line:0101Adv02_Unknown005
@@ -140,6 +145,7 @@ Ema: （真的假的……[br/]　是二阶堂希罗……？） #line:0101Adv02
 是在艾玛的初中时代，令她深陷黑暗的同窗，[br/]也是广受众人仰慕，常在人群中心可爱地微笑着的少女…… #line:0101Adv02_Narrative024
 
 // <<modifyCharacterExtended Lazy:0 ScenePosition:50 IdAndAppearance:Hiro.Surprised1>>
+<<char Hiro appearance:Surprised1 position:center>>
 
 和她对上眼的希罗，也大大的瞪圆了眼睛。[br/]艾玛还是第一次见有人把眼睛瞪得那么大。 #line:0101Adv02_Narrative025
 
@@ -154,6 +160,9 @@ Hiro: 为什么你会在这里？ #line:0101Adv02_Hiro001
 // <<hideAllCharacters Lazy:0>>
 // <<modifyCharacterExtended Lazy:0 ScenePosition:30 IdAndAppearance:Hiro.Surprised1>>
 // <<modifyCharacterExtended Lazy:0 ScenePosition:70 IdAndAppearance:Ema.Fearful1,ArmR3>>
+<<hide Hiro duration:0>>
+<<char Hiro appearance:Surprised1 position:left scenePosition:30,0>>
+<<char Ema appearance:"Fearful1,ArmR3" position:right scenePosition:70,0>>
 
 Ema: 啊…… #line:0101Adv02_Ema012
 
@@ -166,6 +175,8 @@ Ema: 我、我说，希罗…… #line:0101Adv02_Ema013
 艾玛鼓起勇气，[br/]尝试向往日旧识搭话。 #line:0101Adv02_Narrative029
 
 // <<hideAllCharacters Lazy:0>>
+<<hide Hiro duration:0>>
+<<hide Ema duration:0>>
 
 这时—— #line:0101Adv02_Narrative030
 
@@ -177,6 +188,7 @@ Ema: 我、我说，希罗…… #line:0101Adv02_Ema013
 // <<modifyTextPrinter Lazy:0 IdAndAppearance:Normal.Stream MakeDefault:1 HideOther:1>>
 // <<modifyBackgroundExtended Scale:1.3 Lazy:0 AppearanceAndTransition:25_1 SubId:Middle>>
 // <<modifyCharacterExtended Scale:1.4 Lazy:0 IdAndAppearance:Warden.1 SubId:Middle>>
+<<char Warden appearance:1 position:center scale:0.56>>
 // <<wait WaitMode:0.3>>
 
 Ema: （欸，怎么回事！？猫、猫头鹰怪物……！？） #line:0101Adv02_Ema014
@@ -208,8 +220,11 @@ Warden: 想反抗也没问题……[br/]只不过小命不保罢了……嗯…�
 
 // <<resetText>>
 // <<hideActors ActorIds:MainBackground-Middle,Warden-Middle Duration:0 Lazy:0>>
+<<hide Warden duration:0>>
 // <<modifyCharacterExtended Lazy:0 ScenePosition:30 IdAndAppearance:Hiro.Surprised1>>
 // <<modifyCharacterExtended Lazy:0 ScenePosition:70 IdAndAppearance:Ema.Surprised1,ArmR3>>
+<<char Hiro appearance:Surprised1 position:left scenePosition:30,0>>
+<<char Ema appearance:"Surprised1,ArmR3" position:right scenePosition:70,0>>
 // <<modifyBackgroundExtended Duration:0.5 Lazy:0 AppearanceAndTransition:Transparent SubId:Overlay>>
 // <<wait WaitMode:0.3>>
 
@@ -218,6 +233,8 @@ Ema: 典狱长……？看守……？ #line:0101Adv02_Ema015
 艾玛似乎思考不太跟得上状况的变化，呆站在原地一动不动——[br/]而她身边的希罗也一样。紧接着—— #line:0101Adv02_Narrative033
 
 // <<hideAllCharacters Lazy:0>>
+<<hide Hiro duration:0>>
+<<hide Ema duration:0>>
 
 // <<playSfxModified SfxPath:Sfx_5 Volume:1.0 Loop:0 FadeInDuration:0.0>>
 
@@ -278,6 +295,8 @@ Unknown: 呀啊啊啊！怪物别碰我！好恶心！[br/]好了，好了啦，
 
 // <<modifyCharacterExtended Lazy:0 ScenePosition:45 IdAndAppearance:Hiro.Head1,Pale1-Off,Sweat1-Off,Cheeks1-Normal,Angle01/Head01/Facial01/Eyes01>Eyes01_Angry_Open,Angle01/Head01/Facial01/Mouth01>Mouth01_Fearful_Open>>
 // <<modifyCharacterExtended Lazy:0 ScenePosition:60 IdAndAppearance:Ema.Fearful1,ArmR1>>
+<<char Hiro appearance:"Head1,Pale1-Off,Sweat1-Off,Cheeks1-Normal,Angle01/Head01/Facial01/Eyes01~Eyes01_Angry_Open,Angle01/Head01/Facial01/Mouth01~Mouth01_Fearful_Open" position:left scenePosition:45,0>>
+<<char Ema appearance:"Fearful1,ArmR1" position:right scenePosition:60,0>>
 
 Hiro: 所谓的说明，会解释清楚情况吗。[br/]那我得快点过去…… #line:0101Adv02_Hiro003
 
@@ -288,6 +307,8 @@ Hiro: 所谓的说明，会解释清楚情况吗。[br/]那我得快点过去…
 // <<playSfxModified SfxPath:Sfx_18 Volume:1.0 Loop:0 FadeInDuration:0.0>>
 // <<modifyCharacterExtended Lazy:0 ScenePosition:40 IdAndAppearance:Hiro.Angry2>>
 // <<modifyCharacterExtended Lazy:0 ScenePosition:80 IdAndAppearance:Ema.Fearful1,ArmR3>>
+<<char Hiro appearance:Angry2 position:left scenePosition:40,0>>
+<<char Ema appearance:"Fearful1,ArmR3" position:right scenePosition:80,0>>
 
 ——唰。[br/]她用力地甩开了艾玛的手。 #line:0101Adv02_Narrative045
 
@@ -296,6 +317,7 @@ Ema: ……！ #line:0101Adv02_Ema018
 Hiro: 不要随便碰我。[br/]你可别忘了，我讨厌你。 #line:0101Adv02_Hiro004
 
 // <<hideActors ActorIds:Hiro Lazy:0>>
+<<hide Hiro duration:0>>
 
 希罗的眼神中[br/]透着一股深深的厌弃。 #line:0101Adv02_Narrative046
 
@@ -304,6 +326,7 @@ Hiro: 不要随便碰我。[br/]你可别忘了，我讨厌你。 #line:0101Adv0
 // ========================================
 
 // <<modifyCharacterExtended Lazy:0 ScenePosition:80 IdAndAppearance:Ema.Fearful1>>
+<<char Ema appearance:Fearful1 position:right scenePosition:80,0>>
 
 // <<gosub Path:System/System_Subroutine.EndAdv>>
 

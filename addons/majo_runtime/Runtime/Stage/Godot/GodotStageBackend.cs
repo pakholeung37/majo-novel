@@ -116,7 +116,7 @@ internal sealed class GodotStageBackend : IStageBackend
         camera = state.Validate();
         actors.Root.Transform = CreateTransform(
             camera,
-            owner.GetViewport().GetVisibleRect().Size);
+            actors.StageViewport.Size);
     }
 
     public CameraState RenderedCamera => camera;

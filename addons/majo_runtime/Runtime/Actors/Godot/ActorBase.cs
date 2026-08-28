@@ -25,12 +25,28 @@ public abstract class ActorBase : IActor, IGodotActorView
         CanvasItem view,
         IOperationScheduler scheduler,
         IActorTextureLoader textureLoader)
+        : this(
+            definition,
+            view,
+            scheduler,
+            textureLoader,
+            definition.DefaultAppearance)
+    {
+    }
+
+    protected ActorBase(
+        ActorDefinition definition,
+        CanvasItem view,
+        IOperationScheduler scheduler,
+        IActorTextureLoader textureLoader,
+        string initialAppearance)
     {
         Definition = definition ?? throw new ArgumentNullException(nameof(definition));
         View = view ?? throw new ArgumentNullException(nameof(view));
         Scheduler = scheduler ?? throw new ArgumentNullException(nameof(scheduler));
         TextureLoader = textureLoader ?? throw new ArgumentNullException(nameof(textureLoader));
-        Appearance = definition.DefaultAppearance;
+        ArgumentException.ThrowIfNullOrWhiteSpace(initialAppearance);
+        Appearance = initialAppearance;
         TargetAppearance = Appearance;
         TargetVisible = view.Visible;
         TargetPosition = Vector2.Zero;
@@ -76,7 +92,7 @@ public abstract class ActorBase : IActor, IGodotActorView
 
     public Node SceneNode => View;
 
-    public void SetAppearance(string appearance)
+    public virtual void SetAppearance(string appearance)
     {
         EnsureAlive();
         var texture = TextureLoader.Load(

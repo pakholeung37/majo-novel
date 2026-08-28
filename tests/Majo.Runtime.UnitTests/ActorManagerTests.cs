@@ -200,6 +200,41 @@ public sealed class ActorManagerTests
     }
 
     [Fact(Timeout = 5_000)]
+    public async Task SpecializedConventionFactoryOverridesImplicitCharacterFallback()
+    {
+        var characterFactory = new CapturingActorFactory(ActorFactoryIds.Character);
+        var layeredFactory = new ConventionActorFactory("Ema");
+        var manager = new ActorManager([], [characterFactory, layeredFactory]);
+        await manager.InitializeAsync(CancellationToken.None);
+
+        Assert.True(manager.CanCreate("Ema", ActorFactoryIds.LayeredCharacter));
+        Assert.False(manager.CanCreate("Ema", ActorFactoryIds.Character));
+        Assert.True(manager.CanCreate("Other", ActorFactoryIds.Character));
+
+        var actor = await manager.GetOrCreateAsync(new ActorSpawnRequest(
+            "Ema",
+            ActorFactoryIds.Character,
+            "Surprised1",
+            CharacterPositionPreset.Right));
+
+        Assert.Equal(ActorFactoryIds.LayeredCharacter, actor.FactoryId);
+        Assert.NotNull(layeredFactory.LastDefinition);
+        Assert.Equal(
+            CharacterPositionPreset.Right,
+            layeredFactory.LastDefinition.InitialPosition);
+        Assert.Null(characterFactory.LastDefinition);
+
+        Assert.True(manager.Remove("Ema"));
+        var restored = await manager.GetOrCreateAsync(new ActorSpawnRequest(
+            "Ema",
+            ActorFactoryIds.LayeredCharacter,
+            "Surprised1",
+            requiredFactoryId: ActorFactoryIds.LayeredCharacter));
+        Assert.Equal(ActorFactoryIds.LayeredCharacter, restored.FactoryId);
+        await manager.ShutdownAsync(CancellationToken.None);
+    }
+
+    [Fact(Timeout = 5_000)]
     public async Task ExplicitDefinitionRejectsConflictingSpawnFactory()
     {
         var definition = new ActorDefinition(
@@ -280,6 +315,52 @@ public sealed class ActorManagerTests
         public string FactoryId { get; }
 
         public ActorDefinition? LastDefinition { get; private set; }
+
+        public IActor Create(ActorDefinition definition)
+        {
+            LastDefinition = definition;
+            return new FakeActor(
+                definition.Id,
+                definition.DefaultAppearance,
+                definition.FactoryId);
+        }
+    }
+
+    private sealed class ConventionActorFactory : IConventionActorFactory
+    {
+        private readonly string conventionalActorId;
+
+        public ConventionActorFactory(string conventionalActorId) =>
+            this.conventionalActorId = conventionalActorId;
+
+        public string FactoryId => ActorFactoryIds.LayeredCharacter;
+
+        public ActorDefinition? LastDefinition { get; private set; }
+
+        public bool TryResolveDefinition(
+            ActorSpawnRequest request,
+            out ActorDefinition definition)
+        {
+            if (!string.Equals(
+                    request.ActorId,
+                    conventionalActorId,
+                    StringComparison.Ordinal) ||
+                request.FallbackFactoryId is not ActorFactoryIds.Character and
+                    not ActorFactoryIds.LayeredCharacter)
+            {
+                definition = null!;
+                return false;
+            }
+
+            definition = new ActorDefinition(
+                request.ActorId,
+                FactoryId,
+                "layered",
+                request.InitialAppearance,
+                [],
+                request.InitialPosition ?? CharacterPositionPreset.Center);
+            return true;
+        }
 
         public IActor Create(ActorDefinition definition)
         {

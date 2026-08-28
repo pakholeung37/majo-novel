@@ -40,6 +40,11 @@ public partial class ManosabaDemoController : Node
 			configuration.Presentation.Font = ResourceLoader.Load<Font>(
 				"res://demos/manosaba/assets/fonts/SourceHanSerifSC.otf");
 			configuration.Presentation.LettersPerSecond = 36;
+			configuration.Actors!.ReferenceResolution = new Vector2I(2560, 1440);
+			configuration.Actors.ScenePositionOffset = new Vector2(0, 10);
+			configuration.Actors.LeftPosition = new Vector2(768, 1440);
+			configuration.Actors.CenterPosition = new Vector2(1280, 1440);
+			configuration.Actors.RightPosition = new Vector2(1792, 1440);
 
 			var characterNames = ManosabaCharacterNameCatalog.Load(
 				"res://demos/manosaba/assets/localization/character_names.json");

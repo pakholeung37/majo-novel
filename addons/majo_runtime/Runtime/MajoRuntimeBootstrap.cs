@@ -330,7 +330,7 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(IMissingResourceReporter),
                 typeof(ILocaleManager),
                 typeof(ILocalizedResourceResolver))
-            .AddSingleton<GodotActorHost>(_ => new GodotActorHost(this))
+            .AddSingleton<GodotActorHost>(_ => new GodotActorHost(this, Configuration!.Actors!))
             .AddSingleton<IActorManager>(
                 resolver => CreateActorManager(
                     resolver.Get<GodotActorHost>(),
@@ -926,6 +926,13 @@ public partial class MajoRuntimeBootstrap : Node
                     scheduler,
                     textureLoader,
                     new CharacterPositionMap(actorConfiguration)),
+                new LayeredCharacterActorFactory(
+                    host.CharacterLayer,
+                    scheduler,
+                    textureLoader,
+                    new CharacterPositionMap(actorConfiguration),
+                    Configuration.Resources!.RootPath,
+                    Configuration.Resources.CharactersPath),
                 new BackgroundActorFactory(
                     host.BackgroundLayer,
                     scheduler,

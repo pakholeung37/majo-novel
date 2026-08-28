@@ -113,11 +113,21 @@ public sealed class ActorCommandService : IActorCommandService
                 actor.SetAppearance(command.Appearance);
                 actor.SetOpacity(1);
                 actor.SetVisible(true);
-                var operation = actor.ChangePosition(
-                    command.Position,
-                    command.DurationSeconds,
-                    command.OperationId,
-                    command.GroupId);
+                if (command.Scale is { } scale)
+                {
+                    actor.SetScale(new Godot.Vector2(scale, scale));
+                }
+                var operation = command.ScenePosition is { } scenePosition
+                    ? actor.ChangeScenePosition(
+                        scenePosition,
+                        command.DurationSeconds,
+                        command.OperationId,
+                        command.GroupId)
+                    : actor.ChangePosition(
+                        command.Position,
+                        command.DurationSeconds,
+                        command.OperationId,
+                        command.GroupId);
                 context.Track(operation);
                 operationScheduled = true;
                 await WaitIfRequested(operation, command.Wait, context.CancellationToken);

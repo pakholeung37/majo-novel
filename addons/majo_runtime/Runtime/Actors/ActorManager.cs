@@ -355,8 +355,14 @@ public sealed class ActorManager : IActorManager
             return false;
         }
 
-        return definitions.TryGetValue(actorId, out var definition)
-            ? string.Equals(definition.FactoryId, factoryId, StringComparison.Ordinal)
+        if (definitions.TryGetValue(actorId, out var definition))
+        {
+            return string.Equals(definition.FactoryId, factoryId, StringComparison.Ordinal);
+        }
+
+        var request = new ActorSpawnRequest(actorId, factoryId, "Default");
+        return TryResolveConventionDefinition(request, out var inferred)
+            ? string.Equals(inferred.FactoryId, factoryId, StringComparison.Ordinal)
             : IsConventionFactory(factoryId);
     }
 
@@ -366,6 +372,22 @@ public sealed class ActorManager : IActorManager
         {
             ValidateRequiredFactory(request, definition.FactoryId);
             return definition;
+        }
+
+        if (TryResolveConventionDefinition(request, out var conventionalDefinition))
+        {
+            ValidateRequiredFactory(request, conventionalDefinition.FactoryId);
+            logger.Debug(
+                "actor",
+                "actor.definition_inferred",
+                $"Actor '{request.ActorId}' used conventional '{conventionalDefinition.FactoryId}' configuration.",
+                properties: new Dictionary<string, object?>
+                {
+                    ["actorId"] = request.ActorId,
+                    ["factoryId"] = conventionalDefinition.FactoryId,
+                    ["initialAppearance"] = request.InitialAppearance,
+                });
+            return conventionalDefinition;
         }
 
         if (!IsConventionFactory(request.FallbackFactoryId))
@@ -395,6 +417,36 @@ public sealed class ActorManager : IActorManager
                 ["resourcePathPrefix"] = resourcePathPrefix,
             });
         return inferred;
+    }
+
+    private bool TryResolveConventionDefinition(
+        ActorSpawnRequest request,
+        out ActorDefinition definition)
+    {
+        foreach (var factory in factories.Values)
+        {
+            if (factory is not IConventionActorFactory convention ||
+                !convention.TryResolveDefinition(request, out definition!))
+            {
+                continue;
+            }
+
+            if (!string.Equals(
+                    definition.FactoryId,
+                    factory.FactoryId,
+                    StringComparison.Ordinal))
+            {
+                throw new ActorDefinitionException(
+                    request.ActorId,
+                    $"Convention factory '{factory.FactoryId}' inferred definition for " +
+                    $"factory '{definition.FactoryId}'.");
+            }
+
+            return true;
+        }
+
+        definition = null!;
+        return false;
     }
 
     private void ValidatePendingFactory(ActorSpawnRequest request)

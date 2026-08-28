@@ -9,7 +9,7 @@ namespace Majo.Runtime.Dialogue.Commands;
 [RuntimeCommand(
     "char",
     Category = "Actor",
-    Usage = "char <actor> appearance:<id> position:<left|center|right> [duration:<seconds>] [wait:<bool>] [group:<id>] [operation:<id>]")]
+    Usage = "char <actor> appearance:<id> position:<left|center|right> [scenePosition:<x,y>] [scale:<number>] [duration:<seconds>] [wait:<bool>] [group:<id>] [operation:<id>]")]
 public sealed class CharacterCommandArguments
 {
     [CommandParameter("actor", 0, Primary = true, Required = true)]
@@ -37,6 +37,12 @@ public sealed class CharacterCommandArguments
 
     [CommandParameter("operation", 6, ValueHint = "id")]
     public string? Operation { get; set; }
+
+    [CommandParameter("scenePosition", 7, ValueHint = "x,y")]
+    public Godot.Vector2? ScenePosition { get; set; }
+
+    [CommandParameter("scale", 8, ValueHint = "number", Minimum = 0.001)]
+    public double? Scale { get; set; }
 }
 
 public sealed class CharacterCommandHandler
@@ -59,6 +65,8 @@ public sealed class CharacterCommandHandler
                 arguments.Duration,
                 arguments.Wait,
                 arguments.Group,
-                arguments.Operation),
+                arguments.Operation,
+                arguments.ScenePosition,
+                arguments.Scale is null ? null : (float)arguments.Scale.Value),
             context);
 }

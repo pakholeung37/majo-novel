@@ -11,7 +11,7 @@ namespace Majo.Runtime.HeadlessTests;
 
 public partial class HeadlessTestRunner : Node
 {
-	private const double SuiteTimeoutSeconds = 15;
+	private const double SuiteTimeoutSeconds = 25;
 	private const string ForcedFailureArgument = "--majo-force-failure";
 	private bool consumeNextLeftClick;
 	private int consumedLeftClickCount;
@@ -82,6 +82,7 @@ public partial class HeadlessTestRunner : Node
 		await ValidateLifecycleTimeoutAsync();
 		await ValidateOperationKernelAsync();
 		await ValidateActorSystemAsync();
+		await ValidateLayeredCharacterAsync();
 		await ValidateYarnCommandAdapterAsync();
 		await ValidatePlayableDemoAsync();
 		await ValidateFailedConfigurationCleanupAsync();

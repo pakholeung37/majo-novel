@@ -432,6 +432,24 @@ public partial class MajoProjectConfiguration : Resource
         }
 
         var actorIds = new HashSet<string>(StringComparer.Ordinal);
+        if ((Actors.ReferenceResolution.X == 0) != (Actors.ReferenceResolution.Y == 0) ||
+            Actors.ReferenceResolution.X < 0 || Actors.ReferenceResolution.Y < 0)
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Actors)}.{nameof(Actors.ReferenceResolution)}",
+                "Reference resolution must be zero for dynamic sizing or positive on both axes."));
+        }
+        ValidatePosition(
+            Actors.ScenePositionOffset,
+            nameof(Actors.ScenePositionOffset),
+            issues);
+        if (Actors.ScenePositionOffset != Vector2.Zero &&
+            (Actors.ReferenceResolution.X <= 0 || Actors.ReferenceResolution.Y <= 0))
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Actors)}.{nameof(Actors.ScenePositionOffset)}",
+                "A scene-position offset requires a positive reference resolution."));
+        }
         ValidatePosition(Actors.LeftPosition, nameof(Actors.LeftPosition), issues);
         ValidatePosition(Actors.CenterPosition, nameof(Actors.CenterPosition), issues);
         ValidatePosition(Actors.RightPosition, nameof(Actors.RightPosition), issues);

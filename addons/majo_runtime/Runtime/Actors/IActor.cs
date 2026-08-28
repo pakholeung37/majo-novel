@@ -99,7 +99,17 @@ public interface ICharacterActor : IActor, IGodotActorView
 {
     Sprite2D View { get; }
 
+    Vector2 Scale { get; }
+
     CharacterPositionPreset PositionPreset { get; }
+
+    void SetScale(Vector2 scale);
+
+    IOperationHandle ChangeScenePosition(
+        Vector2 scenePosition,
+        double durationSeconds,
+        string? operationId = null,
+        string? groupId = null);
 
     IOperationHandle ChangePosition(
         CharacterPositionPreset preset,
