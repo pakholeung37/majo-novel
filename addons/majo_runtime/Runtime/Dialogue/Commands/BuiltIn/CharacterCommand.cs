@@ -9,7 +9,7 @@ namespace Majo.Runtime.Dialogue.Commands;
 [RuntimeCommand(
     "char",
     Category = "Actor",
-    Usage = "char <actor> appearance:<id> position:<left|center|right> [scenePosition:<x,y>] [scale:<number>] [duration:<seconds>] [wait:<bool>] [group:<id>] [operation:<id>]")]
+    Usage = "char <actor> appearance:<id> position:<left|center|right> [scenePosition:<x,y>] [scale:<number>] [zIndex:<integer>] [duration:<seconds>] [wait:<bool>] [group:<id>] [operation:<id>]")]
 public sealed class CharacterCommandArguments
 {
     [CommandParameter("actor", 0, Primary = true, Required = true)]
@@ -43,6 +43,9 @@ public sealed class CharacterCommandArguments
 
     [CommandParameter("scale", 8, ValueHint = "number", Minimum = 0.001)]
     public double? Scale { get; set; }
+
+    [CommandParameter("zIndex", 9, ValueHint = "integer")]
+    public int? ZIndex { get; set; }
 }
 
 public sealed class CharacterCommandHandler
@@ -67,6 +70,7 @@ public sealed class CharacterCommandHandler
                 arguments.Group,
                 arguments.Operation,
                 arguments.ScenePosition,
-                arguments.Scale is null ? null : (float)arguments.Scale.Value),
+                arguments.Scale is null ? null : (float)arguments.Scale.Value,
+                arguments.ZIndex),
             context);
 }

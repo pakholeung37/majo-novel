@@ -26,6 +26,7 @@ public sealed class RuntimeCommandTests
                 "group:setup",
                 "scenePosition:45,0",
                 "scale:0.75",
+                "zIndex:12",
             ]);
 
         Assert.Equal("maya", character.Actor);
@@ -37,6 +38,7 @@ public sealed class RuntimeCommandTests
         Assert.Equal("maya-move", character.Operation);
         Assert.Equal(new Vector2(45, 0), character.ScenePosition);
         Assert.Equal(0.75, character.Scale);
+        Assert.Equal(12, character.ZIndex);
     }
 
     [Fact]
@@ -83,6 +85,7 @@ public sealed class RuntimeCommandTests
     [Theory]
     [InlineData("appearance", "char hero position:left")]
     [InlineData("position", "char hero appearance:happy position:diagonal")]
+    [InlineData("integer", "char hero appearance:happy position:center zIndex:1.5")]
     [InlineData("duration", "back backdrop appearance:dark duration:NaN")]
     [InlineData("at least 0", "back backdrop appearance:dark duration:-0.1")]
     [InlineData("wait", "hide hero duration:0.2 wait:sometimes")]
@@ -148,7 +151,7 @@ public sealed class RuntimeCommandTests
     }
 
     [Fact(Timeout = 5_000)]
-    public async Task CharacterCommandAppliesScenePositionAndRootScale()
+    public async Task CharacterCommandAppliesScenePositionRootScaleAndZIndex()
     {
         var actor = new FakeCharacterActor("hero", "idle");
         var service = CreateService(actor);
@@ -162,11 +165,13 @@ public sealed class RuntimeCommandTests
             null,
             "scene-move",
             new Vector2(45, 0),
-            0.75f));
+            0.75f,
+            20));
 
         Assert.True(task.IsCompletedSuccessfully);
         Assert.Equal(new Vector2(45, 0), actor.Position);
         Assert.Equal(new Vector2(0.75f, 0.75f), actor.Scale);
+        Assert.Equal(20, actor.ZIndex);
         actor.LastOperation.Complete();
         await actor.LastOperation.Completion;
     }
@@ -1103,6 +1108,8 @@ public sealed class RuntimeCommandTests
 
         public float Opacity { get; protected set; } = 1;
 
+        public int ZIndex { get; private set; }
+
         public Node SceneNode => null!;
 
         public FakeOperationHandle LastOperation { get; protected set; } = new();
@@ -1116,6 +1123,12 @@ public sealed class RuntimeCommandTests
         public void SetTint(Color tint) => Tint = tint;
 
         public virtual void SetOpacity(float opacity) => Opacity = opacity;
+
+        public void SetZIndex(int zIndex)
+        {
+            ActorZIndexRange.Validate(zIndex);
+            ZIndex = zIndex;
+        }
 
         public IOperationHandle ChangePosition(
             Vector2 position,

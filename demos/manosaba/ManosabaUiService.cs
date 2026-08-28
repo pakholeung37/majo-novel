@@ -30,7 +30,10 @@ public sealed class ManosabaUiService : IManosabaUiService, IStateContributor
 	public string Key => "manosaba.ui";
 	public StateScope Scope => StateScope.Game;
 	public int SchemaVersion => 1;
-	public StateContributorCapability Capability => StateContributorCapability.DurableRollback;
+	public StateContributorCapability Capability => new(
+		true,
+		StateRollbackPolicy.Supported,
+		StateRestoreRecordPolicy.UseDefault);
 
 	public void Attach(ManosabaPresentation presentation)
 	{

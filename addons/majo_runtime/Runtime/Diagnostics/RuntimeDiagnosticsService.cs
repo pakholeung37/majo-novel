@@ -181,9 +181,6 @@ public sealed class RuntimeDiagnosticsService : IRuntimeDiagnostics
                     IBackgroundActor => "background",
                     _ => "custom",
                 };
-                var zIndex = actor is IGodotActorView { SceneNode: CanvasItem canvasItem }
-                    ? canvasItem.ZIndex
-                    : 0;
                 actorList.Add(new ActiveActorInfo(
                     actor.Id,
                     actor.FactoryId,
@@ -193,7 +190,7 @@ public sealed class RuntimeDiagnosticsService : IRuntimeDiagnostics
                     actor.Position.X,
                     actor.Position.Y,
                     actor.Opacity,
-                    zIndex,
+                    actor.ZIndex,
                     actor is IBackgroundActor background ? background.Slot : null));
             }
             actorDiag = new ActorDiagnostics(actorList);

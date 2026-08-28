@@ -137,7 +137,7 @@ public sealed class StateManagerTests
     }
 
     [Fact]
-    public async Task RestoreRejectsMissingAndUnknownRecordsBeforePreflight()
+    public async Task RestoreRejectsMissingRequiredRecordsButIgnoresUnknownLegacyRecords()
     {
         var events = new List<string>();
         var only = new RecordingContributor("only", [], events);
@@ -165,9 +165,18 @@ public sealed class StateManagerTests
             ]);
         events.Clear();
 
-        await Assert.ThrowsAsync<StateCompatibilityException>(() =>
-            manager.RestoreGameAsync(unknown));
-        Assert.Empty(events);
+        await manager.RestoreGameAsync(unknown);
+        Assert.Equal(
+            [
+                "preflight:only",
+                "input:acquire",
+                "dialogue:stop",
+                "reset:only",
+                "restore:only",
+                "input:dispose",
+            ],
+            events);
+        Assert.Equal(["ignored:unknown@1"], manager.LastMigrationChain);
     }
 
     [Fact]
@@ -315,9 +324,9 @@ public sealed class StateManagerTests
         var manager = new ActorManager(definitions, [factory]);
         await manager.InitializeAsync(CancellationToken.None);
 
-        manager.Create("stills");
+        manager.Create("stills").SetZIndex(-10);
         manager.Create("scenes");
-        manager.Create("hero");
+        manager.Create("hero").SetZIndex(20);
 
         var contributor = new ActorStateContributor(manager);
         var record = await contributor.CaptureAsync(CancellationToken.None);
@@ -328,6 +337,7 @@ public sealed class StateManagerTests
 
         await contributor.RestoreAsync(record, CancellationToken.None);
         Assert.Equal(["stills", "scenes", "hero"], manager.Actors.Select(a => a.Id));
+        Assert.Equal([-10, 0, 20], manager.Actors.Select(a => a.ZIndex));
 
         await manager.ShutdownAsync(CancellationToken.None);
     }
@@ -362,6 +372,7 @@ public sealed class StateManagerTests
         public Godot.Color Tint => Godot.Colors.White;
         public float Opacity { get; set; } = 1f;
         public float TargetOpacity => 1f;
+        public int ZIndex { get; private set; }
 
         public void SetAppearance(string appearance) => Appearance = appearance;
         public Task PrepareAppearanceAsync(string appearance, CancellationToken cancellationToken = default) => Task.CompletedTask;
@@ -369,6 +380,11 @@ public sealed class StateManagerTests
         public void SetPosition(Godot.Vector2 position) { }
         public void SetTint(Godot.Color tint) { }
         public void SetOpacity(float opacity) => Opacity = opacity;
+        public void SetZIndex(int zIndex)
+        {
+            ActorZIndexRange.Validate(zIndex);
+            ZIndex = zIndex;
+        }
         public IOperationHandle ChangePosition(Godot.Vector2 position, double durationSeconds, string? operationId = null, string? groupId = null) => throw new NotImplementedException();
         public IOperationHandle ChangePosition(Godot.Vector2 position, AnimationSpec animation, string? operationId = null, string? groupId = null) => throw new NotImplementedException();
         public IOperationHandle ChangeOpacity(float opacity, double durationSeconds, string? operationId = null, string? groupId = null) => throw new NotImplementedException();

@@ -23,7 +23,8 @@ public sealed record CharacterCommand(
     string? GroupId,
     string? OperationId,
     Vector2? ScenePosition = null,
-    float? Scale = null);
+    float? Scale = null,
+    int? ZIndex = null);
 
 public sealed record HideCommand(
     string ActorId,

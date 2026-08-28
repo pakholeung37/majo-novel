@@ -90,6 +90,8 @@ public abstract class ActorBase : IActor, IGodotActorView
 
     public float TargetOpacity { get; protected set; }
 
+    public int ZIndex => View.ZIndex;
+
     public Node SceneNode => View;
 
     public virtual void SetAppearance(string appearance)
@@ -148,6 +150,13 @@ public abstract class ActorBase : IActor, IGodotActorView
         var current = View.Modulate;
         View.Modulate = new Color(current.R, current.G, current.B, opacity);
         TargetOpacity = opacity;
+    }
+
+    public void SetZIndex(int zIndex)
+    {
+        EnsureAlive();
+        ActorZIndexRange.Validate(zIndex);
+        View.ZIndex = zIndex;
     }
 
     public IOperationHandle ChangePosition(

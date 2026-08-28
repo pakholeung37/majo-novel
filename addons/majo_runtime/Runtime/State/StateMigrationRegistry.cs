@@ -145,9 +145,12 @@ public sealed class StateMigrationRegistry
                 if (!visited.Add(identity) ||
                     !contributorMigrations.TryGetValue(identity, out var migration))
                 {
-                    if (!expected.ContainsKey(current.Key) && removedContributors.Contains(current.Key))
+                    if (!expected.ContainsKey(current.Key))
                     {
-                        chain.Add($"removed:{current.Key}@{current.SchemaVersion}");
+                        var disposition = removedContributors.Contains(current.Key)
+                            ? "removed"
+                            : "ignored";
+                        chain.Add($"{disposition}:{current.Key}@{current.SchemaVersion}");
                         current = null!;
                         break;
                     }

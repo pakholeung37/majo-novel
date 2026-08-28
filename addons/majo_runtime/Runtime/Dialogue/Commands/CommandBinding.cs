@@ -64,6 +64,14 @@ public sealed class CommandValueConverterRegistry
             double.IsFinite(result)
                 ? result
                 : throw new FormatException("must be a finite number"));
+        Register<int>(value =>
+            int.TryParse(
+                value,
+                NumberStyles.Integer,
+                CultureInfo.InvariantCulture,
+                out var result)
+                ? result
+                : throw new FormatException("must be an integer"));
         Register<Vector2>(ParseVector2);
         Register<MotionCurve>(value => Enum.TryParse<MotionCurve>(
                 value.Replace("-", string.Empty, StringComparison.Ordinal),

@@ -85,6 +85,11 @@ public partial class HeadlessTestRunner
             "Camera Stage did not retain an explicit black background below its actors.");
         Assert(character.Position.IsEqualApprox(configuration.Actors.LeftPosition),
             "Character did not use the configured left position preset.");
+        character.SetZIndex(15);
+        Assert(character.ZIndex == 15 && character.View.ZIndex == 15,
+            "Actor z-index did not propagate to its Godot CanvasItem.");
+        _ = AssertThrows<ArgumentOutOfRangeException>(() =>
+            character.SetZIndex(ActorZIndexRange.Maximum + 1));
 
         var initialTexture = character.View.Texture;
         character.SetAppearance("blue");

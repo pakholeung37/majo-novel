@@ -57,6 +57,11 @@ public sealed class StateEligibilityTests
         Assert.Single(operations.ActiveOperations);
         Assert.Single(input.ActiveHandles);
 
+        var restore = eligibility.Check(StateOperationKind.Restore);
+        Assert.Equal(
+            [StateEligibilityReasonCode.ExternalBarrier],
+            restore.Reasons.Select(value => value.Code));
+
         barrier.Dispose();
         script.PhaseValue = ScriptPlaybackPhase.AwaitingAdvance;
         operations.Active = [];

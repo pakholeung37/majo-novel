@@ -3,7 +3,7 @@ tags: headless
 ---
 <<await>>
 <<back backdrop appearance:dark duration:0.12 operation:back-fade>>
-<<char hero appearance:red position:left duration:0.12 operation:hero-left>>
+<<char hero appearance:red position:left zIndex:20 duration:0.12 operation:hero-left>>
 <<endAwait>>
 Narrator: after join #line:m4-after-join
 <<char hero appearance:blue position:right duration:0.08 wait:true operation:hero-right>>

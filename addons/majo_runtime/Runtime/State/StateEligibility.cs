@@ -130,10 +130,11 @@ public sealed class StateEligibility : IStateEligibility
         }
 
         var reasons = new List<StateEligibilityReason>();
+        var isDestructiveRestore = operation == StateOperationKind.Restore;
         var safeScriptPhase = operation == StateOperationKind.Save
             ? script.Phase == ScriptPlaybackPhase.AwaitingAdvance
             : script.Phase is ScriptPlaybackPhase.AwaitingAdvance or ScriptPlaybackPhase.Idle;
-        if (!safeScriptPhase)
+        if (!isDestructiveRestore && !safeScriptPhase)
         {
             reasons.Add(new StateEligibilityReason(
                 StateEligibilityReasonCode.ScriptUnsafePhase,
@@ -148,14 +149,14 @@ public sealed class StateEligibility : IStateEligibility
                 $"State manager is '{status}'."));
         }
 
-        if (commands?.HasActiveCommands == true)
+        if (!isDestructiveRestore && commands?.HasActiveCommands == true)
         {
             reasons.Add(new StateEligibilityReason(
                 StateEligibilityReasonCode.ActiveCommand,
                 "A runtime command is active."));
         }
 
-        if (operations.ActiveOperations.Count > 0)
+        if (!isDestructiveRestore && operations.ActiveOperations.Count > 0)
         {
             reasons.Add(new StateEligibilityReason(
                 StateEligibilityReasonCode.ActiveOperation,
@@ -163,7 +164,7 @@ public sealed class StateEligibility : IStateEligibility
         }
 
         var modal = input.ActiveHandles.FirstOrDefault(value => value.IsModal);
-        if (modal is not null)
+        if (!isDestructiveRestore && modal is not null)
         {
             reasons.Add(new StateEligibilityReason(
                 StateEligibilityReasonCode.ModalInput,

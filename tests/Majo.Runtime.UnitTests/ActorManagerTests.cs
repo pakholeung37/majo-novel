@@ -479,6 +479,8 @@ public sealed class ActorManagerTests
 
         public float Opacity { get; private set; } = 1;
 
+        public int ZIndex { get; private set; }
+
         public Node SceneNode => null!;
 
         public bool IsDestroyed { get; private set; }
@@ -494,6 +496,12 @@ public sealed class ActorManagerTests
         public void SetTint(Color tint) => Tint = tint;
 
         public void SetOpacity(float opacity) => Opacity = opacity;
+
+        public void SetZIndex(int zIndex)
+        {
+            ActorZIndexRange.Validate(zIndex);
+            ZIndex = zIndex;
+        }
 
         public IOperationHandle ChangePosition(
             Vector2 position,

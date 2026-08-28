@@ -329,7 +329,8 @@ public sealed class ActorStateContributor : IStateContributor
                 actor.Tint.R,
                 actor.Tint.G,
                 actor.Tint.B,
-                actor.Opacity))
+                actor.Opacity,
+                actor.ZIndex))
             .ToArray();
         return ValueTask.FromResult(new StateRecord(
             Key,
@@ -370,6 +371,7 @@ public sealed class ActorStateContributor : IStateContributor
             }
             actor.SetTint(new Color(entry.TintR, entry.TintG, entry.TintB));
             actor.SetOpacity(entry.Opacity);
+            actor.SetZIndex(entry.ZIndex);
             actor.SetVisible(entry.Visible);
         }
     }
@@ -417,7 +419,8 @@ public sealed class ActorStateContributor : IStateContributor
                 entry.ScaleY is { } scaleY && (!float.IsFinite(scaleY) || scaleY <= 0) ||
                 !float.IsFinite(entry.TintR) || !float.IsFinite(entry.TintG) ||
                 !float.IsFinite(entry.TintB) || !float.IsFinite(entry.Opacity) ||
-                entry.Opacity is < 0 or > 1)
+                entry.Opacity is < 0 or > 1 ||
+                entry.ZIndex is < ActorZIndexRange.Minimum or > ActorZIndexRange.Maximum)
             {
                 throw new StateSnapshotException(
                     $"Actor '{entry.Id}' contains invalid visual state.");
@@ -442,7 +445,8 @@ public sealed class ActorStateContributor : IStateContributor
         float TintR,
         float TintG,
         float TintB,
-        float Opacity);
+        float Opacity,
+        int ZIndex);
 }
 
 public sealed class AudioStateContributor : IStateContributor

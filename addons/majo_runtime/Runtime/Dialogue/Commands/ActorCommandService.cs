@@ -165,6 +165,11 @@ public sealed class ActorCommandService : IActorCommandService
                     actor.SetScale(new Godot.Vector2(scale, scale));
                 }
 
+                if (command.ZIndex is { } zIndex)
+                {
+                    actor.SetZIndex(zIndex);
+                }
+
                 IOperationHandle appearanceOperation;
                 if (created || (!actor.Visible && !actor.TargetVisible))
                 {

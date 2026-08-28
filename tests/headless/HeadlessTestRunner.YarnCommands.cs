@@ -92,6 +92,8 @@ public partial class HeadlessTestRunner
                     var background = manager.Get<IBackgroundActor>("backdrop");
                     joinedAtFinalState =
                         character.Position.IsEqualApprox(configuration.Actors.LeftPosition) &&
+                        character.ZIndex == 20 &&
+                        character.View.ZIndex == 20 &&
                         background.Appearance == "dark" &&
                         scheduler.ActiveOperations.Count == 0;
                     break;
