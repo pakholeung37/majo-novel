@@ -2,13 +2,14 @@
 
 using System;
 using System.Threading.Tasks;
+using Majo.Runtime.Actors;
 
 namespace Majo.Runtime.Dialogue.Commands;
 
 [RuntimeCommand(
     "back",
     Category = "Actor",
-    Usage = "back <actor> appearance:<id> [duration:<seconds>] [wait:<bool>] [group:<id>] [operation:<id>]")]
+    Usage = "back <actor> appearance:<id> [duration:<seconds>] [wait:<bool>] [group:<id>] [operation:<id>] [slot:<id>]")]
 public sealed class BackCommandArguments
 {
     [CommandParameter("actor", 0, Primary = true, Required = true)]
@@ -33,6 +34,13 @@ public sealed class BackCommandArguments
 
     [CommandParameter("operation", 5, ValueHint = "id")]
     public string? Operation { get; set; }
+
+    [CommandParameter(
+        "slot",
+        6,
+        ValueHint = "id",
+        DefaultValue = BackgroundSlotIds.Main)]
+    public string Slot { get; set; } = BackgroundSlotIds.Main;
 }
 
 public sealed class BackCommandHandler : IRuntimeCommandHandler<BackCommandArguments>
@@ -53,6 +61,7 @@ public sealed class BackCommandHandler : IRuntimeCommandHandler<BackCommandArgum
                 arguments.Duration,
                 arguments.Wait,
                 arguments.Group,
-                arguments.Operation),
+                arguments.Operation,
+                arguments.Slot),
             context);
 }

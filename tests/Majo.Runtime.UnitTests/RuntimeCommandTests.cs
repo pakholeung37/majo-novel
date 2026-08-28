@@ -54,6 +54,7 @@ public sealed class RuntimeCommandTests
         Assert.False(background.Wait);
         Assert.Null(background.Group);
         Assert.Null(background.Operation);
+        Assert.Equal(BackgroundSlotIds.Main, background.Slot);
         Assert.Equal(0.1, character.Duration);
         Assert.Equal(0.1, hiddenWithDefaultDuration.Duration);
         Assert.Equal(0, hiddenImmediately.Duration);
@@ -230,6 +231,47 @@ public sealed class RuntimeCommandTests
 
         var background = manager.Get<FakeBackgroundActor>("chapter-one-stage");
         Assert.Equal("courtroom", background.Appearance);
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task BackCommandCrossFadesAndHidesThePreviousBackgroundInMainSlot()
+    {
+        var previous = new FakeBackgroundActor("stills", "dream");
+        var manager = new FakeActorManager(previous);
+        var service = new ActorCommandService(manager);
+
+        var transition = service.BackAsync(new BackCommand(
+            "scenes", "courtroom", 0.5, true, null, null));
+
+        var current = manager.Get<FakeBackgroundActor>("scenes");
+        Assert.Equal(BackgroundSlotIds.Main, current.Slot);
+        Assert.False(previous.Visible);
+        Assert.True(current.Visible);
+        Assert.False(transition.IsCompleted);
+
+        current.LastOperation.Complete();
+        Assert.False(transition.IsCompleted);
+        previous.LastOperation.Complete();
+        await transition;
+    }
+
+    [Fact]
+    public async Task BackCommandOnlyReplacesBackgroundsInTheSameSlot()
+    {
+        var main = new FakeBackgroundActor("main-stage", "courtroom");
+        var overlay = new FakeBackgroundActor("fog", "thin");
+        var manager = new FakeActorManager(main, overlay);
+        var service = new ActorCommandService(manager);
+
+        await service.BackAsync(new BackCommand(
+            "fog", "thick", 0.5, false, null, null, "overlay"));
+        await service.BackAsync(new BackCommand(
+            "next-stage", "hall", 0.5, false, null, null));
+
+        Assert.False(main.Visible);
+        Assert.True(overlay.Visible);
+        Assert.Equal("overlay", overlay.Slot);
+        Assert.True(manager.Get<FakeBackgroundActor>("next-stage").Visible);
     }
 
     [Fact(Timeout = 5_000)]
@@ -1191,7 +1233,11 @@ public sealed class RuntimeCommandTests
 
         public TextureRect CurrentView => null!;
 
+        public string Slot { get; private set; } = BackgroundSlotIds.Main;
+
         public float StartOpacity { get; private set; } = 1;
+
+        public void SetSlot(string slot) => Slot = BackgroundSlotIds.Normalize(slot);
 
         public override void SetOpacity(float opacity)
         {

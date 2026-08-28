@@ -28,6 +28,7 @@
 [ext_resource type="Texture2D" uid="uid://c7jp0q47ayiwv" path="res://demos/manosaba/assets/ui/menu/MenuButton_Options_Highlighted@ZhHans.png" id="26_options_hover"]
 [ext_resource type="Texture2D" uid="uid://dc15ermbw5a2k" path="res://demos/manosaba/assets/ui/menu/MenuButton_Title_Normal@ZhHans.png" id="27_title"]
 [ext_resource type="Texture2D" uid="uid://cxph1cu7mx5e5" path="res://demos/manosaba/assets/ui/menu/MenuButton_Title_Highlighted@ZhHans.png" id="28_title_hover"]
+[ext_resource type="Texture2D" uid="uid://8mwcy761l0l0" path="res://demos/manosaba/assets/ui/adv/StreamFrame.png" id="29_stream"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBox_option"]
 bg_color = Color(0.045, 0.04, 0.045, 0.94)
@@ -68,18 +69,6 @@ useFadeEffect = false
 lettersPerSecond = 32
 typewriterStyle = 1
 
-[node name="GrassLeft" type="TextureRect" parent="LinePresenter" unique_id=2068371094]
-layout_mode = 1
-anchors_preset = 1
-anchor_left = 1.0
-anchor_right = 1.0
-offset_left = -274.0
-offset_bottom = 278.0
-grow_horizontal = 0
-mouse_filter = 2
-texture = ExtResource("8_grass1")
-expand_mode = 1
-
 [node name="Screen" type="TextureRect" parent="LinePresenter" unique_id=784802526]
 layout_mode = 1
 anchors_preset = 12
@@ -91,6 +80,18 @@ grow_horizontal = 2
 grow_vertical = 0
 mouse_filter = 2
 texture = ExtResource("5_screen")
+expand_mode = 1
+
+[node name="GrassLeft" type="TextureRect" parent="LinePresenter" unique_id=2068371094]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -274.0
+offset_bottom = 278.0
+grow_horizontal = 0
+mouse_filter = 2
+texture = ExtResource("8_grass1")
 expand_mode = 1
 
 [node name="BottomFrame" type="TextureRect" parent="LinePresenter" unique_id=1728031496]
@@ -129,6 +130,18 @@ grow_vertical = 0
 pivot_offset = Vector2(-1, 323)
 mouse_filter = 2
 texture = ExtResource("9_grass2")
+expand_mode = 1
+
+[node name="ForeGround" type="TextureRect" parent="LinePresenter" unique_id=1498192837]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("29_stream")
 expand_mode = 1
 
 [node name="PresenterControl" type="Control" parent="LinePresenter" unique_id=1807125287]

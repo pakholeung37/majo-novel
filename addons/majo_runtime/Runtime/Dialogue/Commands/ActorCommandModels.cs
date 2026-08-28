@@ -11,7 +11,8 @@ public sealed record BackCommand(
     double DurationSeconds,
     bool Wait,
     string? GroupId,
-    string? OperationId);
+    string? OperationId,
+    string Slot = BackgroundSlotIds.Main);
 
 public sealed record CharacterCommand(
     string ActorId,

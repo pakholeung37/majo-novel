@@ -193,7 +193,8 @@ public sealed class RuntimeDiagnosticsService : IRuntimeDiagnostics
                     actor.Position.X,
                     actor.Position.Y,
                     actor.Opacity,
-                    zIndex));
+                    zIndex,
+                    actor is IBackgroundActor background ? background.Slot : null));
             }
             actorDiag = new ActorDiagnostics(actorList);
         }
@@ -509,7 +510,8 @@ public sealed class RuntimeDiagnosticsService : IRuntimeDiagnostics
             builder.AppendLine($"- Total Registered: {snapshot.Actor.Actors.Count}");
             foreach (var actor in snapshot.Actor.Actors)
             {
-                builder.AppendLine($"  - `{actor.Id}` ({actor.FactoryId}, layer: {actor.Layer}, appearance: `{actor.Appearance ?? "none"}`), Visible: `{actor.IsVisible}`, Pos: ({actor.PositionX}, {actor.PositionY}), Alpha: {actor.Alpha:0.##}");
+                var slot = actor.Slot is null ? string.Empty : $", slot: {actor.Slot}";
+                builder.AppendLine($"  - `{actor.Id}` ({actor.FactoryId}, layer: {actor.Layer}{slot}, appearance: `{actor.Appearance ?? "none"}`), Visible: `{actor.IsVisible}`, Pos: ({actor.PositionX}, {actor.PositionY}), Alpha: {actor.Alpha:0.##}");
             }
             builder.AppendLine();
         }

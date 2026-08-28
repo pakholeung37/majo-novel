@@ -127,7 +127,8 @@ public sealed record ActiveActorInfo(
     float PositionX,
     float PositionY,
     float Alpha,
-    int ZIndex);
+    int ZIndex,
+    string? Slot = null);
 
 public sealed record AudioDiagnostics(
     float MasterVolume,

@@ -319,6 +319,7 @@ public sealed class ActorStateContributor : IStateContributor
             .Select(actor => new ActorEntry(
                 actor.Id,
                 actor.FactoryId,
+                actor is IBackgroundActor background ? background.Slot : null,
                 actor.Appearance,
                 actor.Visible,
                 actor.Position.X,
@@ -356,6 +357,10 @@ public sealed class ActorStateContributor : IStateContributor
                     entry.Appearance,
                     requiredFactoryId: entry.FactoryId),
                 cancellationToken);
+            if (actor is IBackgroundActor background)
+            {
+                background.SetSlot(entry.Slot ?? BackgroundSlotIds.Main);
+            }
             actor.SetAppearance(entry.Appearance);
             actor.SetPosition(new Vector2(entry.PositionX, entry.PositionY));
             if (actor is ICharacterActor character &&
@@ -382,6 +387,19 @@ public sealed class ActorStateContributor : IStateContributor
             ArgumentException.ThrowIfNullOrWhiteSpace(entry.Id);
             ArgumentException.ThrowIfNullOrWhiteSpace(entry.FactoryId);
             ArgumentException.ThrowIfNullOrWhiteSpace(entry.Appearance);
+            if (entry.FactoryId == ActorFactoryIds.Background)
+            {
+                try
+                {
+                    _ = BackgroundSlotIds.Normalize(entry.Slot ?? BackgroundSlotIds.Main);
+                }
+                catch (ActorException exception)
+                {
+                    throw new StateSnapshotException(
+                        $"Background actor '{entry.Id}' contains an invalid slot.",
+                        exception);
+                }
+            }
             if (!ids.Add(entry.Id))
             {
                 throw new StateSnapshotException(
@@ -414,6 +432,7 @@ public sealed class ActorStateContributor : IStateContributor
     private sealed record ActorEntry(
         string Id,
         string FactoryId,
+        string? Slot,
         string Appearance,
         bool Visible,
         float PositionX,

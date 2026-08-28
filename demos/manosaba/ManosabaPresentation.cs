@@ -24,6 +24,11 @@ public partial class ManosabaPresentation : Control
 	private Label? menuStatus;
 	private TextureRect? inputIndicator;
 	private RichTextLabel? autoLabel;
+	private TextureRect? grassLeft;
+	private TextureRect? grassRight;
+	private TextureRect? bottomFrame;
+	private TextureRect? topFrame;
+	private TextureRect? foreGround;
 	private IPlaybackModeManager? playback;
 	private IHistoryManager? history;
 	private ISaveLoadOverlay? saveLoad;
@@ -34,6 +39,7 @@ public partial class ManosabaPresentation : Control
 	private Tween? autoButtonHoverTween;
 	private Tween? autoLabelTween;
 	private Tween? inputIndicatorTween;
+	private Tween? frameTransitionTween;
 	private static readonly Vector2 MenuButtonHoverScale = new(1.08f, 1.08f);
 	private static readonly Vector2 AutoButtonBaseScale = new(0.8f, 0.8f);
 	private static readonly Vector2 AutoButtonHoverScale = new(0.8f * 1.08f, 0.8f * 1.08f);
@@ -69,6 +75,11 @@ public partial class ManosabaPresentation : Control
 		menuStatus = GetNode<Label>("MenuPanel/Status");
 		inputIndicator = GetNodeOrNull<TextureRect>("LinePresenter/InputIndicator");
 		autoLabel = GetNodeOrNull<RichTextLabel>("LinePresenter/AutoButton/AutoLabel");
+		grassLeft = GetNodeOrNull<TextureRect>("LinePresenter/GrassLeft");
+		grassRight = GetNodeOrNull<TextureRect>("LinePresenter/GrassRight");
+		bottomFrame = GetNodeOrNull<TextureRect>("LinePresenter/BottomFrame");
+		topFrame = GetNodeOrNull<TextureRect>("LinePresenter/TopFrame");
+		foreGround = GetNodeOrNull<TextureRect>("LinePresenter/ForeGround");
 
 		AutoSubmitOnSound ??= ResourceLoader.Load<AudioStream>(DefaultAutoSubmitOnSoundPath);
 		AutoSubmitOffSound ??= ResourceLoader.Load<AudioStream>(DefaultAutoSubmitOffSoundPath);
@@ -102,6 +113,7 @@ public partial class ManosabaPresentation : Control
 
 		UpdateAutoLabelPosition(autoButton?.ButtonPressed == true, animate: false);
 		StartInputIndicatorBlink();
+		SetFrameMode(CurrentFrameMode, duration: 0);
 
 		// // The ADV presenter owns a full-screen input scope. Keep the interactive
 		// // art above it and stop GUI clicks before they can become Advance input.
@@ -174,6 +186,9 @@ public partial class ManosabaPresentation : Control
 
 		inputIndicatorTween?.Kill();
 		inputIndicatorTween = null;
+
+		frameTransitionTween?.Kill();
+		frameTransitionTween = null;
 
 		menuPause?.Dispose();
 		menuPause = null;
@@ -406,6 +421,94 @@ public partial class ManosabaPresentation : Control
 		{
 			menuStatus.Text = "返回标题画面将在标题流程接入后启用";
 		}
+	}
+
+	public ManosabaFrameMode CurrentFrameMode { get; private set; } = ManosabaFrameMode.Default;
+
+	public void SetFrameMode(ManosabaFrameMode mode, double duration = 0)
+	{
+		CurrentFrameMode = mode;
+		var isStream = mode == ManosabaFrameMode.Stream;
+		frameTransitionTween?.Kill();
+		frameTransitionTween = null;
+
+		var standardFrameNodes = new[] { grassLeft, grassRight, bottomFrame, topFrame };
+
+		if (duration <= 0 || !IsInsideTree())
+		{
+			foreach (var node in standardFrameNodes)
+			{
+				if (node is not null)
+				{
+					node.Visible = !isStream;
+					node.Modulate = Colors.White;
+				}
+			}
+
+			if (foreGround is not null)
+			{
+				foreGround.Visible = isStream;
+				foreGround.Modulate = Colors.White;
+			}
+
+			return;
+		}
+
+		var tween = CreateTween();
+		tween.SetParallel(true);
+		if (isStream)
+		{
+			if (foreGround is not null)
+			{
+				foreGround.Visible = true;
+				foreGround.Modulate = new Color(1, 1, 1, 0);
+				tween.TweenProperty(foreGround, "modulate:a", 1.0f, duration);
+			}
+
+			foreach (var node in standardFrameNodes)
+			{
+				if (node is not null && node.Visible)
+				{
+					tween.TweenProperty(node, "modulate:a", 0.0f, duration);
+				}
+			}
+		}
+		else
+		{
+			foreach (var node in standardFrameNodes)
+			{
+				if (node is not null)
+				{
+					node.Visible = true;
+					node.Modulate = new Color(1, 1, 1, 0);
+					tween.TweenProperty(node, "modulate:a", 1.0f, duration);
+				}
+			}
+
+			if (foreGround is not null && foreGround.Visible)
+			{
+				tween.TweenProperty(foreGround, "modulate:a", 0.0f, duration);
+			}
+		}
+
+		tween.Chain().TweenCallback(Callable.From(() =>
+		{
+			foreach (var node in standardFrameNodes)
+			{
+				if (node is not null)
+				{
+					node.Visible = !isStream;
+					node.Modulate = Colors.White;
+				}
+			}
+
+			if (foreGround is not null)
+			{
+				foreGround.Visible = isStream;
+				foreGround.Modulate = Colors.White;
+			}
+		}));
+		frameTransitionTween = tween;
 	}
 
 	private static bool IsPointerOver(Control? control, Vector2 viewportPosition)

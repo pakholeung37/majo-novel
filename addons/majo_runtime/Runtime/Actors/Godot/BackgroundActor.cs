@@ -28,7 +28,11 @@ public sealed class BackgroundActor : ActorBase, IBackgroundActor
 
     public TextureRect CurrentView { get; private set; }
 
+    public string Slot { get; private set; } = BackgroundSlotIds.Main;
+
     public override Vector2 Position => Container.Position;
+
+    public void SetSlot(string slot) => Slot = BackgroundSlotIds.Normalize(slot);
 
     public IOperationHandle CrossFadeAppearance(
         string appearance,

@@ -51,11 +51,24 @@ public partial class ManosabaDemoController : Node
 
 			var characterNames = ManosabaCharacterNameCatalog.Load(
 				"res://demos/manosaba/assets/localization/character_names.json");
+			var uiService = new ManosabaUiService();
 			var runtime = new MajoRuntimeBootstrap
 			{
 				Name = "ManosabaRuntime",
 				Configuration = configuration,
 				ResolveSpeakerName = characterNames.Resolve,
+				ConfigureServices = services =>
+				{
+					services.AddSingleton<IManosabaUiService>(_ => uiService);
+				},
+				ConfigureCommands = commands =>
+				{
+					ManosabaCommands.Register(commands);
+				},
+				ConfigureStateContributors = contributors =>
+				{
+					contributors.Register(uiService);
+				},
 			};
 
 			AddChild(runtime);
@@ -68,6 +81,8 @@ public partial class ManosabaDemoController : Node
 				throw new InvalidOperationException(
 					"Manosaba presentation did not instantiate correctly.");
 			}
+
+			uiService.Attach(presentation);
 
 			services.TryGet<IAudioManager>(out var audio);
 			presentation.Bind(

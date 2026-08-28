@@ -8,6 +8,21 @@ using System.Threading.Tasks;
 
 namespace Majo.Runtime.Actors;
 
+public static class BackgroundSlotIds
+{
+    public const string Main = "main";
+
+    public static string Normalize(string? slot)
+    {
+        if (string.IsNullOrWhiteSpace(slot))
+        {
+            throw new ActorException("Background slot cannot be empty.");
+        }
+
+        return slot.Trim().ToLowerInvariant();
+    }
+}
+
 public interface IActor
 {
     string Id { get; }
@@ -149,6 +164,20 @@ public interface ICharacterActor : IActor, IGodotActorView
 
 public interface IBackgroundActor : IActor, IGodotActorView
 {
+    string Slot => BackgroundSlotIds.Main;
+
+    void SetSlot(string slot)
+    {
+        if (!string.Equals(
+                BackgroundSlotIds.Normalize(slot),
+                BackgroundSlotIds.Main,
+                StringComparison.Ordinal))
+        {
+            throw new ActorException(
+                $"Background actor '{Id}' only supports the '{BackgroundSlotIds.Main}' slot.");
+        }
+    }
+
     TextureRect CurrentView { get; }
 
     IOperationHandle CrossFadeAppearance(

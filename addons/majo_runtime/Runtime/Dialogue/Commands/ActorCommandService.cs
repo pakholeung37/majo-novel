@@ -1,7 +1,11 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
+using Godot;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Core;
 using Majo.Runtime.Operations;
@@ -38,18 +42,27 @@ public sealed class ActorCommandService : IActorCommandService
                     ActorFactoryIds.Background,
                     command.Appearance),
                 context.CancellationToken);
-            await actor.PrepareAppearanceAsync(
-                command.Appearance,
-                context.CancellationToken);
             var operationScheduled = false;
             try
             {
-                IOperationHandle operation;
+                await actor.PrepareAppearanceAsync(
+                    command.Appearance,
+                    context.CancellationToken);
+                actor.SetSlot(command.Slot);
+                var competingActors = actors.Actors
+                    .OfType<IBackgroundActor>()
+                    .Where(candidate =>
+                        !ReferenceEquals(candidate, actor) &&
+                        string.Equals(candidate.Slot, actor.Slot, StringComparison.Ordinal) &&
+                        (candidate.Visible || candidate.TargetVisible))
+                    .ToArray();
+                BringBackgroundToFront(actor);
+                IOperationHandle appearanceOperation;
                 if (created || (!actor.Visible && !actor.TargetVisible))
                 {
                     actor.SetAppearance(command.Appearance);
                     actor.SetOpacity(0);
-                    operation = actor.Show(
+                    appearanceOperation = actor.Show(
                         command.DurationSeconds,
                         command.OperationId,
                         command.GroupId);
@@ -60,7 +73,7 @@ public sealed class ActorCommandService : IActorCommandService
                     StringComparison.Ordinal))
                 {
                     actor.SetVisible(true);
-                    operation = actor.ChangeOpacity(
+                    appearanceOperation = actor.ChangeOpacity(
                         1,
                         command.DurationSeconds,
                         command.OperationId,
@@ -70,16 +83,47 @@ public sealed class ActorCommandService : IActorCommandService
                 {
                     actor.SetVisible(true);
                     actor.SetOpacity(1);
-                    operation = actor.CrossFadeAppearance(
+                    appearanceOperation = actor.CrossFadeAppearance(
                         command.Appearance,
                         command.DurationSeconds,
                         command.OperationId,
                         command.GroupId);
                 }
 
-                context.Track(operation);
+                var transitionOperations = new List<IOperationHandle>(
+                    competingActors.Length + 1)
+                {
+                    context.Track(appearanceOperation),
+                };
                 operationScheduled = true;
-                await WaitIfRequested(operation, command.Wait, context.CancellationToken);
+                foreach (var competingActor in competingActors)
+                {
+                    transitionOperations.Add(context.Track(competingActor.Hide(
+                        command.DurationSeconds,
+                        groupId: command.GroupId)));
+                }
+
+                if (competingActors.Length > 0)
+                {
+                    logger.Debug(
+                        "actor",
+                        "background.slot_transition",
+                        $"Background '{actor.Id}' replaced {competingActors.Length} actor(s) " +
+                        $"in slot '{actor.Slot}'.",
+                        properties: new Dictionary<string, object?>
+                        {
+                            ["actorId"] = actor.Id,
+                            ["slot"] = actor.Slot,
+                            ["replacedActorIds"] = competingActors
+                                .Select(candidate => candidate.Id)
+                                .ToArray(),
+                        });
+                }
+
+                await WaitIfRequested(
+                    transitionOperations,
+                    command.Wait,
+                    context.CancellationToken);
             }
             catch
             {
@@ -238,8 +282,31 @@ public sealed class ActorCommandService : IActorCommandService
     private static Task WaitIfRequested(
         IOperationHandle operation,
         bool wait,
-        System.Threading.CancellationToken cancellationToken) =>
+        CancellationToken cancellationToken) =>
         wait ? operation.Completion.WaitAsync(cancellationToken) : Task.CompletedTask;
+
+    private static Task WaitIfRequested(
+        IReadOnlyCollection<IOperationHandle> operations,
+        bool wait,
+        CancellationToken cancellationToken) => wait
+            ? Task.WhenAll(operations.Select(operation => operation.Completion))
+                .WaitAsync(cancellationToken)
+            : Task.CompletedTask;
+
+    private static void BringBackgroundToFront(IBackgroundActor actor)
+    {
+        var node = actor.SceneNode;
+        if (node is null || !GodotObject.IsInstanceValid(node))
+        {
+            return;
+        }
+
+        var parent = node.GetParent();
+        if (parent is not null)
+        {
+            parent.MoveChild(node, parent.GetChildCount() - 1);
+        }
+    }
 
     private RuntimeCommandContext CreateDetachedContext() =>
         new(actors, null, null, System.Threading.CancellationToken.None);

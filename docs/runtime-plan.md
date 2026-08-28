@@ -325,7 +325,8 @@ Command 通过 `DialogueRunner.AddCommandHandler` 显式注册，不依赖 `[Yar
 
 首批命令语义：
 
-- `back`：设置背景 Appearance 和淡化时长。
+- `back`：设置背景 Appearance、淡化时长和可选 Slot；Slot 默认为 `main`，同一 Slot 的
+  Background Actor 互斥，切换时目标淡入、旧 Actor 淡出并在稳定态隐藏。
 - `char`：创建或修改 Character 的 Appearance、位置、可见性和动画时长。
 - `hide`：隐藏指定 Actor。
 - `await`：等待命名 Operation/组，或开始一个收集 Operation 的等待块；可选择强制完成。

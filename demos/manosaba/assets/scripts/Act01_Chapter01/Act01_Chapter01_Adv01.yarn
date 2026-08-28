@@ -20,7 +20,7 @@ title: Act01_Chapter01_Adv01
 <<curtain open duration:1.2 wait:true>>
 <<wait 1.8>>
 
-<<bgm Ambient_011_001 track:ambi loop:true>>
+<<bgm Ambient_011_001 track:ambi>>
 // <<autoSave>>
 ——这里是囚牢。 #line:0101Adv01_Narrative001
 
@@ -80,6 +80,7 @@ title: Act01_Chapter01_Adv01
 
 大家都去死就好了。 #line:0101Adv01_Narrative024
 
+<<curtain closed duration:1.5 wait:true>>
 <<detour EndAdv>>
 <<jump Act01_Chapter01_Adv02>>
 
