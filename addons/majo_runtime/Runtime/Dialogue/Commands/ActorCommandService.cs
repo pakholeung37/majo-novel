@@ -110,14 +110,40 @@ public sealed class ActorCommandService : IActorCommandService
             var operationScheduled = false;
             try
             {
-                actor.SetAppearance(command.Appearance);
-                actor.SetOpacity(1);
-                actor.SetVisible(true);
                 if (command.Scale is { } scale)
                 {
                     actor.SetScale(new Godot.Vector2(scale, scale));
                 }
-                var operation = command.ScenePosition is { } scenePosition
+
+                IOperationHandle appearanceOperation;
+                if (created)
+                {
+                    actor.SetAppearance(command.Appearance);
+                    actor.SetOpacity(0);
+                    appearanceOperation = actor.Show(
+                        command.DurationSeconds,
+                        groupId: command.GroupId);
+                }
+                else if (string.Equals(
+                    actor.TargetAppearance,
+                    command.Appearance,
+                    StringComparison.Ordinal))
+                {
+                    actor.SetVisible(true);
+                    appearanceOperation = actor.ChangeOpacity(
+                        1,
+                        command.DurationSeconds,
+                        groupId: command.GroupId);
+                }
+                else
+                {
+                    appearanceOperation = actor.ChangeAppearance(
+                        command.Appearance,
+                        command.DurationSeconds,
+                        groupId: command.GroupId);
+                }
+
+                var positionOperation = command.ScenePosition is { } scenePosition
                     ? actor.ChangeScenePosition(
                         scenePosition,
                         command.DurationSeconds,
@@ -128,9 +154,15 @@ public sealed class ActorCommandService : IActorCommandService
                         command.DurationSeconds,
                         command.OperationId,
                         command.GroupId);
-                context.Track(operation);
+                context.Track(appearanceOperation);
+                context.Track(positionOperation);
                 operationScheduled = true;
-                await WaitIfRequested(operation, command.Wait, context.CancellationToken);
+                if (command.Wait)
+                {
+                    await Task.WhenAll(
+                        appearanceOperation.Completion.WaitAsync(context.CancellationToken),
+                        positionOperation.Completion.WaitAsync(context.CancellationToken));
+                }
             }
             catch
             {

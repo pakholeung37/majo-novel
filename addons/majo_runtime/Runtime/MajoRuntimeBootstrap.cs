@@ -336,10 +336,12 @@ public partial class MajoRuntimeBootstrap : Node
                     resolver.Get<GodotActorHost>(),
                     resolver.Get<IOperationScheduler>(),
                     resolver.Get<IActorTextureLoader>(),
+                    resolver.Get<IFrameClock>(),
                     resolver.Get<ILocaleManager>()),
                 typeof(GodotActorHost),
                 typeof(IOperationScheduler),
                 typeof(IActorTextureLoader),
+                typeof(IFrameClock),
                 typeof(ILocaleManager))
             .AddSingleton<IStageBackend>(
                 resolver => new GodotStageBackend(this, resolver.Get<GodotActorHost>()),
@@ -893,7 +895,8 @@ public partial class MajoRuntimeBootstrap : Node
         var binder = new CommandBinder(
             new CommandBindingContext(
                 Configuration!.Operations!.DefaultAnimationDurationSeconds,
-                Configuration.Audio!.DefaultFadeDurationSeconds),
+                Configuration.Audio!.DefaultFadeDurationSeconds,
+                Configuration.Operations.DefaultCharacterAnimationDurationSeconds),
             converters);
         var dispatcher = new RuntimeCommandDispatcher(
             binder,
@@ -914,6 +917,7 @@ public partial class MajoRuntimeBootstrap : Node
         GodotActorHost host,
         IOperationScheduler scheduler,
         IActorTextureLoader textureLoader,
+        IFrameClock frameClock,
         ILocaleManager locales)
     {
         var actorConfiguration = Configuration!.Actors!;
@@ -930,6 +934,7 @@ public partial class MajoRuntimeBootstrap : Node
                     host.CharacterLayer,
                     scheduler,
                     textureLoader,
+                    frameClock,
                     new CharacterPositionMap(actorConfiguration),
                     Configuration.Resources!.RootPath,
                     Configuration.Resources.CharactersPath),

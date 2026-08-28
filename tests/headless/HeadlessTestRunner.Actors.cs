@@ -30,7 +30,8 @@ public partial class HeadlessTestRunner
             ActorFactoryIds.Background,
             CharacterPositionPreset.Center,
             ("dark", "res://tests/headless/fixtures/background_dark.svg"),
-            ("light", "res://tests/headless/fixtures/background_light.svg")));
+            ("light", "res://tests/headless/fixtures/background_light.svg"),
+            ("wide", "res://tests/headless/fixtures/background_wide.svg")));
 
         var bootstrap = new MajoRuntimeBootstrap
         {
@@ -65,6 +66,11 @@ public partial class HeadlessTestRunner
             "Background TextureRect was created under the wrong host.");
         Assert(character.View.Texture is not null, "Character texture was not loaded.");
         Assert(background.CurrentView.Texture is not null, "Background texture was not loaded.");
+        background.SetAppearance("wide");
+        Assert(background.CurrentView.Size.X > stageViewport.Size.X &&
+                Mathf.IsEqualApprox(background.CurrentView.Size.Y, stageViewport.Size.Y),
+            "Wide background bleed was cropped before Camera shake could reveal it.");
+        background.SetAppearance("dark");
         Assert(cameraOutput.GetNode<TextureRect>("LiveOutput").Texture is ViewportTexture,
             "Camera output did not present the isolated Stage viewport texture.");
         Assert(stageBackdrop.Color == Colors.Black &&

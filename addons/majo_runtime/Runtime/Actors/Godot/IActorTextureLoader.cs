@@ -17,8 +17,25 @@ public interface IActorTextureLoader : IRuntimeService
 {
     Texture2D Load(string resourcePath);
 
+    Task<Texture2D> LoadAsync(
+        string resourcePath,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(Load(resourcePath));
+    }
+
     Texture2D Load(ResourceKey key, string? overridePath = null) =>
         Load(overridePath ?? key.Path);
+
+    Task<Texture2D> LoadAsync(
+        ResourceKey key,
+        string? overridePath = null,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(Load(key, overridePath));
+    }
 }
 
 public sealed class ResourceActorTextureLoader : IActorTextureLoader
@@ -98,6 +115,56 @@ public sealed class ResourceActorTextureLoader : IActorTextureLoader
         return GetPlaceholderTexture();
     }
 
+    public async Task<Texture2D> LoadAsync(
+        ResourceKey key,
+        string? overridePath = null,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (resources is null)
+        {
+            return Load(key, overridePath);
+        }
+
+        var root = localizedRoots.FirstOrDefault(value =>
+            key.Path.StartsWith($"{value}/", System.StringComparison.Ordinal));
+        if (root is not null && localizedResources is not null && locales is not null)
+        {
+            var resolution = localizedResources.Resolve<Texture2D>(
+                key,
+                root,
+                locales.DialogueLocale,
+                locales.GetDialogueFallbackChain(locales.DialogueLocale),
+                overridePath);
+            if (resolution.IsResolved)
+            {
+                return await resources.LoadAsync<Texture2D>(
+                    resolution.ResolvedKey!.Value,
+                    resolution.ResolvedOverridePath,
+                    cancellationToken);
+            }
+
+            if (failOnMissingAssets)
+            {
+                return await resources.LoadAsync<Texture2D>(
+                    key,
+                    overridePath,
+                    cancellationToken);
+            }
+        }
+        else if (failOnMissingAssets || resources.Exists<Texture2D>(key, overridePath))
+        {
+            return await resources.LoadAsync<Texture2D>(
+                key,
+                overridePath,
+                cancellationToken);
+        }
+
+        var requestedPath = overridePath ?? key.Path;
+        missingResources?.Report("Texture2D", key.Path, "placeholder", requestedPath);
+        return GetPlaceholderTexture();
+    }
+
     public Texture2D Load(string resourcePath)
     {
         if (!ResourceLoader.Exists(resourcePath))
@@ -115,6 +182,38 @@ public sealed class ResourceActorTextureLoader : IActorTextureLoader
 
         return ResourceLoader.Load<Texture2D>(resourcePath) ?? throw new ActorException(
             $"Actor resource '{resourcePath}' is not a Texture2D.");
+    }
+
+    public async Task<Texture2D> LoadAsync(
+        string resourcePath,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!ResourceLoader.Exists(resourcePath))
+        {
+            if (failOnMissingAssets)
+            {
+                throw new ActorException(
+                    $"Actor texture resource does not exist: '{resourcePath}'.");
+            }
+
+            missingResources?.Report(
+                "Texture2D", resourcePath, "placeholder", resourcePath);
+            return GetPlaceholderTexture();
+        }
+
+        if (resources is null)
+        {
+            return Load(resourcePath);
+        }
+
+        var logicalPath = resourcePath.StartsWith("res://", System.StringComparison.Ordinal)
+            ? resourcePath["res://".Length..]
+            : resourcePath;
+        return await resources.LoadAsync<Texture2D>(
+            new ResourceKey(logicalPath),
+            resourcePath,
+            cancellationToken);
     }
 
     public Task InitializeAsync(CancellationToken cancellationToken)

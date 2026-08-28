@@ -18,7 +18,7 @@ public sealed class HideCommandArguments
         "duration",
         1,
         ValueHint = "seconds",
-        DefaultSource = CommandDefaultSource.AnimationDuration,
+        DefaultSource = CommandDefaultSource.CharacterAnimationDuration,
         Minimum = 0)]
     public double Duration { get; set; }
 

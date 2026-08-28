@@ -39,6 +39,23 @@ public sealed class CharacterActor : ActorBase, ICharacterActor
         View.Scale = scale;
     }
 
+    public IOperationHandle ChangeAppearance(
+        string appearance,
+        double durationSeconds,
+        string? operationId = null,
+        string? groupId = null)
+    {
+        var texture = TextureLoader.Load(
+            Definition.GetAppearanceResourceKey(appearance),
+            Definition.GetAppearanceOverride(appearance));
+        return FadeToAppearance(
+            appearance,
+            () => ApplyTexture(texture),
+            durationSeconds,
+            operationId,
+            groupId);
+    }
+
     public IOperationHandle ChangeScenePosition(
         Vector2 scenePosition,
         double durationSeconds,

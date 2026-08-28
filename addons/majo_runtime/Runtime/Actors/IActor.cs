@@ -105,6 +105,12 @@ public interface ICharacterActor : IActor, IGodotActorView
 
     void SetScale(Vector2 scale);
 
+    IOperationHandle ChangeAppearance(
+        string appearance,
+        double durationSeconds,
+        string? operationId = null,
+        string? groupId = null);
+
     IOperationHandle ChangeScenePosition(
         Vector2 scenePosition,
         double durationSeconds,

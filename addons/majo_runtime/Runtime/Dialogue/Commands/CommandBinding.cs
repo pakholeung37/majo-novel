@@ -11,7 +11,8 @@ namespace Majo.Runtime.Dialogue.Commands;
 
 public sealed record CommandBindingContext(
     double DefaultAnimationDurationSeconds,
-    double DefaultAudioFadeDurationSeconds = 0.35)
+    double DefaultAudioFadeDurationSeconds = 0.35,
+    double DefaultCharacterAnimationDurationSeconds = 0.1)
 {
     public CommandBindingContext Validate()
     {
@@ -29,6 +30,14 @@ public sealed record CommandBindingContext(
             throw new ArgumentOutOfRangeException(
                 nameof(DefaultAudioFadeDurationSeconds),
                 "Default audio fade duration must be finite and non-negative.");
+        }
+
+        if (!double.IsFinite(DefaultCharacterAnimationDurationSeconds) ||
+            DefaultCharacterAnimationDurationSeconds < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(DefaultCharacterAnimationDurationSeconds),
+                "Default character animation duration must be finite and non-negative.");
         }
 
         return this;
@@ -170,6 +179,13 @@ public sealed class CommandBinder
                         "R",
                         CultureInfo.InvariantCulture);
                 }
+                else if (parameter.DefaultSource ==
+                    CommandDefaultSource.CharacterAnimationDuration)
+                {
+                    value = context.DefaultCharacterAnimationDurationSeconds.ToString(
+                        "R",
+                        CultureInfo.InvariantCulture);
+                }
                 else if (parameter.DefaultSource == CommandDefaultSource.AudioFadeDuration)
                 {
                     value = context.DefaultAudioFadeDurationSeconds.ToString(
@@ -260,6 +276,7 @@ public sealed class CommandBinder
             }
 
             if (parameter.DefaultSource is CommandDefaultSource.AnimationDuration or
+                    CommandDefaultSource.CharacterAnimationDuration or
                     CommandDefaultSource.AudioFadeDuration &&
                 parameter.ValueType != typeof(double))
             {

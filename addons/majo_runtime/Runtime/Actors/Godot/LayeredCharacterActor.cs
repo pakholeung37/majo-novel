@@ -3,6 +3,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Actors.Layered;
 using Majo.Runtime.Operations;
@@ -11,18 +13,13 @@ namespace Majo.Runtime.Actors.Godot;
 
 public sealed class LayeredCharacterActor : ActorBase, ICharacterActor
 {
-    private const string AlphaAwareMultiplyShaderCode = """
-        shader_type canvas_item;
-        render_mode blend_mul, unshaded;
-
-        void fragment() {
-            vec4 source = COLOR;
-            COLOR = vec4(mix(vec3(1.0), source.rgb, source.a), 1.0);
-        }
-        """;
+    private const ulong LayerBuildBudgetMicroseconds = 2_000;
+    private const string AlphaAwareMultiplyShaderPath =
+        "res://addons/majo_runtime/Runtime/Actors/Godot/Shaders/AlphaAwareMultiply.gdshader";
     private readonly CharacterPositionMap positions;
     private readonly LayerCompositionResolver resolver;
     private readonly HashSet<string> activeLayers;
+    private readonly ShaderMaterial multiplyMaterial;
     private readonly Dictionary<string, Sprite2D> layerViews =
         new(StringComparer.Ordinal);
 
@@ -34,7 +31,9 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor
         CharacterPositionMap positions,
         LayeredCharacterManifest manifest,
         string manifestPath,
-        CharacterPositionPreset initialPosition)
+        CharacterPositionPreset initialPosition,
+        ShaderMaterial? multiplyMaterial = null,
+        bool buildLayerViews = true)
         : base(
             definition,
             view,
@@ -45,10 +44,14 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor
         this.positions = positions ?? throw new ArgumentNullException(nameof(positions));
         ArgumentNullException.ThrowIfNull(manifest);
         ArgumentException.ThrowIfNullOrWhiteSpace(manifestPath);
+        this.multiplyMaterial = multiplyMaterial ?? CreateAlphaAwareMultiplyMaterial();
         resolver = new LayerCompositionResolver(manifest);
         activeLayers = resolver.CreateDefaultState();
-        BuildLayerViews(manifest, manifestPath);
-        ApplyLayerVisibility();
+        if (buildLayerViews)
+        {
+            BuildLayerViews(manifest, manifestPath, null);
+            ApplyLayerVisibility();
+        }
         Appearance = resolver.Canonicalize(activeLayers);
         TargetAppearance = Appearance;
         PositionPreset = initialPosition;
@@ -68,6 +71,28 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor
     {
         ValidateScale(scale);
         View.Scale = scale;
+    }
+
+    public IOperationHandle ChangeAppearance(
+        string appearance,
+        double durationSeconds,
+        string? operationId = null,
+        string? groupId = null)
+    {
+        var nextLayers = new HashSet<string>(activeLayers, StringComparer.Ordinal);
+        resolver.Apply(nextLayers, appearance);
+        var canonicalAppearance = resolver.Canonicalize(nextLayers);
+        return FadeToAppearance(
+            canonicalAppearance,
+            () =>
+            {
+                activeLayers.Clear();
+                activeLayers.UnionWith(nextLayers);
+                ApplyLayerVisibility();
+            },
+            durationSeconds,
+            operationId,
+            groupId);
     }
 
     public IOperationHandle ChangeScenePosition(
@@ -118,11 +143,58 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor
         View.Position = position;
     }
 
-    private void BuildLayerViews(LayeredCharacterManifest manifest, string manifestPath)
+    internal async Task BuildLayerViewsAsync(
+        LayeredCharacterManifest manifest,
+        IReadOnlyDictionary<string, Texture2D> atlases,
+        IFrameClock? frameClock,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(manifest);
+        ArgumentNullException.ThrowIfNull(atlases);
+        cancellationToken.ThrowIfCancellationRequested();
+        var pixelsPerUnit = (float)manifest.Canvas.PixelsPerUnit;
+        var frameStartedAt = Time.GetTicksUsec();
+        foreach (var layer in manifest.Layers.OrderBy(layer => layer.SortingOrder))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!atlases.TryGetValue(layer.Atlas, out var atlas))
+            {
+                throw new ActorException(
+                    $"Layered character atlas '{layer.Atlas}' was not loaded.");
+            }
+
+            AddLayerView(layer, atlas, manifest, pixelsPerUnit, multiplyMaterial);
+            if (Time.GetTicksUsec() - frameStartedAt < LayerBuildBudgetMicroseconds)
+            {
+                continue;
+            }
+
+            if (frameClock is not null)
+            {
+                await frameClock.NextFrameAsync(cancellationToken);
+            }
+
+            frameStartedAt = Time.GetTicksUsec();
+        }
+
+        ApplyLayerVisibility();
+    }
+
+    private void BuildLayerViews(
+        LayeredCharacterManifest manifest,
+        string manifestPath,
+        IReadOnlyDictionary<string, Texture2D>? preloadedAtlases)
     {
         var manifestDirectory = GetDirectory(manifestPath);
         var atlases = new Dictionary<string, Texture2D>(StringComparer.Ordinal);
-        ShaderMaterial? multiplyMaterial = null;
+        if (preloadedAtlases is not null)
+        {
+            foreach (var atlas in preloadedAtlases)
+            {
+                atlases.Add(atlas.Key, atlas.Value);
+            }
+        }
+
         var pixelsPerUnit = (float)manifest.Canvas.PixelsPerUnit;
         foreach (var layer in manifest.Layers.OrderBy(layer => layer.SortingOrder))
         {
@@ -132,46 +204,56 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor
                 atlases.Add(layer.Atlas, atlas);
             }
 
-            var texture = new AtlasTexture
-            {
-                Atlas = atlas,
-                Region = new Rect2(
-                    layer.Region.X,
-                    layer.Region.Y,
-                    layer.Region.Width,
-                    layer.Region.Height),
-            };
-            var layerView = new Sprite2D
-            {
-                Name = SanitizeNodeName(layer.Path),
-                Texture = texture,
-                Centered = true,
-                Position = new Vector2(
-                    (float)((layer.Position.X - manifest.Canvas.OffsetX) * pixelsPerUnit),
-                    (float)(-(layer.Position.Y - manifest.Canvas.OffsetY) * pixelsPerUnit)),
-                RotationDegrees = (float)-layer.RotationDegrees,
-                Scale = new Vector2(
-                    (float)layer.Scale.X * (layer.FlipX ? -1 : 1),
-                    (float)layer.Scale.Y * (layer.FlipY ? -1 : 1)),
-                Offset = new Vector2(
-                    (float)((0.5 - layer.Pivot.X) * layer.Region.Width),
-                    (float)((layer.Pivot.Y - 0.5) * layer.Region.Height)),
-                ZIndex = layer.SortingOrder,
-                Modulate = new Color(
-                    (float)layer.Color.R,
-                    (float)layer.Color.G,
-                    (float)layer.Color.B,
-                    (float)layer.Color.A),
-            };
-            if (layer.Material.Contains("Multiply", StringComparison.OrdinalIgnoreCase))
-            {
-                multiplyMaterial ??= CreateAlphaAwareMultiplyMaterial();
-                layerView.Material = multiplyMaterial;
-            }
-
-            View.AddChild(layerView);
-            layerViews.Add(layer.Path, layerView);
+            AddLayerView(layer, atlas, manifest, pixelsPerUnit, multiplyMaterial);
         }
+    }
+
+    private void AddLayerView(
+        LayeredCharacterLayer layer,
+        Texture2D atlas,
+        LayeredCharacterManifest manifest,
+        float pixelsPerUnit,
+        ShaderMaterial multiplyMaterial)
+    {
+        var texture = new AtlasTexture
+        {
+            Atlas = atlas,
+            Region = new Rect2(
+                layer.Region.X,
+                layer.Region.Y,
+                layer.Region.Width,
+                layer.Region.Height),
+        };
+        var layerView = new Sprite2D
+        {
+            Name = SanitizeNodeName(layer.Path),
+            Texture = texture,
+            Centered = true,
+            Visible = activeLayers.Contains(layer.Path),
+            Position = new Vector2(
+                (float)((layer.Position.X - manifest.Canvas.OffsetX) * pixelsPerUnit),
+                (float)(-(layer.Position.Y - manifest.Canvas.OffsetY) * pixelsPerUnit)),
+            RotationDegrees = (float)-layer.RotationDegrees,
+            Scale = new Vector2(
+                (float)layer.Scale.X * (layer.FlipX ? -1 : 1),
+                (float)layer.Scale.Y * (layer.FlipY ? -1 : 1)),
+            Offset = new Vector2(
+                (float)((0.5 - layer.Pivot.X) * layer.Region.Width),
+                (float)((layer.Pivot.Y - 0.5) * layer.Region.Height)),
+            ZIndex = layer.SortingOrder,
+            Modulate = new Color(
+                (float)layer.Color.R,
+                (float)layer.Color.G,
+                (float)layer.Color.B,
+                (float)layer.Color.A),
+        };
+        if (layer.Material.Contains("Multiply", StringComparison.OrdinalIgnoreCase))
+        {
+            layerView.Material = multiplyMaterial;
+        }
+
+        View.AddChild(layerView);
+        layerViews.Add(layer.Path, layerView);
     }
 
     private void ApplyLayerVisibility()
@@ -195,9 +277,11 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor
 
     private static string SanitizeNodeName(string path) => path.Replace('/', '_');
 
-    private static ShaderMaterial CreateAlphaAwareMultiplyMaterial() => new()
+    internal static ShaderMaterial CreateAlphaAwareMultiplyMaterial() => new()
     {
-        Shader = new Shader { Code = AlphaAwareMultiplyShaderCode },
+        Shader = ResourceLoader.Load<Shader>(AlphaAwareMultiplyShaderPath) ??
+            throw new ActorException(
+                $"Layered character shader could not be loaded: '{AlphaAwareMultiplyShaderPath}'."),
     };
 
     private static void ValidateScale(Vector2 scale)

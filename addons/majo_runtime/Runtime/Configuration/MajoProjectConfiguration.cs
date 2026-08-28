@@ -419,6 +419,14 @@ public partial class MajoProjectConfiguration : Resource
                 $"{nameof(Operations)}.{nameof(Operations.DefaultAnimationDurationSeconds)}",
                 "Value must be finite and greater than zero."));
         }
+
+        if (!double.IsFinite(Operations.DefaultCharacterAnimationDurationSeconds) ||
+            Operations.DefaultCharacterAnimationDurationSeconds <= 0)
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Operations)}.{nameof(Operations.DefaultCharacterAnimationDurationSeconds)}",
+                "Value must be finite and greater than zero."));
+        }
     }
 
     private void ValidateActors(

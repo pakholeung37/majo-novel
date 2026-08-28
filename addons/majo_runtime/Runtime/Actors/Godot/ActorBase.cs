@@ -344,6 +344,70 @@ public abstract class ActorBase : IActor, IGodotActorView
 
     protected void CancelPropertyAnimation(string property) => CancelProperty(property);
 
+    protected IOperationHandle FadeToAppearance(
+        string appearance,
+        Action applyAppearance,
+        double durationSeconds,
+        string? operationId = null,
+        string? groupId = null)
+    {
+        EnsureAlive();
+        ArgumentException.ThrowIfNullOrWhiteSpace(appearance);
+        ArgumentNullException.ThrowIfNull(applyAppearance);
+        var halfDuration = durationSeconds / 2;
+        var fadeOut = CreateOpacityTween(0, new AnimationSpec(halfDuration));
+        var fadeIn = CreateOpacityTween(1, new AnimationSpec(halfDuration));
+        var appearanceApplied = false;
+
+        void ApplyAppearance()
+        {
+            if (appearanceApplied)
+            {
+                return;
+            }
+
+            applyAppearance();
+            Appearance = appearance;
+            appearanceApplied = true;
+        }
+
+        TargetAppearance = appearance;
+        TargetVisible = true;
+        TargetOpacity = 1;
+        var transition = new OperationDefinition(
+            async context =>
+            {
+                View.Visible = true;
+                await fadeOut.ExecuteAsync(context);
+                ApplyAppearance();
+                await fadeIn.ExecuteAsync(context);
+            },
+            completeAsync: async cancellationToken =>
+            {
+                View.Visible = true;
+                await fadeOut.CompleteAsync(cancellationToken);
+                ApplyAppearance();
+                await fadeIn.CompleteAsync(cancellationToken);
+            },
+            cancelAsync: async cancellationToken =>
+            {
+                await fadeOut.CancelAsync(cancellationToken);
+                await fadeIn.CancelAsync(cancellationToken);
+                var color = View.Modulate;
+                View.Modulate = new Color(color.R, color.G, color.B, 1);
+                View.Visible = true;
+                TargetAppearance = Appearance;
+                TargetOpacity = 1;
+                TargetVisible = true;
+            },
+            isSkippable: true);
+        return StartSequencedOperation(
+            OpacityProperty,
+            transition,
+            operationId,
+            groupId);
+    }
+
     private static async Task WaitForPredecessorAsync(
         IOperationHandle? predecessor,
         CancellationToken cancellationToken)

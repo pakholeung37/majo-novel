@@ -44,16 +44,21 @@ public sealed class RuntimeCommandTests
     {
         var background = Bind<BackCommandArguments>(
             ["backdrop", "appearance:courtroom"]);
-        var hidden = Bind<HideCommandArguments>(
+        var character = Bind<CharacterCommandArguments>(
+            ["maya", "appearance:happy", "position:center"]);
+        var hiddenWithDefaultDuration = Bind<HideCommandArguments>(["maya"]);
+        var hiddenImmediately = Bind<HideCommandArguments>(
             ["maya", "operation:hide-maya", "duration:0"]);
 
         Assert.Equal(0.35, background.Duration);
         Assert.False(background.Wait);
         Assert.Null(background.Group);
         Assert.Null(background.Operation);
-        Assert.Equal(0, hidden.Duration);
-        Assert.Null(hidden.Group);
-        Assert.Equal("hide-maya", hidden.Operation);
+        Assert.Equal(0.1, character.Duration);
+        Assert.Equal(0.1, hiddenWithDefaultDuration.Duration);
+        Assert.Equal(0, hiddenImmediately.Duration);
+        Assert.Null(hiddenImmediately.Group);
+        Assert.Equal("hide-maya", hiddenImmediately.Operation);
 
         var constant = Bind<ConstantDefaultCommandArguments>([]);
         Assert.True(constant.Enabled);
@@ -1111,6 +1116,18 @@ public sealed class RuntimeCommandTests
         public CharacterPositionPreset PositionPreset { get; private set; }
 
         public void SetScale(Vector2 scale) => Scale = scale;
+
+        public IOperationHandle ChangeAppearance(
+            string appearance,
+            double durationSeconds,
+            string? operationId = null,
+            string? groupId = null)
+        {
+            Appearance = appearance;
+            var operation = new FakeOperationHandle(operationId, groupId);
+            operation.Complete();
+            return operation;
+        }
 
         public IOperationHandle ChangeScenePosition(
             Vector2 scenePosition,

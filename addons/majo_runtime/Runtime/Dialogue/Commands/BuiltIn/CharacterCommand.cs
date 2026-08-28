@@ -25,7 +25,7 @@ public sealed class CharacterCommandArguments
         "duration",
         3,
         ValueHint = "seconds",
-        DefaultSource = CommandDefaultSource.AnimationDuration,
+        DefaultSource = CommandDefaultSource.CharacterAnimationDuration,
         Minimum = 0)]
     public double Duration { get; set; }
 

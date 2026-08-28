@@ -599,10 +599,12 @@ endAwait
 cancel <group:<id>|operation:<id>>
 ```
 
-Durations default to `Operations.DefaultAnimationDurationSeconds`; animated
-commands default to `wait:false`. `group` and `operation` are mutually exclusive
-for `await` and `cancel`. Unknown, duplicated, missing, and unexpected positional
-parameters fail the command with its exact usage.
+`char` and `hide` durations default to
+`Operations.DefaultCharacterAnimationDurationSeconds` (`0.1` seconds by
+default). Other visual durations use `Operations.DefaultAnimationDurationSeconds`;
+animated commands default to `wait:false`. `group` and `operation` are mutually
+exclusive for `await` and `cancel`. Unknown, duplicated, missing, and unexpected
+positional parameters fail the command with its exact usage.
 
 ```yarn
 <<await>>

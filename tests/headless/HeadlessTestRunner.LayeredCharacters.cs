@@ -29,7 +29,7 @@ public partial class HeadlessTestRunner
         Assert(bootstrap.GetNode<SubViewport>("MajoStageViewport").Size ==
                 new Vector2I(2560, 1440),
             "Layered character Stage did not retain the configured reference resolution.");
-        var character = (ICharacterActor)actors.GetOrCreate(new ActorSpawnRequest(
+        var character = (ICharacterActor)await actors.GetOrCreateAsync(new ActorSpawnRequest(
             "Ema",
             ActorFactoryIds.Character,
             "Default",
@@ -75,7 +75,15 @@ public partial class HeadlessTestRunner
                 .Transform.IsEqualApprox(expectedCameraTransform),
             "Camera pose did not use the configured Stage reference resolution.");
 
-        character.SetAppearance("Surprised1");
+        var previousAppearance = character.Appearance;
+        var appearanceTransition = character.ChangeAppearance("Surprised1", 0.2);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Assert(character.Opacity < 1 && character.Appearance == previousAppearance,
+            "Layered character appearance change did not expose its fade-out phase.");
+        await appearanceTransition.Completion;
+        Assert(Mathf.IsEqualApprox(character.Opacity, 1),
+            "Layered character appearance change did not finish its fade-in phase.");
         Assert(LayerVisible(layers,
                 "Angle01_Head01_Facial01_Eyes01_Eyes01_Surprised_Open01") &&
             !LayerVisible(layers,

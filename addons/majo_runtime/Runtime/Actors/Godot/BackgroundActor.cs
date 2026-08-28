@@ -19,6 +19,7 @@ public sealed class BackgroundActor : ActorBase, IBackgroundActor
         IActorTextureLoader textureLoader)
         : base(definition, container, scheduler, textureLoader)
     {
+        Container.Resized += LayoutViews;
         CurrentView = CreateView();
         SetAppearance(definition.DefaultAppearance);
     }
@@ -65,6 +66,7 @@ public sealed class BackgroundActor : ActorBase, IBackgroundActor
             previousView = CurrentView;
             nextView = CreateView();
             nextView.Texture = texture;
+            LayoutView(nextView);
             nextView.Modulate = new Color(1, 1, 1, 0);
             previousFade = GodotTweenOperation.CreatePropertyTween(
                 Container,
@@ -153,6 +155,7 @@ public sealed class BackgroundActor : ActorBase, IBackgroundActor
     protected override void ApplyTexture(Texture2D texture)
     {
         CurrentView.Texture = texture;
+        LayoutView(CurrentView);
     }
 
     protected override void ApplyPosition(Vector2 position)
@@ -166,12 +169,51 @@ public sealed class BackgroundActor : ActorBase, IBackgroundActor
         {
             Name = "Appearance",
             ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
-            StretchMode = TextureRect.StretchModeEnum.KeepAspectCovered,
+            StretchMode = TextureRect.StretchModeEnum.Scale,
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
         Container.AddChild(view);
-        view.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         return view;
+    }
+
+    private void LayoutViews()
+    {
+        foreach (var child in Container.GetChildren())
+        {
+            if (child is TextureRect view)
+            {
+                LayoutView(view);
+            }
+        }
+    }
+
+    private void LayoutView(TextureRect view)
+    {
+        var textureSize = view.Texture?.GetSize() ?? Vector2.Zero;
+        var viewportSize = Container.Size;
+        if (textureSize.X <= 0 || textureSize.Y <= 0 ||
+            viewportSize.X <= 0 || viewportSize.Y <= 0)
+        {
+            return;
+        }
+
+        // Size the view to the complete "cover" result instead of cropping the
+        // texture into a viewport-sized TextureRect. Wide background and still
+        // assets intentionally contain horizontal bleed for camera movement;
+        // keeping the expanded rect lets a shake reveal that bleed rather than
+        // the black Stage backdrop.
+        var scale = Mathf.Max(
+            viewportSize.X / textureSize.X,
+            viewportSize.Y / textureSize.Y);
+        var renderedSize = textureSize * scale;
+        view.AnchorLeft = 0.5f;
+        view.AnchorTop = 0.5f;
+        view.AnchorRight = 0.5f;
+        view.AnchorBottom = 0.5f;
+        view.OffsetLeft = -renderedSize.X / 2;
+        view.OffsetTop = -renderedSize.Y / 2;
+        view.OffsetRight = renderedSize.X / 2;
+        view.OffsetBottom = renderedSize.Y / 2;
     }
 
 }
