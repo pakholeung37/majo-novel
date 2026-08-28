@@ -13,7 +13,7 @@ namespace Majo.Runtime.Actors.Godot;
 public abstract class ActorBase : IActor, IGodotActorView
 {
     private const string PositionProperty = "position";
-    private const string OpacityProperty = "opacity";
+    protected const string OpacityProperty = "opacity";
     private const string AppearanceProperty = "appearance";
 
     private readonly Dictionary<string, IOperationHandle> propertyOperations =
@@ -86,7 +86,7 @@ public abstract class ActorBase : IActor, IGodotActorView
         }
     }
 
-    public float Opacity => View.Modulate.A;
+    public virtual float Opacity => View.Modulate.A;
 
     public float TargetOpacity { get; protected set; }
 
@@ -104,7 +104,19 @@ public abstract class ActorBase : IActor, IGodotActorView
         TargetAppearance = appearance;
     }
 
-    public void SetVisible(bool visible)
+    public virtual async Task PrepareAppearanceAsync(
+        string appearance,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureAlive();
+        ArgumentException.ThrowIfNullOrWhiteSpace(appearance);
+        _ = await TextureLoader.LoadAsync(
+            Definition.GetAppearanceResourceKey(appearance),
+            Definition.GetAppearanceOverride(appearance),
+            cancellationToken);
+    }
+
+    public virtual void SetVisible(bool visible)
     {
         EnsureAlive();
         CancelProperty(OpacityProperty);
@@ -128,7 +140,7 @@ public abstract class ActorBase : IActor, IGodotActorView
         View.Modulate = new Color(tint.R, tint.G, tint.B, current.A);
     }
 
-    public void SetOpacity(float opacity)
+    public virtual void SetOpacity(float opacity)
     {
         EnsureAlive();
         ValidateOpacity(opacity);
@@ -170,7 +182,7 @@ public abstract class ActorBase : IActor, IGodotActorView
             PositionProperty, tween, operationId, groupId, animation.ConflictPolicy);
     }
 
-    public IOperationHandle ChangeOpacity(
+    public virtual IOperationHandle ChangeOpacity(
         float opacity,
         double durationSeconds,
         string? operationId = null,
@@ -180,7 +192,7 @@ public abstract class ActorBase : IActor, IGodotActorView
             operationId,
             groupId);
 
-    public IOperationHandle ChangeOpacity(
+    public virtual IOperationHandle ChangeOpacity(
         float opacity,
         AnimationSpec animation,
         string? operationId = null,
@@ -202,13 +214,13 @@ public abstract class ActorBase : IActor, IGodotActorView
             OpacityProperty, tween, operationId, groupId, animation.ConflictPolicy);
     }
 
-    public IOperationHandle Show(
+    public virtual IOperationHandle Show(
         double durationSeconds,
         string? operationId = null,
         string? groupId = null) => Show(
             new AnimationSpec(durationSeconds), operationId, groupId);
 
-    public IOperationHandle Show(
+    public virtual IOperationHandle Show(
         AnimationSpec animation,
         string? operationId = null,
         string? groupId = null)
@@ -237,13 +249,13 @@ public abstract class ActorBase : IActor, IGodotActorView
             animation.ConflictPolicy);
     }
 
-    public IOperationHandle Hide(
+    public virtual IOperationHandle Hide(
         double durationSeconds,
         string? operationId = null,
         string? groupId = null) => Hide(
             new AnimationSpec(durationSeconds), operationId, groupId);
 
-    public IOperationHandle Hide(
+    public virtual IOperationHandle Hide(
         AnimationSpec animation,
         string? operationId = null,
         string? groupId = null)
@@ -486,7 +498,7 @@ public abstract class ActorBase : IActor, IGodotActorView
         }
     }
 
-    private static void ValidateOpacity(float opacity)
+    protected static void ValidateOpacity(float opacity)
     {
         if (!float.IsFinite(opacity) || opacity is < 0 or > 1)
         {

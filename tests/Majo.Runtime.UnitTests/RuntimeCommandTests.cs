@@ -171,6 +171,22 @@ public sealed class RuntimeCommandTests
     }
 
     [Fact(Timeout = 5_000)]
+    public async Task CharacterCommandActivatesDormantActorWithPreparedAppearance()
+    {
+        var actor = new FakeCharacterActor("hero", "idle");
+        actor.SetVisible(false);
+        var service = CreateService(actor);
+
+        await service.CharacterAsync(new CharacterCommand(
+            "hero", "happy", CharacterPositionPreset.Center, 1, false, null, null));
+
+        Assert.Equal("happy", actor.Appearance);
+        Assert.True(actor.Visible);
+        Assert.Equal(0, actor.Opacity);
+        actor.LastOperation.Complete();
+    }
+
+    [Fact(Timeout = 5_000)]
     public async Task WaitingHideCommandDoesNotFinishBeforeActorOperation()
     {
         var actor = new FakeCharacterActor("hero", "idle");

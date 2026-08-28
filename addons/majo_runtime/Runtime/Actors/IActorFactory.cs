@@ -6,12 +6,37 @@ public interface IActorFactory
 
     IActor Create(ActorDefinition definition);
 
+    IActor Create(ActorDefinition definition, ActorCreationMode creationMode)
+    {
+        var actor = Create(definition);
+        if (creationMode == ActorCreationMode.Dormant)
+        {
+            actor.SetVisible(false);
+        }
+
+        return actor;
+    }
+
     async System.Threading.Tasks.Task<IActor> CreateAsync(
         ActorDefinition definition,
         System.Threading.CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         return await System.Threading.Tasks.Task.FromResult(Create(definition));
+    }
+
+    async System.Threading.Tasks.Task<IActor> CreateAsync(
+        ActorDefinition definition,
+        ActorCreationMode creationMode,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var actor = await CreateAsync(definition, cancellationToken);
+        if (creationMode == ActorCreationMode.Dormant)
+        {
+            actor.SetVisible(false);
+        }
+
+        return actor;
     }
 
     void ValidateDefinition(ActorDefinition definition)

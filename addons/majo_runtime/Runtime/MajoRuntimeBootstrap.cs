@@ -27,6 +27,7 @@ using Majo.Runtime.Localization;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Operations.Godot;
 using Majo.Runtime.Played;
+using Majo.Runtime.Preloading;
 using Majo.Runtime.Resources;
 using Majo.Runtime.Resources.Godot;
 using Majo.Runtime.Script;
@@ -343,6 +344,13 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(IActorTextureLoader),
                 typeof(IFrameClock),
                 typeof(ILocaleManager))
+            .AddSingleton<IScriptPreloadManager>(
+                resolver => new ScriptPreloadManager(
+                    resolver.Get<IResourceManager>(),
+                    resolver.Get<IActorManager>(),
+                    Logger),
+                typeof(IResourceManager),
+                typeof(IActorManager))
             .AddSingleton<IStageBackend>(
                 resolver => new GodotStageBackend(this, resolver.Get<GodotActorHost>()),
                 typeof(GodotActorHost))

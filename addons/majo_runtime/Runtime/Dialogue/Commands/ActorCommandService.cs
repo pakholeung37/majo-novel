@@ -38,11 +38,14 @@ public sealed class ActorCommandService : IActorCommandService
                     ActorFactoryIds.Background,
                     command.Appearance),
                 context.CancellationToken);
+            await actor.PrepareAppearanceAsync(
+                command.Appearance,
+                context.CancellationToken);
             var operationScheduled = false;
             try
             {
                 IOperationHandle operation;
-                if (created)
+                if (created || (!actor.Visible && !actor.TargetVisible))
                 {
                     actor.SetAppearance(command.Appearance);
                     actor.SetOpacity(0);
@@ -107,6 +110,9 @@ public sealed class ActorCommandService : IActorCommandService
                     command.Appearance,
                     command.Position),
                 context.CancellationToken);
+            await actor.PrepareAppearanceAsync(
+                command.Appearance,
+                context.CancellationToken);
             var operationScheduled = false;
             try
             {
@@ -116,7 +122,7 @@ public sealed class ActorCommandService : IActorCommandService
                 }
 
                 IOperationHandle appearanceOperation;
-                if (created)
+                if (created || (!actor.Visible && !actor.TargetVisible))
                 {
                     actor.SetAppearance(command.Appearance);
                     actor.SetOpacity(0);

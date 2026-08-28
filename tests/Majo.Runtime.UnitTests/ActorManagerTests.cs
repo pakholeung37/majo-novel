@@ -200,6 +200,25 @@ public sealed class ActorManagerTests
     }
 
     [Fact(Timeout = 5_000)]
+    public async Task DormantSpawnBuildsActorWithoutMakingItVisible()
+    {
+        var factory = new FakeActorFactory("test");
+        var manager = new ActorManager([CreateDefinition("hero")], [factory]);
+        await manager.InitializeAsync(CancellationToken.None);
+
+        var actor = await manager.GetOrCreateAsync(new ActorSpawnRequest(
+            "hero",
+            "test",
+            "default",
+            creationMode: ActorCreationMode.Dormant));
+
+        Assert.False(actor.Visible);
+        Assert.Same(actor, manager.Get<IActor>("hero"));
+        Assert.Equal(1, factory.CreateCount);
+        await manager.ShutdownAsync(CancellationToken.None);
+    }
+
+    [Fact(Timeout = 5_000)]
     public async Task SpecializedConventionFactoryOverridesImplicitCharacterFallback()
     {
         var characterFactory = new CapturingActorFactory(ActorFactoryIds.Character);

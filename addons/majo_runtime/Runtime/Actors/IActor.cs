@@ -1,7 +1,10 @@
 #nullable enable
 
+using System;
 using Godot;
 using Majo.Runtime.Operations;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Majo.Runtime.Actors;
 
@@ -30,6 +33,15 @@ public interface IActor
     float TargetOpacity => Opacity;
 
     void SetAppearance(string appearance);
+
+    Task PrepareAppearanceAsync(
+        string appearance,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(appearance);
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.CompletedTask;
+    }
 
     void SetVisible(bool visible);
 

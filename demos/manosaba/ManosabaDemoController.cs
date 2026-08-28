@@ -3,11 +3,14 @@
 using System;
 using Godot;
 using Majo.Runtime;
+using Majo.Runtime.Actors;
 using Majo.Runtime.Audio;
 using Majo.Runtime.Auto;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.History;
+using Majo.Runtime.Preloading;
+using Majo.Runtime.Resources;
 using Majo.Runtime.UI.SaveLoad;
 using Majo.Runtime.UI.Settings;
 
@@ -74,6 +77,9 @@ public partial class ManosabaDemoController : Node
 				services.Get<ISettingsOverlay>(),
 				audio);
 
+			await services.Get<IScriptPreloadManager>().PrepareAsync(
+				CreateOpeningPreloadWindow());
+
 			var dialogue = services.Get<IDialoguePlayer>();
 			await dialogue.StartAsync();
 		}
@@ -81,5 +87,46 @@ public partial class ManosabaDemoController : Node
 		{
 			GD.PushError($"Manosaba Demo failed: {exception}");
 		}
+	}
+
+	private static ScriptPreloadWindow CreateOpeningPreloadWindow()
+	{
+		const long mib = 1024L * 1024L;
+		var resources = new ResourcePreloadManifest(
+			"manosaba-act01-adv02-opening-resources",
+			[
+				ResourcePreloadEntry.Create<Texture2D>(
+					new ResourceKey("backgrounds/stills/Still_490_001"),
+					estimatedBytes: 32 * mib),
+				ResourcePreloadEntry.Create<Texture2D>(
+					new ResourceKey("backgrounds/scenes/Background_001_001"),
+					estimatedBytes: 32 * mib),
+				ResourcePreloadEntry.Create<Texture2D>(
+					new ResourceKey("characters/Ema/Ema_Angle01"),
+					estimatedBytes: 256 * mib),
+				ResourcePreloadEntry.Create<Texture2D>(
+					new ResourceKey("characters/Hiro/002_Hiro_Angle01"),
+					estimatedBytes: 128 * mib),
+				ResourcePreloadEntry.Create<Texture2D>(
+					new ResourceKey("characters/Warden/1"),
+					estimatedBytes: 12 * mib),
+			]);
+		return new ScriptPreloadWindow(
+			"manosaba-act01-adv02-opening",
+			resources,
+			[
+				new ActorWarmupRequest(
+					"Ema",
+					ActorFactoryIds.Character,
+					["Surprised1", "Normal1,ArmR3", "Fearful1,ArmR1"]),
+				new ActorWarmupRequest(
+					"Hiro",
+					ActorFactoryIds.Character,
+					["Angry1", "Surprised1", "Angry2"]),
+				new ActorWarmupRequest(
+					"Warden",
+					ActorFactoryIds.Character,
+					["1"]),
+			]);
 	}
 }

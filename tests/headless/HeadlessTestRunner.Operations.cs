@@ -88,6 +88,46 @@ public partial class HeadlessTestRunner
         Assert(tweenTarget.Position.IsEqualApprox(new Vector2(120, 40)),
             "Force-completed Tween did not apply its final property value.");
 
+        var methodTweenValue = 0.0f;
+        var naturalMethodTween = scheduler.Start(GodotTweenOperation.CreateFloatMethodTween(
+            this,
+            () => methodTweenValue,
+            value => methodTweenValue = value,
+            1,
+            0.03,
+            id: "natural-method-tween"));
+        await naturalMethodTween.Completion;
+        Assert(Mathf.IsEqualApprox(methodTweenValue, 1),
+            "Naturally completed method Tween did not apply its exact final value.");
+
+        methodTweenValue = 0;
+        var cancelledMethodTween = scheduler.Start(GodotTweenOperation.CreateFloatMethodTween(
+            this,
+            () => methodTweenValue,
+            value => methodTweenValue = value,
+            1,
+            1,
+            id: "cancelled-method-tween"));
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await scheduler.CancelAsync(OperationTarget.ForId("cancelled-method-tween"));
+        Assert(cancelledMethodTween.State == OperationState.Cancelled &&
+                methodTweenValue < 1,
+            "Cancelled method Tween incorrectly applied its final value.");
+
+        methodTweenValue = 0;
+        var completedMethodTween = scheduler.Start(GodotTweenOperation.CreateFloatMethodTween(
+            this,
+            () => methodTweenValue,
+            value => methodTweenValue = value,
+            1,
+            1,
+            id: "completed-method-tween"));
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await scheduler.CompleteAsync(OperationTarget.ForId("completed-method-tween"));
+        Assert(completedMethodTween.State == OperationState.Completed &&
+                Mathf.IsEqualApprox(methodTweenValue, 1),
+            "Force-completed method Tween did not apply its final value.");
+
         tweenTarget.Position = Vector2.Zero;
         var shutdownTween = scheduler.Start(GodotTweenOperation.CreatePropertyTween(
             this,

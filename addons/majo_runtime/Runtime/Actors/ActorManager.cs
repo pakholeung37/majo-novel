@@ -213,6 +213,7 @@ public sealed class ActorManager : IActorManager
                     actorId,
                     definition,
                     factory,
+                    ActorCreationMode.Active,
                     completion,
                     actorLifetime.Token);
             }
@@ -245,7 +246,7 @@ public sealed class ActorManager : IActorManager
             throw new ActorFactoryNotFoundException(definition.FactoryId, request.ActorId);
         }
 
-        var actor = factory.Create(definition) ?? throw new ActorException(
+        var actor = factory.Create(definition, request.CreationMode) ?? throw new ActorException(
             $"Actor factory '{factory.FactoryId}' returned null for '{request.ActorId}'.");
         ValidateCreatedActor(request.ActorId, factory, actor);
         lock (gate)
@@ -293,6 +294,7 @@ public sealed class ActorManager : IActorManager
                 request.ActorId,
                 definition,
                 factory,
+                request.CreationMode,
                 completion,
                 actorLifetime.Token);
         }
@@ -536,13 +538,14 @@ public sealed class ActorManager : IActorManager
         string actorId,
         ActorDefinition definition,
         IActorFactory factory,
+        ActorCreationMode creationMode,
         TaskCompletionSource<IActor> completion,
         CancellationToken cancellationToken)
     {
         IActor? actor = null;
         try
         {
-            actor = await factory.CreateAsync(definition, cancellationToken);
+            actor = await factory.CreateAsync(definition, creationMode, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             ValidateCreatedActor(actorId, factory, actor);
             lock (gate)
