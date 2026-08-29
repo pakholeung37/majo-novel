@@ -14,6 +14,7 @@ using Majo.YarnBridge;
 using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Resources;
 using Majo.Runtime.Localization;
+using Majo.Runtime.Dialogue.Yarn.HotReload;
 using Yarn.Markup;
 using YarnSpinnerGodot;
 
@@ -24,7 +25,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
     IScriptCheckpointBackend
 {
     private readonly Node owner;
-    private readonly IResourceLoader<YarnProject> projects;
+    private readonly IYarnProjectVersionStore projectVersions;
     private readonly IReadOnlyList<IDialoguePresenter> presenters;
     private readonly ILocaleManager? localeManager;
     private readonly DialogueSpeakerNameResolver? speakerNameResolver;
@@ -53,6 +54,9 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
     private Exception? pendingFailure;
     private bool isStopping;
     private bool isInitialized;
+    private bool isInternalMigration;
+    private bool hotReloadProgressionFrozen;
+    private DialoguePresentationOrigin pendingPresentationOrigin;
     private int nextLineRequested;
     private string configuredLocale = "en";
     private Func<CancellationToken, Task>? presentationQuiescenceWaiter;
@@ -65,11 +69,13 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
         ILocaleManager? localeManager = null,
         DialogueSpeakerNameResolver? speakerNameResolver = null,
         IRuntimeLogger? logger = null,
-        bool requireExactProgramFingerprint = false)
+        bool requireExactProgramFingerprint = false,
+        IYarnProjectVersionStore? projectVersions = null)
     {
         this.owner = owner ?? throw new ArgumentNullException(nameof(owner));
         ArgumentNullException.ThrowIfNull(resources);
-        projects = resources.CreateLoader<YarnProject>(scriptsPath);
+        this.projectVersions = projectVersions ??
+            new YarnProjectVersionStore(resources, scriptsPath);
         this.presenters = presenters ?? throw new ArgumentNullException(nameof(presenters));
         this.localeManager = localeManager;
         this.speakerNameResolver = speakerNameResolver;
@@ -206,9 +212,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
         YarnProject project;
         try
         {
-            project = await projects.LoadAsync(
-                projectId,
-                cancellationToken: cancellationToken);
+            project = await projectVersions.GetActiveAsync(projectId, cancellationToken);
         }
         catch (OperationCanceledException)
         {
@@ -230,6 +234,14 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
                 "the Yarn resource has no compiled program.");
         }
 
+        BeginProjectSession(projectId, startNode, resetCompletion: true);
+
+        await StartProjectAsync(project, startNode, cancellationToken);
+        projectVersions.MarkRunning(projectId, project);
+    }
+
+    private void BeginProjectSession(string projectId, string startNode, bool resetCompletion)
+    {
         lock (sync)
         {
             currentProjectId = projectId;
@@ -239,10 +251,19 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
             currentSubstitutions = Array.Empty<string>();
             pendingFailure = null;
             isStopping = false;
-            completion = new TaskCompletionSource<DialogueCompletion>(
-                TaskCreationOptions.RunContinuationsAsynchronously);
+            if (resetCompletion)
+            {
+                completion = new TaskCompletionSource<DialogueCompletion>(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
+            }
         }
+    }
 
+    private async Task StartProjectAsync(
+        YarnProject project,
+        string startNode,
+        CancellationToken cancellationToken)
+    {
         variableStore.Program = project.Program;
         Runner.SetProject(project);
         SetLocale(configuredLocale);
@@ -252,7 +273,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
         if (!Runner.IsDialogueRunning && !Completion.IsCompleted)
         {
             throw new DialogueProjectException(
-                projectId,
+                currentProjectId,
                 $"node '{startNode}' did not start.");
         }
     }
@@ -315,12 +336,15 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
             await commandAdapter.DrainDialogueOperationsAsync(cancellationToken);
         }
 
-        CompleteSession(DialogueCompletionKind.Stopped);
+        if (!isInternalMigration)
+        {
+            CompleteSession(DialogueCompletionKind.Stopped);
+        }
     }
 
     public void RequestHurryUp()
     {
-        if (isInitialized)
+        if (isInitialized && !hotReloadProgressionFrozen)
         {
             Runner.RequestHurryUpLine();
         }
@@ -328,7 +352,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
 
     public void RequestNextLine()
     {
-        if (isInitialized && Runner.IsDialogueRunning &&
+        if (isInitialized && !hotReloadProgressionFrozen && Runner.IsDialogueRunning &&
             Interlocked.Exchange(ref nextLineRequested, 1) == 0)
         {
             Runner.RequestNextLine();
@@ -347,6 +371,54 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
         adapter.CommandFailed += HandleCommandFailed;
     }
 
+    public async Task ReplaceRunningProjectAsync(
+        YarnProjectVersion version,
+        ScriptCheckpoint checkpoint,
+        DialoguePresentationOrigin replayOrigin,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(version);
+        ArgumentNullException.ThrowIfNull(checkpoint);
+        EnsureInitialized();
+        if (!Runner.IsDialogueRunning && string.IsNullOrWhiteSpace(currentProjectId))
+        {
+            throw new DialogueException("No running Yarn dialogue can be hot reloaded.");
+        }
+
+        hotReloadProgressionFrozen = true;
+        isInternalMigration = true;
+        try
+        {
+            if (Runner.IsDialogueRunning)
+            {
+                await StopAsync(cancellationToken);
+            }
+            pendingRestore = checkpoint;
+            pendingPresentationOrigin = replayOrigin;
+            BeginProjectSession(
+                checkpoint.Spot.Script.ProjectId,
+                checkpoint.Spot.Script.NodeName,
+                resetCompletion: false);
+            await StartProjectAsync(
+                version.Project,
+                checkpoint.Spot.Script.NodeName,
+                cancellationToken);
+        }
+        catch
+        {
+            pendingRestore = null;
+            pendingPresentationOrigin = DialoguePresentationOrigin.Normal;
+            throw;
+        }
+        finally
+        {
+            isInternalMigration = false;
+        }
+    }
+
+    public void SetHotReloadProgressionFrozen(bool frozen) =>
+        hotReloadProgressionFrozen = frozen;
+
     public async Task<ScriptDescriptor> ResolveAsync(
         ScriptId id,
         CancellationToken cancellationToken = default)
@@ -355,9 +427,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
         YarnProject project;
         try
         {
-            project = await projects.LoadAsync(
-                id.ProjectId,
-                cancellationToken: cancellationToken);
+            project = await projectVersions.GetActiveAsync(id.ProjectId, cancellationToken);
         }
         catch (OperationCanceledException)
         {
@@ -529,6 +599,10 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
 
     private void HandleDialogueCompleted()
     {
+        if (isInternalMigration)
+        {
+            return;
+        }
         Exception? failure;
         bool stopping;
         lock (sync)
@@ -585,6 +659,11 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
         currentOptions = Array.Empty<DialogueOption>();
         Volatile.Write(ref nextLineRequested, 0);
         LinePresented?.Invoke(line);
+        if (line.Origin == DialoguePresentationOrigin.HotReloadReplay &&
+            Runner.IsDialogueRunning)
+        {
+            Runner.RequestHurryUpLine();
+        }
     }
 
     public DialogueLine? ReResolveCurrentLine(string locale, IReadOnlyList<string> fallbackChain)
@@ -712,12 +791,22 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
         return presenterAdapter!.WaitForPresentationBoundaryAsync(cancellationToken);
     }
 
-    private DialogueLine ConvertPresentedLine(LocalizedLine line) =>
-        YarnLineConverter.Convert(
+    private DialogueLine ConvertPresentedLine(LocalizedLine line)
+    {
+        var converted = YarnLineConverter.Convert(
             line,
             ResolvePresentedLocale(line),
             speakerNameResolver,
             localeManager?.DialogueLocale ?? configuredLocale);
+        if (pendingPresentationOrigin == DialoguePresentationOrigin.Normal)
+        {
+            return converted;
+        }
+
+        converted = converted with { Origin = pendingPresentationOrigin };
+        pendingPresentationOrigin = DialoguePresentationOrigin.Normal;
+        return converted;
+    }
 
     private string ResolvePresentedLocale(LocalizedLine line)
     {

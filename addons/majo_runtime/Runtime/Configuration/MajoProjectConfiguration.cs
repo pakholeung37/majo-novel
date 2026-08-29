@@ -627,6 +627,23 @@ public partial class MajoProjectConfiguration : Resource
                 $"{nameof(Dialogue)}.{nameof(Dialogue.DefaultStartNode)}",
                 "Default start node is required."));
         }
+
+        if (Dialogue.HotReload is null)
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Dialogue)}.{nameof(Dialogue.HotReload)}",
+                "Configuration is required."));
+            return;
+        }
+
+        if (Dialogue.HotReload.DebounceMilliseconds < 0 ||
+            Dialogue.HotReload.ConsistencyScanMilliseconds <= 0 ||
+            Dialogue.HotReload.ApplyTimeoutMilliseconds <= 0)
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Dialogue)}.{nameof(Dialogue.HotReload)}",
+                "Hot reload timing values must be positive."));
+        }
     }
 
     private void ValidateInput(ICollection<ConfigurationIssue> issues)

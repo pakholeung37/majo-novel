@@ -338,8 +338,9 @@ public sealed class PlaybackModeManager : IPlaybackModeManager
 		}
 	}
 
-	private void HandleLinePresented(DialogueLine _)
+	private void HandleLinePresented(DialogueLine line)
 	{
+		if (line.Origin == DialoguePresentationOrigin.HotReloadReplay) return;
 		if (!IsSkip(Mode)) return;
 		var captured = played.CurrentPresentation;
 		if (Mode == PlaybackMode.SkipReadOnly &&

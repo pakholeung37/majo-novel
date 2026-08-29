@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Script;
 using YarnSpinnerGodot;
+using Majo.Runtime.Dialogue.Yarn.HotReload;
 
 namespace Majo.Runtime.Dialogue.Yarn;
 
@@ -33,4 +34,12 @@ public interface IYarnDialogueBackend : IDialogueBackend,
     void SetLocale(string locale);
 
     Task WaitForLocaleSwitchBoundaryAsync(CancellationToken cancellationToken);
+
+    Task ReplaceRunningProjectAsync(
+        YarnProjectVersion version,
+        ScriptCheckpoint checkpoint,
+        DialoguePresentationOrigin replayOrigin,
+        CancellationToken cancellationToken);
+
+    void SetHotReloadProgressionFrozen(bool frozen);
 }

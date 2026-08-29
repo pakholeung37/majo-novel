@@ -1,6 +1,8 @@
 #nullable enable
 
 using System;
+using System.Linq;
+using System.Text;
 using Godot;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
@@ -24,13 +26,20 @@ public partial class DefaultDebugOverlay : CanvasLayer, IDisposable
     private Button? refreshButton;
     private Button? copySummaryButton;
     private Button? exportButton;
-    private Label? summaryLabel;
+    private Label? runtimeSummaryLabel;
+    private Label? dialogueSummaryLabel;
+    private Label? activitySummaryLabel;
     private Label? logHeaderLabel;
+    private OptionButton? logLevelFilter;
     private RichTextLabel? logTextLabel;
     private Label? statusLabel;
     private InputActionId? toggleAction;
     private bool isOpen;
     private bool isDisposed;
+    private RuntimeLogLevel? selectedLogLevel;
+    private double refreshElapsedSeconds;
+
+    private const double RefreshIntervalSeconds = 0.5;
 
     public DefaultDebugOverlay(
         Node hostNode,
@@ -46,9 +55,28 @@ public partial class DefaultDebugOverlay : CanvasLayer, IDisposable
         BuildUi();
         hostNode.AddChild(this);
         RegisterToggleInput();
+        if (this.configuration.defaultOverlayVisible)
+        {
+            Open();
+        }
     }
 
     public bool IsOpen => isOpen;
+
+    public override void _Process(double delta)
+    {
+        if (!isOpen || isDisposed)
+        {
+            return;
+        }
+
+        refreshElapsedSeconds += delta;
+        if (refreshElapsedSeconds >= RefreshIntervalSeconds)
+        {
+            refreshElapsedSeconds = 0;
+            Refresh();
+        }
+    }
 
     public void Open()
     {
@@ -58,6 +86,7 @@ public partial class DefaultDebugOverlay : CanvasLayer, IDisposable
         }
 
         isOpen = true;
+        refreshElapsedSeconds = 0;
         rootControl!.Visible = true;
         if (modalHandle is null)
         {
@@ -109,31 +138,52 @@ public partial class DefaultDebugOverlay : CanvasLayer, IDisposable
         }
 
         var snapshot = diagnostics.CaptureSnapshot();
-        if (summaryLabel is not null)
+        if (runtimeSummaryLabel is not null)
         {
-            summaryLabel.Text =
-                $"Runtime ID: {snapshot.RuntimeId}\n" +
-                $"Host State: {snapshot.State} | Version: {snapshot.RuntimeVersion}\n" +
-                $"Dialogue: {snapshot.Dialogue?.State.ToString() ?? "N/A"} (Project: {snapshot.Dialogue?.ProjectId ?? "-"}, Line: {snapshot.Dialogue?.LineId ?? "-"})\n" +
-                $"Active Operations: {snapshot.Operation?.ActiveCount ?? 0} | Commands: {snapshot.Command?.ActiveCount ?? 0}\n" +
-                $"Missing Resources: {snapshot.MissingResources?.UniqueCount ?? 0} ({snapshot.MissingResources?.TotalCount ?? 0} uses)\n" +
-                $"Playback Mode: {snapshot.Playback?.Mode ?? "Manual"} (History: {snapshot.Playback?.HistoryItemCount ?? 0})\n" +
-                $"State Status: {snapshot.StateDiagnostics?.Status.ToString() ?? "Idle"}";
+            runtimeSummaryLabel.Text =
+                $"RUNTIME  {snapshot.State}\n" +
+                $"{ShortenIdentifier(snapshot.RuntimeId)}  ·  v{snapshot.RuntimeVersion}";
+            runtimeSummaryLabel.TooltipText = $"Runtime ID: {snapshot.RuntimeId}";
+        }
+
+        if (dialogueSummaryLabel is not null)
+        {
+            dialogueSummaryLabel.Text =
+                $"DIALOGUE  {snapshot.Dialogue?.State.ToString() ?? "N/A"}\n" +
+                $"{snapshot.Dialogue?.ProjectId ?? "-"}  ·  Line {snapshot.Dialogue?.LineId ?? "-"}";
+        }
+
+        if (activitySummaryLabel is not null)
+        {
+            activitySummaryLabel.Text =
+                $"OPS {snapshot.Operation?.ActiveCount ?? 0}  ·  CMDS {snapshot.Command?.ActiveCount ?? 0}  ·  MISSING {snapshot.MissingResources?.UniqueCount ?? 0}/{snapshot.MissingResources?.TotalCount ?? 0}\n" +
+                $"{snapshot.Playback?.Mode ?? "Manual"}  ·  History {snapshot.Playback?.HistoryItemCount ?? 0}  ·  State {snapshot.StateDiagnostics?.Status.ToString() ?? "Idle"}";
         }
 
         if (logTextLabel is not null)
         {
-            var logs = snapshot.RecentLogs;
-            if (logs is null || logs.Count == 0)
+            var logs = snapshot.RecentLogs?
+                .Where(log => selectedLogLevel is null || log.Level == selectedLogLevel)
+                .ToArray();
+            if (logs is null || logs.Length == 0)
             {
-                logTextLabel.Text = "No recent log events.";
+                logTextLabel.Text = selectedLogLevel is null
+                    ? "No recent log events."
+                    : $"No recent {selectedLogLevel} log events.";
             }
             else
             {
-                var sb = new System.Text.StringBuilder();
-                for (var i = Math.Max(0, logs.Count - 50); i < logs.Count; i++)
+                var sb = new StringBuilder();
+                for (var i = Math.Max(0, logs.Length - 50); i < logs.Length; i++)
                 {
-                    sb.AppendLine(GodotConsoleSink.FormatEvent(logs[i]));
+                    var log = logs[i];
+                    sb.Append("[color=")
+                        .Append(GetLogLevelColor(log.Level))
+                        .Append(']')
+                        .Append(EscapeBbcode(GodotConsoleSink.FormatEvent(
+                            log,
+                            includeCorrelation: false)))
+                        .AppendLine("[/color]");
                 }
                 logTextLabel.Text = sb.ToString();
             }
@@ -151,6 +201,11 @@ public partial class DefaultDebugOverlay : CanvasLayer, IDisposable
                 toggleHandle.Activated -= HandleToggleActivated;
                 toggleHandle.Dispose();
                 toggleHandle = null;
+            }
+
+            if (logLevelFilter is not null)
+            {
+                logLevelFilter.ItemSelected -= HandleLogLevelSelected;
             }
 
             if (IsInsideTree())
@@ -188,9 +243,9 @@ public partial class DefaultDebugOverlay : CanvasLayer, IDisposable
         {
             Name = "MajoDebugOverlayRoot",
             AnchorRight = 1.0f,
-            AnchorBottom = 1.0f,
+            AnchorBottom = 0.75f,
             MouseFilter = Control.MouseFilterEnum.Ignore,
-            Visible = configuration.defaultOverlayVisible,
+            Visible = false,
         };
         AddChild(rootControl);
 
@@ -208,11 +263,16 @@ public partial class DefaultDebugOverlay : CanvasLayer, IDisposable
 
         var vbox = new VBoxContainer
         {
+            Name = "DebugOverlayVBox",
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
         margin.AddChild(vbox);
 
-        var headerBox = new HBoxContainer();
+        var headerBox = new HBoxContainer
+        {
+            Name = "HeaderBox",
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
         vbox.AddChild(headerBox);
 
         titleLabel = new Label
@@ -255,27 +315,128 @@ public partial class DefaultDebugOverlay : CanvasLayer, IDisposable
         };
         vbox.AddChild(statusLabel);
 
-        summaryLabel = new Label
+        var summaryGrid = new GridContainer
         {
-            Text = "Loading diagnostics snapshot...",
+            Name = "DiagnosticsSummaryGrid",
+            Columns = 3,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
         };
-        vbox.AddChild(summaryLabel);
+        summaryGrid.AddThemeConstantOverride("h_separation", 4);
+        vbox.AddChild(summaryGrid);
+
+        runtimeSummaryLabel = AddSummaryCard(summaryGrid, "Loading runtime...");
+        dialogueSummaryLabel = AddSummaryCard(summaryGrid, "Loading dialogue...");
+        activitySummaryLabel = AddSummaryCard(summaryGrid, "Loading activity...");
+
+        var logHeaderBox = new HBoxContainer
+        {
+            Name = "LogHeaderBox",
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        vbox.AddChild(logHeaderBox);
 
         logHeaderLabel = new Label
         {
             Text = TrText(UiStringKeys.DebugRecentLogs, "Recent Log Events:"),
         };
-        vbox.AddChild(logHeaderLabel);
+        logHeaderBox.AddChild(logHeaderLabel);
+
+        var logLevelLabel = new Label
+        {
+            Text = " Level: ",
+        };
+        logHeaderBox.AddChild(logLevelLabel);
+
+        logLevelFilter = new OptionButton
+        {
+            Name = "LogLevelFilter",
+            TooltipText = "Show all recent events or only events at one log level.",
+        };
+        logLevelFilter.AddItem("All Levels");
+        logLevelFilter.AddItem("Debug");
+        logLevelFilter.AddItem("Information");
+        logLevelFilter.AddItem("Warning");
+        logLevelFilter.AddItem("Error");
+        logLevelFilter.ItemSelected += HandleLogLevelSelected;
+        logHeaderBox.AddChild(logLevelFilter);
 
         logTextLabel = new RichTextLabel
         {
+            Name = "RecentLogEvents",
             SizeFlagsVertical = Control.SizeFlags.ExpandFill,
             ScrollFollowing = true,
-            BbcodeEnabled = false,
+            BbcodeEnabled = true,
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
+        logTextLabel.AddThemeStyleboxOverride("normal", CreatePaddingStyle(
+            horizontalPadding: 0,
+            verticalPadding: 0));
+        logTextLabel.AddThemeConstantOverride("line_separation", 2);
         vbox.AddChild(logTextLabel);
     }
+
+    private static Label AddSummaryCard(GridContainer grid, string initialText)
+    {
+        var panel = new PanelContainer
+        {
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        panel.AddThemeStyleboxOverride("panel", CreatePaddingStyle(
+            horizontalPadding: 6,
+            verticalPadding: 2));
+        grid.AddChild(panel);
+
+        var label = new Label
+        {
+            Text = initialText,
+            TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis,
+            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+        };
+        panel.AddChild(label);
+        return label;
+    }
+
+    private static StyleBoxFlat CreatePaddingStyle(
+        float horizontalPadding,
+        float verticalPadding) => new()
+    {
+        BgColor = Colors.Transparent,
+        ContentMarginLeft = horizontalPadding,
+        ContentMarginRight = horizontalPadding,
+        ContentMarginTop = verticalPadding,
+        ContentMarginBottom = verticalPadding,
+    };
+
+    private static string ShortenIdentifier(string identifier) =>
+        identifier.Length <= 12 ? identifier : $"{identifier[..12]}…";
+
+    private void HandleLogLevelSelected(long index)
+    {
+        selectedLogLevel = index switch
+        {
+            1 => RuntimeLogLevel.Debug,
+            2 => RuntimeLogLevel.Information,
+            3 => RuntimeLogLevel.Warning,
+            4 => RuntimeLogLevel.Error,
+            _ => null,
+        };
+        Refresh();
+    }
+
+    private static string GetLogLevelColor(RuntimeLogLevel level) => level switch
+    {
+        RuntimeLogLevel.Debug => "#7ee787",
+        RuntimeLogLevel.Information => "#58a6ff",
+        RuntimeLogLevel.Warning => "#d29922",
+        RuntimeLogLevel.Error => "#f85149",
+        _ => "#ffffff",
+    };
+
+    private static string EscapeBbcode(string text) =>
+        text.Replace("[", "[lb]", StringComparison.Ordinal);
 
     private static string TrText(string key, string fallback) => fallback;
 

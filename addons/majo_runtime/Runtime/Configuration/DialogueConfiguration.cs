@@ -29,4 +29,7 @@ public partial class DialogueConfiguration : Resource
     /// </summary>
     [Export]
     public bool AbortOnCommandError { get; set; }
+
+    [Export]
+    public YarnHotReloadConfiguration HotReload { get; set; } = new();
 }

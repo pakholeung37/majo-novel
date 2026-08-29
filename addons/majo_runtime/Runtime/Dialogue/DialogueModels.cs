@@ -108,12 +108,20 @@ public sealed record DialogueText(
     string Text,
     IReadOnlyList<DialogueMarkupAttribute> Attributes);
 
+public enum DialoguePresentationOrigin
+{
+    Normal,
+    CheckpointRestore,
+    HotReloadReplay,
+}
+
 public sealed record DialogueLine(
     string Id,
     string? Speaker,
     DialogueText Text,
     IReadOnlyList<string> Metadata,
-    string? ResolvedLocale = null);
+    string? ResolvedLocale = null,
+    DialoguePresentationOrigin Origin = DialoguePresentationOrigin.Normal);
 
 public sealed record DialogueOption(
     int Id,

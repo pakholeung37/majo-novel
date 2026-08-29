@@ -7,6 +7,7 @@ using Majo.Runtime.Actors;
 using Majo.Runtime.Audio;
 using Majo.Runtime.Auto;
 using Majo.Runtime.Configuration;
+using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.History;
 using Majo.Runtime.Preloading;
@@ -36,7 +37,8 @@ public partial class ManosabaDemoController : Node
 			configuration.State.GameBuildId = "manosaba-v0.1";
 			configuration.Save!.Enabled = true;
 			configuration.Diagnostics!.EnableOverlay = true;
-			configuration.Diagnostics!.defaultOverlayVisible = true;
+			configuration.Diagnostics!.defaultOverlayVisible = false;
+			configuration.Diagnostics!.MinimumLevel = RuntimeLogLevel.Debug;
 			configuration.Presentation!.PresenterScene =
 				ResourceLoader.Load<PackedScene>(
 					"res://demos/manosaba/ManosabaPresentation.tscn");

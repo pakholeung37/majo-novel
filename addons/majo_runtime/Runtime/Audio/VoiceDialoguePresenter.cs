@@ -40,6 +40,11 @@ public sealed class VoiceDialoguePresenter : IDialoguePresenter
         ArgumentNullException.ThrowIfNull(line);
         ArgumentNullException.ThrowIfNull(context);
         await audio.StopVoiceAsync(cancellationToken: context.NextLineToken);
+        if (line.Origin == DialoguePresentationOrigin.HotReloadReplay)
+        {
+            LastVoiceId = null;
+            return;
+        }
         var resolution = locales is not null && resources is not null
             ? DialogueVoiceResolver.ResolveExistingVoice(line, audio, locales, resources)
             : null;

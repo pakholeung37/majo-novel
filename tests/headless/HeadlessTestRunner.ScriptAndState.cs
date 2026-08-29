@@ -32,6 +32,7 @@ public partial class HeadlessTestRunner
         configuration.Resources!.RootPath = "res://tests";
         configuration.Resources.ScriptsPath = "headless";
         configuration.Dialogue!.DefaultProjectId = "M95State";
+        configuration.Dialogue.HotReload.Enabled = false;
         configuration.Presentation!.Enabled = true;
         configuration.Presentation.LettersPerSecond = 10_000;
         configuration.Presentation.UseFadeEffect = false;

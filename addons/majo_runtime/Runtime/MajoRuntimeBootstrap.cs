@@ -19,6 +19,7 @@ using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Dialogue.Commands.Audio;
 using Majo.Runtime.Dialogue.Presentation;
 using Majo.Runtime.Dialogue.Yarn;
+using Majo.Runtime.Dialogue.Yarn.HotReload;
 using Majo.Runtime.Dialogue.Yarn.Presentation;
 using Majo.Runtime.Input;
 using Majo.Runtime.Input.Godot;
@@ -460,6 +461,11 @@ public partial class MajoRuntimeBootstrap : Node
         var markupHandlerRegistry = new DialogueMarkupHandlerRegistry();
         ConfigureDialogueMarkupHandlers?.Invoke(markupHandlerRegistry);
         services
+            .AddSingleton<IYarnProjectVersionStore>(
+                resolver => new YarnProjectVersionStore(
+                    resolver.Get<IResourceManager>(),
+                    Configuration!.Resources!.ScriptsPath),
+                typeof(IResourceManager))
             .AddSingleton<IYarnDialogueBackend>(
                 resolver =>
                 {
@@ -477,13 +483,15 @@ public partial class MajoRuntimeBootstrap : Node
                         resolver.Get<ILocaleManager>(),
                         ResolveSpeakerName,
                         Logger,
-                        Configuration.Script!.RequireExactProgramFingerprint);
+                        Configuration.Script!.RequireExactProgramFingerprint,
+                        resolver.Get<IYarnProjectVersionStore>());
                     return yarnDialogueBackend;
                 },
                 typeof(IResourceManager),
                 typeof(IAudioManager),
                 typeof(ILocaleManager),
-                typeof(ILocalizedResourceResolver))
+                typeof(ILocalizedResourceResolver),
+                typeof(IYarnProjectVersionStore))
             .AddSingleton<IDialoguePresentation>(
                 resolver =>
                 {
@@ -542,6 +550,29 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(IDialoguePlayer),
                 typeof(IDialoguePresentation),
                 typeof(IYarnDialogueBackend))
+            .AddSingleton<IYarnHotReloadService>(
+                resolver =>
+                {
+                    var hotReload = Configuration!.Dialogue!.HotReload;
+                    var configuredRoot = string.IsNullOrWhiteSpace(hotReload.SourceRootOverride)
+                        ? System.IO.Path.Combine(
+                            ProjectSettings.GlobalizePath(Configuration.Resources!.RootPath),
+                            Configuration.Resources.ScriptsPath)
+                        : hotReload.SourceRootOverride;
+                    return new YarnHotReloadService(
+                        resolver.Get<IYarnProjectVersionStore>(),
+                        resolver.Get<IScriptPlayback>(),
+                        resolver.Get<IYarnDialogueBackend>(),
+                        hotReload,
+                        Configuration.Dialogue.DefaultProjectId,
+                        configuredRoot,
+                        Logger,
+                        playback: resolver.Get<IPlaybackModeManager>());
+                },
+                typeof(IYarnProjectVersionStore),
+                typeof(IScriptPlayback),
+                typeof(IYarnDialogueBackend),
+                typeof(IPlaybackModeManager))
             .AddSingleton<IHistoryManager>(
                 resolver => new HistoryManager(
                     resolver.Get<IDialoguePlayer>(),

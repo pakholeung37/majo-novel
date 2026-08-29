@@ -174,6 +174,16 @@ public sealed class SaveProductManager : ISaveProductManager
 
     private void HandleLinePresented(DialogueLine line)
     {
+        if (line.Origin == DialoguePresentationOrigin.HotReloadReplay)
+        {
+            lock (sync)
+            {
+                currentLine = line;
+                quickCandidate = null;
+                candidate = null;
+            }
+            return;
+        }
         AutoSaveCandidate? accepted = null;
         lock (sync)
         {

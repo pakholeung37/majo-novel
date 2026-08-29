@@ -28,7 +28,9 @@ public sealed class GodotConsoleSink : IRuntimeLogSink
 		}
 	}
 
-	public static string FormatEvent(RuntimeLogEvent logEvent)
+	public static string FormatEvent(
+		RuntimeLogEvent logEvent,
+		bool includeCorrelation = true)
 	{
 		var builder = new StringBuilder();
 		builder.Append('[')
@@ -42,7 +44,9 @@ public sealed class GodotConsoleSink : IRuntimeLogSink
 			.Append(") ")
 			.Append(logEvent.Message);
 
-		if (logEvent.Correlation != default && !string.IsNullOrEmpty(logEvent.Correlation.RuntimeId))
+		if (includeCorrelation &&
+			logEvent.Correlation != default &&
+			!string.IsNullOrEmpty(logEvent.Correlation.RuntimeId))
 		{
 			builder.Append(" [Correlation: ");
 			builder.Append("runtime=").Append(logEvent.Correlation.RuntimeId);

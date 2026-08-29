@@ -1,0 +1,74 @@
+#nullable enable
+
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Yarn;
+using Yarn.Compiler;
+using YarnSpinnerGodot;
+
+namespace Majo.Runtime.Dialogue.Yarn.HotReload;
+
+public sealed record YarnRuntimeCompilation(
+    YarnSourceSnapshot Snapshot,
+    CompilationResult Result,
+    IReadOnlyList<YarnCompilationDiagnostic> Diagnostics)
+{
+    public bool HasErrors => Diagnostics.Any(diagnostic =>
+        string.Equals(diagnostic.Severity, "Error", StringComparison.OrdinalIgnoreCase));
+}
+
+public sealed class YarnRuntimeCompiler
+{
+    private readonly Library library;
+
+    public YarnRuntimeCompiler(Library? library = null)
+    {
+        this.library = library ?? Actions.GetLibrary();
+    }
+
+    public Task<YarnRuntimeCompilation> CompileAsync(
+        YarnSourceSnapshot snapshot,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        return Task.Run(() => Compile(snapshot, cancellationToken), cancellationToken);
+    }
+
+    private YarnRuntimeCompilation Compile(
+        YarnSourceSnapshot snapshot,
+        CancellationToken cancellationToken)
+    {
+        var files = snapshot.Files.Select(file => (ISourceInput)new CompilationJob.File
+        {
+            FileName = file.LogicalPath,
+            Source = file.Content,
+        });
+        var job = CompilationJob.CreateFromInputs(
+            files,
+            library,
+            snapshot.LanguageVersion);
+        job.CompilationType = CompilationJob.Type.FullCompilation;
+        job.CancellationToken = cancellationToken;
+        var result = global::Yarn.Compiler.Compiler.Compile(job);
+        var diagnostics = result.Diagnostics.Select(diagnostic =>
+        {
+            var file = string.IsNullOrWhiteSpace(diagnostic.FileName)
+                ? snapshot.ManifestPath
+                : diagnostic.FileName.Replace('\\', '/');
+            return new YarnCompilationDiagnostic(
+                diagnostic.Severity.ToString(),
+                diagnostic.Code,
+                file,
+                diagnostic.Range.Start.Line,
+                diagnostic.Range.Start.Character,
+                diagnostic.Range.End.Line,
+                diagnostic.Range.End.Character,
+                diagnostic.Message);
+        }).ToArray();
+        return new YarnRuntimeCompilation(snapshot, result, Array.AsReadOnly(diagnostics));
+    }
+}

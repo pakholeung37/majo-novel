@@ -1,8 +1,35 @@
 # Yarn Script Hot Reload 技术方案
 
-状态：Proposed  
+状态：Implemented (MVP)
 目标版本：Majo Runtime 开发期功能  
 适用范围：Godot Editor、桌面 Debug Build；Release Build 默认且强制关闭
+
+## 0. 当前实现与启用方式
+
+运行时实现位于 `addons/majo_runtime/Runtime/Dialogue/Yarn/HotReload`，已包含：
+
+- `.yarnproject` glob 快照、内容指纹和 torn-read 重试；
+- 使用 YarnSpinner 3.2 runtime compiler 的内存编译；
+- 独立内存 `YarnProject` materialization、Active/Running/LKG 版本边界；
+- `FileSystemWatcher`、debounce、generation 淘汰和周期一致性扫描；
+- `AwaitingAdvance` 安全点迁移、推进冻结、同 Line ID replay 和失败回滚；
+- compile/apply/rollback 结构化日志与 `IYarnHotReloadService` 状态/事件；
+- History、Voice、Played、AutoSave 和 Skip 的 `HotReloadReplay` 副作用抑制；
+- 单元测试及真实 `DialogueRunner` headless 迁移测试。
+
+在项目配置的 `Dialogue > Hot Reload` 中设置：
+
+```text
+Enabled = true
+```
+
+从 Godot Editor 运行时会监听 `Resources.RootPath/Resources.ScriptsPath`。桌面 Debug Export
+还需要设置 `EnableInExportedDebugBuild = true`，并将 `SourceRootOverride` 指向外部源码目录。
+Release Build 即使资源误设为启用也不会启动 watcher。
+
+可通过运行时服务容器取得 `IYarnHotReloadService`，调用 `RequestReloadAsync` 手动编译，或订阅
+`StatusChanged` / `AttemptCompleted` 构建自定义 Debug UI。当前默认 Debug Overlay 尚未提供
+Compile/Discard 按钮；这部分仍属于后续编辑器体验增强，不影响自动热重载路径。
 
 ## 1. 背景
 

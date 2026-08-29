@@ -20,6 +20,7 @@ public partial class HeadlessTestRunner
 			MinimumLevel = RuntimeLogLevel.Debug,
 			RingBufferCapacity = 200,
 			EnableOverlay = true,
+			defaultOverlayVisible = true,
 			EnableFileLogging = true,
 			FileLogDirectory = "user://test_logs",
 		};
@@ -72,8 +73,48 @@ public partial class HeadlessTestRunner
 			// Verify debug overlay toggle and input isolation
 			var overlay = bootstrap.DebugOverlay;
 			var input = bootstrap.Host.Services.Get<IInputManager>();
-			var closedHandleCount = input.ActiveHandleCount;
-			Assert(!overlay.IsOpen, "Debug overlay should be closed initially.");
+			var openHandleCount = input.ActiveHandleCount;
+			Assert(overlay.IsOpen, "A default-visible debug overlay should be open and refreshed initially.");
+
+			var levelFilter = overlay.FindChild("LogLevelFilter", recursive: true, owned: false) as OptionButton;
+			var logText = overlay.FindChild("RecentLogEvents", recursive: true, owned: false) as RichTextLabel;
+			var summaryGrid = overlay.FindChild("DiagnosticsSummaryGrid", recursive: true, owned: false) as GridContainer;
+			var overlayRoot = overlay.FindChild("MajoDebugOverlayRoot", recursive: true, owned: false) as Control;
+			Assert(overlayRoot is not null && Mathf.IsEqualApprox(overlayRoot.AnchorBottom, 0.75f),
+				"Debug overlay should reserve the bottom quarter of the viewport for the line presenter.");
+			Assert(summaryGrid is not null && summaryGrid.Columns == 3,
+				"Debug overlay summary should use a compact three-column layout.");
+			Assert(levelFilter is not null && levelFilter.ItemCount == 5,
+				"Debug overlay should provide All, Debug, Information, Warning, and Error filters.");
+			Assert(logText is not null && logText.BbcodeEnabled,
+				"Recent log events should support colored BBCode output.");
+
+			bootstrap.Logger!.Debug("test", "test.debug", "Debug filter probe");
+			bootstrap.Logger.Info("test", "test.info", "Information filter probe");
+			bootstrap.Logger.Warning("test", "test.warning", "Warning filter probe");
+			bootstrap.Logger.Error("test", "test.error", "Error filter probe");
+			overlay.Refresh();
+			var allLevelsText = logText!.Text;
+			Assert(allLevelsText.Contains("Debug filter probe") &&
+				allLevelsText.Contains("Information filter probe") &&
+				allLevelsText.Contains("Warning filter probe") &&
+				allLevelsText.Contains("Error filter probe"),
+				"All Levels should show events from every log level.");
+			Assert(!allLevelsText.Contains("Correlation:"),
+				"The compact overlay should hide correlation details.");
+			Assert(allLevelsText.Contains("#7ee787") &&
+				allLevelsText.Contains("#58a6ff") &&
+				allLevelsText.Contains("#d29922") &&
+				allLevelsText.Contains("#f85149"),
+				"Every log level should have a distinct display color.");
+
+			levelFilter!.EmitSignal(OptionButton.SignalName.ItemSelected, 4);
+			var errorsOnlyText = logText.Text;
+			Assert(errorsOnlyText.Contains("Error filter probe") &&
+				!errorsOnlyText.Contains("Debug filter probe") &&
+				!errorsOnlyText.Contains("Information filter probe") &&
+				!errorsOnlyText.Contains("Warning filter probe"),
+				"Error filter should show only Error events.");
 
 			Godot.Input.ParseInputEvent(new InputEventKey
 			{
@@ -81,8 +122,8 @@ public partial class HeadlessTestRunner
 				Pressed = true,
 			});
 			await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-			Assert(overlay.IsOpen, "Debug overlay should open through the real F3 input path.");
-			Assert(input.ActiveHandleCount == closedHandleCount + 1, "Open overlay should own exactly one modal scope.");
+			Assert(!overlay.IsOpen, "Debug overlay should close through its modal F3 input scope.");
+			Assert(input.ActiveHandleCount == openHandleCount - 1, "Closing overlay should release its modal scope.");
 
 			Godot.Input.ParseInputEvent(new InputEventKey
 			{
@@ -95,8 +136,8 @@ public partial class HeadlessTestRunner
 				Pressed = true,
 			});
 			await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-			Assert(!overlay.IsOpen, "Debug overlay should close through its modal F3 input scope.");
-			Assert(input.ActiveHandleCount == closedHandleCount, "Closing overlay should release its modal scope.");
+			Assert(overlay.IsOpen, "Debug overlay should reopen through the real F3 input path.");
+			Assert(input.ActiveHandleCount == openHandleCount, "Reopening overlay should reacquire one modal scope.");
 
 			// Clean shutdown
 			await bootstrap.RequestShutdownAsync();

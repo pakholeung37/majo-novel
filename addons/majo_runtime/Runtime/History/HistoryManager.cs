@@ -237,15 +237,28 @@ public sealed class HistoryManager : IHistoryManager
             ? DialogueVoiceResolver.ResolveExistingVoice(
                 line, audio, locales, localizedResources)
             : null;
-        entries.Add(new HistoryEntry(
-            ++nextSequence,
+        var sequence = line.Origin == DialoguePresentationOrigin.HotReloadReplay &&
+            entries.LastOrDefault()?.LineId == line.Id
+                ? entries[^1].Sequence
+                : ++nextSequence;
+        var updated = new HistoryEntry(
+            sequence,
             line.Id,
             line.Speaker,
             line.Text.Text,
             voice?.VoiceId ?? DialogueVoiceResolver.ResolveExistingVoiceId(line, audio),
             line.ResolvedLocale,
             voice?.ResolvedPath,
-            voice?.ResolvedLocale));
+            voice?.ResolvedLocale);
+        if (line.Origin == DialoguePresentationOrigin.HotReloadReplay &&
+            entries.LastOrDefault()?.LineId == line.Id)
+        {
+            entries[^1] = updated;
+        }
+        else
+        {
+            entries.Add(updated);
+        }
         if (entries.Count > Capacity)
         {
             entries.RemoveRange(0, entries.Count - Capacity);

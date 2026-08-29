@@ -161,6 +161,10 @@ public sealed class PlayedRegister : IPlayedRegister, IStateContributor, IStateD
 
     private void HandleLinePresented(DialogueLine line)
     {
+        if (line.Origin == DialoguePresentationOrigin.HotReloadReplay)
+        {
+            return;
+        }
         var projectId = dialogue.CurrentProjectId ?? throw new InvalidOperationException(
             "A presented line must belong to a dialogue project.");
         var fingerprint = MetadataValue(line.Metadata, FingerprintMetadataPrefix);

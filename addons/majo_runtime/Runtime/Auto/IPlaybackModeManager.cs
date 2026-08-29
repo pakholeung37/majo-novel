@@ -20,6 +20,7 @@ public enum PlaybackPauseReason
     Options,
     Modal,
     StateRestore,
+    HotReload,
     External,
 }
 

@@ -73,6 +73,7 @@ public partial class HeadlessTestRunner : Node
 		await ValidateAudioRuntimeAsync();
 		await ValidateInputRuntimeAsync();
 		await ValidateYarnVmStateBridgeAsync();
+		await ValidateYarnHotReloadAsync();
 		await ValidateScriptAndStateRuntimeAsync();
 		await ValidateAutoAndHistoryRuntimeAsync();
 		await ValidateSettingsRuntimeAsync();
