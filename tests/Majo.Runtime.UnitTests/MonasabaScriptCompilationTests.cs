@@ -42,6 +42,27 @@ public sealed class ManosabaScriptCompilationTests
 		Assert.Equal("你好", converted.Text.Text);
 	}
 
+	[Fact]
+	public void SelfClosingLineBreakMarkupProducesALineFeed()
+	{
+		const string rawText = "Ema: 昨天是想到明天我就要上高中了……[br /]　很开心地睡着了才对";
+		var parser = new LineParser();
+		parser.RegisterMarkerProcessor("br", new MajoLineBreakMarkupReplacer());
+		var parsedText = parser.ParseString(rawText, "zh-Hans");
+		var line = new LocalizedLine
+		{
+			TextID = "line:test-line-break",
+			RawText = rawText,
+			Text = parsedText,
+		};
+
+		var converted = YarnLineConverter.Convert(line);
+
+		Assert.Equal("Ema", converted.Speaker);
+		Assert.Equal("昨天是想到明天我就要上高中了……\n　很开心地睡着了才对", converted.Text.Text);
+		Assert.DoesNotContain("[character", converted.Text.Text, StringComparison.Ordinal);
+	}
+
     [Fact]
     public void ManosabaYarnFilesCompileSuccessfully()
     {

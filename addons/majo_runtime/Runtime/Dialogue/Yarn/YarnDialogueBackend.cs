@@ -32,6 +32,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
     private readonly bool requireExactProgramFingerprint;
     private readonly YarnVmStateBridge stateBridge = new();
     private readonly YarnDialogueVariableStore variableStore = new();
+    private readonly MajoLineBreakMarkupReplacer lineBreakMarkupReplacer = new();
     private readonly object sync = new();
     private DialogueRunner? runner;
     private YarnDialoguePresenterAdapter? presenterAdapter;
@@ -134,6 +135,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
         runner.VariableStorage = variableStore;
         runner.AddChild(presenterAdapter);
         runner.dialoguePresenters = new Godot.Collections.Array<Node?> { presenterAdapter };
+        runner.LineProvider.RegisterMarkerProcessor("br", lineBreakMarkupReplacer);
         owner.AddChild(runner);
         configuredLocale = localeManager?.DialogueLocale ?? TranslationServer.GetLocale();
 
@@ -749,7 +751,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
         return null;
     }
 
-    private static LocalizedLine CreateLocalizedLine(
+    private LocalizedLine CreateLocalizedLine(
         string lineId,
         string rawText,
         IReadOnlyList<string> substitutions,
@@ -758,6 +760,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
     {
         var expanded = LineParser.ExpandSubstitutions(rawText, substitutions.ToArray());
         var parser = new LineParser();
+        parser.RegisterMarkerProcessor("br", lineBreakMarkupReplacer);
         return new LocalizedLine
         {
             TextID = lineId,

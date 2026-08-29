@@ -183,6 +183,7 @@ scroll_active = false
 autowrap_mode = 2
 
 [node name="CharacterNamePanel" type="TextureRect" parent="LinePresenter" unique_id=1103432621]
+visible = false
 layout_mode = 0
 offset_left = 270.0
 offset_top = 696.0
