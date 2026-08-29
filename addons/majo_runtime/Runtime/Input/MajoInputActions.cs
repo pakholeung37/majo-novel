@@ -31,6 +31,14 @@ public static class MajoInputActions
 
     public static readonly InputActionId Settings = new("settings");
 
+    public static readonly InputActionId StepBack = new("stepBack");
+
+    public static readonly InputActionId StepForward = new("stepForward");
+
+    public static InputActionId Rollback => StepBack;
+
+    public static readonly InputActionId Travel = new("travel");
+
     public static IReadOnlyList<InputActionId> All { get; } = new List<InputActionId>
     {
         Advance,
@@ -45,6 +53,9 @@ public static class MajoInputActions
         Confirm,
         Debug,
         Settings,
+        StepBack,
+        StepForward,
+        Travel,
     }.AsReadOnly();
 
     public static string ToGodotAction(InputActionId action)

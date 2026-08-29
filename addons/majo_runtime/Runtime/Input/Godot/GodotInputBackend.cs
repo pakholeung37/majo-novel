@@ -197,6 +197,21 @@ internal static class GodotInputDefaults
         [
             KeyEvent(Key.S),
         ]),
+        new(MajoInputActions.StepBack,
+        [
+            KeyEvent(Key.Backspace),
+            KeyEvent(Key.Left),
+            JoyEvent(JoyButton.DpadLeft),
+        ]),
+        new(MajoInputActions.StepForward,
+        [
+            KeyEvent(Key.Right),
+            JoyEvent(JoyButton.DpadRight),
+        ]),
+        new(MajoInputActions.Travel,
+        [
+            KeyEvent(Key.F4),
+        ]),
     ];
 
     private static InputEventKey KeyEvent(Key key) => new()

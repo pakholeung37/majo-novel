@@ -42,6 +42,8 @@ using Majo.Runtime.UI.Diagnostics;
 using Majo.Runtime.UI.History;
 using Majo.Runtime.UI.SaveLoad;
 using Majo.Runtime.UI.Settings;
+using Majo.Runtime.Travel;
+using Majo.Runtime.UI.Travel;
 using Majo.YarnBridge;
 using YarnSpinnerGodot;
 
@@ -776,6 +778,42 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(IHistoryManager),
                 typeof(IPlaybackModeManager),
                 typeof(IStateEligibility));
+
+            var travel = Configuration.State.DialogueTravel;
+            if (travel.Enabled &&
+                (OS.HasFeature("editor") ||
+                 OS.IsDebugBuild() && travel.EnableInExportedDebugBuild))
+            {
+                services.AddSingleton<IDialogueTravelManager>(
+                    resolver => new DialogueTravelManager(
+                        resolver.Get<IStateManager>(),
+                        resolver.Get<IGameSessionCoordinator>(),
+                        resolver.Get<IScriptPlayback>(),
+                        resolver.Get<IDialoguePlayer>(),
+                        resolver.Get<IPlaybackModeManager>(),
+                        travel.Capacity,
+                        resolver.Get<IInputManager>(),
+                        Logger),
+                    typeof(IStateManager),
+                    typeof(IGameSessionCoordinator),
+                    typeof(IScriptPlayback),
+                    typeof(IDialoguePlayer),
+                    typeof(IPlaybackModeManager),
+                    typeof(IInputManager));
+
+                if (travel.ShowDefaultUi)
+                {
+                    services.AddSingleton<DefaultDialogueTravelOverlay>(
+                        resolver => new DefaultDialogueTravelOverlay(
+                            this,
+                            resolver.Get<IDialogueTravelManager>(),
+                            resolver.Get<IInputManager>(),
+                            resolver.Get<IPlaybackModeManager>()),
+                        typeof(IDialogueTravelManager),
+                        typeof(IInputManager),
+                        typeof(IPlaybackModeManager));
+                }
+            }
 
             if (Configuration.Save?.Enabled == true)
             {

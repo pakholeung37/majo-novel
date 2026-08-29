@@ -15,4 +15,7 @@ public partial class StateConfiguration : Resource
 
     [Export]
     public string GameBuildId { get; set; } = "development";
+
+    [Export]
+    public DialogueTravelConfiguration DialogueTravel { get; set; } = new();
 }

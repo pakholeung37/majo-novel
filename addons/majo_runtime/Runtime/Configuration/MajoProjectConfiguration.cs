@@ -262,6 +262,19 @@ public partial class MajoProjectConfiguration : Resource
                 $"{nameof(State)}.{nameof(State.GameBuildId)}",
                 "Game build ID is required."));
         }
+
+        if (State.DialogueTravel is null)
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(State)}.{nameof(State.DialogueTravel)}",
+                "Configuration is required."));
+        }
+        else if (State.DialogueTravel.Capacity < 2)
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(State)}.{nameof(State.DialogueTravel)}.{nameof(State.DialogueTravel.Capacity)}",
+                "Capacity must be at least two."));
+        }
     }
 
     private void ValidateAuto(ICollection<ConfigurationIssue> issues)

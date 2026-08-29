@@ -35,6 +35,7 @@ public partial class ManosabaDemoController : Node
 			configuration.Settings!.DialogueLocale = "zh-Hans";
 			configuration.State!.StorageNamespace = "majo/manosaba";
 			configuration.State.GameBuildId = "manosaba-v0.1";
+			configuration.State.DialogueTravel.Enabled = true;
 			configuration.Save!.Enabled = true;
 			configuration.Diagnostics!.EnableOverlay = true;
 			configuration.Diagnostics!.defaultOverlayVisible = false;

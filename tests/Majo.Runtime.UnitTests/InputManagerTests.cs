@@ -35,7 +35,13 @@ public sealed class InputManagerTests
         Assert.Equal("majo_debug", MajoInputActions.ToGodotAction(MajoInputActions.Debug));
         Assert.Equal(MajoInputActions.Debug, MajoInputActions.FromGodotAction("majo_debug"));
         Assert.Equal("majo_settings", MajoInputActions.ToGodotAction(MajoInputActions.Settings));
-        Assert.Equal(12, MajoInputActions.All.Count);
+        Assert.Equal("majo_stepBack", MajoInputActions.ToGodotAction(MajoInputActions.StepBack));
+        Assert.Equal(
+            "majo_stepForward",
+            MajoInputActions.ToGodotAction(MajoInputActions.StepForward));
+        Assert.Equal(MajoInputActions.StepBack, MajoInputActions.Rollback);
+        Assert.Equal("majo_travel", MajoInputActions.ToGodotAction(MajoInputActions.Travel));
+        Assert.Equal(15, MajoInputActions.All.Count);
     }
 
     [Fact(Timeout = 5_000)]

@@ -21,6 +21,7 @@ using Majo.Runtime.Script;
 using Majo.Runtime.State;
 using Majo.Runtime.Stage;
 using Majo.Runtime.UI.SaveLoad;
+using Majo.Runtime.Travel;
 
 namespace Majo.Runtime.HeadlessTests;
 
@@ -40,6 +41,8 @@ public partial class HeadlessTestRunner
         configuration.Save.CaptureThumbnails = false;
         configuration.Save.ShowDefaultUi = true;
         configuration.Save.ManualSlotCapacity = 3;
+        configuration.State!.DialogueTravel.Enabled = true;
+        configuration.State.DialogueTravel.ShowDefaultUi = true;
         configuration.Actors!.Actors.Add(CreateActorDefinition(
             "state-hero",
             ActorFactoryIds.Character,
@@ -99,6 +102,7 @@ public partial class HeadlessTestRunner
         var history = services.Get<IHistoryManager>();
         var slots = services.Get<ISaveSlotManager>();
         var saveLoadOverlay = services.Get<ISaveLoadOverlay>();
+        var travel = services.Get<IDialogueTravelManager>();
 
         foreach (var existingSlot in await slots.ListAsync())
         {
@@ -119,6 +123,11 @@ public partial class HeadlessTestRunner
                     recursive: true,
                     owned: false) is CanvasLayer { Layer: 90 },
             "Stage curtain must render above actors and below dialogue/full-screen effects.");
+        Assert(bootstrap.FindChild(
+                    "MajoDialogueTravelOverlay",
+                    recursive: true,
+                    owned: false) is Control { Visible: false },
+            "Dialogue Travel did not create its editor-only default overlay.");
         var curtainRect = bootstrap.FindChild(
             "Curtain",
             recursive: true,
@@ -164,6 +173,9 @@ public partial class HeadlessTestRunner
                 script.CanCaptureCheckpoint &&
                 script.CurrentSpot?.LineId == "line:m95-state-current",
             "M9.5 ScriptPlayback did not expose the safe line checkpoint boundary.");
+        await WaitForConditionAsync(
+            () => travel.Entries.Count == 1 && travel.CurrentIndex == 0,
+            2);
 
         var capturedCheckpoint = script.CaptureCheckpoint();
         var changedProgramCheckpoint = new ScriptCheckpoint(
@@ -276,6 +288,10 @@ public partial class HeadlessTestRunner
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         Assert(script.Phase == ScriptPlaybackPhase.AwaitingAdvance,
             "M12 restored checkpoint did not settle at a stable save boundary.");
+        await WaitForConditionAsync(
+            () => travel.Entries.Count == 1 &&
+                travel.Entries[0].Spot.LineId == "line:m95-state-current",
+            2);
 
         var restoredHero = actors.Get<IActor>("state-hero");
         var restoredRoom = actors.Get<IActor>("state-room");
@@ -327,6 +343,28 @@ public partial class HeadlessTestRunner
             2);
         Assert(lineProbe.Lines[^1].Id == "line:m95-state-after",
             "M12 first advance after restore did not present the next line exactly once.");
+        await WaitForConditionAsync(
+            () => travel.Entries.Count == 2 &&
+                travel.Entries[^1].Spot.LineId == "line:m95-state-after",
+            2);
+        Godot.Input.ParseInputEvent(new InputEventKey
+        {
+            PhysicalKeycode = Key.Left,
+            Pressed = true,
+        });
+        await WaitForConditionAsync(
+            () => dialogue.CurrentLineId == "line:m95-state-current" &&
+                script.Phase == ScriptPlaybackPhase.AwaitingAdvance,
+            2);
+        Godot.Input.ParseInputEvent(new InputEventKey
+        {
+            PhysicalKeycode = Key.Right,
+            Pressed = true,
+        });
+        await WaitForConditionAsync(
+            () => dialogue.CurrentLineId == "line:m95-state-after" &&
+                script.Phase == ScriptPlaybackPhase.AwaitingAdvance,
+            2);
 
         for (var round = 1; round <= 3; round++)
         {

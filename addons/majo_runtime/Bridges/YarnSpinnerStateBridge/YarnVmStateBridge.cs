@@ -35,6 +35,14 @@ public sealed class YarnVmStateBridge
         }
 
         ref var callStack = ref YarnPrivateAccess.GetCallStack(vm.state);
+        if (vm.state.stack.Count != 0 ||
+            callStack.Count != 0 ||
+            vm.state.currentOptions.Count != 0)
+        {
+            throw new NotSupportedException(
+                "Yarn VM checkpoints only support top-level line boundaries with empty stacks and no pending options.");
+        }
+
         return new YarnVmLineSnapshot(
             vm.state.currentNodeName!,
             lineId,

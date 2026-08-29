@@ -154,6 +154,37 @@ public sealed class YarnVmStateBridgeTests
         Assert.Empty(delivered[2].Substitutions);
     }
 
+    [Fact]
+    public void CaptureRejectsLineInsideDetourCallStack()
+    {
+        const string source = """
+            title: Start
+            ---
+            <<detour Subroutine>>
+            Narrator: After. #line:bridge-after-detour
+            ===
+            title: Subroutine
+            ---
+            Narrator: Inside. #line:bridge-inside-detour
+            <<return>>
+            ===
+            """;
+        var compilation = Compiler.Compile(
+            CompilationJob.CreateFromString("bridge-detour.yarn", source));
+        Assert.DoesNotContain(
+            compilation.Diagnostics,
+            diagnostic => diagnostic.Severity == Diagnostic.DiagnosticSeverity.Error);
+        var program = Assert.IsType<Program>(compilation.Program);
+        var dialogue = CreateDialogue(program, out var deliveredLines);
+        var bridge = new YarnVmStateBridge();
+
+        dialogue.Continue();
+
+        Assert.Equal(["line:bridge-inside-detour"], deliveredLines);
+        Assert.Throws<NotSupportedException>(() =>
+            bridge.CaptureAtLine(dialogue, "line:bridge-inside-detour"));
+    }
+
     private static YarnDialogue CreateDialogue(
         Program program,
         out List<string> deliveredLines)

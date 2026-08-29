@@ -191,6 +191,32 @@ if (eligibility.Check(StateOperationKind.Save).IsAllowed)
 不可保存的外部阶段使用 `IStateEligibility.AcquireBarrier`，不要在保存请求中强制完成动画或停止
 Dialogue。默认 Serializer 与 Storage 都可通过 `ConfigureServices.ReplaceSingleton` 替换。
 
+### Dialogue Travel（开发调试）
+
+Dialogue Travel 使用内存中的 Game Snapshot 时间线，在每条台词完整显示并进入
+`AwaitingAdvance` 后自动捕获稳定 checkpoint。它不会创建存档文件，也不与 History 或
+Played Register 共用数据：
+
+```csharp
+using Majo.Runtime.Travel;
+
+configuration.State!.DialogueTravel.Enabled = true;
+configuration.State.DialogueTravel.Capacity = 128;
+configuration.State.DialogueTravel.ShowDefaultUi = true;
+
+var travel = runtime.Host!.Services.Get<IDialogueTravelManager>();
+await travel.StepBackAsync();
+await travel.StepForwardAsync();
+await travel.TravelToAsync(travel.Entries[0].Sequence);
+```
+
+默认只在 Godot 编辑器运行环境创建该服务；如需在导出的 Debug build 使用，显式设置
+`EnableInExportedDebugBuild = true`。`Backspace` / `←` 回退一步，`→` 前进一步，`F4` 打开
+默认时间线 UI；手柄对应 D-pad 左/右。回退后尚未推进时可以恢复保留的 future；从过去重新
+推进会截断旧 future 并形成新分支。只能准确跳转到
+已经捕获的 checkpoint，不能凭 Line ID 跳到尚未执行过的未来剧情。New Game 和 Return To
+Title 会清空内存时间线；Load Game 会清除旧分支，并以读档恢复出的当前行作为新时间线起点。
+
 ### Save / Load Slot（M13）
 
 Slot 默认关闭，启用后才会创建玩家文件以及 Quick Save、Save/Load UI 的输入 Scope：
