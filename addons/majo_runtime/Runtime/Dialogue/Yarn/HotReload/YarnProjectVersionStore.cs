@@ -28,6 +28,8 @@ public interface IYarnProjectVersionStore : IRuntimeService
     void Activate(YarnProjectVersion version);
 
     void MarkRunning(string projectId, YarnProject project);
+
+    void UpdateSourceFingerprint(string projectId, string sourceFingerprint);
 }
 
 public sealed class YarnProjectVersionStore : IYarnProjectVersionStore
@@ -153,6 +155,29 @@ public sealed class YarnProjectVersionStore : IYarnProjectVersionStore
             entry.Candidate = null;
         }
     }
+
+    public void UpdateSourceFingerprint(string projectId, string sourceFingerprint)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
+        ArgumentNullException.ThrowIfNull(sourceFingerprint);
+        lock (sync)
+        {
+            if (entries.TryGetValue(projectId, out var entry))
+            {
+                entry.Active = entry.Active with { SourceFingerprint = sourceFingerprint };
+                if (entry.Running is not null)
+                {
+                    entry.Running = entry.Running with { SourceFingerprint = sourceFingerprint };
+                }
+                entry.LastKnownGood = entry.LastKnownGood with { SourceFingerprint = sourceFingerprint };
+                if (entry.Candidate is not null)
+                {
+                    entry.Candidate = entry.Candidate with { SourceFingerprint = sourceFingerprint };
+                }
+            }
+        }
+    }
+
 
     private YarnProjectVersion? Get(
         string projectId,

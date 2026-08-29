@@ -1,7 +1,9 @@
 #nullable enable
 
+using Google.Protobuf;
 using Majo.Runtime.Dialogue.Yarn.HotReload;
 using Xunit;
+
 
 namespace Majo.Runtime.UnitTests;
 
@@ -75,6 +77,31 @@ public sealed class YarnHotReloadTests
         Assert.Contains("line:stable", compilation.Result.StringTable!.Keys);
         Assert.False(compilation.Result.StringTable["line:stable"].isImplicitTag);
     }
+
+    [Fact]
+    public async Task CompilerProducesIdenticalProgramAndStringsWhenOnlyCommentsChange()
+    {
+        using var directory = CreateProject(Yarn("Start", "line:1", "Hello"));
+        var snapshot = await new YarnSourceSnapshotReader().ReadAsync(
+            "main", directory.PathOf("main.yarnproject"));
+
+        var compilation1 = await new YarnRuntimeCompiler().CompileAsync(snapshot);
+
+        // Add a comment line (source fingerprint changes, but compiled program and strings are identical)
+        directory.Write("main.yarn", "// just a comment\n" + Yarn("Start", "line:1", "Hello"));
+        var snapshot2 = await new YarnSourceSnapshotReader().ReadAsync(
+            "main", directory.PathOf("main.yarnproject"));
+        var compilation2 = await new YarnRuntimeCompiler().CompileAsync(snapshot2);
+
+        Assert.NotEqual(snapshot.SourceFingerprint, snapshot2.SourceFingerprint);
+        Assert.NotNull(compilation1.Result.Program);
+        Assert.NotNull(compilation2.Result.Program);
+        Assert.True(Google.Protobuf.ByteString.CopyFrom(compilation1.Result.Program.ToByteArray())
+            .Equals(Google.Protobuf.ByteString.CopyFrom(compilation2.Result.Program.ToByteArray())));
+        Assert.Equal(compilation1.Result.StringTable!["line:1"].text, compilation2.Result.StringTable!["line:1"].text);
+    }
+
+
 
     private static TemporaryDirectory CreateProject(string source)
     {

@@ -334,6 +334,18 @@ public sealed class YarnHotReloadService : IYarnHotReloadService
                 return;
             }
 
+            var currentActive = versions.GetActiveVersion(projectId) ?? active;
+            if (currentActive is not null && IsContentEquivalent(currentActive, version))
+            {
+                versions.UpdateSourceFingerprint(projectId, version.SourceFingerprint);
+                PublishAttempt(projectId, generation, YarnHotReloadOutcome.NoSourceChange,
+                    version.SourceFingerprint, version.ProgramFingerprint,
+                    version.Diagnostics, null, stopwatch.Elapsed);
+                SetWatching(generation, projectId, version.SourceFingerprint,
+                    version.ProgramFingerprint, Array.Empty<YarnCompilationDiagnostic>(), null);
+                return;
+            }
+
             versions.StageForNextSession(version);
             if (playback?.IsPaused != true &&
                 script.Phase == ScriptPlaybackPhase.AwaitingAdvance &&
@@ -773,4 +785,55 @@ public sealed class YarnHotReloadService : IYarnHotReloadService
         ArgumentException.ThrowIfNullOrWhiteSpace(value, parameter);
         return value.Trim();
     }
+
+    private static bool IsContentEquivalent(
+        YarnProjectVersion active,
+        YarnProjectVersion candidate)
+    {
+        if (!string.Equals(active.ProgramFingerprint, candidate.ProgramFingerprint, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (!active.NodeNames.SetEquals(candidate.NodeNames) ||
+            !active.LineIds.SetEquals(candidate.LineIds))
+        {
+            return false;
+        }
+
+        if (active.LineNodes.Count != candidate.LineNodes.Count)
+        {
+            return false;
+        }
+
+        foreach (var (lineId, node) in candidate.LineNodes)
+        {
+            if (!active.LineNodes.TryGetValue(lineId, out var activeNode) ||
+                !string.Equals(activeNode, node, StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        if (!active.ImplicitLineIds.SetEquals(candidate.ImplicitLineIds))
+        {
+            return false;
+        }
+
+        var activeLoc = active.Project.baseLocalization;
+        var candidateLoc = candidate.Project.baseLocalization;
+
+        foreach (var lineId in candidate.LineIds)
+        {
+            var activeText = activeLoc?.GetLocalizedString(lineId);
+            var candidateText = candidateLoc?.GetLocalizedString(lineId);
+            if (!string.Equals(activeText, candidateText, StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 }
+
