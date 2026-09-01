@@ -1,687 +1,853 @@
-# Multi-Stage、多镜头与镜头合成实施方案
+# Direction Transaction Runtime：Multi-Stage、Multi-View 与 Yarn API 实施方案
 
 ## 1. 文档状态
 
-- 状态：Draft 0.3
-- 目标：为 Majo Runtime 增加命名 Stage、多 Camera Rig、Output Routing 和 Composition
-- 基线：复用现有 Actor、Camera State、Operation、State 和 Yarn Command 体系
+- 状态：Draft 1.0
+- 目标：以 Script Writer 体验为优先，破坏性重构现有 Stage、Camera 与 Yarn staging command 执行模型
+- 核心能力：显式 Beat 事务、Multi-Stage、Multi-View、Screen Layout、Backdrop/CG 分离、原子 Prepare/Commit、Rollback、Hot Reload
+- Authoring 原则：inline-first、node-local、name-on-reuse、资源路径隐式解析
+- 兼容策略：不以旧 staging command 或旧存档 schema 兼容为设计约束
 - 相关文档：
   - [`camera-runtime-next-phases.md`](camera-runtime-next-phases.md)
   - [`archive/camera-view-transition-design.md`](archive/camera-view-transition-design.md)
+  - [`asset-hot-reload.md`](asset-hot-reload.md)
 
-## 2. 目标
+本文取代旧版“Stage / Camera Rig / Output / Composition 直接映射为 Yarn Command”的方案。
 
-系统需要支持：
+## 2. 结论摘要
 
-1. 同时维护多个互相隔离的 Stage。
-2. 每个 Stage 维护多个持久命名 Camera Rig。
-3. Camera Rig 在不可见时仍可设置和保存 Pose。
-4. Output 可以在 Camera Rig 之间切换。
-5. 多个 Output 可以同时显示并参与布局、裁剪、叠加和过渡。
-6. Stage、Camera Rig、Output 和 Composition 分别保存稳定状态。
-7. 保持现有单 Stage、单 Camera 脚本兼容。
+本次改造不建设一门要求作者预先填写 Stage、Shot 和 Look 资源的 Blocking DSL。
 
-本方案不包含具体项目的镜头设计、资源组织和脚本改编规则。
+改造后的系统分为两层：
 
-## 3. 核心模型
+```text
+Script Writer
+  backdrop / place / leave / shot / layout / beat
+                         │
+                         ▼
+Direction Runtime
+  Stage / View / Screen / DirectionPlan / CommitToken
+```
+
+作者只描述：
+
+- 舞台环境变成什么。
+- 哪个 Actor 处于什么目标状态。
+- 某个 View 使用哪个 Source 和 Pose。
+- Screen 如何排列多个 View。
+- 哪些变化必须在同一个显式 Beat 中原子提交。
+
+Runtime 负责：
+
+- 资源解析和准备。
+- Stage、Actor、View 与 Screen 的稳定状态。
+- 事务合并、冲突检测和依赖排序。
+- 动画统一启动。
+- Render-ready 和无黑帧提交。
+- Skip、Interrupt、Rollback、Save/Load 和 Hot Reload。
+
+## 3. 设计原则
+
+### 3.1 Writer 体验优先
+
+必须满足：
+
+1. 普通单 Stage、单 View、单 Screen 场景不需要任何声明。
+2. 一次性 Stage、站位、Shot 和 CG 直接写在 Yarn body。
+3. 只有复用时才建立 local mark、Shot alias 或 import。
+4. Yarn 不出现资源路径、texture bounds、ready fence、CommitToken、lease 或 backend 名称。
+5. staging command 不携带 `wait:false`、`group:` 和 `operation:`。
+6. 多 View、Skip、Interrupt、Rollback 和 Save/Load 不要求剧本编写补偿逻辑。
+7. 复杂声明必须 colocate 在使用它的 Yarn Node 中。
+
+### 3.2 不推断时间意图
+
+- 不存在隐式 Beat。
+- 相邻 staging command 不自动合并。
+- Beat 必须显式 `begin/end`。
+- Beat 外的单条 staging command 各自作为单指令事务执行。
+- 顺序演出使用多个 Beat 或明确的等待边界，不由 Runtime 猜测。
+
+### 3.3 状态与机制分离
+
+- Stage、View 和 Screen 是持久状态。
+- Shot 是一次 `ViewPatch` 或可选复用 recipe，不是持久 Camera 对象。
+- Camera 是 Stage Source 的 backend 实现机制，不进入普通 Yarn API。
+- Layout 是 Screen 的作者层动作词；`ScreenState` 不机械地映射为 `screen` Command。
+- Blocking 仅指 Actor 在 Stage 中的状态，不作为整个 Runtime 的总称。
+
+### 3.4 精确 Pose 优先
+
+第一版 Shot 只支持明确 Pose：
+
+- `center`
+- `zoom`
+- `rotation`
+- `via`
+- `over`
+- `ease`
+
+第一版不包含 `focus`、`framing`、Actor bounds 驱动的自动构图、自动多人构图或 Follow Driver。这些能力不得成为第一版数据模型、事务模型或 backend 接口的前提。
+
+### 3.5 资源寻址保持隐式
+
+Yarn 写语义 ID：
+
+```yarn
+<<backdrop Background_001_001>>
+<<place Ema look:"Fearful1,ArmR1">>
+<<shot cg Still_490_001>>
+```
+
+内部转换：
+
+```text
+semantic ID
+  ↓
+typed ResourceKey
+  ↓
+IResourcePathResolver / Actor Manifest / LayerCompositionResolver
+  ↓
+backend resource
+```
+
+Direction Runtime 不建立第二套资源路径规则。
+
+## 4. 领域模型
+
+### 4.1 总体关系
 
 ```text
 Stage Registry
-├── Stage A
-│   ├── Actors
-│   ├── Effects
-│   ├── Camera Rig A1
-│   └── Camera Rig A2
-│
-└── Stage B
-    ├── Actors
-    ├── Effects
-    └── Camera Rig B1
-              │
-              ▼
-        Output Router
-              │
-              ▼
-         Composition
-              │
-              ▼
-       Screen Effects / UI
+├── Stage: main
+│   ├── Backdrop
+│   ├── Actors / Blocking
+│   └── Stage Effects
+│             │
+│             └── Camera Backend ────┐
+│                                    │
+├── Stage: broadcast                 │
+│   ├── Backdrop                     │
+│   └── Actors                       │
+│             │                      │
+│             └── Camera Backend ────┤
+│                                    ▼
+CG Resource ─────── Plate Backend → View Registry
+                                     │
+                                     ▼
+                                  Screen
+                                     │
+                                     ▼
+                              Screen Effects / UI
 ```
 
-### 3.1 Stage
+### 4.2 Stage
 
-Stage 是 Actor 和 Stage Effect 的独立容器，负责：
-
-- Actor 归属与查询。
-- 参考分辨率和坐标空间。
-- 资源准备与释放。
-- Camera Rig 归属。
-- 生命周期和稳定状态。
-
-Stage 不负责：
-
-- 决定自己是否显示。
-- 决定使用哪台 Camera。
-- 管理最终画面布局。
-- 管理 Screen Effect 或 UI。
-
-### 3.2 Camera Rig
-
-Camera Rig 是 Stage 内的持久命名视图状态，负责：
-
-- 保存 CurrentPose 和 TargetPose。
-- 执行 move、zoom、rotate、pose 和 shake。
-- 在没有 Output 引用时保留状态。
-- 被多个 Output 引用时提供一致的 Pose。
-
-Camera Rig 不负责：
-
-- 自己的屏幕位置。
-- 分屏形状。
-- Output 层级和透明度。
-- Stage Actor 生命周期。
-
-### 3.3 Output
-
-Output 是最终画面中的一个渲染区域，负责：
-
-- 引用一个 Camera Rig。
-- 控制区域、层级、透明度和可见性。
-- 应用裁剪和适配策略。
-- 参与 Camera Switch 和 Output Transition。
-
-Output 不拥有 Stage 或 Actor。切换 Output Source 不修改源或目标 Camera Rig 的 Pose。
-
-### 3.4 Composition
-
-Composition 是一组 Output 的稳定布局，负责：
-
-- Output 集合。
-- Output 的矩形或裁剪形状。
-- Output 层级。
-- Output Source Routing。
-- Composition 切换和过渡。
-
-复杂布局应定义为资源 preset，脚本只选择 preset 和 source。
-
-## 4. 当前基线与缺口
-
-当前 Runtime 已具备：
-
-- Actor 创建、销毁、状态变更和 Operation。
-- Camera `center/zoom/rotation` 状态。
-- Camera `pose/move/zoom/rotate/reset/shake`。
-- 单 Camera Output 的 `cut/move/dissolve`。
-- 独立 Stage 渲染边界和 Camera Output。
-- Actor 与 Stage 稳定状态存档。
-- Operation 的 wait、skip、complete、cancel、group 和 curve。
-
-当前缺口：
-
-- Actor Host 和 Stage Surface 只有一个。
-- Actor ID 没有 Stage 作用域。
-- Camera Manager 只保存一个 Camera State。
-- Camera Transform 直接作用于唯一 Stage Root。
-- Output 只有一个稳定 Live Output。
-- 没有稳定 Output Routing。
-- 没有多 Output Composition。
-
-## 5. Stage Registry
-
-### 5.1 数据模型
+Stage 是一份独立、可同时存在的故事空间状态，拥有 Backdrop、Stage-scoped Actor instances、Actor Blocking、参考坐标空间和 Stage effects。Stage 不拥有 Camera Pose、CG 或最终 Screen Layout。
 
 ```csharp
-public enum StageLifecycleState
-{
-    Prepared,
-    Referenced,
-    Dormant,
-}
+public readonly record struct StageId(string Value);
 
 public sealed record StageState(
-    string Id,
-    string? DefinitionId,
-    Vector2I ReferenceResolution,
-    StageLifecycleState Lifecycle);
+    StageId Id,
+    BackdropState? Backdrop,
+    IReadOnlyDictionary<ActorId, ActorState> Actors,
+    StageEffectState Effects);
 
-public interface IStageManager : IRuntimeService
-{
-    string DefaultStageId { get; }
-    IReadOnlyCollection<StageState> Stages { get; }
-
-    Task CreateAsync(StageCreateRequest request, CancellationToken token);
-    Task PrepareAsync(string stageId, CancellationToken token);
-    Task UnloadAsync(string stageId, CancellationToken token);
-}
-```
-
-### 5.2 生命周期
-
-```text
-不存在
-  ↓ create / prepare
-Prepared
-  ↓ 被稳定或过渡中的 Output 引用
-Referenced
-  ↓ 不再被 Output 引用
-Dormant
-  ↓ unload
-不存在
-```
-
-规则：
-
-- `Prepared` Stage 已拥有可查询的 Actor 和资源。
-- `Referenced` Stage 必须持续产生有效画面。
-- `Dormant` Stage 保留稳定状态，但可以暂停无必要的渲染更新。
-- `unload` 先处理关联 Operation、Camera Rig 和 Output，再释放资源。
-- 不能卸载仍被稳定 Output 引用的 Stage；调用方必须先切换或隐藏 Output。
-
-### 5.3 Actor 地址
-
-Actor 使用 Stage 作用域地址：
-
-```csharp
 public readonly record struct ActorAddress(
-    string StageId,
-    string ActorId);
+    StageId StageId,
+    ActorId ActorId);
 ```
 
-Actor Manager 内部以 `ActorAddress` 作为主键。规则：
+同一个 Actor ID 可以同时存在于多个 Stage，并保存完全独立的状态。
 
-- 同一个 ActorId 可以存在于多个 Stage。
-- 每个实例拥有独立的 Appearance、Position、Scale、Visibility 和 Operation。
-- 未指定 `stage:` 的旧命令使用 `DefaultStageId`。
-- 多 Stage 脚本应显式指定 `stage:`。
+### 4.3 Backdrop
 
-## 6. Camera Rig Registry
-
-### 6.1 数据模型
-
-继续使用现有 Camera State：
+Backdrop 是 Stage 环境，不是普通 Actor，也不是 CG。
 
 ```csharp
-public sealed record CameraRigState(
-    string Id,
-    string StageId,
-    CameraState CurrentPose,
-    CameraState TargetPose);
+public sealed record BackdropState(
+    ResourceKey Resource,
+    BackdropFit Fit,
+    Color Tint);
 ```
-
-```csharp
-public interface ICameraDirector : IRuntimeService
-{
-    string DefaultRigId { get; }
-    IReadOnlyCollection<CameraRigState> Rigs { get; }
-
-    void Create(CameraRigDefinition definition);
-    void Destroy(string rigId);
-
-    IOperationHandle Pose(
-        string rigId,
-        CameraPoseTransitionRequest request);
-
-    IOperationHandle Move(
-        string rigId,
-        Vector2 center,
-        StageOperationSpec operation);
-
-    IOperationHandle Zoom(
-        string rigId,
-        float zoom,
-        StageOperationSpec operation);
-
-    IOperationHandle Rotate(
-        string rigId,
-        float degrees,
-        StageOperationSpec operation);
-
-    IOperationHandle Shake(
-        string rigId,
-        CameraShakeSpec shake);
-}
-```
-
-### 6.2 规则
-
-- Camera Rig 必须归属于一个已存在的 Stage。
-- `CurrentPose` 表示当前实际状态。
-- `TargetPose` 表示当前 Operation 的稳定终态。
-- 没有 Output 引用的 Rig 仍可修改 Pose。
-- 没有 Output 引用的 Rig 不应占用 Output 渲染资源。
-- 切走后 Rig 保留 Pose。
-- 删除 Rig 前必须移除所有稳定和过渡中的 Output 引用。
-- 省略 `camera:` 时使用 `DefaultRigId`，保持现有脚本兼容。
-
-## 7. Output Router
-
-### 7.1 数据模型
-
-```csharp
-public sealed record CameraOutputState(
-    string Id,
-    string SourceRigId,
-    Rect2 NormalizedRect,
-    int ZIndex,
-    float Opacity,
-    float RotationDegrees,
-    OutputClipShape Clip,
-    CameraAspectMode AspectMode,
-    bool Visible);
-```
-
-```csharp
-public interface ICameraOutputRouter : IRuntimeService
-{
-    string MainOutputId { get; }
-    IReadOnlyCollection<CameraOutputState> Outputs { get; }
-
-    IOperationHandle Switch(CameraSwitchRequest request);
-    IOperationHandle SetVisibility(OutputVisibilityRequest request);
-    void ApplyStableRouting(IReadOnlyCollection<CameraOutputState> outputs);
-}
-```
-
-### 7.2 Switch 语义
-
-`via:cut`：
-
-1. 准备目标 Rig 所属 Stage。
-2. 应用目标 Rig 的 TargetPose。
-3. 等待目标 Output 产生有效画面。
-4. 原子替换 Output Source。
-
-`via:dissolve`：
-
-1. 保留当前 Output Source。
-2. 准备目标 Source。
-3. 同时渲染 source 和 target。
-4. 在 Output Transition 中混合。
-5. 完成后提交目标 Source 并释放临时资源。
 
 规则：
 
-- Switch 不修改任意 Rig 的 Pose。
-- 新 switch 打断旧 dissolve 时不得闪回旧 source。
-- Skip 直接提交目标 source。
-- Reset、Load 和 Shutdown 清理所有瞬态 transition。
+- 同一 Stage 的所有 View 观察同一个 Backdrop。
+- 改变 Backdrop 不销毁或隐藏 Actor。
+- 切走 View 不改变 Backdrop。
+- Backdrop 资源由 typed Resolver 解析。
+- cover、bleed 和 transition 属于 backend 细节。
 
-## 8. Composition
+### 4.4 View
 
-### 8.1 数据模型
-
-```csharp
-public sealed record CameraCompositionState(
-    string Id,
-    IReadOnlyList<CameraOutputState> Outputs);
-
-public sealed record CompositionRequest(
-    string PresetId,
-    IReadOnlyList<string> SourceRigIds,
-    StageOperationSpec Operation);
-```
-
-### 8.2 Preset
-
-示例：
-
-```yaml
-id: split-overlay
-outputs:
-  - id: main
-    source-index: 0
-    rect: [0, 0, 1, 1]
-    z-index: 0
-    opacity: 1
-    clip: rectangle
-
-  - id: inset
-    source-index: 1
-    rect: [0.62, 0.08, 0.34, 0.36]
-    z-index: 10
-    opacity: 1
-    clip: inset-angle
-```
-
-Preset 可以定义：
-
-- Output 数量。
-- Source 参数位置。
-- Normalized Rect。
-- ZIndex。
-- Opacity。
-- Rotation。
-- Clip Shape。
-- Aspect Mode。
-- 可选装饰资源。
-
-### 8.3 Composition 切换
-
-- Composition Operation 只修改 Output 布局和 routing。
-- Composition 不修改 Stage、Actor 或 Camera Pose。
-- 过渡开始前所有目标 Output 必须 ready。
-- Skip 直接提交目标 Composition。
-- Cancel 默认落到目标稳定 Composition。
-- Reset、Load 和 Shutdown 移除瞬态 Output，并释放租约。
-
-## 9. Render Backend
-
-### 9.1 目标边界
-
-```text
-Stage Surfaces
-       │
-       ▼
-Camera Output Pool
-       │
-       ▼
-Stage Compositor
-       │
-       ▼
-Screen Effects / UI
-```
-
-Backend 负责：
-
-- Stage Surface 的创建、准备、休眠和释放。
-- Camera Rig Pose 到实际视图状态的映射。
-- Output 资源的按需分配。
-- Output Texture、Clip 和 Layout。
-- render-ready 通知。
-- transition capture 和资源回收。
-
-Core 不依赖具体节点、纹理或裁剪实现。
-
-### 9.2 资源约束
-
-- Stage 内容只有一份，不因 Camera Output 数量而复制 Actor Tree。
-- 只为可见或过渡中的 Output 分配渲染资源。
-- 不可见 Camera Rig 只保存逻辑状态。
-- Output 隐藏后释放对应租约。
-- Transition capture 必须有明确的 Complete、Skip、Cancel、Reset、Load、Shutdown 回收路径。
-- 同时活跃的 Stage 和 Output 数量由配置限制。
-
-### 9.3 Render-ready
-
-Backend 提供显式 ready 机制：
+View 是一条持续存在的观察通道。
 
 ```csharp
-public interface ICameraOutputBackend
-{
-    Task PrepareAsync(
-        string outputId,
-        string rigId,
-        CancellationToken token);
+public readonly record struct ViewId(string Value);
 
-    Task WaitUntilReadyAsync(
-        string outputId,
-        CancellationToken token);
-}
+public abstract record ViewSource;
+public sealed record StageViewSource(StageId StageId) : ViewSource;
+public sealed record CgViewSource(ResourceKey Resource) : ViewSource;
+
+public sealed record ViewPose(
+    Vector2 Center,
+    float Zoom,
+    float RotationDegrees);
+
+public sealed record ViewState(
+    ViewId Id,
+    ViewSource Source,
+    ViewPose Pose);
 ```
 
-脚本不需要等待固定帧数。Switch 和 Compose 在内部等待目标 Output ready。
+View 的稳定状态拥有 Source 和目标 Pose，不拥有 Actor、Backdrop、屏幕矩形或 Layout slot。CurrentPose、transition clock 和中间 render state 属于运行中的事务，不写入 `DirectionState`。未被 Screen 引用的 View 仍保留逻辑状态，但不必持续占用渲染资源。
 
-### 9.4 技术验证
+### 4.5 Shot
 
-实施 Output Pool 前先验证：
+Shot 是一次 View 改变，不是另一个 Registry 实体。
 
-1. 同一 Stage 内容能否由多个 Output 同时观察而不复制 Actor Tree。
-2. 不同 Stage 能否保持渲染和状态隔离。
-3. Control、CanvasLayer、Sprite、Layered Character 和 Effect 的排序是否一致。
-4. Output resize、rotation 和 clipping 是否保持参考坐标规则。
-5. Headless 环境下是否存在确定性的生命周期验证路径。
+```csharp
+public sealed record ViewPatch(
+    ViewId ViewId,
+    Optional<ViewSource> Source,
+    Optional<Vector2> Center,
+    Optional<float> Zoom,
+    Optional<float> RotationDegrees,
+    ViewTransitionSpec Transition);
+```
 
-如果首选实现无法满足条件，备选实现仍必须遵守相同 Core 接口和“不复制 Actor Tree”的约束。
+一次性 Shot 直接产生匿名 `ViewPatch`。使用 `as:` 时，Node Direction Module 保存可复用 recipe；`shot use` 再次实例化该 recipe。
 
-## 10. Yarn API
+### 4.6 Screen
 
-### 10.1 Stage
+系统默认只有一个最终 Screen。Screen 保存 Layout 与 slot routing：
+
+```csharp
+public sealed record ScreenState(
+    LayoutId Layout,
+    IReadOnlyDictionary<LayoutSlotId, ViewId> Bindings);
+```
+
+Screen 不理解 Stage、Actor、CG 或 Camera，只引用 View。默认状态为 `single` Layout 的 `main` slot 绑定 `main View`。
+
+### 4.7 CG
+
+CG 是已经完成构图的视觉 Plate，通过 `CgViewSource` 进入 View。CG 不是 Stage Backdrop、Background Actor、特殊 Stage 或 Screen overlay。
+
+规则：
+
+- 全屏 CG 可以复用默认 `main View`。
+- CG 与 Stage 同时显示时使用两个 View。
+- 切入 CG 不修改任何 Stage 或 Actor。
+- 返回 Stage 时原 Stage 状态持续存在。
+- CG 的 center、zoom 和 rotation 属于 View Pose。
+
+## 5. Stage 与 View 的建立规则
+
+### 5.1 默认实例
+
+每个播放 Session 自动存在 `main Stage`、`main View` 和 `main Screen`。`main View` 初始引用 `main Stage`，`main Screen` 的 `main` slot 初始绑定 `main View`。
+
+### 5.2 建立 Stage
+
+具名 Stage 由第一次 Stage-owned 写入建立：
 
 ```yarn
-<<stage create id:stage-a definition:scene-a>>
-<<stage create id:stage-b definition:scene-b>>
-
-<<back stage:stage-a actor:background appearance:default duration:0>>
-<<character stage:stage-a actor:Alice appearance:Idle position:40,100>>
-<<character stage:stage-b actor:Bob appearance:Idle position:60,100>>
-
-<<stage unload id:stage-b>>
+<<backdrop Background_001_001 stage:cell>>
+<<place Ema stage:cell at:center>>
 ```
 
-### 10.2 Camera Rig
+`backdrop` 和 `place` 可以定义 Stage；`leave`、`shot` 和 `layout` 只能引用已定义或 import 的 Stage。同一显式 Beat 内的定义和引用由 Planner 排序，不依赖文本顺序。
+
+### 5.3 建立 View
+
+具名 View 由第一次带 `view:` 的 Shot 建立：
 
 ```yarn
-<<camera create id:wide stage:stage-a preset:wide>>
-<<camera create id:closeup stage:stage-a from:wide>>
-<<camera create id:reaction stage:stage-b preset:closeup>>
-
-<<camera pose camera:closeup center:62,54 zoom:1.8 via:cut>>
-<<camera move camera:wide to:75,50 duration:4 curve:sine-in-out>>
-<<camera zoom camera:closeup to:2 duration:0.5 curve:sine-out>>
+<<shot pose view:wide stage:cell center:50,50 zoom:1>>
 ```
 
-### 10.3 Output 与 Composition
+`layout` 只能引用已经由 Shot 建立或 import 的 View。未知 View 是 authoring error，不能因拼写错误静默建立。
 
-```yarn
-<<camera switch output:main to:closeup via:cut>>
-<<camera switch output:main to:wide via:dissolve duration:0.6>>
-
-<<camera compose preset:split-overlay sources:wide,reaction duration:0.35>>
-<<camera compose preset:single sources:wide duration:0.2>>
-```
-
-## 11. Operation 通道
+### 5.4 选择规则
 
 ```text
-stage/<id>/lifecycle
+需要独立世界状态       → 新 Stage
+需要独立观察通道       → 新 View
+只是改变观察方式       → 同一 View 的新 Shot
+只是改变最终排列       → 新 Layout
+```
+
+| 场景 | Stage | View |
+|---|---:|---:|
+| 同一房间顺序切换两个 Pose | 1 | 1 |
+| 同一房间同时显示全景和特写 | 1 | 2 |
+| 牢房与直播间顺序切换 | 2 | 1 |
+| 牢房与直播间同时分屏 | 2 | 2 |
+| 全屏 CG 后返回 Stage | 原 Stage 保留 | 1 |
+| Stage 主画面加 CG 画中画 | 原 Stage 保留 | 2 |
+
+## 6. Node Direction Module
+
+Direction Module 是编译器从 Yarn Node 推导的内部产物，不是作者维护的 JSON 或外部资源。
+
+```csharp
+public sealed record NodeDirectionModule(
+    string NodeId,
+    long Version,
+    DirectionSymbolTable Symbols,
+    IReadOnlyCollection<TypedResourceReference> Resources,
+    IReadOnlyCollection<DirectionSourceMap> SourceMaps);
+```
+
+它负责 local mark、local Shot alias、local Stage/View symbol、explicit import、typed resource references、Yarn source location 和 preload 候选集合。
+
+规则：
+
+- 未限定的具名 Stage、View、Mark 和 Shot alias 默认 Node-local。
+- `main Stage/View/Screen` 是 Session 默认实例。
+- 跨 Node 共享必须显式 import。
+- Local alias 不写入 Save；Save 保存解析后的稳定状态。
+- 没有强制 Direction declaration block。
+- 一次性数据直接 inline。
+- 编译器可以按值 intern 匿名 Shot，但不能要求作者为性能命名。
+
+内部完全限定示例：
+
+```text
+Act01_Chapter01_Adv02/stages/cell
+Act01_Chapter01_Adv02/views/warden
+Act01_Chapter01_Adv02/marks/left
+Act01_Chapter01_Adv02/shots/cell-wide
+```
+
+## 7. Yarn API
+
+### 7.1 通用约定
+
+```text
+stage:<id>       目标 Stage，默认 main
+view:<id>        目标 View，默认 main
+via:<kind>       过渡方式
+over:<seconds>   过渡时长
+ease:<curve>     动画曲线
+join:<barrier>   commit 或 settle
+```
+
+规则：
+
+- 资源使用 primary semantic ID，不写路径。
+- 时间统一使用 `over:`，不再混用 `duration:`。
+- 动画曲线统一使用 `ease:`，不再混用 `curve:`。
+- 单指令事务默认 `join:commit`。
+- `join:settle` 等待动画完成。
+- 需要异步开始后稍后 join 的多指令演出必须使用具名 Beat。
+
+### 7.2 `backdrop`
+
+```yarn
+<<backdrop Background_001_001>>
+<<backdrop Background_025_001 stage:broadcast via:dissolve over:0.4>>
+```
+
+产生 `BackdropPatch`，修改目标 Stage 的 Backdrop。
+
+### 7.3 `place`
+
+```yarn
+<<place Ema at:left look:"Fearful1,ArmR1">>
+<<place Hiro stage:cell at:70,0 look:Angry2>>
+<<place Ema at:right over:0.3 ease:cubic-out>>
+```
+
+产生稀疏 `ActorPatch`。Actor 不存在时建立 Stage-scoped instance；Actor 已存在时只修改明确字段；未提供字段保持稳定目标不变。`look:` 交给 Actor Manifest 和 LayerCompositionResolver。
+
+第一版参数：
+
+```text
+at:<mark|x,y>
+look:<appearance-id>
+scale:<number>
+z:<integer>
+via:<cut|move|fade>
+over:<seconds>
+ease:<curve>
+```
+
+### 7.4 `leave`
+
+```yarn
+<<leave Hiro>>
+<<leave Guard stage:corridor toward:right over:0.4>>
+```
+
+`leave` 表示 Actor 真正离开 Stage。未被当前 View 拍到不是 `leave`；对未知 Actor 执行 `leave` 是 authoring error。
+
+### 7.5 `shot pose`
+
+```yarn
+<<shot pose center:35,50 zoom:2 rotation:0 via:cut>>
+<<shot pose stage:cell center:50,50 zoom:1 via:dissolve over:0.4>>
+<<shot pose view:reaction stage:cell center:70,45 zoom:1.8>>
+```
+
+修改目标 View。`stage:` 存在时将 Source 改为对应 Stage；省略 Source 时保持当前 Source；未提供的 Pose 字段保持不变。新建具名 View 时必须提供 Source，缺省 Pose 使用 `ViewPose.Default`。
+
+### 7.6 `shot cg`
+
+```yarn
+<<shot cg Still_490_001 via:cut>>
+<<shot cg Still_490_001 center:37.384,74.816 zoom:3 rotation:10>>
+<<shot cg Evidence_001 view:evidence>>
+```
+
+将目标 View Source 改为 CG；Stage 不被修改；Pose 作用于 Plate backend。
+
+### 7.7 `shot use`
+
+```yarn
+<<shot pose stage:cell center:50,50 zoom:1 as:cell-wide>>
+...
+<<shot use cell-wide>>
+<<shot use cell-wide view:preview via:dissolve>>
+```
+
+Alias 保存 ViewPatch recipe，不保存运行时 View 实例。
+
+### 7.8 `layout`
+
+```yarn
+<<layout single main:main>>
+<<layout split main:cell inset:warden via:dissolve over:0.3>>
+<<layout pip main:main inset:evidence>>
+```
+
+产生 `ScreenPatch`。第一个参数是 Layout semantic ID，后续 `slot:view` 绑定必须覆盖 required slots。未知 slot、重复 slot 和未知 View 都是 authoring error。Layout preset 由 `ILayoutResolver` 解析，Yarn 不写矩形和裁剪路径。
+
+### 7.9 `beat`
+
+```yarn
+<<beat begin id:hiro-descends over:0.3 ease:cubic-out>>
+<<place Hiro at:left look:Surprised1>>
+<<place Ema at:right look:Fearful1>>
+<<shot pose center:55,50 zoom:1.2 via:move>>
+<<beat end join:settle>>
+```
+
+异步开始：
+
+```yarn
+<<beat begin id:slow-pan over:4>>
+<<shot pose center:75,50 via:move>>
+<<beat end join:commit>>
+
+Narrator: 镜头继续移动。
+
+<<beat join slow-pan>>
+```
+
+控制命令：
+
+```text
+beat begin
+beat end
+beat join
+beat finish
+beat abort
+```
+
+Beat 不能嵌套或跨 Node。Choice、jump、stop、save 等控制流命令不能出现在开放 Beat 内。Beat 级 `over/ease` 作为命令缺省值，命令可以明确覆盖。
+
+### 7.10 `mark`
+
+```yarn
+<<mark witness at:37,0>>
+<<mark presenter stage:broadcast at:50,40>>
+<<place Ema at:witness>>
+```
+
+Mark 属于 Stage 坐标空间，默认 Node-local。
+
+### 7.11 瞬态 Cue
+
+```yarn
+<<shake strength:8 axis:x over:0.4>>
+<<flash intensity:0.8 over:0.15>>
+<<curtain open over:1.2>>
+```
+
+高频 Cue 直接使用动词，不要求 `cue` 包装层。Cue 在 Beat 中只在 Commit 成功后触发，不进入稳定 DirectionState。
+
+## 8. Directive、State 与 Plan
+
+### 8.1 Directive
+
+```csharp
+public interface IDirectionDirective;
+public interface IDurableDirectionPatch : IDirectionDirective;
+public interface ITransientDirectionCue : IDirectionDirective;
+
+public sealed record BackdropPatch(...) : IDurableDirectionPatch;
+public sealed record ActorPatch(...) : IDurableDirectionPatch;
+public sealed record ViewPatch(...) : IDurableDirectionPatch;
+public sealed record ScreenPatch(...) : IDurableDirectionPatch;
+public sealed record ShakeCue(...) : ITransientDirectionCue;
+public sealed record FlashCue(...) : ITransientDirectionCue;
+```
+
+Yarn staging command 不直接调用 Stage、Actor 或 Camera service，只产生 Directive。
+
+### 8.2 DirectionState
+
+```csharp
+public sealed record DirectionState(
+    IReadOnlyDictionary<StageId, StageState> Stages,
+    IReadOnlyDictionary<ViewId, ViewState> Views,
+    ScreenState Screen,
+    StableEffectState Effects,
+    long Revision);
+```
+
+Runtime 同时维护 CurrentState 和 TargetState。Save、Skip 和新 Beat merge 以 TargetState 为主；新 transition 从当前实际帧接管。
+
+### 8.3 Plan
+
+```csharp
+public sealed record DirectionPlan(
+    DirectionTransactionId Id,
+    DirectionState BeforeState,
+    DirectionState TargetState,
+    IReadOnlyList<DirectionTransition> Transitions,
+    IReadOnlyList<ITransientDirectionCue> Cues,
+    IReadOnlyList<ResourceClaim> ResourceClaims,
+    DirectionCompletionBarrier Completion);
+```
+
+```text
+Directives
+  ↓
+Resolve scope and aliases
+  ↓
+Merge sparse patches
+  ↓
+Validate conflicts and references
+  ↓
+Build complete TargetState
+  ↓
+Derive resource claims and dependencies
+  ↓
+DirectionPlan
+```
+
+### 8.4 合并与冲突
+
+同一 Beat 中，不同字段可以合并；同一路径被写入两次默认报错。`leave` 与同一 Actor 的 `place` 冲突；`shot cg` 与同一 View 的 Stage Source 写入冲突；`layout` 写入两次冲突。禁止使用“最后一条获胜”。
+
+稳定路径：
+
+```text
+stage/<stage>/backdrop
+actor/<stage>/<actor>/presence
 actor/<stage>/<actor>/position
 actor/<stage>/<actor>/appearance
-actor/<stage>/<actor>/visibility
-rig/<id>/center
-rig/<id>/zoom
-rig/<id>/rotation
-rig/<id>/modifier/shake
-output/<id>/source
-output/<id>/visibility
-composition/layout
+actor/<stage>/<actor>/scale
+actor/<stage>/<actor>/z
+view/<view>/source
+view/<view>/center
+view/<view>/zoom
+view/<view>/rotation
+screen/layout
+screen/slot/<slot>
+effect/curtain
 ```
 
-冲突规则：
+## 9. 事务执行模型
 
-- 同一 Rig 的不同 Pose 属性可以并行。
-- 同一属性的新 Operation 从当前实际值接管。
-- Output Switch 独占对应 `output/<id>/source`。
-- Composition Operation 独占 `composition/layout` 和涉及的 Output 布局属性。
-- Stage unload 独占该 Stage 生命周期，并在释放前处理所有关联 Operation。
-- Camera shake 是瞬态 modifier，不改变 TargetPose。
+### 9.1 阶段
 
-## 12. State
+```text
+Collect → Plan → Prepare → Commit → Transition → Settle
+```
 
-### 12.1 保存
+### 9.2 Prepare
 
-- Stage Registry 和各 Stage 稳定生命周期状态。
-- Stage-scoped Actor 稳定目标状态。
-- Camera Rig Registry 和各 Rig TargetPose。
-- 稳定 Output Routing。
-- 稳定 Composition。
-- 现有 Curtain、Screen Effect 和 Stage Transition 状态。
-
-### 12.2 不保存
-
-- Tween 中间值。
-- Shake offset。
-- Output ready fence。
-- 临时 capture texture。
-- Transition 混合权重。
-- Output lease。
-- Operation handle。
-
-### 12.3 恢复顺序
-
-1. 取消 Camera、Output 和 Composition Operation。
-2. 清理 transition、capture 和 Output lease。
-3. 恢复 Stage Registry。
-4. 恢复 Actor。
-5. 恢复 Camera Rig 和 TargetPose。
-6. 恢复稳定 Composition 与 Output Routing。
-7. 等待可见 Output ready。
-8. 恢复 Screen Effect 和 UI。
-
-### 12.4 Schema
-
-- `majo.actors` entry 增加 `StageId`。
-- `majo.stage` 增加 Stage Registry、Rig Registry、Output Routing 和 Composition。
-- 如果开发期没有旧存档兼容要求，直接拒绝旧 schema；否则单独提供迁移。
-
-## 13. 配置
-
-建议新增：
+Prepare 必须无可见副作用，负责解析资源、加载 Backdrop/CG/Appearance、建立隐藏 Stage backend、申请 View lease、准备 dissolve source/target、验证 Layout capacity 并等待目标 View ready。
 
 ```csharp
-public sealed class StageConfiguration
+public sealed record PreparedDirectionPlan(
+    DirectionPlan Plan,
+    IReadOnlyList<IPreparedDirectionResource> Resources,
+    IReadOnlyList<IRenderReadyFence> ReadyFences);
+```
+
+任一 Prepare 失败时，BeforeState 保持不变，释放临时资源，并且不触发 Cue。
+
+### 9.3 Commit
+
+Commit 是同步、短暂、不可 await 的可见状态切换点：
+
+```csharp
+public interface IDirectionCommitCoordinator
 {
-    public int MaxPreparedStages { get; set; } = 4;
-    public int MaxActiveOutputs { get; set; } = 2;
-    public string DefaultStageId { get; set; } = "main";
-    public string DefaultRigId { get; set; } = "main";
-    public string DefaultOutputId { get; set; } = "main";
-    public string DefaultCompositionId { get; set; } = "single";
+    CommittedDirectionTransaction Commit(
+        PreparedDirectionPlan plan,
+        DirectionCommitToken token);
 }
 ```
 
-超出限制时产生 authoring error，不静默驱逐仍被引用的 Stage 或 Output。
+Commit 同时发布 Actor、Backdrop、View Source/TargetPose、Screen Layout/bindings，启动 transition clock，更新 DirectionState revision，并允许 Cue 开始。
+
+“同一 CommitToken”表示同一逻辑和渲染提交边界，不承诺所有 Godot 节点调用发生在同一个 CPU 指令中。
+
+### 9.4 Transition、Finish 与 Rollback
+
+- `join:commit` 在 Commit 完成后返回。
+- `join:settle` 等待所有 transition 到达 TargetState。
+- `finish` 立即提交已 Commit 事务的 TargetState。
+- `abort` 撤销尚未 Commit 的事务并释放 Prepare 资源。
+- `rollback` 对已 Commit 事务应用 BeforeState 恢复事务。
+- `replace` 从当前实际帧接管冲突路径。
+- `skip` finish 所有 skippable 事务。
+
+Rollback 只对稳定视觉状态提供保证。已播放 SFX、已被玩家感知的 flash 等瞬态副作用不可逆。
+
+## 10. Render Backend
+
+```csharp
+public interface IStageRenderBackend
+{
+    Task<IPreparedStage> PrepareAsync(
+        StageState target,
+        CancellationToken cancellationToken);
+}
+
+public interface IViewRenderBackend
+{
+    Task<IPreparedView> PrepareAsync(
+        ViewState target,
+        CancellationToken cancellationToken);
+}
+
+public interface IScreenCompositorBackend
+{
+    Task<IPreparedScreen> PrepareAsync(
+        ScreenState target,
+        CancellationToken cancellationToken);
+}
+```
+
+Core 不依赖 Godot Node、SubViewport、TextureRect 或具体裁剪实现。
+
+规则：
+
+- 一个 Stage 只拥有一份 Actor Tree。
+- 同一 Stage 的多个 View 不复制 Actor Tree。
+- Camera backend 将 ViewPose 映射为 Stage 观察结果。
+- Plate backend 直接渲染 CG，不创建 Actor Tree。
+- 逻辑 View 可以在没有 render lease 时存在。
+- 被 Screen 引用或参与 transition 的 View 才持有 lease。
+- Reset、Load、Rollback 和 Shutdown 必须清理临时 lease/capture。
+
+实施多 View 前必须验证同 Stage 多观察、跨 Stage 隔离、Godot layer 排序、Stage/CG 统一参考分辨率、dissolve 中断、窗口 resize 和 headless lifecycle。
+
+## 11. Preload 与资源推导
+
+Node Direction Compiler 收集 `backdrop`、`place look:`、`shot cg`、`layout` 和 import 的 typed resource references，生成 `DirectionPreloadManifest`。
+
+规则：
+
+- 作者不维护资源表。
+- 静态引用在 Node 进入前预加载。
+- 变量生成的动态引用在 Beat Prepare 阶段解析。
+- 静态扫描可以保守多加载，但不得漏掉确定引用。
+- Hot Reload 只增量准备新增资源。
+
+## 12. State、Save/Load 与 Hot Reload
+
+保存：
+
+- Stage Registry、Backdrop 和 Actor target state。
+- View Registry、ViewSource 和 TargetPose。
+- Screen Layout 和 bindings。
+- 稳定 Curtain/Screen Effect。
+- DirectionState revision 和必要 provenance。
+
+不保存 tween 中间值、shake offset、dissolve weight、capture texture、ready fence、lease、Prepare 临时资源和 Node-local alias 表。
+
+Load 流程：
+
+```text
+清理现有 transition
+  ↓
+解析和验证 snapshot
+  ↓
+Prepare Stage / Actor / View / Screen
+  ↓
+原子 Commit snapshot TargetState
+  ↓
+恢复稳定 Effect 和 UI
+```
+
+Hot Reload 以 Node Direction Module 为编译单位。新版本必须完成解析、引用验证和资源 Prepare 后，才替换未来指令使用的 Module。需要重放当前 Beat 时，生成从当前实际状态到新版 TargetState 的新事务；失败时保留旧 Module 和旧画面。
+
+## 13. Destructive Refactor 策略
+
+删除或替换：
+
+- Command bind 后立即调用 Actor/Camera service。
+- `AwaitScopeCoordinator` 对已启动 Operation 的事后收集。
+- staging command 的 `wait/group/operation`。
+- Backdrop 作为 Background Actor。
+- Still/CG 复用 Backdrop Actor。
+- 唯一 Camera State 和唯一 Live Output 假设。
+- `camera create/switch/compose` 作者 API。
+
+保留并适配：
+
+- Actor Manifest。
+- LayerCompositionResolver。
+- IResourcePathResolver 与 ResourceKey。
+- MotionCurve/AnimationSpec 中与新 transition 契约一致的部分。
+- Audio、Dialogue、UI 和非 staging commands。
+- State Manager 的 contributor/preflight 思路。
+- 可复用的 Godot Texture/Transition backend。
+
+新 vertical slice 成立后直接迁移 demo Yarn 并删除旧 staging handler，不建设长期双轨兼容桥。
+
+### 13.1 目标代码边界
+
+```text
+Runtime/Direction/
+├── Core/          IDs、State、Directive、Patch、Plan、validation
+├── Execution/     Beat collector、Planner、Prepare、Commit、transaction registry
+├── Rendering/     Stage/View/Screen backend interfaces、ready fence、lease contracts
+└── Godot/         Stage renderer、Camera/Plate View renderer、Screen compositor
+
+Runtime/Dialogue/Direction/
+├── Yarn command adapters
+├── Node Direction Compiler
+├── Node-local symbol/import resolver
+└── preload/source-map diagnostics
+```
+
+依赖方向必须保持：Dialogue adapter → Direction Core/Execution；Execution → Core 与 Rendering interfaces；Godot → Core/Rendering；State contributor → Direction snapshot API。Core 不依赖 Yarn、Godot Node、现有 command registry 或 save schema。
+
+### 13.2 现有实现迁移映射
+
+| 现有实现 | 处理方式 |
+|---|---|
+| `RuntimeCommandRegistry` / `RuntimeCommandDispatcher` | 保留通用注册与 Yarn 调用桥；Direction handler 只提交 Directive，不直接调用 Actor/Camera service |
+| `AwaitScopeCoordinator` / `await` handlers | 不再参与 staging；若 Audio 等非 staging command 仍需要，则缩减为其私有机制，不让它进入 Direction transaction |
+| `ActorCommandService` | staging 路径由 ActorPatch + Planner 取代；仅保留不属于 Direction 的职责，之后删除无调用部分 |
+| `CameraCommandModule` / `ICameraManager` / `CameraManager` | 由 `shot` adapter、ViewState、Planner 和 View backend 取代 |
+| `GodotStageBackend` | 拆出 Stage renderer、Stage Camera View renderer 和可复用 transition primitives；不得继续保存唯一 Camera/Output 状态 |
+| `BackgroundActor` / `BackgroundActorFactory` | 删除；以 Stage-owned Backdrop renderer 取代 |
+| `BuiltInStateContributors` 中 Camera/Actor staging payload | 迁移为单一 DirectionState schema 与 transactional load |
+| `MajoRuntimeBootstrap` | 改为装配 Direction Core、Execution、backend pool、Yarn adapters 和 state contributor |
+
+迁移期间允许短期编译中间态，但每个 vertical slice 合并时只能有一个 staging 执行入口。旧 handler 与新 handler 不得同时注册同一作者命令。
 
 ## 14. 实施阶段
 
-### Phase A：Stage Registry 与 Actor Scope
+### Phase A：Direction Core 与事务内核
 
-交付：
+交付 DirectionState、Core records、Directive、Patch merge、冲突检测、DirectionPlan、Prepare/Commit/Settle、fake backend、Finish/Abort/Rollback/Skip。
 
-- `IStageManager` 和 Stage Registry。
-- 默认 `main` Stage。
-- `ActorAddress`。
-- Actor Manager 使用 Stage-scoped key。
-- Stage prepare、dormant 和 unload。
-- 旧命令默认路由到 `main` Stage。
+验收：Prepare 失败不改变 BeforeState；同一路径冲突提供 Yarn source location；Commit 单次递增 revision；commit/settle 可测试；Rollback 恢复完整 BeforeState。
 
-验收：
+### Phase B：单 Stage、单 View、Backdrop/CG Vertical Slice
 
-- 多个 Stage 可以同时 Prepared。
-- 相同 ActorId 可以存在于不同 Stage。
-- Stage 状态互相隔离。
-- Stage unload 不遗留 Actor、资源或 Operation。
-- 现有脚本和测试保持通过。
+交付默认 main Stage/View/Screen、独立 Backdrop、StageSource/CgSource、ViewPose、Stage/Plate backend，以及 `backdrop/place/leave/shot pose/shot cg/beat`。
 
-### Phase B：Camera Rig Registry
+验收：CG 切入不改变 Stage；返回时 Actor 状态保留；Backdrop/Actor/Shot 原子发布；Stage/CG dissolve 无黑帧；不读取 Actor bounds。
 
-交付：
+### Phase C：Multi-Stage
 
-- `ICameraDirector` 和 Rig Registry。
-- 默认 `main` Rig。
-- 现有 Camera Operation 支持 `camera:<id>`。
-- 隐藏 Rig 的 Pose 更新和保存。
-- Rig 生命周期与 Stage 生命周期关联。
+交付 Stage Registry、ActorAddress、Stage lifecycle、`stage:` scope、Node-local qualification、首次写入和 import、Stage limits，并迁移 `Adv02` 中 broadcast 的切入与返回。
 
-验收：
+验收：同 Actor ID 可存在于不同 Stage；cell/broadcast 顺序切换只需一个 View；切走后状态保持；未知 Stage 不静默创建；Stage Prepare 失败不部分发布。
 
-- 多个 Rig 独立保存 Pose。
-- 切走再切回不重置 Pose。
-- 修改隐藏 Rig 不改变当前 Output。
-- Stage unload 正确处理所属 Rig。
+### Phase D：Multi-View 与 Layout
 
-### Phase C：Output Router
+交付 View Registry、具名 View、render lease pool、ScreenState、Layout Resolver、`view:`、`layout` 和 slot binding。
 
-交付：
+验收：同 Stage 双 View 不复制 Actor Tree；未知 View 编译失败；Split/PIP 全部 ready 后提交；被打断 transition 不闪回；unbind 后释放 lease。
 
-- `ICameraOutputRouter`。
-- 默认 `main` Output。
-- Output Pool 和 lease。
-- `camera switch via:cut|dissolve`。
-- render-ready barrier。
-- Output Routing 稳定状态。
+### Phase E：Node Compiler、Preload 与 Alias
 
-验收：
+交付 NodeDirectionModule、source map、`mark`、Shot `as/use`、import、typed preload 和 authoring diagnostics。
 
-- 首次切换不显示旧 Pose 或空白画面。
-- Switch 不改变 Rig Pose。
-- Dissolve 被打断不闪回。
-- 隐藏 Output 后释放渲染资源。
+验收：Node-local 同名不冲突；未 import 的跨 Node 引用失败；一次性内容不要求命名；Yarn 不出现物理路径；静态资源集合可推导。
 
-### Phase D：Composition
+### Phase F：State、Hot Reload、诊断与性能
 
-交付：
+交付新 state schema、原子 Save/Load、Hot Reload transactional reapply、diagnostics、资源上限和清理测试。
 
-- Composition Registry 和 preset loader。
-- 多 Output 同时显示。
-- Output rect、z-index、opacity、rotation、aspect mode。
-- 矩形和自定义裁剪。
-- `camera compose`。
-- Composition State。
-
-验收：
-
-- Composition 切换不修改 Stage、Actor 或 Rig。
-- 多 Output 首帧全部 ready。
-- Skip、Cancel、Reset、Load、Shutdown 无资源残留。
-- 不同窗口比例下布局符合 preset。
-
-### Phase E：持久化、诊断与性能
-
-交付：
-
-- State schema 更新。
-- Stage、Rig、Output 和 Composition diagnostics。
-- 活跃资源计数。
-- 配置上限与 authoring validation。
-- 性能和资源回收测试。
-
-验收：
-
-- Save/Load 恢复稳定画面。
-- 不恢复 transition 中间帧和瞬态资源。
-- 日志可以定位 Stage、Rig、Output 和 Operation。
-- 超出配置上限时产生可操作的错误信息。
+验收：Load 不恢复中间帧；Hot Reload 失败保持旧画面；Reset/Load/Rollback/Shutdown 无资源泄漏；日志可定位 Node、Beat、Stage、Actor、View 和稳定路径。
 
 ## 15. 测试策略
 
 ### Unit
 
-- Stage Registry、生命周期和重复 ID。
-- ActorAddress、默认 Stage 和隔离。
-- Rig Registry、Pose Operation 和重复 ID。
-- Output Routing、Switch 和 ready 顺序。
-- Composition validation 和 preset source 数量。
-- Operation 冲突和终态。
-- State capture、preflight 和 restore。
+- StageId、ViewId 和 Node-local qualification。
+- Sparse Patch merge 与冲突。
+- Stage/View 建立和未知引用。
+- Backdrop/CG ownership。
+- Shot partial Pose merge。
+- Layout slot validation。
+- Beat begin/end/join/finish/abort。
+- TargetState、BeforeState 和 revision。
+- Resource claim、dependency graph 和 state schema。
 
 ### Headless
 
-- 多 Stage 创建、休眠和释放。
-- 多 Rig 更新和切换。
-- Output lease 分配和释放。
-- Reset、Load 和 Shutdown 清理。
-- 无实际像素输出时的确定性生命周期验证。
+- Prepare 无可见副作用和失败清理。
+- Commit 单次性和同 token transition 启动。
+- Rollback、Skip、Stage dormant、View lease。
+- 同 Stage 多 View 不复制逻辑 ActorState。
+- Node abort、Load、Reset 和 Shutdown 清理。
 
 ### Visual Smoke
 
-- 同一 Stage 的多个 Camera Output。
-- 不同 Stage 的多个 Camera Output。
-- Cut、dissolve 和被打断的 dissolve。
-- Split、overlay 和 single Composition。
-- Output resize、rotation、opacity 和 clip。
-- 不同窗口比例下的布局。
+- Backdrop + Actor + Shot Pose 原子首帧。
+- CG 全屏进入、Pose move、返回 Stage。
+- 同 Stage wide/close 双 View。
+- cell/broadcast 跨 Stage split。
+- Stage + CG PIP。
+- Cut、move、dissolve 和中断。
+- Layout resize、rotation、opacity、clip 和不同窗口比例。
+
+### Script Writer 验收
+
+使用简单单人 ADV、Adv02 和真实 multi-view Trial 验证：普通场景无声明样板；一次性内容不命名；显式 Beat 不增加 wait/group/operation；broadcast 返回不重建 Actor；CG 不伪装 Backdrop；multi-view 不暴露 Output/lease；只阅读当前 Yarn Node 即可理解局部演出。
 
 ## 16. 首个技术切片
 
-首个切片只验证基础依赖关系：
+首个切片纵向贯通：
 
-1. 将现有唯一 Stage 包装成默认 `main` Stage。
-2. 创建第二个 Stage，并验证状态隔离。
-3. Actor Manager 引入 `ActorAddress`，保持旧命令默认行为。
-4. 在同一 Stage 创建 `main` 和 `aux` 两个 Camera Rig。
-5. 修改隐藏 `aux` Pose。
-6. 将 `main` Output 从 `main` Rig 切换到 `aux` Rig。
-7. 验证切换首帧、Operation 终态和资源释放。
+1. 建立纯 Core DirectionState、Patch、Plan 和 CommitToken。
+2. 使用 fake backend 验证 Prepare 失败和原子 Commit。
+3. 建立默认 main Stage/View/Screen。
+4. 将 Backdrop 从 Background Actor 中分离。
+5. 实现 StageSource 与 CgSource。
+6. 实现 `backdrop/place/shot pose/shot cg/beat` 最小 Yarn adapter。
+7. 迁移 Adv02 开场 CG Pose、Camera move 和 Curtain open。
+8. 从 CG 切回默认 `main View -> main Stage`，验证 CG 演出未修改 Stage 稳定状态。
+9. 验证 Skip、Rollback、Reset 和 Save/Load 稳定终态。
 
-完成该切片后，再实现多 Output 和 Composition。这样可以先稳定 Stage、Actor、Rig 和 Routing
-之间的领域关系，避免同时修改全部渲染路径。
+首个切片不包含自动 framing/bounds、具名 View、多 View Layout、Shot alias/import、自定义 clip 或旧 Command 兼容层。只有它证明事务模型、Backdrop/CG 分离和 Writer API 可行后，才进入 Multi-Stage 和 Multi-View。
+
+## 17. 完成标准
+
+1. Writer 可以只用 inline command 完成普通 Node。
+2. Beat 原子性覆盖 Actor、Backdrop、View 和 Screen 稳定状态。
+3. 相邻命令不会隐式归组。
+4. Backdrop 与 CG 使用不同状态所有权和 backend。
+5. Multi-Stage 和 Multi-View 可以独立组合。
+6. 未知 Stage/View、资源和 Layout slot 在 Commit 前失败。
+7. Prepare 失败不产生部分可见状态。
+8. Save/Load、Skip、Rollback 和 Hot Reload 使用同一 DirectionState/Plan 模型。
+9. Yarn 不出现物理路径、bounds、ready fence、lease、group 或 operation。
+10. demo Yarn 已迁移，旧 staging handler 已删除，不存在双轨执行。
