@@ -23,6 +23,7 @@ public static class BuiltInStateKeys
     public const string ScriptPlayback = "majo.script.playback";
     public const string SessionHistory = "majo.session.history";
     public const string Stage = "majo.stage";
+    public const string Direction = "majo.direction";
 }
 
 public sealed class StageStateContributor : IStateContributor

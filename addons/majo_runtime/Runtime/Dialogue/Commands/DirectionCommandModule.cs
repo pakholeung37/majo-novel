@@ -40,6 +40,7 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
             .Register<LeaveDirectionCommandArguments>(LeaveAsync)
             .Register<ShotPoseDirectionCommandArguments>(ShotPoseAsync)
             .Register<ShotCgDirectionCommandArguments>(ShotCgAsync)
+            .Register<ShotUseDirectionCommandArguments>(ShotUseAsync)
             .Register<LayoutDirectionCommandArguments>(LayoutAsync)
             .Register<BeatBeginDirectionCommandArguments>(BeatBeginAsync)
             .Register<BeatEndDirectionCommandArguments>(BeatEndAsync)
@@ -115,8 +116,7 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
         ShotPoseDirectionCommandArguments a,
         RuntimeCommandContext c) => ExecuteAsync("shot pose", async () =>
     {
-        await beats.SubmitAsync(
-            new ViewPatch(
+        var patch = new ViewPatch(
                 View(a.View),
                 a.Stage is null
                     ? default
@@ -132,9 +132,24 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
                 a.Rotation is null
                     ? default
                     : DirectionValue<float>.From((float)a.Rotation.Value),
-                Transition(a, c, Enum.GetValues<DirectionTransitionKind>())),
+                Transition(a, c, Enum.GetValues<DirectionTransitionKind>()));
+        if (a.As is not null)
+            scopes.DefineShot(RequireNode(), a.As, patch);
+        await beats.SubmitAsync(
+            patch,
             a.Join,
             c.CancellationToken);
+    });
+
+    private Task ShotUseAsync(
+        ShotUseDirectionCommandArguments a,
+        RuntimeCommandContext c) => ExecuteAsync("shot use", async () =>
+    {
+        var patch = scopes.ResolveShot(RequireNode(), a.Alias);
+        if (a.View is not null)
+            patch = patch with { ViewId = View(a.View) };
+        patch = patch with { Transition = Transition(a, c, Enum.GetValues<DirectionTransitionKind>()) };
+        await beats.SubmitAsync(patch, a.Join, c.CancellationToken);
     });
 
     private Task ShotCgAsync(
@@ -329,8 +344,8 @@ public sealed class LeaveDirectionCommandArguments : DirectionTransitionCommandA
     public string Stage { get; set; } = "main";
 }
 
-[RuntimeCommand("shot", "pose", Category = "Direction", Usage = "shot pose [stage:<id>] [view:<id>] [center:<x,y>] [zoom:<number>] [rotation:<degrees>] [via:<kind>] [over:<seconds>] [ease:<curve>] [join:<commit|settle>]")]
-[CommandParameterSet(CommandParameterSetRule.AtLeastOne, "stage", "center", "zoom", "rotation")]
+[RuntimeCommand("shot", "pose", Category = "Direction", Usage = "shot pose [stage:<id>] [view:<id>] [center:<x,y>] [zoom:<number>] [rotation:<degrees>] [as:<alias>] [via:<kind>] [over:<seconds>] [ease:<curve>] [join:<commit|settle>]")]
+[CommandParameterSet(CommandParameterSetRule.AtLeastOne, "stage", "center", "zoom", "rotation", "as")]
 public sealed class ShotPoseDirectionCommandArguments : DirectionTransitionCommandArguments
 {
     [CommandParameter("stage", 0)] public string? Stage { get; set; }
@@ -339,6 +354,7 @@ public sealed class ShotPoseDirectionCommandArguments : DirectionTransitionComma
     [CommandParameter("center", 2)] public Vector2? Center { get; set; }
     [CommandParameter("zoom", 3, Minimum = 0.001)] public double? Zoom { get; set; }
     [CommandParameter("rotation", 4)] public double? Rotation { get; set; }
+    [CommandParameter("as", 5)] public string? As { get; set; }
 }
 
 [RuntimeCommand("shot", "cg", Category = "Direction", Usage = "shot cg <resource> [view:<id>] [center:<x,y>] [zoom:<number>] [rotation:<degrees>] [via:<kind>] [over:<seconds>] [ease:<curve>] [join:<commit|settle>]")]
@@ -351,6 +367,14 @@ public sealed class ShotCgDirectionCommandArguments : DirectionTransitionCommand
     [CommandParameter("center", 2)] public Vector2? Center { get; set; }
     [CommandParameter("zoom", 3, Minimum = 0.001)] public double? Zoom { get; set; }
     [CommandParameter("rotation", 4)] public double? Rotation { get; set; }
+}
+
+[RuntimeCommand("shot", "use", Category = "Direction", Usage = "shot use <alias> [view:<id>] [via:<kind>] [over:<seconds>] [ease:<curve>] [join:<commit|settle>]")]
+public sealed class ShotUseDirectionCommandArguments : DirectionTransitionCommandArguments
+{
+    [CommandParameter("alias", 0, Primary = true, Required = true)]
+    public string Alias { get; set; } = string.Empty;
+    [CommandParameter("view", 1)] public string? View { get; set; }
 }
 
 [RuntimeCommand("layout", Category = "Direction", Usage = "layout <single|split|pip> <slot:view> ...")]

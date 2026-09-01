@@ -2,13 +2,70 @@ using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Direction.Rendering;
 using Majo.Runtime.Dialogue.Commands;
+using Majo.Runtime.Dialogue.Yarn;
+using Majo.Runtime.Dialogue.Yarn.HotReload;
 using Majo.Runtime.Resources;
+using Majo.Runtime.State;
 using Xunit;
 
 namespace Majo.Runtime.UnitTests;
 
 public sealed class DirectionRuntimeTests
 {
+    [Fact]
+    public void NodeDirectionCompilerBuildsNodeLocalSymbolsAndTypedPreloadReferences()
+    {
+        var compiler = new NodeDirectionCompiler();
+        var snapshot = new YarnSourceSnapshot(
+            "test",
+            "test.yarnproject",
+            1,
+            "en",
+            new[]
+            {
+                new YarnSourceFileSnapshot(
+                    "main.yarn",
+                    "main.yarn",
+                    "title: Opening\n---\n<<backdrop Background_001>>\n<<shot pose view:reaction stage:cell>>\n<<shot cg Still_001>>\n<<layout split main:main inset:reaction>>\n===\n",
+                    "hash"),
+            },
+            "fingerprint");
+
+        var module = Assert.Single(compiler.Compile(snapshot));
+        Assert.Equal("Opening", module.NodeId);
+        Assert.Contains("cell", module.Symbols.Stages);
+        Assert.Contains("reaction", module.Symbols.Views);
+        Assert.Contains(module.Resources, resource =>
+            resource.Kind == DirectionResourceKind.Backdrop &&
+            resource.SemanticId == "Background_001");
+        Assert.Contains(module.Resources, resource =>
+            resource.Kind == DirectionResourceKind.Cg &&
+            resource.SemanticId == "Still_001");
+        Assert.Equal(4, module.SourceMaps.Count);
+    }
+
+    [Fact]
+    public void NodeDirectionCompilerCollectsExplicitImportsAndAuthoringDiagnostics()
+    {
+        var compiler = new NodeDirectionCompiler();
+        var snapshot = new YarnSourceSnapshot(
+            "test", "test.yarnproject", 1, "en",
+            new[]
+            {
+                new YarnSourceFileSnapshot(
+                    "main.yarn", "main.yarn",
+                    "title: Opening\n---\n<<import stage news from Broadcast:broadcast>>\n<<backdrop>>\n===\n",
+                    "hash"),
+            },
+            "fingerprint");
+
+        var module = Assert.Single(compiler.Compile(snapshot));
+        var import = Assert.Single(module.Imports);
+        Assert.Equal("stage", import.Kind);
+        Assert.Equal("news", import.Alias);
+        Assert.Equal("Broadcast", import.SourceNode);
+        Assert.Contains(module.Diagnostics, diagnostic => diagnostic.Code == "DIR001");
+    }
     [Fact]
     public void DirectionScopeQualifiesNodeLocalSymbolsAndResolvesExplicitImports()
     {
@@ -25,6 +82,22 @@ public sealed class DirectionRuntimeTests
         Assert.Equal(first, scopes.ResolveStage("Trial01", "news"));
         Assert.Throws<DirectionReferenceException>(() =>
             scopes.ImportStage("Trial01", "news", "Adv03", "broadcast"));
+    }
+
+    [Fact]
+    public void DirectionScopeKeepsShotAliasesNodeLocal()
+    {
+        var scopes = new DirectionScopeResolver();
+        var patch = new ViewPatch(
+            ViewId.Main,
+            default,
+            default,
+            DirectionValue<float>.From(1.5f),
+            default,
+            DirectionTransitionSpec.Cut);
+        scopes.DefineShot("Opening", "wide", patch);
+        Assert.Equal(patch, scopes.ResolveShot("Opening", "wide"));
+        Assert.Throws<DirectionReferenceException>(() => scopes.ResolveShot("Other", "wide"));
     }
 
     [Fact]
@@ -47,6 +120,30 @@ public sealed class DirectionRuntimeTests
         Assert.Equal(StageId.Main, view.StageId);
         Assert.Equal(ViewId.Main, state.Screen.Bindings[LayoutSlotId.Main]);
         Assert.Equal(0, state.Revision);
+    }
+
+    [Fact]
+    public async Task DirectionStateContributorRestoresThroughAtomicCoordinatorCommit()
+    {
+        var backend = new FakeDirectionBackend { AutoSettle = true };
+        var coordinator = CreateCoordinator(backend);
+        var contributor = new DirectionStateContributor(coordinator);
+        var initial = await contributor.CaptureAsync(default);
+
+        await coordinator.ExecuteAsync(new IDirectionDirective[]
+        {
+            new BackdropPatch(
+                new StageId("broadcast"),
+                new BackdropState(new ResourceKey("Background_025_001")),
+                DirectionTransitionSpec.Cut),
+        }, DirectionCompletionBarrier.Settle);
+        Assert.Contains(new StageId("broadcast"), coordinator.State.Stages.Keys);
+
+        await contributor.PreflightAsync(initial, default);
+        await contributor.RestoreAsync(initial, default);
+
+        Assert.DoesNotContain(new StageId("broadcast"), coordinator.State.Stages.Keys);
+        Assert.True(coordinator.State.Revision > 0);
     }
 
     [Fact]

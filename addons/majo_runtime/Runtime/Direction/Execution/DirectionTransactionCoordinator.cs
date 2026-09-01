@@ -85,6 +85,10 @@ public interface IDirectionTransactionCoordinator : IRuntimeService
         CommittedDirectionTransaction transaction,
         CancellationToken cancellationToken = default);
 
+    Task RestoreAsync(
+        DirectionState target,
+        CancellationToken cancellationToken = default);
+
     Task FinishSkippableAsync(CancellationToken cancellationToken = default);
 }
 
@@ -221,6 +225,32 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
     {
         ArgumentNullException.ThrowIfNull(transaction);
         return transaction.FinishAsync(cancellationToken);
+    }
+
+    public async Task RestoreAsync(
+        DirectionState target,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        await commitGate.WaitAsync(cancellationToken);
+        try
+        {
+            var current = State;
+            var plan = new DirectionPlan(
+                DirectionTransactionId.New(),
+                current,
+                target with { Revision = checked(current.Revision + 1) },
+                new[] { new DirectionTransition(new[] { "*" }, DirectionTransitionSpec.Cut) },
+                Array.Empty<ITransientDirectionCue>(),
+                Array.Empty<DirectionResourceClaim>(),
+                DirectionCompletionBarrier.Settle);
+            var committed = await PrepareAndCommitAsync(plan, cancellationToken);
+            await committed.Settlement.WaitAsync(cancellationToken);
+        }
+        finally
+        {
+            commitGate.Release();
+        }
     }
 
     public async Task FinishSkippableAsync(CancellationToken cancellationToken = default)

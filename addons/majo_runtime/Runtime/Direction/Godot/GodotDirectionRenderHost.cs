@@ -412,12 +412,15 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
             SetFullRect(view.Canvas, resolution);
             SetFullRect(view.Content, resolution);
         }
-        LiveOutput.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
-        TransitionSource.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
-        Curtain.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        var screenSize = visibleSize.X > 0 && visibleSize.Y > 0
+            ? ToSize(visibleSize)
+            : resolution;
+        SetFullRect(LiveOutput, screenSize);
+        SetFullRect(TransitionSource, screenSize);
+        SetFullRect(Curtain, screenSize);
         foreach (var pair in screenSlots)
             if (pair.Value.Visible)
-                LayoutSlot(pair.Value, PublishedScreen.Layout, pair.Key, resolution);
+                LayoutSlot(pair.Value, PublishedScreen.Layout, pair.Key, screenSize);
         if (PublishedView is not null) ApplyViewPose(ViewId.Main, PublishedView.Pose);
     }
 
@@ -457,7 +460,7 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
     {
         Name = name,
         ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
-        StretchMode = TextureRect.StretchModeEnum.Scale,
+        StretchMode = TextureRect.StretchModeEnum.KeepAspectCovered,
         MouseFilter = Control.MouseFilterEnum.Ignore,
     };
 
@@ -467,6 +470,10 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
         control.Position = Vector2.Zero;
         control.Size = size;
     }
+
+    private static Vector2I ToSize(Vector2 size) => new(
+        Math.Max(1, Mathf.RoundToInt(size.X)),
+        Math.Max(1, Mathf.RoundToInt(size.Y)));
 
     internal GodotDirectionStageSurface GetOrCreateStage(StageId stageId)
     {
@@ -617,23 +624,14 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
         TextureRect view,
         BackdropFit fit)
     {
-        var textureSize = view.Texture?.GetSize() ?? Vector2.Zero;
-        var viewportSize = new Vector2(surface.Viewport.Size.X, surface.Viewport.Size.Y);
-        if (textureSize.X <= 0 || textureSize.Y <= 0 ||
-            viewportSize.X <= 0 || viewportSize.Y <= 0 ||
-            fit == BackdropFit.Stretch)
+        SetFullRect(view, surface.Viewport.Size);
+        view.StretchMode = fit switch
         {
-            SetFullRect(view, surface.Viewport.Size);
-            return;
-        }
-
-        var scale = fit == BackdropFit.Cover
-            ? Mathf.Max(viewportSize.X / textureSize.X, viewportSize.Y / textureSize.Y)
-            : Mathf.Min(viewportSize.X / textureSize.X, viewportSize.Y / textureSize.Y);
-        var renderedSize = textureSize * scale;
-        view.SetAnchorsPreset(Control.LayoutPreset.TopLeft);
-        view.Position = (viewportSize - renderedSize) / 2;
-        view.Size = renderedSize;
+            BackdropFit.Cover => TextureRect.StretchModeEnum.KeepAspectCovered,
+            BackdropFit.Contain => TextureRect.StretchModeEnum.KeepAspectCentered,
+            BackdropFit.Stretch => TextureRect.StretchModeEnum.Scale,
+            _ => throw new ArgumentOutOfRangeException(nameof(fit)),
+        };
     }
 
     private static Color ToGodot(DirectionColor color) =>

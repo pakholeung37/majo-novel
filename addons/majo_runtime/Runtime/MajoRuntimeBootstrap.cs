@@ -810,6 +810,7 @@ public partial class MajoRuntimeBootstrap : Node
                     resolver.Get<IInputManager>(),
                     resolver.Get<IOperationScheduler>(),
                     resolver.Get<IStateEligibility>(),
+                    resolver.Get<IDirectionTransactionCoordinator>(),
                     stateMigrations,
                     customContributors.Where(value =>
                         value.Scope is StateScope.Game or StateScope.Session).ToArray()),
@@ -825,7 +826,8 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(IDialoguePlayer),
                 typeof(IInputManager),
                 typeof(IOperationScheduler),
-                typeof(IStateEligibility));
+                typeof(IStateEligibility),
+                typeof(IDirectionTransactionCoordinator));
             services.AddSingleton<IGameSessionCoordinator>(
                 resolver => new GameSessionCoordinator(
                     resolver.Get<IRuntimeSessionController>(),
@@ -963,6 +965,7 @@ public partial class MajoRuntimeBootstrap : Node
         IInputManager input,
         IOperationScheduler operations,
         IStateEligibility eligibility,
+        IDirectionTransactionCoordinator direction,
         StateMigrationRegistry migrations,
         IReadOnlyList<IStateContributor> customContributors)
     {
@@ -971,7 +974,8 @@ public partial class MajoRuntimeBootstrap : Node
             .Register(new ActorStateContributor(actors))
             .Register(new AudioStateContributor(audio))
             .Register(new StageStateContributor(camera, curtain, effects, transitions))
-            .Register(new SessionHistoryStateContributor(history));
+            .Register(new SessionHistoryStateContributor(history))
+            .Register(new DirectionStateContributor(direction));
         foreach (var contributor in customContributors)
         {
             contributors.Register(contributor);

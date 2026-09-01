@@ -228,6 +228,7 @@ public partial class HeadlessTestRunner
                     BuiltInStateKeys.Actors,
                     BuiltInStateKeys.AudioBgm,
                     BuiltInStateKeys.Stage,
+                    BuiltInStateKeys.Direction,
                     BuiltInStateKeys.ScriptPlayback,
                 ]),
             "M9.6 StateManager did not capture all built-in Game contributors.");

@@ -2,7 +2,7 @@
 
 ## 1. 文档状态
 
-- 状态：Draft 1.0
+- 状态：Implementation baseline 1.0
 - 目标：以 Script Writer 体验为优先，破坏性重构现有 Stage、Camera 与 Yarn staging command 执行模型
 - 核心能力：显式 Beat 事务、Multi-Stage、Multi-View、Screen Layout、Backdrop/CG 分离、原子 Prepare/Commit、Rollback、Hot Reload
 - Authoring 原则：inline-first、node-local、name-on-reuse、资源路径隐式解析
@@ -11,6 +11,8 @@
 - Phase B 进度（2026-09-01）：独立 StageViewport → ViewViewport → Screen 的单 Stage/单 View Godot render chain、Backdrop/CG typed texture Prepare、Pose/Cut/Move/Dissolve、Curtain backend，以及 Actor `place/leave` 的完整隐藏树 Prepare、cut root swap、actor-level move/fade/finish 已落地；`backdrop/place/leave/shot pose/shot cg/beat` 已注册到 Yarn adapter，Bootstrap 已装配 Direction service graph，真实 Yarn headless vertical slice 已覆盖显式 Beat 原子提交、单命令事务、CG/Stage 往返和 Actor transition。Phase B 完成，下一阶段进入 Multi-Stage
 - Phase C 进度（2026-09-01）：Stage Registry、独立 Stage SubViewport/Backdrop/Actor tree、`ActorAddress`、可配置 Stage limit、`stage:` node-local qualification 和 compiler-facing explicit import resolver 已落地；main View 已能在多个 Stage 间顺序切换并保留 dormant Stage 状态。真实 Yarn headless 测试覆盖同 Actor ID 跨 Stage 隔离、切入/返回和失败 Prepare 清理。Phase C runtime vertical slice 完成，下一阶段进入 Multi-View/Layout
 - Phase D 进度（2026-09-01）：View Registry、每 View 独立观察 SubViewport、`layout single/split/pip` 与 Screen slot binding 已落地；同一 Stage 可被多个 View 观察，View 状态与 Stage Actor tree 不复制；真实 headless 测试覆盖 reaction View、split layout、Stage/CG 既有行为和 reset/shutdown。Phase D runtime vertical slice 完成，下一阶段进入 Node Compiler/Preload/Alias
+- Phase E 进度（2026-09-01）：`NodeDirectionCompiler` 已接入 Yarn runtime compiler，生成 node-local symbols、source maps、显式 `import stage/view ... from Node:symbol`、Shot alias/mark 收集、typed preload references 与 authoring diagnostics；编译诊断会阻止含 Direction authoring error 的 hot-reload candidate。
+- Phase F 进度（2026-09-01）：`majo.direction` durable state contributor 已接入 StateManager，保存完整 Stage/Actor/View/Screen 状态（含 Backdrop fit/tint 与 Stage/CG source），Load 通过 Direction coordinator 的 prepare→cut commit 原子恢复并递增 revision；Reset/Shutdown 复用 coordinator 生命周期。Hot Reload 继续沿用 checkpoint replay，Direction commands 由同一 compiler 诊断和事务入口执行。
 - 相关文档：
   - [`camera-runtime-next-phases.md`](camera-runtime-next-phases.md)
   - [`archive/camera-view-transition-design.md`](archive/camera-view-transition-design.md)

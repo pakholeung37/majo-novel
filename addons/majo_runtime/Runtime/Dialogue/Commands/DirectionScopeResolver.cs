@@ -18,6 +18,10 @@ public interface IDirectionScopeResolver : IRuntimeService
     void ImportStage(string nodeId, string alias, string sourceNodeId, string sourceSymbol);
 
     void ImportView(string nodeId, string alias, string sourceNodeId, string sourceSymbol);
+
+    void DefineShot(string nodeId, string alias, ViewPatch patch);
+
+    ViewPatch ResolveShot(string nodeId, string alias);
 }
 
 /// <summary>
@@ -29,6 +33,7 @@ public sealed class DirectionScopeResolver : IDirectionScopeResolver
 {
     private readonly Dictionary<(string Node, string Alias), StageId> stageImports = new();
     private readonly Dictionary<(string Node, string Alias), ViewId> viewImports = new();
+    private readonly Dictionary<(string Node, string Alias), ViewPatch> shotAliases = new();
 
     public StageId ResolveStage(string nodeId, string symbol)
     {
@@ -72,6 +77,22 @@ public sealed class DirectionScopeResolver : IDirectionScopeResolver
         AddImport(viewImports, (node, localAlias), source, "View");
     }
 
+    public void DefineShot(string nodeId, string alias, ViewPatch patch)
+    {
+        ArgumentNullException.ThrowIfNull(patch);
+        var (node, localAlias) = Validate(nodeId, alias);
+        AddImport(shotAliases, (node, localAlias), patch, "Shot");
+    }
+
+    public ViewPatch ResolveShot(string nodeId, string alias)
+    {
+        var (node, localAlias) = Validate(nodeId, alias);
+        if (!shotAliases.TryGetValue((node, localAlias), out var patch))
+            throw new DirectionReferenceException(
+                $"Shot alias '{localAlias}' is not defined in Node '{node}'.");
+        return patch;
+    }
+
     public Task InitializeAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -83,6 +104,7 @@ public sealed class DirectionScopeResolver : IDirectionScopeResolver
         cancellationToken.ThrowIfCancellationRequested();
         stageImports.Clear();
         viewImports.Clear();
+        shotAliases.Clear();
         return Task.CompletedTask;
     }
 
@@ -121,7 +143,6 @@ public sealed class DirectionScopeResolver : IDirectionScopeResolver
         (string Node, string Alias) key,
         T value,
         string kind)
-        where T : struct
     {
         if (!imports.TryAdd(key, value))
         {

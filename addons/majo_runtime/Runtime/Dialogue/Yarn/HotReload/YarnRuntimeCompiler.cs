@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using Yarn;
 using Yarn.Compiler;
 using YarnSpinnerGodot;
+using Majo.Runtime.Dialogue.Yarn;
 
 namespace Majo.Runtime.Dialogue.Yarn.HotReload;
 
@@ -17,6 +18,9 @@ public sealed record YarnRuntimeCompilation(
     CompilationResult Result,
     IReadOnlyList<YarnCompilationDiagnostic> Diagnostics)
 {
+    public IReadOnlyList<NodeDirectionModule> DirectionModules { get; init; } =
+        Array.Empty<NodeDirectionModule>();
+
     public bool HasErrors => Diagnostics.Any(diagnostic =>
         string.Equals(diagnostic.Severity, "Error", StringComparison.OrdinalIgnoreCase));
 }
@@ -69,6 +73,14 @@ public sealed class YarnRuntimeCompiler
                 diagnostic.Range.End.Character,
                 diagnostic.Message);
         }).ToArray();
-        return new YarnRuntimeCompilation(snapshot, result, Array.AsReadOnly(diagnostics));
+        var directionModules = new NodeDirectionCompiler().Compile(snapshot);
+        var directionDiagnostics = directionModules
+            .SelectMany(module => module.Diagnostics)
+            .ToArray();
+        var allDiagnostics = diagnostics.Concat(directionDiagnostics).ToArray();
+        return new YarnRuntimeCompilation(snapshot, result, Array.AsReadOnly(allDiagnostics))
+        {
+            DirectionModules = directionModules,
+        };
     }
 }

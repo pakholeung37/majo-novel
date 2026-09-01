@@ -95,8 +95,8 @@ public partial class ManosabaDemoController : Node
 				services.Get<ISettingsOverlay>(),
 				audio);
 
-			await services.Get<IScriptPreloadManager>().PrepareAsync(
-				CreateOpeningPreloadWindow());
+			// await services.Get<IScriptPreloadManager>().PrepareAsync(
+			// 	CreateOpeningPreloadWindow());
 
 			var dialogue = services.Get<IDialoguePlayer>();
 			await dialogue.StartAsync();
@@ -114,10 +114,10 @@ public partial class ManosabaDemoController : Node
 			"manosaba-act01-adv02-opening-resources",
 			[
 				ResourcePreloadEntry.Create<Texture2D>(
-					new ResourceKey("backgrounds/stills/Still_490_001"),
+					new ResourceKey("backgrounds/Still_490_001"),
 					estimatedBytes: 32 * mib),
 				ResourcePreloadEntry.Create<Texture2D>(
-					new ResourceKey("backgrounds/scenes/Background_001_001"),
+					new ResourceKey("backgrounds/Background_001_001"),
 					estimatedBytes: 32 * mib),
 				ResourcePreloadEntry.Create<Texture2D>(
 					new ResourceKey("characters/Ema/Ema_Angle01"),
