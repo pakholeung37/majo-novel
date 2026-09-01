@@ -81,4 +81,7 @@ title: DirectionMultiStage
 Narrator: broadcast stage shown #line:m4-direction-broadcast
 <<shot pose stage:main via:cut join:settle>>
 Narrator: main stage restored #line:m4-direction-main-return
+<<shot pose view:reaction stage:main center:65,50 zoom:1.8 via:cut>>
+<<layout split main:main inset:reaction via:cut join:settle>>
+Narrator: split layout shown #line:m4-direction-split
 ===

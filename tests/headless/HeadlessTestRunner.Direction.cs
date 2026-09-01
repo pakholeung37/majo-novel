@@ -354,6 +354,31 @@ public partial class HeadlessTestRunner
                 !host.StageIds.Contains(failedStage),
             "Failed Multi-Stage Prepare partially published state or changed the View.");
 
+        var reaction = new ViewId("reaction");
+        var inset = new LayoutSlotId("inset");
+        await coordinator.ExecuteAsync(
+            new IDirectionDirective[]
+            {
+                ViewPatchFor(
+                    new StageViewSource(StageId.Main),
+                    new ViewPose(new DirectionPoint(65, 50), 1.8f, 0),
+                    DirectionTransitionSpec.Cut,
+                    reaction),
+                new ScreenPatch(
+                    new LayoutId("split"),
+                    new Dictionary<LayoutSlotId, ViewId>
+                    {
+                        [LayoutSlotId.Main] = ViewId.Main,
+                        [inset] = reaction,
+                    },
+                    DirectionTransitionSpec.Cut),
+            },
+            DirectionCompletionBarrier.Settle);
+        Assert(host.ViewIds.Contains(reaction) &&
+                host.PublishedScreen.Layout == new LayoutId("split") &&
+                host.PublishedScreen.Bindings[inset] == reaction,
+            "Direction split layout did not publish a second persistent View.");
+
         await stageBackend.ResetAsync(CancellationToken.None);
         await host.ResetAsync(CancellationToken.None);
         Assert(host.PublishedBackdrop is null && host.Backdrop.Texture is null,
@@ -381,8 +406,9 @@ public partial class HeadlessTestRunner
     private static ViewPatch ViewPatchFor(
         ViewSource source,
         ViewPose pose,
-        DirectionTransitionSpec transition) => new(
-            ViewId.Main,
+        DirectionTransitionSpec transition,
+        ViewId? viewId = null) => new(
+            viewId ?? ViewId.Main,
             DirectionValue<ViewSource>.From(source),
             DirectionValue<DirectionPoint>.From(pose.Center),
             DirectionValue<float>.From(pose.Zoom),

@@ -132,6 +132,27 @@ public sealed record ScreenState(
         }));
 }
 
+public static class DirectionLayoutCatalog
+{
+    public static IReadOnlySet<LayoutSlotId> RequiredSlots(LayoutId layout) =>
+        layout.Value.ToLowerInvariant() switch
+        {
+            "single" => new HashSet<LayoutSlotId> { LayoutSlotId.Main },
+            "split" => new HashSet<LayoutSlotId>
+            {
+                LayoutSlotId.Main,
+                new LayoutSlotId("inset"),
+            },
+            "pip" => new HashSet<LayoutSlotId>
+            {
+                LayoutSlotId.Main,
+                new LayoutSlotId("inset"),
+            },
+            _ => throw new DirectionReferenceException(
+                $"Unknown Direction layout '{layout}'."),
+        };
+}
+
 public sealed record CurtainState(DirectionColor Color, float Opacity)
 {
     public static CurtainState Open { get; } = new(DirectionColor.Black, 0);

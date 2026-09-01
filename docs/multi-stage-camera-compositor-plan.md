@@ -10,6 +10,7 @@
 - 实施进度（2026-09-01）：Phase A 的纯 Direction Core、Planner、Prepare/Commit 协调器、显式 Beat runtime 与 fake backend 单测已完成
 - Phase B 进度（2026-09-01）：独立 StageViewport → ViewViewport → Screen 的单 Stage/单 View Godot render chain、Backdrop/CG typed texture Prepare、Pose/Cut/Move/Dissolve、Curtain backend，以及 Actor `place/leave` 的完整隐藏树 Prepare、cut root swap、actor-level move/fade/finish 已落地；`backdrop/place/leave/shot pose/shot cg/beat` 已注册到 Yarn adapter，Bootstrap 已装配 Direction service graph，真实 Yarn headless vertical slice 已覆盖显式 Beat 原子提交、单命令事务、CG/Stage 往返和 Actor transition。Phase B 完成，下一阶段进入 Multi-Stage
 - Phase C 进度（2026-09-01）：Stage Registry、独立 Stage SubViewport/Backdrop/Actor tree、`ActorAddress`、可配置 Stage limit、`stage:` node-local qualification 和 compiler-facing explicit import resolver 已落地；main View 已能在多个 Stage 间顺序切换并保留 dormant Stage 状态。真实 Yarn headless 测试覆盖同 Actor ID 跨 Stage 隔离、切入/返回和失败 Prepare 清理。Phase C runtime vertical slice 完成，下一阶段进入 Multi-View/Layout
+- Phase D 进度（2026-09-01）：View Registry、每 View 独立观察 SubViewport、`layout single/split/pip` 与 Screen slot binding 已落地；同一 Stage 可被多个 View 观察，View 状态与 Stage Actor tree 不复制；真实 headless 测试覆盖 reaction View、split layout、Stage/CG 既有行为和 reset/shutdown。Phase D runtime vertical slice 完成，下一阶段进入 Node Compiler/Preload/Alias
 - 相关文档：
   - [`camera-runtime-next-phases.md`](camera-runtime-next-phases.md)
   - [`archive/camera-view-transition-design.md`](archive/camera-view-transition-design.md)
@@ -779,6 +780,8 @@ Runtime/Dialogue/Direction/
 交付 View Registry、具名 View、render lease pool、ScreenState、Layout Resolver、`view:`、`layout` 和 slot binding。
 
 验收：同 Stage 双 View 不复制 Actor Tree；未知 View 编译失败；Split/PIP 全部 ready 后提交；被打断 transition 不闪回；unbind 后释放 lease。
+
+实施说明：当前 Godot compositor 已提供最小 `single`、`split`、`pip` preset；slot 几何仍由 backend preset 负责，Yarn 不暴露矩形。View lease 的精细复用和解绑回收留到后续性能阶段，逻辑 View 可先保持 dormant。
 
 ### Phase E：Node Compiler、Preload 与 Alias
 

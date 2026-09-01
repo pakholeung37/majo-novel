@@ -30,11 +30,12 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(plan);
-        if (viewId != ViewId.Main || target is null)
+        if (target is null)
         {
             throw new DirectionReferenceException(
-                $"The first Godot Direction backend only supports persistent View '{ViewId.Main}'.");
+                $"Direction View '{viewId}' has no target state.");
         }
+        host.GetOrCreateView(viewId);
 
         Texture2D targetTexture = target.Source switch
         {
@@ -48,17 +49,18 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
 
         var transition = GodotDirectionRendering.ResolveTransition(
             plan,
-            path => path.StartsWith("view/main/", StringComparison.Ordinal));
+            path => path.StartsWith($"view/{viewId.Value}/", StringComparison.Ordinal));
         ImageTexture? capture = null;
         if (transition.DurationSeconds > 0 &&
             transition.Kind is DirectionTransitionKind.Fade or DirectionTransitionKind.Dissolve)
         {
-            capture = host.CaptureView();
+            capture = host.CaptureView(viewId);
         }
 
         return new PreparedView(
             host,
-            before ?? host.PublishedView ?? target,
+            viewId,
+            before ?? target,
             target,
             targetTexture,
             capture,
@@ -68,6 +70,7 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
     private sealed class PreparedView : IPreparedDirectionComponent
     {
         private readonly GodotDirectionRenderHost host;
+        private readonly ViewId viewId;
         private readonly ViewState before;
         private readonly ViewState target;
         private readonly Texture2D targetTexture;
@@ -81,6 +84,7 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
 
         public PreparedView(
             GodotDirectionRenderHost host,
+            ViewId viewId,
             ViewState before,
             ViewState target,
             Texture2D targetTexture,
@@ -88,6 +92,7 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
             DirectionTransitionSpec transition)
         {
             this.host = host;
+            this.viewId = viewId;
             this.before = before;
             this.target = target;
             this.targetTexture = targetTexture;
@@ -110,7 +115,7 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
                 host.TransitionSource.Visible = true;
             }
 
-            host.PublishView(target, targetTexture);
+            host.PublishView(viewId, target, targetTexture);
             if (transition.DurationSeconds <= 0 || transition.Kind == DirectionTransitionKind.Cut)
             {
                 Complete();
@@ -122,9 +127,10 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
             switch (transition.Kind)
             {
                 case DirectionTransitionKind.Move:
-                    host.ApplyViewPose(before.Pose);
+                    host.ApplyViewPose(viewId, before.Pose);
                     tween.TweenMethod(
                         Callable.From<float>(progress => host.ApplyViewPose(
+                            viewId,
                             GodotDirectionRendering.Interpolate(
                                 before.Pose,
                                 target.Pose,
@@ -183,7 +189,7 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
                 tween.Finished -= OnFinished;
             GodotDirectionRendering.Kill(tween);
             tween = null;
-            host.PublishView(target, targetTexture);
+            host.PublishView(viewId, target, targetTexture);
             host.ClearViewTransition();
             settlement.TrySetResult();
         }

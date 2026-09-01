@@ -308,6 +308,7 @@ public partial class HeadlessTestRunner
         var broadcastStage = scopes.ResolveStage("DirectionMultiStage", "broadcast");
         var directionBroadcastShown = false;
         var directionMainReturned = false;
+        var directionSplitShown = false;
         presenter.LinePresented += line =>
         {
             var state = direction.State;
@@ -329,6 +330,14 @@ public partial class HeadlessTestRunner
                         mainReturnSource.StageId == StageId.Main &&
                         state.Stages[broadcastStage].Actors[new ActorId("hero")].Appearance == "blue";
                     break;
+                case "line:m4-direction-split":
+                    directionSplitShown =
+                        state.Revision == 9 &&
+                        state.Screen.Layout == new LayoutId("split") &&
+                        state.Screen.Bindings.TryGetValue(new LayoutSlotId("inset"), out var insetView) &&
+                        insetView == scopes.ResolveView("DirectionMultiStage", "reaction") &&
+                        directionHost.ViewIds.Contains(insetView);
+                    break;
             }
         };
         await dialogue.StartAsync(new DialogueStartRequest(StartNode: "DirectionMultiStage"));
@@ -337,6 +346,8 @@ public partial class HeadlessTestRunner
             "Yarn did not create and show a node-local broadcast Stage atomically.");
         Assert(directionMainReturned,
             "Returning main View to main Stage did not preserve the dormant broadcast Stage.");
+        Assert(directionSplitShown,
+            "Yarn layout did not bind a second View into the split Screen.");
 
         await bootstrap.RequestShutdownAsync();
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);

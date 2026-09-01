@@ -286,6 +286,19 @@ public sealed class DirectionPlanner : IDirectionPlanner
 
         var paths = new List<string>();
         RegisterWrite("screen/layout", patch.SourceLocation, writes, paths);
+        var required = DirectionLayoutCatalog.RequiredSlots(patch.Layout);
+        if (patch.Bindings.Count != required.Count ||
+            required.Any(slot => !patch.Bindings.ContainsKey(slot)))
+        {
+            throw new DirectionReferenceException(
+                $"Layout '{patch.Layout}' requires exactly these slots: " +
+                string.Join(", ", required.Select(slot => slot.Value)));
+        }
+        if (patch.Bindings.Keys.Any(slot => !required.Contains(slot)))
+        {
+            throw new DirectionReferenceException(
+                $"Layout '{patch.Layout}' contains an unknown slot.");
+        }
         foreach (var binding in patch.Bindings)
         {
             RegisterWrite(

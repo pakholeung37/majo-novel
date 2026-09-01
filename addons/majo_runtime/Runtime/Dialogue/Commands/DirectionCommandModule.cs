@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Direction.Core;
@@ -39,6 +40,7 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
             .Register<LeaveDirectionCommandArguments>(LeaveAsync)
             .Register<ShotPoseDirectionCommandArguments>(ShotPoseAsync)
             .Register<ShotCgDirectionCommandArguments>(ShotCgAsync)
+            .Register<LayoutDirectionCommandArguments>(LayoutAsync)
             .Register<BeatBeginDirectionCommandArguments>(BeatBeginAsync)
             .Register<BeatEndDirectionCommandArguments>(BeatEndAsync)
             .Register<BeatJoinDirectionCommandArguments>(BeatJoinAsync)
@@ -155,6 +157,22 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
                     ? default
                     : DirectionValue<float>.From((float)a.Rotation.Value),
                 Transition(a, c, Enum.GetValues<DirectionTransitionKind>())),
+            a.Join,
+            c.CancellationToken);
+    });
+
+    private Task LayoutAsync(
+        LayoutDirectionCommandArguments a,
+        RuntimeCommandContext c) => ExecuteAsync("layout", async () =>
+    {
+        var bindings = new Dictionary<LayoutSlotId, ViewId>();
+        foreach (var pair in a.Bindings)
+            bindings.Add(new LayoutSlotId(pair.Key), View(pair.Value));
+        await beats.SubmitAsync(
+            new ScreenPatch(
+                new LayoutId(a.Layout),
+                bindings,
+                Transition(a, c, DirectionTransitionKind.Cut, DirectionTransitionKind.Dissolve)),
             a.Join,
             c.CancellationToken);
     });
@@ -333,6 +351,29 @@ public sealed class ShotCgDirectionCommandArguments : DirectionTransitionCommand
     [CommandParameter("center", 2)] public Vector2? Center { get; set; }
     [CommandParameter("zoom", 3, Minimum = 0.001)] public double? Zoom { get; set; }
     [CommandParameter("rotation", 4)] public double? Rotation { get; set; }
+}
+
+[RuntimeCommand("layout", Category = "Direction", Usage = "layout <single|split|pip> <slot:view> ...")]
+public sealed class LayoutDirectionCommandArguments : DirectionTransitionCommandArguments
+{
+    [CommandParameter("layout", 0, Primary = true, Required = true)]
+    public string Layout { get; set; } = "single";
+
+    [CommandParameter("main", 1)] public string? Main { get; set; }
+    [CommandParameter("inset", 2)] public string? Inset { get; set; }
+
+    public IReadOnlyDictionary<string, string> Bindings
+    {
+        get
+        {
+            var bindings = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["main"] = Main ?? "main",
+            };
+            if (Inset is not null) bindings["inset"] = Inset;
+            return bindings;
+        }
+    }
 }
 
 [RuntimeCommand("beat", "begin", Category = "Direction", Usage = "beat begin id:<id> [over:<seconds>] [ease:<curve>]")]
