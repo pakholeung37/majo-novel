@@ -357,7 +357,8 @@ public partial class MajoRuntimeBootstrap : Node
             .AddSingleton<GodotDirectionRenderHost>(
                 _ => new GodotDirectionRenderHost(
                     this,
-                    Configuration!.Actors!.ReferenceResolution))
+                    Configuration!.Actors!.ReferenceResolution,
+                    Configuration!.Stage!.MaxDirectionStages))
             .AddSingleton<GodotDirectionStageBackend>(
                 resolver => new GodotDirectionStageBackend(
                     resolver.Get<GodotDirectionRenderHost>(),
@@ -396,6 +397,7 @@ public partial class MajoRuntimeBootstrap : Node
                 resolver => new DirectionBeatRuntime(
                     resolver.Get<IDirectionTransactionCoordinator>()),
                 typeof(IDirectionTransactionCoordinator))
+            .AddSingleton<IDirectionScopeResolver>(_ => new DirectionScopeResolver())
             .AddSingleton<IScriptPreloadManager>(
                 resolver => new ScriptPreloadManager(
                     resolver.Get<IResourceManager>(),
@@ -1033,6 +1035,7 @@ public partial class MajoRuntimeBootstrap : Node
             DirectionPositionResolver ??
                 new Majo.Runtime.Dialogue.Commands.DirectionPositionResolver(
                     Configuration!.Actors!),
+            Host!.Services.Get<IDirectionScopeResolver>(),
             () => dialoguePlayer?.CurrentNode));
         ConfigureCommands?.Invoke(commands);
         var catalog = commands.BuildCatalog();

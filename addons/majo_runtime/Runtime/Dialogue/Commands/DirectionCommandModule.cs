@@ -13,17 +13,20 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
     private readonly IDirectionBeatRuntime beats;
     private readonly IDirectionResourceKeyResolver resources;
     private readonly IDirectionPositionResolver positions;
+    private readonly IDirectionScopeResolver scopes;
     private readonly Func<string?> currentNode;
 
     public DirectionCommandModule(
         IDirectionBeatRuntime beats,
         IDirectionResourceKeyResolver resources,
         IDirectionPositionResolver positions,
+        IDirectionScopeResolver scopes,
         Func<string?> currentNode)
     {
         this.beats = beats ?? throw new ArgumentNullException(nameof(beats));
         this.resources = resources ?? throw new ArgumentNullException(nameof(resources));
         this.positions = positions ?? throw new ArgumentNullException(nameof(positions));
+        this.scopes = scopes ?? throw new ArgumentNullException(nameof(scopes));
         this.currentNode = currentNode ?? throw new ArgumentNullException(nameof(currentNode));
     }
 
@@ -232,8 +235,18 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
         };
     }
 
-    private static StageId Stage(string value) => new(value);
-    private static ViewId View(string value) => new(value);
+    private StageId Stage(string value) => scopes.ResolveStage(RequireNode(), value);
+
+    private ViewId View(string value) => scopes.ResolveView(RequireNode(), value);
+
+    private string RequireNode()
+    {
+        var node = currentNode();
+        if (string.IsNullOrWhiteSpace(node))
+            throw new DirectionReferenceException(
+                "Direction symbols cannot be resolved outside a Yarn Node.");
+        return node;
+    }
 
     private static async Task ExecuteAsync(string command, Func<Task> action)
     {

@@ -9,6 +9,7 @@
 - 兼容策略：不以旧 staging command 或旧存档 schema 兼容为设计约束
 - 实施进度（2026-09-01）：Phase A 的纯 Direction Core、Planner、Prepare/Commit 协调器、显式 Beat runtime 与 fake backend 单测已完成
 - Phase B 进度（2026-09-01）：独立 StageViewport → ViewViewport → Screen 的单 Stage/单 View Godot render chain、Backdrop/CG typed texture Prepare、Pose/Cut/Move/Dissolve、Curtain backend，以及 Actor `place/leave` 的完整隐藏树 Prepare、cut root swap、actor-level move/fade/finish 已落地；`backdrop/place/leave/shot pose/shot cg/beat` 已注册到 Yarn adapter，Bootstrap 已装配 Direction service graph，真实 Yarn headless vertical slice 已覆盖显式 Beat 原子提交、单命令事务、CG/Stage 往返和 Actor transition。Phase B 完成，下一阶段进入 Multi-Stage
+- Phase C 进度（2026-09-01）：Stage Registry、独立 Stage SubViewport/Backdrop/Actor tree、`ActorAddress`、可配置 Stage limit、`stage:` node-local qualification 和 compiler-facing explicit import resolver 已落地；main View 已能在多个 Stage 间顺序切换并保留 dormant Stage 状态。真实 Yarn headless 测试覆盖同 Actor ID 跨 Stage 隔离、切入/返回和失败 Prepare 清理。Phase C runtime vertical slice 完成，下一阶段进入 Multi-View/Layout
 - 相关文档：
   - [`camera-runtime-next-phases.md`](camera-runtime-next-phases.md)
   - [`archive/camera-view-transition-design.md`](archive/camera-view-transition-design.md)
@@ -770,6 +771,8 @@ Runtime/Dialogue/Direction/
 交付 Stage Registry、ActorAddress、Stage lifecycle、`stage:` scope、Node-local qualification、首次写入和 import、Stage limits，并迁移 `Adv02` 中 broadcast 的切入与返回。
 
 验收：同 Actor ID 可存在于不同 Stage；cell/broadcast 顺序切换只需一个 View；切走后状态保持；未知 Stage 不静默创建；Stage Prepare 失败不部分发布。
+
+实施说明：import 的解析内核在本阶段交付，Yarn import 语法由 Phase E 的 Node compiler 生成，不增加临时 runtime command。`Adv02` 的 broadcast 行为已用同构的真实 Yarn vertical slice 验证；原 demo 仍大量使用旧 `back/char/camera/curtain` staging 链路，在 Direction cue 和整段 staging 迁移完成前不做局部替换，以免同一场景同时发布两套输出。
 
 ### Phase D：Multi-View 与 Layout
 

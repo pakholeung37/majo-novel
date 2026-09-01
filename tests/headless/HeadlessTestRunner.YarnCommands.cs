@@ -304,6 +304,40 @@ public partial class HeadlessTestRunner
         Assert(directionActorLeft,
             "Yarn leave did not settle the target Actor state.");
 
+        var scopes = bootstrap.Host.Services.Get<IDirectionScopeResolver>();
+        var broadcastStage = scopes.ResolveStage("DirectionMultiStage", "broadcast");
+        var directionBroadcastShown = false;
+        var directionMainReturned = false;
+        presenter.LinePresented += line =>
+        {
+            var state = direction.State;
+            switch (line.Id)
+            {
+                case "line:m4-direction-broadcast":
+                    directionBroadcastShown =
+                        state.Revision == 6 &&
+                        state.Stages[StageId.Main].Actors[new ActorId("hero")].Appearance == "red" &&
+                        state.Stages[broadcastStage].Actors[new ActorId("hero")].Appearance == "blue" &&
+                        state.Views[ViewId.Main].Source is StageViewSource source &&
+                        source.StageId == broadcastStage &&
+                        directionHost.StageIds.Contains(broadcastStage);
+                    break;
+                case "line:m4-direction-main-return":
+                    directionMainReturned =
+                        state.Revision == 7 &&
+                        state.Views[ViewId.Main].Source is StageViewSource mainReturnSource &&
+                        mainReturnSource.StageId == StageId.Main &&
+                        state.Stages[broadcastStage].Actors[new ActorId("hero")].Appearance == "blue";
+                    break;
+            }
+        };
+        await dialogue.StartAsync(new DialogueStartRequest(StartNode: "DirectionMultiStage"));
+        await dialogue.Completion;
+        Assert(directionBroadcastShown,
+            "Yarn did not create and show a node-local broadcast Stage atomically.");
+        Assert(directionMainReturned,
+            "Returning main View to main Stage did not preserve the dormant broadcast Stage.");
+
         await bootstrap.RequestShutdownAsync();
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);

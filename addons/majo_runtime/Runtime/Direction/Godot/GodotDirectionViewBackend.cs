@@ -38,10 +38,7 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
 
         Texture2D targetTexture = target.Source switch
         {
-            StageViewSource { StageId: var stageId } when stageId == StageId.Main =>
-                host.StageViewport.GetTexture(),
-            StageViewSource stage => throw new DirectionReferenceException(
-                $"The first Godot Direction backend cannot observe Stage '{stage.StageId}'."),
+            StageViewSource { StageId: var stageId } => host.GetStageTexture(stageId),
             CgViewSource cg => await textures.LoadAsync(
                 cg.Resource,
                 cancellationToken),

@@ -272,6 +272,88 @@ public partial class HeadlessTestRunner
         Assert(GetVisibleActorRoot(host).GetChildCount() == 0,
             "Direction leave did not publish an empty target actor tree.");
 
+        var broadcast = new StageId("broadcast");
+        await coordinator.ExecuteAsync(
+            new IDirectionDirective[]
+            {
+                new BackdropPatch(
+                    broadcast,
+                    new BackdropState(cgKey),
+                    DirectionTransitionSpec.Cut),
+                ActorPatchFor(
+                    "hero",
+                    new DirectionPoint(75, 0),
+                    "blue",
+                    1,
+                    2,
+                    stageId: broadcast),
+                ViewPatchFor(
+                    new StageViewSource(broadcast),
+                    ViewPose.Default,
+                    DirectionTransitionSpec.Cut),
+            },
+            DirectionCompletionBarrier.Settle);
+        var broadcastSurface = host.GetStage(broadcast);
+        var broadcastActor = broadcastSurface.Actors.GetChildren()
+            .OfType<Node2D>()
+            .Single(root => root.Visible)
+            .GetNode<Sprite2D>("hero");
+        Assert(host.PublishedView?.Source is StageViewSource broadcastSource &&
+                broadcastSource.StageId == broadcast &&
+                broadcastActor.Position.IsEqualApprox(new Vector2(480, 360)),
+            "Direction main View did not switch to the independently prepared Stage.");
+
+        await coordinator.ExecuteAsync(
+            new IDirectionDirective[]
+            {
+                ActorPatchFor(
+                    "hero",
+                    new DirectionPoint(25, 0),
+                    "red",
+                    1,
+                    1),
+                ViewPatchFor(
+                    new StageViewSource(StageId.Main),
+                    ViewPose.Default,
+                    DirectionTransitionSpec.Cut),
+            },
+            DirectionCompletionBarrier.Settle);
+        Assert(host.PublishedView?.Source is StageViewSource mainSource &&
+                mainSource.StageId == StageId.Main &&
+                broadcastSurface.Actors.GetChildren()
+                    .OfType<Node2D>()
+                    .Single(root => root.Visible)
+                    .GetNode<Sprite2D>("hero").Position.IsEqualApprox(new Vector2(480, 360)),
+            "Returning to main Stage mutated the dormant broadcast Stage.");
+
+        var revisionBeforeMultiStageFailure = coordinator.State.Revision;
+        var viewBeforeMultiStageFailure = host.PublishedView;
+        var failedStage = new StageId("failed");
+        _ = await AssertThrowsAsync<ActorException>(() => coordinator.ExecuteAsync(
+            new IDirectionDirective[]
+            {
+                new BackdropPatch(
+                    failedStage,
+                    new BackdropState(backdropKey),
+                    DirectionTransitionSpec.Cut),
+                ActorPatchFor(
+                    "hero",
+                    new DirectionPoint(50, 0),
+                    "missing",
+                    1,
+                    0,
+                    stageId: failedStage),
+                ViewPatchFor(
+                    new StageViewSource(failedStage),
+                    ViewPose.Default,
+                    DirectionTransitionSpec.Cut),
+            },
+            DirectionCompletionBarrier.Settle));
+        Assert(coordinator.State.Revision == revisionBeforeMultiStageFailure &&
+                Equals(host.PublishedView, viewBeforeMultiStageFailure) &&
+                !host.StageIds.Contains(failedStage),
+            "Failed Multi-Stage Prepare partially published state or changed the View.");
+
         await stageBackend.ResetAsync(CancellationToken.None);
         await host.ResetAsync(CancellationToken.None);
         Assert(host.PublishedBackdrop is null && host.Backdrop.Texture is null,
@@ -313,8 +395,9 @@ public partial class HeadlessTestRunner
         string appearance,
         float scale,
         int z,
-        DirectionTransitionSpec? transition = null) => new(
-            StageId.Main,
+        DirectionTransitionSpec? transition = null,
+        StageId? stageId = null) => new(
+            stageId ?? StageId.Main,
             new ActorId(actorId),
             DirectionValue<DirectionPoint>.From(position),
             DirectionValue<string?>.From(appearance),

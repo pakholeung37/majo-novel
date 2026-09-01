@@ -35,6 +35,11 @@ public readonly record struct ActorId
     public override string ToString() => Value;
 }
 
+public readonly record struct ActorAddress(StageId StageId, ActorId ActorId)
+{
+    public override string ToString() => $"{StageId}/{ActorId}";
+}
+
 public readonly record struct LayoutId
 {
     public LayoutId(string value) => Value = DirectionIdentifier.Validate(value, nameof(value));

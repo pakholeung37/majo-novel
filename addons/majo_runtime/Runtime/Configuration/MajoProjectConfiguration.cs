@@ -167,6 +167,12 @@ public partial class MajoProjectConfiguration : Resource
                 $"{nameof(Stage)}.{nameof(Stage.DefaultEffectDurationSeconds)}",
                 "Default effect duration must be finite and non-negative."));
         }
+        if (Stage.MaxDirectionStages <= 0)
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Stage)}.{nameof(Stage.MaxDirectionStages)}",
+                "Direction Stage limit must be positive."));
+        }
     }
 
     private void ValidateSettings(ICollection<ConfigurationIssue> issues)

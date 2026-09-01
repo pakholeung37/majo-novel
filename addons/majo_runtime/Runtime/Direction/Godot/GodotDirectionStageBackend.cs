@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -16,7 +17,8 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
 {
     private readonly GodotDirectionRenderHost host;
     private readonly IDirectionTextureLoader textures;
-    private readonly GodotDirectionActorTreeBackend? actors;
+    private readonly Func<Node2D, IActorManager>? createActorManager;
+    private readonly Dictionary<StageId, GodotDirectionActorTreeBackend> actors = new();
 
     public GodotDirectionStageBackend(
         GodotDirectionRenderHost host,
@@ -25,9 +27,7 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
     {
         this.host = host ?? throw new ArgumentNullException(nameof(host));
         this.textures = textures ?? throw new ArgumentNullException(nameof(textures));
-        actors = createActorManager is null
-            ? null
-            : new GodotDirectionActorTreeBackend(host, createActorManager);
+        this.createActorManager = createActorManager;
     }
 
     public Task InitializeAsync(CancellationToken cancellationToken)
@@ -38,12 +38,16 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
 
     public async Task ResetAsync(CancellationToken cancellationToken)
     {
-        if (actors is not null) await actors.ResetAsync(cancellationToken);
+        foreach (var backend in actors.Values)
+            await backend.ResetAsync(cancellationToken);
+        actors.Clear();
     }
 
     public async Task ShutdownAsync(CancellationToken cancellationToken)
     {
-        if (actors is not null) await actors.ResetAsync(cancellationToken);
+        foreach (var backend in actors.Values)
+            await backend.ResetAsync(cancellationToken);
+        actors.Clear();
     }
 
     public async Task<IPreparedDirectionComponent> PrepareAsync(
@@ -54,11 +58,8 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(plan);
-        if (stageId != StageId.Main)
-        {
-            throw new DirectionReferenceException(
-                $"The first Godot Direction backend only supports Stage '{StageId.Main}'.");
-        }
+        var createdSurface = !host.HasStage(stageId);
+        var surface = host.GetOrCreateStage(stageId);
 
         var backdropChanged = !Equals(before?.Backdrop, target?.Backdrop);
         var actorsChanged = !DirectionActorsEqual(before, target);
@@ -70,36 +71,59 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
         try
         {
             if (backdropChanged)
-                preparedBackdrop = await PrepareBackdropAsync(plan, target, cancellationToken);
+                preparedBackdrop = await PrepareBackdropAsync(
+                    plan,
+                    stageId,
+                    target,
+                    cancellationToken);
             if (actorsChanged)
             {
-                if (actors is null)
+                if (createActorManager is null)
                 {
                     throw new DirectionException(
                         "Direction Actor state changed, but no actor manager factory is configured.");
                 }
 
-                preparedActors = await actors.PrepareAsync(
+                if (!actors.TryGetValue(stageId, out var actorBackend))
+                {
+                    actorBackend = new GodotDirectionActorTreeBackend(
+                        host,
+                        surface.Actors,
+                        createActorManager);
+                    actors.Add(stageId, actorBackend);
+                }
+
+                preparedActors = await actorBackend.PrepareAsync(
                     plan,
                     before,
                     target,
                     cancellationToken);
             }
 
-            if (preparedBackdrop is null) return preparedActors!;
-            if (preparedActors is null) return preparedBackdrop;
-            return new GodotPreparedDirectionComponentGroup(preparedBackdrop, preparedActors);
+            IPreparedDirectionComponent component = preparedBackdrop switch
+            {
+                null => preparedActors!,
+                _ when preparedActors is null => preparedBackdrop,
+                _ => new GodotPreparedDirectionComponentGroup(
+                    preparedBackdrop,
+                    preparedActors),
+            };
+            return createdSurface
+                ? new PreparedStageLifecycle(this, stageId, component)
+                : component;
         }
         catch
         {
             if (preparedActors is not null) await preparedActors.DisposeAsync();
             if (preparedBackdrop is not null) await preparedBackdrop.DisposeAsync();
+            if (createdSurface) await ReleasePreparedStageAsync(stageId);
             throw;
         }
     }
 
     private async Task<IPreparedDirectionComponent> PrepareBackdropAsync(
         DirectionPlan plan,
+        StageId stageId,
         StageState? target,
         CancellationToken cancellationToken)
     {
@@ -111,13 +135,18 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
                 cancellationToken);
         }
 
+        var surface = host.GetStage(stageId);
         var transition = GodotDirectionRendering.ResolveTransition(
             plan,
-            path => string.Equals(path, "stage/main/backdrop", StringComparison.Ordinal));
+            path => string.Equals(
+                path,
+                $"stage/{stageId.Value}/backdrop",
+                StringComparison.Ordinal));
         return new PreparedBackdrop(
             host,
-            host.PublishedBackdrop,
-            host.Backdrop.Texture,
+            surface,
+            surface.PublishedBackdrop,
+            surface.Backdrop.Texture,
             target?.Backdrop,
             targetTexture,
             transition);
@@ -133,9 +162,55 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
             Equals(pair.Value, value));
     }
 
+    private async ValueTask ReleasePreparedStageAsync(StageId stageId)
+    {
+        if (actors.Remove(stageId, out var actorBackend))
+            await actorBackend.ResetAsync(CancellationToken.None);
+        host.ReleasePreparedStage(stageId);
+    }
+
+    private sealed class PreparedStageLifecycle : IPreparedDirectionComponent
+    {
+        private readonly GodotDirectionStageBackend backend;
+        private readonly StageId stageId;
+        private readonly IPreparedDirectionComponent component;
+        private bool committed;
+        private bool disposed;
+
+        public PreparedStageLifecycle(
+            GodotDirectionStageBackend backend,
+            StageId stageId,
+            IPreparedDirectionComponent component)
+        {
+            this.backend = backend;
+            this.stageId = stageId;
+            this.component = component;
+        }
+
+        public Task Settlement => component.Settlement;
+
+        public void Commit(DirectionCommitToken token)
+        {
+            component.Commit(token);
+            committed = true;
+        }
+
+        public ValueTask FinishAsync(CancellationToken cancellationToken) =>
+            component.FinishAsync(cancellationToken);
+
+        public async ValueTask DisposeAsync()
+        {
+            if (disposed) return;
+            disposed = true;
+            await component.DisposeAsync();
+            if (!committed) await backend.ReleasePreparedStageAsync(stageId);
+        }
+    }
+
     private sealed class PreparedBackdrop : IPreparedDirectionComponent
     {
         private readonly GodotDirectionRenderHost host;
+        private readonly GodotDirectionStageSurface surface;
         private readonly BackdropState? source;
         private readonly Texture2D? sourceTexture;
         private readonly BackdropState? target;
@@ -148,6 +223,7 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
 
         public PreparedBackdrop(
             GodotDirectionRenderHost host,
+            GodotDirectionStageSurface surface,
             BackdropState? source,
             Texture2D? sourceTexture,
             BackdropState? target,
@@ -155,6 +231,7 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
             DirectionTransitionSpec transition)
         {
             this.host = host;
+            this.surface = surface;
             this.source = source;
             this.sourceTexture = sourceTexture;
             this.target = target;
@@ -168,7 +245,7 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
         {
             if (committed) throw new InvalidOperationException("Backdrop already committed.");
             committed = true;
-            host.ClearBackdropTransition();
+            host.ClearBackdropTransition(surface.Id);
             var animate = transition.DurationSeconds > 0 &&
                 transition.Kind is DirectionTransitionKind.Fade or
                     DirectionTransitionKind.Dissolve &&
@@ -176,10 +253,10 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
                 source is not null;
             if (animate)
             {
-                host.PublishBackdropTransition(source!, sourceTexture!);
+                host.PublishBackdropTransition(surface.Id, source!, sourceTexture!);
             }
 
-            host.PublishBackdrop(target, targetTexture);
+            host.PublishBackdrop(surface.Id, target, targetTexture);
             if (!animate)
             {
                 settlement.TrySetResult();
@@ -189,7 +266,7 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
             tween = host.CreateTween();
             GodotDirectionRendering.Configure(tween, transition.Ease);
             tween.TweenProperty(
-                host.BackdropTransition,
+                surface.BackdropTransition,
                 "modulate:a",
                 0,
                 transition.DurationSeconds);
@@ -223,8 +300,8 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
                 tween.Finished -= OnFinished;
             GodotDirectionRendering.Kill(tween);
             tween = null;
-            host.PublishBackdrop(target, targetTexture);
-            host.ClearBackdropTransition();
+            host.PublishBackdrop(surface.Id, target, targetTexture);
+            host.ClearBackdropTransition(surface.Id);
             settlement.TrySetResult();
         }
     }

@@ -21,14 +21,17 @@ internal sealed class GodotDirectionActorTreeBackend
 {
     private long nextTreeId;
     private readonly GodotDirectionRenderHost host;
+    private readonly Node2D actorRoot;
     private readonly Func<Node2D, IActorManager> createManager;
     private PreparedActorTreeState? active;
 
     public GodotDirectionActorTreeBackend(
         GodotDirectionRenderHost host,
+        Node2D actorRoot,
         Func<Node2D, IActorManager> createManager)
     {
         this.host = host ?? throw new ArgumentNullException(nameof(host));
+        this.actorRoot = actorRoot ?? throw new ArgumentNullException(nameof(actorRoot));
         this.createManager = createManager ?? throw new ArgumentNullException(nameof(createManager));
     }
 
@@ -45,7 +48,7 @@ internal sealed class GodotDirectionActorTreeBackend
             Name = $"PreparedActors-{Interlocked.Increment(ref nextTreeId)}",
             Visible = false,
         };
-        host.Actors.AddChild(root);
+        actorRoot.AddChild(root);
 
         IActorManager? manager = null;
         try

@@ -68,3 +68,17 @@ Narrator: direction stage restored #line:m4-direction-stage
 <<leave hero via:fade over:0.08 join:settle>>
 Narrator: direction actor left #line:m4-direction-leave
 ===
+
+title: DirectionMultiStage
+---
+<<beat begin id:direction-multi-stage>>
+<<backdrop background_dark stage:main>>
+<<place hero stage:main at:left look:red>>
+<<backdrop background_light stage:broadcast>>
+<<place hero stage:broadcast at:right look:blue>>
+<<shot pose stage:broadcast center:50,50 zoom:1>>
+<<beat end join:settle>>
+Narrator: broadcast stage shown #line:m4-direction-broadcast
+<<shot pose stage:main via:cut join:settle>>
+Narrator: main stage restored #line:m4-direction-main-return
+===

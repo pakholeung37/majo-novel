@@ -1,6 +1,7 @@
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Direction.Rendering;
+using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Resources;
 using Xunit;
 
@@ -8,6 +9,34 @@ namespace Majo.Runtime.UnitTests;
 
 public sealed class DirectionRuntimeTests
 {
+    [Fact]
+    public void DirectionScopeQualifiesNodeLocalSymbolsAndResolvesExplicitImports()
+    {
+        var scopes = new DirectionScopeResolver();
+
+        var first = scopes.ResolveStage("Adv02", "broadcast");
+        var second = scopes.ResolveStage("Trial01", "broadcast");
+
+        Assert.NotEqual(first, second);
+        Assert.Equal(StageId.Main, scopes.ResolveStage("Adv02", "main"));
+        Assert.Equal(first, scopes.ResolveStage("Adv02", "broadcast"));
+
+        scopes.ImportStage("Trial01", "news", "Adv02", "broadcast");
+        Assert.Equal(first, scopes.ResolveStage("Trial01", "news"));
+        Assert.Throws<DirectionReferenceException>(() =>
+            scopes.ImportStage("Trial01", "news", "Adv03", "broadcast"));
+    }
+
+    [Fact]
+    public void ActorAddressDistinguishesTheSameActorAcrossStages()
+    {
+        var actor = new ActorId("Ema");
+
+        Assert.NotEqual(
+            new ActorAddress(new StageId("cell"), actor),
+            new ActorAddress(new StageId("broadcast"), actor));
+    }
+
     [Fact]
     public void DefaultStateProvidesMainStageViewAndScreen()
     {
