@@ -47,6 +47,53 @@ public enum DirectionEase
     CubicIn,
     CubicOut,
     CubicInOut,
+    BackIn,
+    BackOut,
+    BackInOut,
+}
+
+public enum DirectionEaseCurve
+{
+    Linear,
+    Sine,
+    Cubic,
+    Back,
+}
+
+public enum DirectionEaseMode
+{
+    In,
+    Out,
+    InOut,
+}
+
+public readonly record struct DirectionEaseParts(
+    DirectionEaseCurve Curve,
+    DirectionEaseMode Mode);
+
+public static class DirectionEaseExtensions
+{
+    public static DirectionEaseParts Decompose(this DirectionEase ease)
+    {
+        if (ease == DirectionEase.Linear)
+            return new(DirectionEaseCurve.Linear, DirectionEaseMode.InOut);
+
+        var name = ease.ToString();
+        foreach (var (suffix, mode) in new[]
+        {
+            ("InOut", DirectionEaseMode.InOut),
+            ("In", DirectionEaseMode.In),
+            ("Out", DirectionEaseMode.Out),
+        })
+        {
+            if (!name.EndsWith(suffix, StringComparison.Ordinal)) continue;
+            var curveName = name[..^suffix.Length];
+            if (Enum.TryParse<DirectionEaseCurve>(curveName, out var curve))
+                return new(curve, mode);
+        }
+
+        throw new ArgumentOutOfRangeException(nameof(ease), ease, null);
+    }
 }
 
 public sealed record DirectionTransitionSpec(

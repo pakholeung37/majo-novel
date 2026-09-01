@@ -410,17 +410,9 @@ internal sealed class GodotDirectionActorTreeBackend
 
         private static AnimationSpec ToAnimationSpec(DirectionTransitionSpec transition)
         {
-            var (curve, ease) = transition.Ease switch
-            {
-                DirectionEase.Linear => (AnimationTransition.Linear, AnimationEase.InOut),
-                DirectionEase.SineIn => (AnimationTransition.Sine, AnimationEase.In),
-                DirectionEase.SineOut => (AnimationTransition.Sine, AnimationEase.Out),
-                DirectionEase.SineInOut => (AnimationTransition.Sine, AnimationEase.InOut),
-                DirectionEase.CubicIn => (AnimationTransition.Cubic, AnimationEase.In),
-                DirectionEase.CubicOut => (AnimationTransition.Cubic, AnimationEase.Out),
-                DirectionEase.CubicInOut => (AnimationTransition.Cubic, AnimationEase.InOut),
-                _ => throw new ArgumentOutOfRangeException(nameof(transition)),
-            };
+            var parts = transition.Ease.Decompose();
+            var curve = Enum.Parse<AnimationTransition>(parts.Curve.ToString());
+            var ease = Enum.Parse<AnimationEase>(parts.Mode.ToString());
             return new AnimationSpec(transition.DurationSeconds, curve, ease);
         }
     }

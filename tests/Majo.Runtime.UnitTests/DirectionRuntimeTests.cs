@@ -15,6 +15,19 @@ namespace Majo.Runtime.UnitTests;
 
 public sealed class DirectionRuntimeTests
 {
+    [Theory]
+    [InlineData(DirectionEase.BackIn, DirectionEaseCurve.Back, DirectionEaseMode.In)]
+    [InlineData(DirectionEase.BackOut, DirectionEaseCurve.Back, DirectionEaseMode.Out)]
+    [InlineData(DirectionEase.BackInOut, DirectionEaseCurve.Back, DirectionEaseMode.InOut)]
+    [InlineData(DirectionEase.CubicOut, DirectionEaseCurve.Cubic, DirectionEaseMode.Out)]
+    public void DirectionEaseDecomposesIntoCurveAndMode(
+        DirectionEase ease,
+        DirectionEaseCurve curve,
+        DirectionEaseMode mode)
+    {
+        Assert.Equal(new DirectionEaseParts(curve, mode), ease.Decompose());
+    }
+
     [Fact]
     public void NodeDirectionCompilerBuildsNodeLocalSymbolsAndTypedPreloadReferences()
     {

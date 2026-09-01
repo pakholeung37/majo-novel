@@ -10,6 +10,7 @@ public enum AnimationTransition
     Sine,
     Cubic,
     Quint,
+    Back,
 }
 
 public enum AnimationEase

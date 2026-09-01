@@ -12,6 +12,7 @@ internal static class GodotAnimationSpec
             AnimationTransition.Sine => Tween.TransitionType.Sine,
             AnimationTransition.Cubic => Tween.TransitionType.Cubic,
             AnimationTransition.Quint => Tween.TransitionType.Quint,
+            AnimationTransition.Back => Tween.TransitionType.Back,
             _ => throw new ArgumentOutOfRangeException(nameof(transition)),
         };
 

@@ -33,17 +33,9 @@ internal static class GodotDirectionRendering
 
     public static void Configure(Tween tween, DirectionEase ease)
     {
-        var (transition, easing) = ease switch
-        {
-            DirectionEase.Linear => (Tween.TransitionType.Linear, Tween.EaseType.InOut),
-            DirectionEase.SineIn => (Tween.TransitionType.Sine, Tween.EaseType.In),
-            DirectionEase.SineOut => (Tween.TransitionType.Sine, Tween.EaseType.Out),
-            DirectionEase.SineInOut => (Tween.TransitionType.Sine, Tween.EaseType.InOut),
-            DirectionEase.CubicIn => (Tween.TransitionType.Cubic, Tween.EaseType.In),
-            DirectionEase.CubicOut => (Tween.TransitionType.Cubic, Tween.EaseType.Out),
-            DirectionEase.CubicInOut => (Tween.TransitionType.Cubic, Tween.EaseType.InOut),
-            _ => throw new ArgumentOutOfRangeException(nameof(ease)),
-        };
+        var parts = ease.Decompose();
+        var transition = Enum.Parse<Tween.TransitionType>(parts.Curve.ToString());
+        var easing = Enum.Parse<Tween.EaseType>(parts.Mode.ToString());
         tween.SetTrans(transition);
         tween.SetEase(easing);
     }
