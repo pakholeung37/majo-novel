@@ -289,6 +289,45 @@ public sealed class DiagnosticsLoggingTests
         Assert.Contains("Recent Log Events", report);
     }
 
+    [Fact]
+    public void GodotConsoleSink_FormatEvent_ExcludesCorrelationByDefault()
+    {
+        var logEvent = new RuntimeLogEvent(
+            new DateTimeOffset(2026, 9, 2, 12, 0, 0, TimeSpan.Zero),
+            RuntimeLogLevel.Information,
+            "core.lifecycle",
+            "init.start",
+            "Majo Runtime started.",
+            null,
+            new RuntimeLogCorrelation("runtime-123", "session-456", "dialogue-789", "cmd-1", "op-2"));
+
+        var formattedDefault = GodotConsoleSink.FormatEvent(logEvent);
+        Assert.DoesNotContain("Correlation:", formattedDefault);
+        Assert.DoesNotContain("runtime-123", formattedDefault);
+
+        var defaultSink = new GodotConsoleSink();
+        Assert.False(defaultSink.IncludeCorrelation);
+    }
+
+    [Fact]
+    public void GodotConsoleSink_FormatEvent_IncludesCorrelationWhenExplicitlyConfigured()
+    {
+        var logEvent = new RuntimeLogEvent(
+            new DateTimeOffset(2026, 9, 2, 12, 0, 0, TimeSpan.Zero),
+            RuntimeLogLevel.Information,
+            "core.lifecycle",
+            "init.start",
+            "Majo Runtime started.",
+            null,
+            new RuntimeLogCorrelation("runtime-123", "session-456", "dialogue-789", "cmd-1", "op-2"));
+
+        var formattedExplicit = GodotConsoleSink.FormatEvent(logEvent, includeCorrelation: true);
+        Assert.Contains("[Correlation: runtime=runtime-123, session=session-456, dialogue=dialogue-789, cmd=cmd-1, op=op-2]", formattedExplicit);
+
+        var configuredSink = new GodotConsoleSink(includeCorrelation: true);
+        Assert.True(configuredSink.IncludeCorrelation);
+    }
+
     private static void AssertDoesNotReferenceGodotOrYarn(Type type, string location)
     {
         var unwrapped = Nullable.GetUnderlyingType(type) ?? type;

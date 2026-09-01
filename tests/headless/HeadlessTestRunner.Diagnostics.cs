@@ -15,6 +15,7 @@ public partial class HeadlessTestRunner
 	private async Task ValidateDiagnosticsRuntimeAsync()
 	{
 		var configuration = MajoProjectConfiguration.CreateDefault();
+		Assert(!new DiagnosticsConfiguration().IncludeCorrelation, "DiagnosticsConfiguration.IncludeCorrelation should default to false.");
 		configuration.Diagnostics = new DiagnosticsConfiguration
 		{
 			MinimumLevel = RuntimeLogLevel.Debug,

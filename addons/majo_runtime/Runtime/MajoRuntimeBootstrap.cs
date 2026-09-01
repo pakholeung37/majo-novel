@@ -209,7 +209,7 @@ public partial class MajoRuntimeBootstrap : Node
             var ringCapacity = Configuration.Diagnostics?.RingBufferCapacity ?? 500;
             RingBuffer = new RingBufferLogSink(ringCapacity);
             sinks.Add(RingBuffer);
-            sinks.Add(new GodotConsoleSink());
+            sinks.Add(new GodotConsoleSink(Configuration.Diagnostics?.IncludeCorrelation ?? false));
 
             if (Configuration.Diagnostics?.EnableFileLogging == true)
             {

@@ -182,7 +182,7 @@ public partial class DefaultDebugOverlay : CanvasLayer, IDisposable
                         .Append(']')
                         .Append(EscapeBbcode(GodotConsoleSink.FormatEvent(
                             log,
-                            includeCorrelation: false)))
+                            includeCorrelation: configuration.IncludeCorrelation)))
                         .AppendLine("[/color]");
                 }
                 logTextLabel.Text = sb.ToString();

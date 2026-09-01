@@ -9,7 +9,12 @@ namespace Majo.Runtime;
 
 public sealed class GodotRuntimeLogger : IRuntimeLogger
 {
-    private readonly GodotConsoleSink consoleSink = new();
+    private readonly GodotConsoleSink consoleSink;
+
+    public GodotRuntimeLogger(bool includeCorrelation = false)
+    {
+        consoleSink = new GodotConsoleSink(includeCorrelation);
+    }
 
     public bool IsEnabled(string category, RuntimeLogLevel level) => true;
 

@@ -9,11 +9,20 @@ namespace Majo.Runtime.Diagnostics;
 
 public sealed class GodotConsoleSink : IRuntimeLogSink
 {
+	private readonly bool includeCorrelation;
+
+	public GodotConsoleSink(bool includeCorrelation = false)
+	{
+		this.includeCorrelation = includeCorrelation;
+	}
+
+	public bool IncludeCorrelation => includeCorrelation;
+
 	public void Emit(RuntimeLogEvent logEvent)
 	{
 		ArgumentNullException.ThrowIfNull(logEvent);
 
-		var formatted = FormatEvent(logEvent);
+		var formatted = FormatEvent(logEvent, includeCorrelation);
 		switch (logEvent.Level)
 		{
 			case RuntimeLogLevel.Warning:
@@ -30,7 +39,7 @@ public sealed class GodotConsoleSink : IRuntimeLogSink
 
 	public static string FormatEvent(
 		RuntimeLogEvent logEvent,
-		bool includeCorrelation = true)
+		bool includeCorrelation = false)
 	{
 		var builder = new StringBuilder();
 		builder.Append('[')

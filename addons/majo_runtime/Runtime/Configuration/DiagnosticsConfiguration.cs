@@ -27,6 +27,9 @@ public partial class DiagnosticsConfiguration : Resource
     public int MaxFileCount { get; set; } = 3;
 
     [Export]
+    public bool IncludeCorrelation { get; set; }
+
+    [Export]
     public bool EnableOverlay { get; set; }
 
     [Export]
