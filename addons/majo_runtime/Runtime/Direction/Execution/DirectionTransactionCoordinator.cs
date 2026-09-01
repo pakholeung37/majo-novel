@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Majo.Runtime.Core;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Rendering;
 
@@ -44,15 +45,15 @@ public sealed class CommittedDirectionTransaction
 
     internal async Task FinishAsync(CancellationToken cancellationToken)
     {
-        await prepared.FinishAsync(cancellationToken).ConfigureAwait(false);
-        await Settlement.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await prepared.FinishAsync(cancellationToken);
+        await Settlement.WaitAsync(cancellationToken);
     }
 
     private async Task ObserveSettlementAsync()
     {
         try
         {
-            await prepared.Settlement.ConfigureAwait(false);
+            await prepared.Settlement;
             Interlocked.Exchange(ref status, (int)DirectionTransactionStatus.Settled);
         }
         catch
@@ -62,12 +63,12 @@ public sealed class CommittedDirectionTransaction
         }
         finally
         {
-            await prepared.DisposeAsync().ConfigureAwait(false);
+            await prepared.DisposeAsync();
         }
     }
 }
 
-public interface IDirectionTransactionCoordinator
+public interface IDirectionTransactionCoordinator : IRuntimeService
 {
     DirectionState State { get; }
 
@@ -114,6 +115,36 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
         }
     }
 
+    public Task InitializeAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.CompletedTask;
+    }
+
+    public async Task ResetAsync(CancellationToken cancellationToken)
+    {
+        CommittedDirectionTransaction[] active;
+        lock (stateGate)
+        {
+            active = transactions
+                .Where(transaction =>
+                    transaction.Status == DirectionTransactionStatus.Committed)
+                .ToArray();
+        }
+
+        foreach (var transaction in active)
+            await transaction.FinishAsync(cancellationToken);
+
+        lock (stateGate)
+        {
+            transactions.Clear();
+            state = DirectionState.CreateDefault();
+        }
+    }
+
+    public Task ShutdownAsync(CancellationToken cancellationToken) =>
+        ResetAsync(cancellationToken);
+
     public async Task<CommittedDirectionTransaction> ExecuteAsync(
         IEnumerable<IDirectionDirective> directives,
         DirectionCompletionBarrier completion = DirectionCompletionBarrier.Commit,
@@ -123,11 +154,11 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
         var capturedDirectives = directives.ToArray();
         CommittedDirectionTransaction committed;
 
-        await commitGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await commitGate.WaitAsync(cancellationToken);
         try
         {
             var plan = planner.Plan(State, capturedDirectives, completion);
-            committed = await PrepareAndCommitAsync(plan, cancellationToken).ConfigureAwait(false);
+            committed = await PrepareAndCommitAsync(plan, cancellationToken);
         }
         finally
         {
@@ -135,7 +166,7 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
         }
 
         if (completion == DirectionCompletionBarrier.Settle)
-            await committed.Settlement.WaitAsync(cancellationToken).ConfigureAwait(false);
+            await committed.Settlement.WaitAsync(cancellationToken);
         return committed;
     }
 
@@ -144,7 +175,7 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(transaction);
-        await commitGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await commitGate.WaitAsync(cancellationToken);
         try
         {
             var current = State;
@@ -174,8 +205,8 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
                 DirectionCompletionBarrier.Settle);
             var committed = await PrepareAndCommitAsync(
                 rollbackPlan,
-                cancellationToken).ConfigureAwait(false);
-            await committed.Settlement.WaitAsync(cancellationToken).ConfigureAwait(false);
+                cancellationToken);
+            await committed.Settlement.WaitAsync(cancellationToken);
             return committed;
         }
         finally
@@ -205,7 +236,7 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
         }
 
         foreach (var transaction in active)
-            await transaction.FinishAsync(cancellationToken).ConfigureAwait(false);
+            await transaction.FinishAsync(cancellationToken);
     }
 
     private async Task<CommittedDirectionTransaction> PrepareAndCommitAsync(
@@ -216,7 +247,7 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
         var didCommit = false;
         try
         {
-            prepared = await backend.PrepareAsync(plan, cancellationToken).ConfigureAwait(false);
+            prepared = await backend.PrepareAsync(plan, cancellationToken);
             if (prepared is null)
                 throw new DirectionException("Direction backend returned no prepared transaction.");
 
@@ -239,7 +270,7 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
         catch
         {
             if (!didCommit && prepared is not null)
-                await prepared.DisposeAsync().ConfigureAwait(false);
+                await prepared.DisposeAsync();
             throw;
         }
     }

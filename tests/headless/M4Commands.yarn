@@ -50,3 +50,21 @@ title: CustomCommand
 <<majo_probe alpha>>
 Narrator: custom command completed #line:m45-custom-command
 ===
+
+title: DirectionCommands
+---
+<<beat begin id:direction-opening over:0.08 ease:cubic-out>>
+<<backdrop background_dark>>
+<<place hero at:left look:red scale:1 z:5>>
+<<shot pose stage:main center:50,50 zoom:1>>
+<<beat end join:settle>>
+Narrator: direction beat committed #line:m4-direction-beat
+<<place hero at:right look:blue via:move over:0.08 join:settle>>
+Narrator: direction actor moved #line:m4-direction-move
+<<shot cg background_light center:40,60 zoom:1.5 via:cut join:settle>>
+Narrator: direction cg shown #line:m4-direction-cg
+<<shot pose stage:main center:50,50 zoom:1 rotation:0 via:cut join:settle>>
+Narrator: direction stage restored #line:m4-direction-stage
+<<leave hero via:fade over:0.08 join:settle>>
+Narrator: direction actor left #line:m4-direction-leave
+===

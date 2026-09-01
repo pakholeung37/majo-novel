@@ -39,7 +39,7 @@ public sealed class CompositeDirectionPreparationBackend : IDirectionPreparation
 
         try
         {
-            var components = await Task.WhenAll(preparations).ConfigureAwait(false);
+            var components = await Task.WhenAll(preparations);
             return new PreparedComposite(components);
         }
         catch
@@ -47,7 +47,7 @@ public sealed class CompositeDirectionPreparationBackend : IDirectionPreparation
             foreach (var preparation in preparations)
             {
                 if (preparation.Status == TaskStatus.RanToCompletion)
-                    await preparation.Result.DisposeAsync().ConfigureAwait(false);
+                    await preparation.Result.DisposeAsync();
             }
             throw;
         }
@@ -67,7 +67,7 @@ public sealed class CompositeDirectionPreparationBackend : IDirectionPreparation
             if (!Equals(before, target))
             {
                 preparations.Add(CapturePreparation(() =>
-                    stages.PrepareAsync(stageId, before, target, cancellationToken)));
+                    stages.PrepareAsync(plan, stageId, before, target, cancellationToken)));
             }
         }
 
@@ -80,13 +80,14 @@ public sealed class CompositeDirectionPreparationBackend : IDirectionPreparation
             if (!Equals(before, target))
             {
                 preparations.Add(CapturePreparation(() =>
-                    views.PrepareAsync(viewId, before, target, cancellationToken)));
+                    views.PrepareAsync(plan, viewId, before, target, cancellationToken)));
             }
         }
 
         if (!Equals(plan.BeforeState.Screen, plan.TargetState.Screen))
         {
             preparations.Add(CapturePreparation(() => screen.PrepareAsync(
+                    plan,
                     plan.BeforeState.Screen,
                     plan.TargetState.Screen,
                     cancellationToken)));
@@ -95,6 +96,7 @@ public sealed class CompositeDirectionPreparationBackend : IDirectionPreparation
         if (!Equals(plan.BeforeState.Effects, plan.TargetState.Effects))
         {
             preparations.Add(CapturePreparation(() => effects.PrepareAsync(
+                    plan,
                     plan.BeforeState.Effects,
                     plan.TargetState.Effects,
                     cancellationToken)));
@@ -148,14 +150,14 @@ public sealed class CompositeDirectionPreparationBackend : IDirectionPreparation
             if (Volatile.Read(ref committed) == 0)
                 throw new InvalidOperationException("Direction transaction has not committed.");
             foreach (var component in components)
-                await component.FinishAsync(cancellationToken).ConfigureAwait(false);
+                await component.FinishAsync(cancellationToken);
         }
 
         public async ValueTask DisposeAsync()
         {
             if (Interlocked.Exchange(ref disposed, 1) != 0) return;
             foreach (var component in components.Reverse())
-                await component.DisposeAsync().ConfigureAwait(false);
+                await component.DisposeAsync();
         }
     }
 }

@@ -511,6 +511,7 @@ public sealed class DirectionRuntimeTests
         public int DisposeCount { get; private set; }
 
         public Task<IPreparedDirectionComponent> PrepareAsync(
+            DirectionPlan plan,
             StageId stageId,
             StageState? before,
             StageState? target,
@@ -518,6 +519,7 @@ public sealed class DirectionRuntimeTests
             Prepare($"stage:{stageId}", fail: false, cancellationToken);
 
         public Task<IPreparedDirectionComponent> PrepareAsync(
+            DirectionPlan plan,
             ViewId viewId,
             ViewState? before,
             ViewState? target,
@@ -525,12 +527,14 @@ public sealed class DirectionRuntimeTests
             Prepare($"view:{viewId}", FailViewPreparation, cancellationToken);
 
         public Task<IPreparedDirectionComponent> PrepareAsync(
+            DirectionPlan plan,
             ScreenState before,
             ScreenState target,
             CancellationToken cancellationToken) =>
             Prepare("screen", fail: false, cancellationToken);
 
         public Task<IPreparedDirectionComponent> PrepareAsync(
+            DirectionPlan plan,
             StableEffectState before,
             StableEffectState target,
             CancellationToken cancellationToken) =>

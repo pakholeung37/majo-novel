@@ -7,6 +7,9 @@ using Majo.Runtime.Configuration;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Dialogue.Yarn;
+using Majo.Runtime.Direction.Core;
+using Majo.Runtime.Direction.Execution;
+using Majo.Runtime.Direction.Godot;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Stage;
 using YarnSpinnerGodot;
@@ -23,8 +26,10 @@ public partial class HeadlessTestRunner
         var configuration = MajoProjectConfiguration.CreateDefault();
         configuration.Resources!.RootPath = "res://tests";
         configuration.Resources.ScriptsPath = "headless";
+        configuration.Resources.BackgroundsPath = "headless/fixtures";
         configuration.Dialogue!.DefaultProjectId = "M4Commands";
         configuration.Presentation!.Enabled = false;
+        configuration.Actors!.ReferenceResolution = new Vector2I(1280, 720);
         configuration.Actors!.LeftPosition = new Vector2(100, 200);
         configuration.Actors.CenterPosition = new Vector2(200, 200);
         configuration.Actors.RightPosition = new Vector2(300, 200);
@@ -234,6 +239,70 @@ public partial class HeadlessTestRunner
             "Public Runtime command registry did not invoke the custom command.");
         Assert(presenter.Lines[^1] == "custom command completed",
             "Yarn did not continue after the custom Runtime command.");
+
+        var direction = bootstrap.Host.Services.Get<IDirectionTransactionCoordinator>();
+        var directionHost = bootstrap.Host.Services.Get<GodotDirectionRenderHost>();
+        var directionBeatCommitted = false;
+        var directionActorMoved = false;
+        var directionCgShown = false;
+        var directionStageRestored = false;
+        var directionActorLeft = false;
+        presenter.LinePresented += line =>
+        {
+            var state = direction.State;
+            state.Stages.TryGetValue(StageId.Main, out var mainStage);
+            switch (line.Id)
+            {
+                case "line:m4-direction-beat":
+                    directionBeatCommitted =
+                        state.Revision == 1 &&
+                        mainStage?.Backdrop?.Resource ==
+                            new Majo.Runtime.Resources.ResourceKey(
+                                "headless/fixtures/background_dark") &&
+                        mainStage.Actors.TryGetValue(new ActorId("hero"), out var placed) &&
+                        placed.Appearance == "red" && placed.Z == 5 &&
+                        directionHost.PublishedBackdrop is not null;
+                    break;
+                case "line:m4-direction-move":
+                    directionActorMoved =
+                        state.Revision == 2 &&
+                        mainStage?.Actors[new ActorId("hero")].Appearance == "blue" &&
+                        mainStage.Actors[new ActorId("hero")].Position ==
+                            new DirectionPoint(
+                                300f / configuration.Actors.ReferenceResolution.X * 100f,
+                                (1f - 200f / configuration.Actors.ReferenceResolution.Y) * 100f);
+                    break;
+                case "line:m4-direction-cg":
+                    directionCgShown =
+                        state.Revision == 3 &&
+                        state.Views[ViewId.Main].Source is CgViewSource &&
+                        mainStage?.Actors.ContainsKey(new ActorId("hero")) == true;
+                    break;
+                case "line:m4-direction-stage":
+                    directionStageRestored =
+                        state.Revision == 4 &&
+                        state.Views[ViewId.Main].Source is StageViewSource stageSource &&
+                        stageSource.StageId == StageId.Main;
+                    break;
+                case "line:m4-direction-leave":
+                    directionActorLeft =
+                        state.Revision == 5 &&
+                        mainStage?.Actors.Count == 0;
+                    break;
+            }
+        };
+        await dialogue.StartAsync(new DialogueStartRequest(StartNode: "DirectionCommands"));
+        await dialogue.Completion;
+        Assert(directionBeatCommitted,
+            "Explicit Yarn Direction Beat did not atomically publish its directives.");
+        Assert(directionActorMoved,
+            "Yarn place did not resolve a configured mark or settle its move.");
+        Assert(directionCgShown,
+            "Yarn shot cg did not replace only the View source.");
+        Assert(directionStageRestored,
+            "Yarn shot pose did not restore the persistent Stage View.");
+        Assert(directionActorLeft,
+            "Yarn leave did not settle the target Actor state.");
 
         await bootstrap.RequestShutdownAsync();
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);

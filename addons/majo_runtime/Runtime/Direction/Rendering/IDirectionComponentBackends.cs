@@ -23,6 +23,7 @@ public interface IPreparedDirectionComponent : IAsyncDisposable
 public interface IDirectionStageBackend
 {
     Task<IPreparedDirectionComponent> PrepareAsync(
+        DirectionPlan plan,
         StageId stageId,
         StageState? before,
         StageState? target,
@@ -32,6 +33,7 @@ public interface IDirectionStageBackend
 public interface IDirectionViewBackend
 {
     Task<IPreparedDirectionComponent> PrepareAsync(
+        DirectionPlan plan,
         ViewId viewId,
         ViewState? before,
         ViewState? target,
@@ -41,6 +43,7 @@ public interface IDirectionViewBackend
 public interface IDirectionScreenBackend
 {
     Task<IPreparedDirectionComponent> PrepareAsync(
+        DirectionPlan plan,
         ScreenState before,
         ScreenState target,
         CancellationToken cancellationToken);
@@ -49,6 +52,7 @@ public interface IDirectionScreenBackend
 public interface IDirectionEffectBackend
 {
     Task<IPreparedDirectionComponent> PrepareAsync(
+        DirectionPlan plan,
         StableEffectState before,
         StableEffectState target,
         CancellationToken cancellationToken);

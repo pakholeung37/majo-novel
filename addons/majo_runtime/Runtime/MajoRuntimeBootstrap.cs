@@ -14,6 +14,9 @@ using Majo.Runtime.Auto;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
 using Majo.Runtime.Diagnostics;
+using Majo.Runtime.Direction.Execution;
+using Majo.Runtime.Direction.Godot;
+using Majo.Runtime.Direction.Rendering;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Dialogue.Commands.Audio;
@@ -93,6 +96,10 @@ public partial class MajoRuntimeBootstrap : Node
     public Action<ResourceProviderRegistry>? ConfigureResourceProviders { get; set; }
 
     public IResourcePathResolver? ResourcePathResolver { get; set; }
+
+    public IDirectionResourceKeyResolver? DirectionResourceResolver { get; set; }
+
+    public IDirectionPositionResolver? DirectionPositionResolver { get; set; }
 
     public Action<DialoguePresenterRegistry>? ConfigureDialoguePresenters { get; set; }
 
@@ -347,6 +354,48 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(IActorTextureLoader),
                 typeof(IFrameClock),
                 typeof(ILocaleManager))
+            .AddSingleton<GodotDirectionRenderHost>(
+                _ => new GodotDirectionRenderHost(
+                    this,
+                    Configuration!.Actors!.ReferenceResolution))
+            .AddSingleton<GodotDirectionStageBackend>(
+                resolver => new GodotDirectionStageBackend(
+                    resolver.Get<GodotDirectionRenderHost>(),
+                    new DirectionTextureLoader(resolver.Get<IResourceManager>()),
+                    root => CreateDirectionActorManager(
+                        root,
+                        resolver.Get<IOperationScheduler>(),
+                        resolver.Get<IActorTextureLoader>(),
+                        resolver.Get<IFrameClock>(),
+                        resolver.Get<ILocaleManager>())),
+                typeof(GodotDirectionRenderHost),
+                typeof(IResourceManager),
+                typeof(IOperationScheduler),
+                typeof(IActorTextureLoader),
+                typeof(IFrameClock),
+                typeof(ILocaleManager))
+            .AddSingleton<IDirectionTransactionCoordinator>(
+                resolver =>
+                {
+                    var host = resolver.Get<GodotDirectionRenderHost>();
+                    var textures = new DirectionTextureLoader(
+                        resolver.Get<IResourceManager>());
+                    var backend = new CompositeDirectionPreparationBackend(
+                        resolver.Get<GodotDirectionStageBackend>(),
+                        new GodotDirectionViewBackend(host, textures),
+                        new GodotDirectionScreenBackend(host),
+                        new GodotDirectionEffectBackend(host));
+                    return new DirectionTransactionCoordinator(
+                        new DirectionPlanner(),
+                        backend);
+                },
+                typeof(GodotDirectionRenderHost),
+                typeof(GodotDirectionStageBackend),
+                typeof(IResourceManager))
+            .AddSingleton<IDirectionBeatRuntime>(
+                resolver => new DirectionBeatRuntime(
+                    resolver.Get<IDirectionTransactionCoordinator>()),
+                typeof(IDirectionTransactionCoordinator))
             .AddSingleton<IScriptPreloadManager>(
                 resolver => new ScriptPreloadManager(
                     resolver.Get<IResourceManager>(),
@@ -517,16 +566,25 @@ public partial class MajoRuntimeBootstrap : Node
                 resolver => new DialogueVariables(
                     resolver.Get<IYarnDialogueBackend>().VariableStore),
                 typeof(IYarnDialogueBackend))
+            .AddSingleton<DirectionBeatNodeBoundaryService>(
+                resolver => new DirectionBeatNodeBoundaryService(
+                    resolver.Get<IYarnDialogueBackend>(),
+                    resolver.Get<IDirectionBeatRuntime>()),
+                typeof(IYarnDialogueBackend),
+                typeof(IDirectionBeatRuntime))
             .AddSingleton<IYarnCommandAdapter>(
                 resolver => CreateYarnCommandAdapter(
                     resolver.Get<IYarnDialogueBackend>(),
                     resolver.Get<IActorManager>(),
                     resolver.Get<IOperationScheduler>(),
-                    resolver.Get<IAudioManager>()),
+                    resolver.Get<IAudioManager>(),
+                    resolver.Get<IDirectionBeatRuntime>()),
                 typeof(IYarnDialogueBackend),
                 typeof(IActorManager),
                 typeof(IOperationScheduler),
-                typeof(IAudioManager))
+                typeof(IAudioManager),
+                typeof(IDirectionBeatRuntime),
+                typeof(DirectionBeatNodeBoundaryService))
             .AddSingleton<IDialoguePlayer>(
                 resolver =>
                 {
@@ -960,13 +1018,22 @@ public partial class MajoRuntimeBootstrap : Node
         IYarnDialogueBackend backend,
         IActorManager actors,
         IOperationScheduler operations,
-        IAudioManager audio)
+        IAudioManager audio,
+        IDirectionBeatRuntime direction)
     {
         var commands = new RuntimeCommandRegistry();
         BuiltInRuntimeCommands.Register(commands, new ActorCommandService(actors, Logger));
         commands.RegisterModule(new AudioCommandModule(audio));
         commands.RegisterModule(new CameraCommandModule());
         commands.RegisterModule(new StageCommandModule());
+        commands.RegisterModule(new DirectionCommandModule(
+            direction,
+            DirectionResourceResolver ??
+                new DirectionResourceKeyResolver(Configuration!.Resources!),
+            DirectionPositionResolver ??
+                new Majo.Runtime.Dialogue.Commands.DirectionPositionResolver(
+                    Configuration!.Actors!),
+            () => dialoguePlayer?.CurrentNode));
         ConfigureCommands?.Invoke(commands);
         var catalog = commands.BuildCatalog();
         var converters = new CommandValueConverterRegistry();
@@ -1029,6 +1096,44 @@ public partial class MajoRuntimeBootstrap : Node
                 Configuration.Resources.BackgroundsPath));
         ConfigureActorFactories?.Invoke(manager);
         return manager;
+    }
+
+    private ActorManager CreateDirectionActorManager(
+        Node2D root,
+        IOperationScheduler scheduler,
+        IActorTextureLoader textureLoader,
+        IFrameClock frameClock,
+        ILocaleManager locales)
+    {
+        var actorConfiguration = Configuration!.Actors!;
+        return new ActorManager(
+            ActorConfigurationCompiler.Compile(
+                actorConfiguration,
+                Configuration.Resources!)
+                .Where(definition =>
+                    definition.FactoryId != ActorFactoryIds.Background)
+                .ToArray(),
+            new IActorFactory[]
+            {
+                new CharacterActorFactory(
+                    root,
+                    scheduler,
+                    textureLoader,
+                    new CharacterPositionMap(actorConfiguration)),
+                new LayeredCharacterActorFactory(
+                    root,
+                    scheduler,
+                    textureLoader,
+                    frameClock,
+                    new CharacterPositionMap(actorConfiguration),
+                    Configuration.Resources!.RootPath,
+                    Configuration.Resources.CharactersPath),
+            },
+            locales,
+            Logger,
+            new ActorCreationConventions(
+                Configuration.Resources!.CharactersPath,
+                Configuration.Resources.BackgroundsPath));
     }
 
     private IResourceManager CreateResourceManager(

@@ -4,16 +4,25 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Majo.Runtime.Core;
 using Majo.Runtime.Direction.Core;
 
 namespace Majo.Runtime.Direction.Execution;
 
-public interface IDirectionBeatRuntime
+public sealed record DirectionBeatDefaults(
+    double? DurationSeconds = null,
+    DirectionEase? Ease = null);
+
+public interface IDirectionBeatRuntime : IRuntimeService
 {
     bool HasOpenBeat { get; }
     string? OpenBeatId { get; }
+    DirectionBeatDefaults? OpenBeatDefaults { get; }
 
-    void Begin(string beatId, string nodeId);
+    void Begin(
+        string beatId,
+        string nodeId,
+        DirectionBeatDefaults? defaults = null);
 
     Task<CommittedDirectionTransaction?> SubmitAsync(
         IDirectionDirective directive,
@@ -47,8 +56,12 @@ public sealed class DirectionBeatRuntime : IDirectionBeatRuntime
 
     public bool HasOpenBeat => open is not null;
     public string? OpenBeatId => open?.Id;
+    public DirectionBeatDefaults? OpenBeatDefaults => open?.Defaults;
 
-    public void Begin(string beatId, string nodeId)
+    public void Begin(
+        string beatId,
+        string nodeId,
+        DirectionBeatDefaults? defaults = null)
     {
         beatId = RequireName(beatId, nameof(beatId));
         nodeId = RequireName(nodeId, nameof(nodeId));
@@ -65,8 +78,36 @@ public sealed class DirectionBeatRuntime : IDirectionBeatRuntime
                 $"Beat '{beatId}' already names an unsettled transaction.");
         }
 
-        open = new OpenBeat(beatId, nodeId, new List<IDirectionDirective>());
+        if (defaults?.DurationSeconds is { } duration &&
+            (!double.IsFinite(duration) || duration < 0))
+        {
+            throw new DirectionBeatException(
+                "Direction Beat default duration must be finite and non-negative.");
+        }
+
+        open = new OpenBeat(
+            beatId,
+            nodeId,
+            defaults,
+            new List<IDirectionDirective>());
     }
+
+    public Task InitializeAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.CompletedTask;
+    }
+
+    public Task ResetAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        open = null;
+        committed.Clear();
+        return Task.CompletedTask;
+    }
+
+    public Task ShutdownAsync(CancellationToken cancellationToken) =>
+        ResetAsync(cancellationToken);
 
     public async Task<CommittedDirectionTransaction?> SubmitAsync(
         IDirectionDirective directive,
@@ -83,7 +124,7 @@ public sealed class DirectionBeatRuntime : IDirectionBeatRuntime
         return await transactions.ExecuteAsync(
             new[] { directive },
             completion,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken);
     }
 
     public async Task<CommittedDirectionTransaction> EndAsync(
@@ -100,7 +141,7 @@ public sealed class DirectionBeatRuntime : IDirectionBeatRuntime
         var transaction = await transactions.ExecuteAsync(
             ending.Directives,
             completion,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken);
         committed[ending.Id] = transaction;
         return transaction;
     }
@@ -117,7 +158,7 @@ public sealed class DirectionBeatRuntime : IDirectionBeatRuntime
         CancellationToken cancellationToken = default)
     {
         var transaction = GetCommitted(beatId);
-        await transaction.Settlement.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await transaction.Settlement.WaitAsync(cancellationToken);
     }
 
     public Task FinishAsync(
@@ -153,5 +194,6 @@ public sealed class DirectionBeatRuntime : IDirectionBeatRuntime
     private sealed record OpenBeat(
         string Id,
         string NodeId,
+        DirectionBeatDefaults? Defaults,
         List<IDirectionDirective> Directives);
 }

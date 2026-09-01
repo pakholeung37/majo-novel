@@ -7,7 +7,8 @@
 - 核心能力：显式 Beat 事务、Multi-Stage、Multi-View、Screen Layout、Backdrop/CG 分离、原子 Prepare/Commit、Rollback、Hot Reload
 - Authoring 原则：inline-first、node-local、name-on-reuse、资源路径隐式解析
 - 兼容策略：不以旧 staging command 或旧存档 schema 兼容为设计约束
-- 实施进度（2026-09-01）：Phase A 的纯 Direction Core、Planner、Prepare/Commit 协调器、显式 Beat runtime 与 fake backend 单测已落地；尚未注册新 Yarn API，也未替换旧 Godot staging backend
+- 实施进度（2026-09-01）：Phase A 的纯 Direction Core、Planner、Prepare/Commit 协调器、显式 Beat runtime 与 fake backend 单测已完成
+- Phase B 进度（2026-09-01）：独立 StageViewport → ViewViewport → Screen 的单 Stage/单 View Godot render chain、Backdrop/CG typed texture Prepare、Pose/Cut/Move/Dissolve、Curtain backend，以及 Actor `place/leave` 的完整隐藏树 Prepare、cut root swap、actor-level move/fade/finish 已落地；`backdrop/place/leave/shot pose/shot cg/beat` 已注册到 Yarn adapter，Bootstrap 已装配 Direction service graph，真实 Yarn headless vertical slice 已覆盖显式 Beat 原子提交、单命令事务、CG/Stage 往返和 Actor transition。Phase B 完成，下一阶段进入 Multi-Stage
 - 相关文档：
   - [`camera-runtime-next-phases.md`](camera-runtime-next-phases.md)
   - [`archive/camera-view-transition-design.md`](archive/camera-view-transition-design.md)
@@ -360,7 +361,7 @@ join:<barrier>   commit 或 settle
 ```yarn
 <<place Ema at:left look:"Fearful1,ArmR1">>
 <<place Hiro stage:cell at:70,0 look:Angry2>>
-<<place Ema at:right over:0.3 ease:cubic-out>>
+<<place Ema at:right via:move over:0.3 ease:cubic-out>>
 ```
 
 产生稀疏 `ActorPatch`。Actor 不存在时建立 Stage-scoped instance；Actor 已存在时只修改明确字段；未提供字段保持稳定目标不变。`look:` 交给 Actor Manifest 和 LayerCompositionResolver。

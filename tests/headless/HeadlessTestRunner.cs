@@ -82,6 +82,7 @@ public partial class HeadlessTestRunner : Node
 		await ValidateSuccessfulRuntimeLifecycleAsync();
 		await ValidateLifecycleTimeoutAsync();
 		await ValidateOperationKernelAsync();
+		await ValidateDirectionRenderingAsync();
 		await ValidateActorSystemAsync();
 		await ValidateLayeredCharacterAsync();
 		await ValidateYarnCommandAdapterAsync();
