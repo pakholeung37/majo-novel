@@ -13,7 +13,9 @@ namespace Majo.Runtime.Direction.Godot;
 internal sealed class GodotPreparedDirectionComponentGroup : IPreparedDirectionComponent
 {
     private readonly IReadOnlyList<IPreparedDirectionComponent> components;
+    private readonly object sync = new();
     private bool committed;
+    private bool rolledBack;
     private bool disposed;
 
     public GodotPreparedDirectionComponentGroup(
@@ -27,23 +29,74 @@ internal sealed class GodotPreparedDirectionComponentGroup : IPreparedDirectionC
 
     public void Commit(DirectionCommitToken token)
     {
-        if (committed) throw new InvalidOperationException("Component group already committed.");
-        committed = true;
-        foreach (var component in components) component.Commit(token);
+        lock (sync)
+        {
+            if (committed || rolledBack || disposed)
+                throw new InvalidOperationException("Component group is no longer preparable.");
+            committed = true;
+        }
+
+        try
+        {
+            foreach (var component in components) component.Commit(token);
+        }
+        catch (Exception commitException)
+        {
+            try
+            {
+                Rollback(token);
+            }
+            catch (Exception rollbackException)
+            {
+                throw new AggregateException(
+                    "Direction component commit failed and compensation also failed.",
+                    commitException,
+                    rollbackException);
+            }
+            throw;
+        }
+    }
+
+    public void Rollback(DirectionCommitToken token)
+    {
+        lock (sync)
+        {
+            if (rolledBack || disposed) return;
+            rolledBack = true;
+        }
+
+        List<Exception>? failures = null;
+        foreach (var component in components.Reverse())
+        {
+            try { component.Rollback(token); }
+            catch (Exception exception) { (failures ??= new()).Add(exception); }
+        }
+        if (failures is not null)
+            throw new AggregateException("One or more Direction components failed to roll back.", failures);
     }
 
     public async ValueTask FinishAsync(CancellationToken cancellationToken)
     {
-        if (!committed) throw new InvalidOperationException("Component group has not committed.");
+        if (!committed || rolledBack || disposed)
+            throw new InvalidOperationException("Component group cannot finish in its current state.");
         foreach (var component in components)
             await component.FinishAsync(cancellationToken);
     }
 
     public async ValueTask DisposeAsync()
     {
-        if (disposed) return;
-        disposed = true;
+        lock (sync)
+        {
+            if (disposed) return;
+            disposed = true;
+        }
+        List<Exception>? failures = null;
         foreach (var component in components.Reverse())
-            await component.DisposeAsync();
+        {
+            try { await component.DisposeAsync(); }
+            catch (Exception exception) { (failures ??= new()).Add(exception); }
+        }
+        if (failures is not null)
+            throw new AggregateException("One or more Direction components failed to dispose.", failures);
     }
 }

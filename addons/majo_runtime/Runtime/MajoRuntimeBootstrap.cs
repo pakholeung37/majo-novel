@@ -395,8 +395,15 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(IResourceManager))
             .AddSingleton<IDirectionBeatRuntime>(
                 resolver => new DirectionBeatRuntime(
-                    resolver.Get<IDirectionTransactionCoordinator>()),
-                typeof(IDirectionTransactionCoordinator))
+                    resolver.Get<IDirectionTransactionCoordinator>(),
+                    new TransientDirectionCueExecutor(
+                        resolver.Get<ICameraManager>(),
+                        resolver.Get<IScreenEffectManager>(),
+                        resolver.Get<IStageCurtainManager>())),
+                typeof(IDirectionTransactionCoordinator),
+                typeof(ICameraManager),
+                typeof(IScreenEffectManager),
+                typeof(IStageCurtainManager))
             .AddSingleton<IDirectionScopeResolver>(_ => new DirectionScopeResolver())
             .AddSingleton<IScriptPreloadManager>(
                 resolver => new ScriptPreloadManager(
@@ -537,14 +544,16 @@ public partial class MajoRuntimeBootstrap : Node
                         ResolveSpeakerName,
                         Logger,
                         Configuration.Script!.RequireExactProgramFingerprint,
-                        resolver.Get<IYarnProjectVersionStore>());
+                        resolver.Get<IYarnProjectVersionStore>(),
+                        resolver.Get<IDirectionScopeResolver>());
                     return yarnDialogueBackend;
                 },
                 typeof(IResourceManager),
                 typeof(IAudioManager),
                 typeof(ILocaleManager),
                 typeof(ILocalizedResourceResolver),
-                typeof(IYarnProjectVersionStore))
+                typeof(IYarnProjectVersionStore),
+                typeof(IDirectionScopeResolver))
             .AddSingleton<IDialoguePresentation>(
                 resolver =>
                 {
@@ -801,10 +810,6 @@ public partial class MajoRuntimeBootstrap : Node
                     resolver.Get<IActorManager>(),
                     resolver.Get<IAudioManager>(),
                     resolver.Get<IHistoryManager>(),
-                    resolver.Get<ICameraManager>(),
-                    resolver.Get<IStageCurtainManager>(),
-                    resolver.Get<IScreenEffectManager>(),
-                    resolver.Get<IStageTransitionManager>(),
                     resolver.Get<IScriptPlayback>(),
                     resolver.Get<IDialoguePlayer>(),
                     resolver.Get<IInputManager>(),
@@ -818,10 +823,6 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(IActorManager),
                 typeof(IAudioManager),
                 typeof(IHistoryManager),
-                typeof(ICameraManager),
-                typeof(IStageCurtainManager),
-                typeof(IScreenEffectManager),
-                typeof(IStageTransitionManager),
                 typeof(IScriptPlayback),
                 typeof(IDialoguePlayer),
                 typeof(IInputManager),
@@ -956,10 +957,6 @@ public partial class MajoRuntimeBootstrap : Node
         IActorManager actors,
         IAudioManager audio,
         IHistoryManager history,
-        ICameraManager camera,
-        IStageCurtainManager curtain,
-        IScreenEffectManager effects,
-        IStageTransitionManager transitions,
         IScriptPlayback scriptPlayback,
         IDialoguePlayer dialogue,
         IInputManager input,
@@ -973,7 +970,6 @@ public partial class MajoRuntimeBootstrap : Node
             .Register(new DialogueVariablesStateContributor(variables))
             .Register(new ActorStateContributor(actors))
             .Register(new AudioStateContributor(audio))
-            .Register(new StageStateContributor(camera, curtain, effects, transitions))
             .Register(new SessionHistoryStateContributor(history))
             .Register(new DirectionStateContributor(direction));
         foreach (var contributor in customContributors)
@@ -1031,7 +1027,7 @@ public partial class MajoRuntimeBootstrap : Node
         BuiltInRuntimeCommands.Register(commands, new ActorCommandService(actors, Logger));
         commands.RegisterModule(new AudioCommandModule(audio));
         commands.RegisterModule(new CameraCommandModule());
-        commands.RegisterModule(new StageCommandModule());
+        commands.RegisterModule(new StageCommandModule(includeTransientCommands: false));
         commands.RegisterModule(new DirectionCommandModule(
             direction,
             DirectionResourceResolver ??
@@ -1210,10 +1206,23 @@ public partial class MajoRuntimeBootstrap : Node
 
             if (Host is not null)
             {
-                await ExecuteWithLifecycleTimeoutAsync(
-                    token => Host.ShutdownAsync(token),
-                    cancellationToken,
-                    "shutdown");
+                // If initialization exceeded its deadline, RuntimeHost may still
+                // own a service whose initializer deliberately ignored
+                // cancellation. Let that initialization finish before asking the
+                // host to shut down; applying the short shutdown deadline here
+                // would cancel while the host is waiting on its lifecycle gate and
+                // leave the late-completing service uncleaned.
+                if (Host.State == RuntimeHostState.Initializing)
+                {
+                    await Host.ShutdownAsync(CancellationToken.None);
+                }
+                else
+                {
+                    await ExecuteWithLifecycleTimeoutAsync(
+                        token => Host.ShutdownAsync(token),
+                        cancellationToken,
+                        "shutdown");
+                }
             }
 
             DebugOverlay?.Dispose();

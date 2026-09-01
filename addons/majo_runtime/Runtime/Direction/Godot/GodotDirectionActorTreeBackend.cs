@@ -74,11 +74,20 @@ internal sealed class GodotDirectionActorTreeBackend
                 target,
                 transitions);
         }
-        catch
+        catch (Exception preparationException)
         {
+            List<Exception>? failures = null;
             if (manager is not null)
-                await manager.ShutdownAsync(CancellationToken.None);
-            ReleaseRoot(root);
+            {
+                try { await manager.ShutdownAsync(CancellationToken.None); }
+                catch (Exception exception) { failures = new List<Exception> { exception }; }
+            }
+            try { ReleaseRoot(root); }
+            catch (Exception exception) { (failures ??= new()).Add(exception); }
+            if (failures is not null)
+                throw new AggregateException(
+                    "Direction actor preparation failed and cleanup also failed.",
+                    new[] { preparationException }.Concat(failures));
             throw;
         }
     }
@@ -221,6 +230,15 @@ internal sealed class GodotDirectionActorTreeBackend
         return previous;
     }
 
+    private void Restore(PreparedActorTreeState? previous, PreparedActorTreeState target)
+    {
+        if (ReferenceEquals(active, target))
+            active = previous;
+        target.Root.Visible = false;
+        if (previous is not null && GodotObject.IsInstanceValid(previous.Root))
+            previous.Root.Visible = true;
+    }
+
     private static void ReleaseRoot(Node2D root)
     {
         if (!GodotObject.IsInstanceValid(root)) return;
@@ -239,6 +257,7 @@ internal sealed class GodotDirectionActorTreeBackend
         private readonly List<IOperationHandle> operations = new();
         private PreparedActorTreeState? replaced;
         private bool committed;
+        private bool rolledBack;
         private bool disposed;
 
         public PreparedActorTree(
@@ -257,7 +276,8 @@ internal sealed class GodotDirectionActorTreeBackend
 
         public void Commit(DirectionCommitToken token)
         {
-            if (committed) throw new InvalidOperationException("Actor tree already committed.");
+            if (committed || rolledBack || disposed)
+                throw new InvalidOperationException("Actor tree is no longer preparable.");
             committed = true;
             replaced = backend.Publish(target);
             StartTransitions();
@@ -274,20 +294,41 @@ internal sealed class GodotDirectionActorTreeBackend
         public async ValueTask FinishAsync(CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (!committed) throw new InvalidOperationException("Actor tree has not committed.");
+            if (!committed || rolledBack || disposed)
+                throw new InvalidOperationException("Actor tree cannot finish in its current state.");
             foreach (var operation in operations) operation.Complete();
             await Task.WhenAll(operations.Select(operation => operation.Completion))
                 .WaitAsync(cancellationToken);
             CompleteSettlement();
         }
 
+        public void Rollback(DirectionCommitToken token)
+        {
+            if (rolledBack || disposed) return;
+            rolledBack = true;
+            List<Exception>? failures = null;
+            foreach (var operation in operations)
+            {
+                try { operation.Cancel(); }
+                catch (Exception exception) { (failures ??= new()).Add(exception); }
+            }
+            try { backend.Restore(replaced, target); }
+            catch (Exception exception) { (failures ??= new()).Add(exception); }
+            settlement.TrySetCanceled();
+            committed = false;
+            if (failures is not null)
+                throw new AggregateException(
+                    "Actor tree rollback failed to fully cancel and restore.", failures);
+        }
+
         public async ValueTask DisposeAsync()
         {
             if (disposed) return;
             disposed = true;
+            if (!settlement.Task.IsCompleted)
+                settlement.TrySetCanceled();
             if (!committed)
             {
-                settlement.TrySetCanceled();
                 await target.DisposeAsync(CancellationToken.None);
                 return;
             }
@@ -362,7 +403,7 @@ internal sealed class GodotDirectionActorTreeBackend
 
         private void CompleteSettlement()
         {
-            if (settlement.Task.IsCompleted) return;
+            if (settlement.Task.IsCompleted || rolledBack || disposed) return;
             if (replaced is not null) replaced.Root.Visible = false;
             settlement.TrySetResult();
         }
@@ -413,8 +454,17 @@ internal sealed class GodotDirectionActorTreeBackend
         {
             if (disposed) return;
             disposed = true;
-            await Manager.ShutdownAsync(cancellationToken);
-            ReleaseRoot(Root);
+            Exception? failure = null;
+            try { await Manager.ShutdownAsync(cancellationToken); }
+            catch (Exception exception) { failure = exception; }
+            try { ReleaseRoot(Root); }
+            catch (Exception exception)
+            {
+                failure = failure is null
+                    ? exception
+                    : new AggregateException(failure, exception);
+            }
+            if (failure is not null) throw failure;
         }
     }
 }

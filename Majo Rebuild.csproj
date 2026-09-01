@@ -4,7 +4,7 @@
     <EnableDynamicLoading>true</EnableDynamicLoading>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <WarningsNotAsErrors>$(WarningsNotAsErrors);SYSLIB1220</WarningsNotAsErrors>
-    <DefaultItemExcludes>$(DefaultItemExcludes);tests/Majo.Runtime.UnitTests/**;tests/fixtures/**</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);tests/Majo.Runtime.UnitTests/**;tests/fixtures/**;**/bin/**;**/obj/**</DefaultItemExcludes>
   </PropertyGroup>
 
   <Import Project="addons\YarnSpinner-Godot\YarnSpinner-Godot.props" />

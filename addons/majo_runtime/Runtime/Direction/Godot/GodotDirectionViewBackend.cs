@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
@@ -35,87 +36,142 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
             throw new DirectionReferenceException(
                 $"Direction View '{viewId}' has no target state.");
         }
+        var createdView = !host.HasView(viewId);
         host.GetOrCreateView(viewId);
-
-        Texture2D targetTexture = target.Source switch
+        try
         {
-            StageViewSource { StageId: var stageId } => host.GetStageTexture(stageId),
-            CgViewSource cg => await textures.LoadAsync(
-                cg.Resource,
-                cancellationToken),
-            _ => throw new DirectionReferenceException(
-                $"Unsupported View source '{target.Source.GetType().Name}'."),
-        };
+            Texture2D? beforeTexture = null;
+            if (before is not null)
+            {
+                beforeTexture = before.Source switch
+                {
+                    StageViewSource { StageId: var stageId } => host.GetStageTexture(stageId),
+                    CgViewSource cg => await textures.LoadAsync(cg.Resource, cancellationToken),
+                    _ => throw new DirectionReferenceException(
+                        $"Unsupported View source '{before.Source.GetType().Name}'."),
+                };
+            }
+            Texture2D targetTexture = target.Source switch
+            {
+                StageViewSource { StageId: var stageId } => host.GetStageTexture(stageId),
+                CgViewSource cg => await textures.LoadAsync(cg.Resource, cancellationToken),
+                _ => throw new DirectionReferenceException(
+                    $"Unsupported View source '{target.Source.GetType().Name}'."),
+            };
 
-        var transition = GodotDirectionRendering.ResolveTransition(
-            plan,
-            path => path.StartsWith($"view/{viewId.Value}/", StringComparison.Ordinal));
-        ImageTexture? capture = null;
-        if (transition.DurationSeconds > 0 &&
-            transition.Kind is DirectionTransitionKind.Fade or DirectionTransitionKind.Dissolve)
-        {
-            capture = host.CaptureView(viewId);
+            await host.WaitForRenderFenceAsync(cancellationToken);
+            var sequence = plan.ViewSequences?.FirstOrDefault(
+                candidate => candidate.ViewId == viewId);
+            if (sequence is not null && sequence.StartState.Source != target.Source)
+            {
+                throw new DirectionException(
+                    $"View '{viewId}' changes source during a sequential pose transition; " +
+                    "split the source change and pose transition into separate beats.");
+            }
+            var transition = sequence?.Transition ?? GodotDirectionRendering.ResolveTransition(
+                plan,
+                path => path.StartsWith($"view/{viewId.Value}/", StringComparison.Ordinal));
+            ImageTexture? capture = null;
+            if (transition.DurationSeconds > 0 &&
+                transition.Kind is DirectionTransitionKind.Fade or DirectionTransitionKind.Dissolve)
+            {
+                capture = await host.CaptureViewAsync(viewId, cancellationToken);
+            }
+
+            var source = sequence?.StartState ?? before ?? target;
+            if (before is not null)
+                source = source with
+                {
+                    Pose = sequence?.StartState.Pose ?? host.GetCurrentViewPose(viewId),
+                };
+            var prepared = new PreparedView(
+                host,
+                viewId,
+                before,
+                source,
+                beforeTexture,
+                target,
+                targetTexture,
+                capture,
+                transition,
+                sequence is not null);
+            return createdView ? new PreparedViewLifecycle(host, viewId, prepared) : prepared;
         }
-
-        return new PreparedView(
-            host,
-            viewId,
-            before ?? target,
-            target,
-            targetTexture,
-            capture,
-            transition);
+        catch
+        {
+            if (createdView) host.ReleasePreparedView(viewId);
+            throw;
+        }
     }
 
     private sealed class PreparedView : IPreparedDirectionComponent
     {
         private readonly GodotDirectionRenderHost host;
         private readonly ViewId viewId;
+        private readonly ViewState? restoreState;
         private readonly ViewState before;
+        private readonly Texture2D? restoreTexture;
         private readonly ViewState target;
         private readonly Texture2D targetTexture;
         private readonly ImageTexture? capture;
         private readonly DirectionTransitionSpec transition;
+        private readonly bool publishTransitionStart;
         private readonly TaskCompletionSource settlement = new(
             TaskCreationOptions.RunContinuationsAsynchronously);
         private Tween? tween;
         private bool committed;
+        private bool rolledBack;
         private bool disposed;
+        private long generation;
 
         public PreparedView(
             GodotDirectionRenderHost host,
             ViewId viewId,
+            ViewState? restoreState,
             ViewState before,
+            Texture2D? restoreTexture,
             ViewState target,
             Texture2D targetTexture,
             ImageTexture? capture,
-            DirectionTransitionSpec transition)
+            DirectionTransitionSpec transition,
+            bool publishTransitionStart)
         {
             this.host = host;
             this.viewId = viewId;
+            this.restoreState = restoreState;
             this.before = before;
+            this.restoreTexture = restoreTexture;
             this.target = target;
             this.targetTexture = targetTexture;
             this.capture = capture;
             this.transition = transition;
+            this.publishTransitionStart = publishTransitionStart;
         }
 
         public Task Settlement => settlement.Task;
 
         public void Commit(DirectionCommitToken token)
         {
-            if (committed) throw new InvalidOperationException("View already committed.");
+            if (committed || rolledBack || disposed)
+                throw new InvalidOperationException("View is no longer preparable.");
             committed = true;
-            host.ClearViewTransition();
+            generation = host.BeginViewGeneration(viewId);
+            host.ClearViewTransition(viewId);
+            var transitionSource = host.GetViewTransitionSource(viewId);
 
             if (capture is not null)
             {
-                host.TransitionSource.Texture = capture;
-                host.TransitionSource.Modulate = Colors.White;
-                host.TransitionSource.Visible = true;
+                transitionSource.Texture = capture;
+                transitionSource.Modulate = Colors.White;
+                transitionSource.Visible = true;
             }
 
-            host.PublishView(viewId, target, targetTexture);
+            // A sequenced pose starts from the cut baseline captured in
+            // `before`; the normal case uses the actual current pose there.
+            host.PublishView(
+                viewId,
+                publishTransitionStart ? before : target,
+                targetTexture);
             if (transition.DurationSeconds <= 0 || transition.Kind == DirectionTransitionKind.Cut)
             {
                 Complete();
@@ -129,12 +185,16 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
                 case DirectionTransitionKind.Move:
                     host.ApplyViewPose(viewId, before.Pose);
                     tween.TweenMethod(
-                        Callable.From<float>(progress => host.ApplyViewPose(
-                            viewId,
-                            GodotDirectionRendering.Interpolate(
-                                before.Pose,
-                                target.Pose,
-                                progress))),
+                        Callable.From<float>(progress =>
+                        {
+                            if (!host.IsCurrentViewGeneration(viewId, generation)) return;
+                            host.ApplyViewPose(
+                                viewId,
+                                GodotDirectionRendering.Interpolate(
+                                    before.Pose,
+                                    target.Pose,
+                                    progress));
+                        }),
                         0.0f,
                         1.0f,
                         transition.DurationSeconds);
@@ -146,11 +206,12 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
                         Complete();
                         return;
                     }
-                    tween.TweenProperty(
-                        host.TransitionSource,
-                        "modulate:a",
-                        0,
-                        transition.DurationSeconds);
+                    tween.TweenMethod(Callable.From<float>(progress =>
+                    {
+                        if (host.IsCurrentViewGeneration(viewId, generation))
+                            transitionSource.Modulate = new Color(
+                                transitionSource.Modulate, 1 - progress);
+                    }), 0.0f, 1.0f, transition.DurationSeconds);
                     break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(transition));
@@ -161,21 +222,38 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
         public ValueTask FinishAsync(CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (!committed) throw new InvalidOperationException("View has not committed.");
+            if (!committed || rolledBack || disposed)
+                throw new InvalidOperationException("View cannot finish in its current state.");
             Complete();
             return ValueTask.CompletedTask;
+        }
+
+        public void Rollback(DirectionCommitToken token)
+        {
+            if (rolledBack || disposed) return;
+            rolledBack = true;
+            generation = host.BeginViewGeneration(viewId);
+            if (tween is not null && GodotObject.IsInstanceValid(tween))
+                tween.Finished -= OnFinished;
+            GodotDirectionRendering.Kill(tween);
+            tween = null;
+            host.ClearViewTransition(viewId);
+            if (restoreState is not null && restoreTexture is not null)
+                host.PublishView(viewId, restoreState, restoreTexture);
+            settlement.TrySetCanceled();
         }
 
         public ValueTask DisposeAsync()
         {
             if (disposed) return ValueTask.CompletedTask;
             disposed = true;
-            if (!committed) settlement.TrySetCanceled();
+            if (!settlement.Task.IsCompleted) settlement.TrySetCanceled();
             if (tween is not null && GodotObject.IsInstanceValid(tween))
                 tween.Finished -= OnFinished;
             GodotDirectionRendering.Kill(tween);
             tween = null;
-            host.ClearViewTransition();
+            if (host.IsCurrentViewGeneration(viewId, generation))
+                host.ClearViewTransition(viewId);
             capture?.Dispose();
             return ValueTask.CompletedTask;
         }
@@ -184,14 +262,58 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
 
         private void Complete()
         {
-            if (settlement.Task.IsCompleted) return;
+            if (settlement.Task.IsCompleted || rolledBack || disposed) return;
             if (tween is not null && GodotObject.IsInstanceValid(tween))
                 tween.Finished -= OnFinished;
             GodotDirectionRendering.Kill(tween);
             tween = null;
-            host.PublishView(viewId, target, targetTexture);
-            host.ClearViewTransition();
+            if (host.IsCurrentViewGeneration(viewId, generation))
+            {
+                host.PublishView(viewId, target, targetTexture);
+                host.ClearViewTransition(viewId);
+            }
             settlement.TrySetResult();
+        }
+    }
+
+    private sealed class PreparedViewLifecycle : IPreparedDirectionComponent
+    {
+        private readonly GodotDirectionRenderHost host;
+        private readonly ViewId viewId;
+        private readonly IPreparedDirectionComponent component;
+        private bool committed;
+        private bool commitStarted;
+        private bool disposed;
+
+        public PreparedViewLifecycle(GodotDirectionRenderHost host, ViewId viewId, IPreparedDirectionComponent component)
+        {
+            this.host = host;
+            this.viewId = viewId;
+            this.component = component;
+        }
+
+        public Task Settlement => component.Settlement;
+        public void Commit(DirectionCommitToken token)
+        {
+            if (committed || disposed)
+                throw new InvalidOperationException("View lifecycle is no longer preparable.");
+            commitStarted = true;
+            component.Commit(token);
+            committed = true;
+        }
+        public void Rollback(DirectionCommitToken token)
+        {
+            if (!commitStarted) return;
+            try { component.Rollback(token); }
+            finally { committed = false; }
+        }
+        public ValueTask FinishAsync(CancellationToken cancellationToken) => component.FinishAsync(cancellationToken);
+        public async ValueTask DisposeAsync()
+        {
+            if (disposed) return;
+            disposed = true;
+            await component.DisposeAsync();
+            if (!committed) host.ReleasePreparedView(viewId);
         }
     }
 }

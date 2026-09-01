@@ -53,10 +53,12 @@ Narrator: custom command completed #line:m45-custom-command
 
 title: DirectionCommands
 ---
-<<beat begin id:direction-opening over:0.08 ease:cubic-out>>
+<<beat begin over:0.08 ease:cubic-out>>
 <<backdrop background_dark>>
 <<place hero at:left look:red scale:1 z:5>>
-<<shot pose stage:main center:50,50 zoom:1>>
+<<shot cg background_light via:cut>>
+<<shot pose center:37.384,74.816 zoom:3 rotation:10 via:cut>>
+<<shot pose center:44.438,71.950 over:0.4 ease:back-out>>
 <<beat end join:settle>>
 Narrator: direction beat committed #line:m4-direction-beat
 <<place hero at:right look:blue via:move over:0.08 join:settle>>

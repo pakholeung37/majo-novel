@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -16,6 +17,8 @@ using Microsoft.Extensions.FileSystemGlobbing;
 using Yarn;
 using Yarn.Compiler;
 using Yarn.Utility;
+using Majo.Runtime.Dialogue.Yarn;
+using Majo.Runtime.Dialogue.Yarn.HotReload;
 using File = System.IO.File;
 using Path = System.IO.Path;
 #if YARNSPINNER_DEBUG
@@ -630,6 +633,33 @@ public static class YarnProjectEditorUtility
                 outputStream.Flush();
 
                 compiledBytes = memoryStream.ToArray();
+
+                var directionFiles = scriptAbsolutePaths.Select(path =>
+                {
+                    var content = File.ReadAllText(path);
+                    return new YarnSourceFileSnapshot(
+                        ProjectSettings.LocalizePath(path),
+                        path,
+                        content,
+                        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(content)))
+                            .ToLowerInvariant());
+                }).ToArray();
+                var directionSnapshot = new YarnSourceSnapshot(
+                    Path.GetFileNameWithoutExtension(project.JSONProjectPath),
+                    project.JSONProjectPath,
+                    project.JSONProject.FileVersion,
+                    project.JSONProject.BaseLanguage,
+                    directionFiles,
+                    Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
+                        string.Join("\n", directionFiles.Select(file => file.ContentHash)))))
+                        .ToLowerInvariant());
+                var directionModules = new NodeDirectionCompiler().Compile(directionSnapshot);
+                project.CompiledDirectionModulesJson = YarnProjectDirectionMetadata.Serialize(directionModules);
+                foreach (var diagnostic in directionModules.SelectMany(module => module.Diagnostics)
+                    .Where(diagnostic => diagnostic.Severity.Equals("error", StringComparison.OrdinalIgnoreCase)))
+                {
+                    GD.PushError($"Direction authoring error: {diagnostic.File}:{diagnostic.StartLine}: {diagnostic.Message}");
+                }
             }
 
             project.ListOfFunctions = newFunctionList.ToArray();

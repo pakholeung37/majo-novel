@@ -20,14 +20,19 @@ public enum DirectionTransactionStatus
 
 public sealed class CommittedDirectionTransaction
 {
+    private readonly object owner;
     private readonly IPreparedDirectionTransaction prepared;
+    private readonly SemaphoreSlim lifecycleGate = new(1, 1);
     private int status = (int)DirectionTransactionStatus.Committed;
+    private int disposed;
 
     internal CommittedDirectionTransaction(
+        object owner,
         DirectionPlan plan,
         DirectionCommitToken token,
         IPreparedDirectionTransaction prepared)
     {
+        this.owner = owner ?? throw new ArgumentNullException(nameof(owner));
         Plan = plan;
         Token = token;
         this.prepared = prepared;
@@ -43,28 +48,111 @@ public sealed class CommittedDirectionTransaction
     public bool IsSkippable =>
         Plan.Transitions.Count > 0 && Plan.Transitions.All(transition => transition.Spec.Skippable);
 
+    internal bool IsOwnedBy(object candidate) => ReferenceEquals(owner, candidate);
+
     internal async Task FinishAsync(CancellationToken cancellationToken)
     {
-        await prepared.FinishAsync(cancellationToken);
+        await lifecycleGate.WaitAsync(cancellationToken);
+        try
+        {
+            if (Volatile.Read(ref disposed) != 0 &&
+                Status == DirectionTransactionStatus.Settled)
+                return;
+
+            if (Status == DirectionTransactionStatus.Faulted)
+            {
+                await Settlement.WaitAsync(cancellationToken);
+                return;
+            }
+
+            if (!prepared.Settlement.IsCompleted)
+                await prepared.FinishAsync(cancellationToken);
+        }
+        finally
+        {
+            lifecycleGate.Release();
+        }
+
         await Settlement.WaitAsync(cancellationToken);
+    }
+
+    internal async Task CleanupAsync(CancellationToken cancellationToken)
+    {
+        List<Exception>? failures = null;
+        try
+        {
+            if (Status == DirectionTransactionStatus.Committed)
+                await FinishAsync(cancellationToken);
+            else
+                await Settlement.WaitAsync(cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            failures = new List<Exception> { exception };
+        }
+
+        try
+        {
+            await DisposeAsync();
+        }
+        catch (Exception exception)
+        {
+            (failures ??= new List<Exception>()).Add(exception);
+        }
+
+        if (failures is not null)
+            throw new AggregateException("Direction transaction cleanup failed.", failures);
+    }
+
+    private async Task DisposeAsync()
+    {
+        await lifecycleGate.WaitAsync(CancellationToken.None);
+        try
+        {
+            if (Interlocked.Exchange(ref disposed, 1) == 0)
+                await prepared.DisposeAsync();
+        }
+        finally
+        {
+            lifecycleGate.Release();
+        }
     }
 
     private async Task ObserveSettlementAsync()
     {
+        Exception? settlementException = null;
         try
         {
             await prepared.Settlement;
             Interlocked.Exchange(ref status, (int)DirectionTransactionStatus.Settled);
         }
-        catch
+        catch (Exception exception)
         {
             Interlocked.Exchange(ref status, (int)DirectionTransactionStatus.Faulted);
-            throw;
+            settlementException = exception;
         }
-        finally
+
+        Exception? disposeException = null;
+        try
         {
-            await prepared.DisposeAsync();
+            await DisposeAsync();
         }
+        catch (Exception exception)
+        {
+            disposeException = exception;
+        }
+
+        if (settlementException is not null && disposeException is not null)
+            throw new AggregateException(
+                "Direction settlement and cleanup both failed.",
+                settlementException,
+                disposeException);
+        if (settlementException is not null)
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo
+                .Capture(settlementException)
+                .Throw();
+        if (disposeException is not null)
+            throw disposeException;
     }
 }
 
@@ -109,6 +197,7 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
         this.planner = planner ?? throw new ArgumentNullException(nameof(planner));
         this.backend = backend ?? throw new ArgumentNullException(nameof(backend));
         state = initialState ?? DirectionState.CreateDefault();
+        state.Validate();
     }
 
     public DirectionState State
@@ -127,23 +216,44 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
 
     public async Task ResetAsync(CancellationToken cancellationToken)
     {
+        await commitGate.WaitAsync(cancellationToken);
+        try
+        {
+            await ResetUnderCommitGateAsync(cancellationToken);
+        }
+        finally
+        {
+            commitGate.Release();
+        }
+    }
+
+    private async Task ResetUnderCommitGateAsync(CancellationToken cancellationToken)
+    {
         CommittedDirectionTransaction[] active;
         lock (stateGate)
-        {
-            active = transactions
-                .Where(transaction =>
-                    transaction.Status == DirectionTransactionStatus.Committed)
-                .ToArray();
-        }
+            active = transactions.ToArray();
 
+        List<Exception>? failures = null;
         foreach (var transaction in active)
-            await transaction.FinishAsync(cancellationToken);
+        {
+            try
+            {
+                await transaction.CleanupAsync(cancellationToken);
+            }
+            catch (Exception exception)
+            {
+                (failures ??= new List<Exception>()).Add(exception);
+            }
+        }
 
         lock (stateGate)
         {
             transactions.Clear();
             state = DirectionState.CreateDefault();
         }
+
+        if (failures is not null)
+            throw new AggregateException("One or more Direction transactions failed to reset.", failures);
     }
 
     public Task ShutdownAsync(CancellationToken cancellationToken) =>
@@ -179,6 +289,10 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(transaction);
+        if (!transaction.IsOwnedBy(this))
+            throw new ArgumentException(
+                "The Direction transaction belongs to another coordinator.",
+                nameof(transaction));
         await commitGate.WaitAsync(cancellationToken);
         try
         {
@@ -224,7 +338,20 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(transaction);
-        return transaction.FinishAsync(cancellationToken);
+        if (!transaction.IsOwnedBy(this))
+            throw new ArgumentException(
+                "The Direction transaction belongs to another coordinator.",
+                nameof(transaction));
+        return FinishUnderCommitGateAsync(transaction, cancellationToken);
+    }
+
+    private async Task FinishUnderCommitGateAsync(
+        CommittedDirectionTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        await commitGate.WaitAsync(cancellationToken);
+        try { await transaction.FinishAsync(cancellationToken); }
+        finally { commitGate.Release(); }
     }
 
     public async Task RestoreAsync(
@@ -232,6 +359,7 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(target);
+        target.Validate();
         await commitGate.WaitAsync(cancellationToken);
         try
         {
@@ -255,18 +383,38 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
 
     public async Task FinishSkippableAsync(CancellationToken cancellationToken = default)
     {
-        CommittedDirectionTransaction[] active;
-        lock (stateGate)
+        await commitGate.WaitAsync(cancellationToken);
+        try
         {
-            active = transactions
-                .Where(transaction =>
-                    transaction.Status == DirectionTransactionStatus.Committed &&
-                    transaction.IsSkippable)
-                .ToArray();
-        }
+            CommittedDirectionTransaction[] active;
+            lock (stateGate)
+            {
+                active = transactions
+                    .Where(transaction =>
+                        transaction.Status == DirectionTransactionStatus.Committed &&
+                        transaction.IsSkippable)
+                    .ToArray();
+            }
 
-        foreach (var transaction in active)
-            await transaction.FinishAsync(cancellationToken);
+            List<Exception>? failures = null;
+            foreach (var transaction in active)
+            {
+                try
+                {
+                    await transaction.FinishAsync(cancellationToken);
+                }
+                catch (Exception exception)
+                {
+                    (failures ??= new List<Exception>()).Add(exception);
+                }
+            }
+            if (failures is not null)
+                throw new AggregateException("One or more Direction transitions failed to skip.", failures);
+        }
+        finally
+        {
+            commitGate.Release();
+        }
     }
 
     private async Task<CommittedDirectionTransaction> PrepareAndCommitAsync(
@@ -274,33 +422,88 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
         CancellationToken cancellationToken)
     {
         IPreparedDirectionTransaction? prepared = null;
-        var didCommit = false;
+        var commitStarted = false;
+        var ownershipTransferred = false;
+        DirectionCommitToken token = default;
         try
         {
             prepared = await backend.PrepareAsync(plan, cancellationToken);
             if (prepared is null)
                 throw new DirectionException("Direction backend returned no prepared transaction.");
 
-            var token = new DirectionCommitToken(plan.Id, plan.TargetState.Revision);
-            CommittedDirectionTransaction committed;
+            token = new DirectionCommitToken(plan.Id, plan.TargetState.Revision);
             lock (stateGate)
             {
-                prepared.Commit(token);
-                didCommit = true;
-                committed = new CommittedDirectionTransaction(plan, token, prepared);
+                if (!ReferenceEquals(state, plan.BeforeState) &&
+                    state.Revision != plan.BeforeState.Revision)
+                {
+                    throw new DirectionRevisionException(
+                        plan.BeforeState.Revision,
+                        state.Revision);
+                }
+            }
+
+            // Commit is deliberately outside stateGate. The commit gate still
+            // serializes writers, while readers never block on Godot/backend work.
+            commitStarted = true;
+            prepared.Commit(token);
+
+            lock (stateGate)
+            {
+                if (state.Revision != plan.BeforeState.Revision)
+                    throw new DirectionRevisionException(
+                        plan.BeforeState.Revision,
+                        state.Revision);
                 state = plan.TargetState;
+            }
+
+            var committed = new CommittedDirectionTransaction(this, plan, token, prepared);
+            ownershipTransferred = true;
+            lock (stateGate)
+            {
                 transactions.Add(committed);
                 transactions.RemoveAll(transaction =>
                     transaction.Status != DirectionTransactionStatus.Committed &&
                     !ReferenceEquals(transaction, committed));
             }
-
             return committed;
         }
-        catch
+        catch (Exception exception)
         {
-            if (!didCommit && prepared is not null)
+            if (prepared is null || ownershipTransferred)
+                throw;
+
+            List<Exception>? cleanupFailures = null;
+            if (commitStarted)
+            {
+                try { prepared.Rollback(token); }
+                catch (Exception rollbackException)
+                {
+                    cleanupFailures = new List<Exception> { rollbackException };
+                }
+            }
+            try
+            {
                 await prepared.DisposeAsync();
+            }
+            catch (Exception disposeException)
+            {
+                (cleanupFailures ??= new List<Exception>()).Add(disposeException);
+            }
+
+            if (commitStarted)
+            {
+                lock (stateGate)
+                {
+                    if (state.Revision == plan.TargetState.Revision &&
+                        Equals(state, plan.TargetState))
+                        state = plan.BeforeState;
+                }
+            }
+            if (cleanupFailures is not null)
+                throw new AggregateException(
+                    "Direction transaction failed and its prepared resources could not be fully released.",
+                    new[] { exception }.Concat(cleanupFailures));
             throw;
         }
     }

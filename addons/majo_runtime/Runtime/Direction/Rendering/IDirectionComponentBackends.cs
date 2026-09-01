@@ -17,6 +17,14 @@ public interface IPreparedDirectionComponent : IAsyncDisposable
 
     void Commit(DirectionCommitToken token);
 
+    /// <summary>
+    /// Compensates a partially published commit. Implementations that cannot
+    /// publish partial state may keep the default no-op implementation.
+    /// </summary>
+    void Rollback(DirectionCommitToken token)
+    {
+    }
+
     ValueTask FinishAsync(CancellationToken cancellationToken);
 }
 

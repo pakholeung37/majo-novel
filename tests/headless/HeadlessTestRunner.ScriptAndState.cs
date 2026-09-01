@@ -12,6 +12,8 @@ using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Presentation;
 using Majo.Runtime.Dialogue.Yarn;
+using Majo.Runtime.Direction.Core;
+using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Input;
 using Majo.Runtime.History;
 using Majo.Runtime.Operations;
@@ -93,6 +95,7 @@ public partial class HeadlessTestRunner
         var curtain = services.Get<IStageCurtainManager>();
         var effects = services.Get<IScreenEffectManager>();
         var transitions = services.Get<IStageTransitionManager>();
+        var direction = services.Get<IDirectionTransactionCoordinator>();
         var input = services.Get<IInputManager>();
         var operations = services.Get<IOperationScheduler>();
         var serializer = services.Get<IStateSerializer>();
@@ -227,7 +230,6 @@ public partial class HeadlessTestRunner
                     BuiltInStateKeys.DialogueVariables,
                     BuiltInStateKeys.Actors,
                     BuiltInStateKeys.AudioBgm,
-                    BuiltInStateKeys.Stage,
                     BuiltInStateKeys.Direction,
                     BuiltInStateKeys.ScriptPlayback,
                 ]),
@@ -307,14 +309,12 @@ public partial class HeadlessTestRunner
                 restoredHero.Visible &&
                 restoredRoom.Appearance == "dark",
             "M9.6 actor/background state did not round-trip.");
-        Assert(camera.State.Center.IsEqualApprox(new Vector2(123, 234)) &&
-                Mathf.IsEqualApprox(camera.State.Zoom, 1.25f) &&
-                Mathf.IsEqualApprox(camera.State.RotationDegrees, 7) &&
-                Mathf.IsEqualApprox(curtain.State.Opacity, 0.75f) &&
-                Mathf.IsEqualApprox(effects.State.OverlayOpacity, 0.4f) &&
-                Mathf.IsEqualApprox(effects.State.LetterboxRatio, 0.15f) &&
-                transitions.Appearance == "courtroom",
-            "M19 Stage state did not round-trip.");
+        Assert(direction.State.Stages.Count == 1 &&
+                direction.State.Stages.ContainsKey(StageId.Main) &&
+                direction.State.Stages[StageId.Main].Backdrop is null &&
+                direction.State.Views.Count == 1 &&
+                direction.State.Views.ContainsKey(ViewId.Main),
+            "M19 Direction state did not round-trip as the single staging snapshot.");
         Assert(audio.BgmTracks.Count == 1 &&
                 audio.BgmTracks.Single().ClipId == "calm" &&
                 audio.BgmTracks.Single().InstanceId == "music" &&

@@ -39,8 +39,12 @@ public sealed class YarnHotReloadService : IYarnHotReloadService
     private SynchronizationContext? mainContext;
     private long requestedGeneration;
     private bool enabled;
-    private YarnProjectVersion? pendingCandidate;
-    private string? lastRejectedSourceFingerprint;
+    private readonly Dictionary<string, YarnProjectVersion> pendingCandidates =
+        new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> lastRejectedSourceFingerprints =
+        new(StringComparer.Ordinal);
+    private readonly SemaphoreSlim applyGate = new(1, 1);
+    private CancellationTokenSource? resetCancellation;
 
     public YarnHotReloadService(
         IYarnProjectVersionStore versions,
@@ -95,6 +99,7 @@ public sealed class YarnHotReloadService : IYarnHotReloadService
 
         Directory.CreateDirectory(scriptsRoot);
         lifetime = new CancellationTokenSource();
+        resetCancellation = new CancellationTokenSource();
         script.PhaseChanged += HandlePhaseChanged;
         if (playback is not null)
         {
@@ -135,7 +140,41 @@ public sealed class YarnHotReloadService : IYarnHotReloadService
     public Task ResetAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.CompletedTask;
+        return ResetCoreAsync(cancellationToken);
+    }
+
+    private async Task ResetCoreAsync(CancellationToken cancellationToken)
+    {
+        Interlocked.Increment(ref requestedGeneration);
+        CancellationTokenSource? pendingToDispose;
+        CancellationTokenSource? resetToCancel;
+        lock (sync)
+        {
+            pendingToDispose = pendingReload;
+            pendingReload = null;
+            resetToCancel = resetCancellation;
+            resetCancellation = new CancellationTokenSource();
+            pendingCandidates.Clear();
+            lastRejectedSourceFingerprints.Clear();
+        }
+        pendingToDispose?.Cancel();
+        pendingToDispose?.Dispose();
+        resetToCancel?.Cancel();
+        resetToCancel?.Dispose();
+        await compileGate.WaitAsync(cancellationToken);
+        compileGate.Release();
+        await applyGate.WaitAsync(cancellationToken);
+        applyGate.Release();
+        if (enabled)
+        {
+            SetWatching(
+                Volatile.Read(ref requestedGeneration),
+                defaultProjectId,
+                null,
+                null,
+                Array.Empty<YarnCompilationDiagnostic>(),
+                null);
+        }
     }
 
     public async Task ShutdownAsync(CancellationToken cancellationToken)
@@ -151,19 +190,26 @@ public sealed class YarnHotReloadService : IYarnHotReloadService
         consistencyTimer = null;
         CancellationTokenSource? lifetimeToDispose;
         CancellationTokenSource? pendingToDispose;
+        CancellationTokenSource? resetToDispose;
         lock (sync)
         {
             lifetimeToDispose = lifetime;
             pendingToDispose = pendingReload;
             lifetime = null;
             pendingReload = null;
+            resetToDispose = resetCancellation;
+            resetCancellation = null;
         }
         lifetimeToDispose?.Cancel();
         pendingToDispose?.Cancel();
+        resetToDispose?.Cancel();
         await compileGate.WaitAsync(cancellationToken);
         compileGate.Release();
+        await applyGate.WaitAsync(cancellationToken);
+        applyGate.Release();
         lifetimeToDispose?.Dispose();
         pendingToDispose?.Dispose();
+        resetToDispose?.Dispose();
         enabled = false;
         SetStatus(YarnHotReloadStatus.Disabled);
     }
@@ -202,7 +248,8 @@ public sealed class YarnHotReloadService : IYarnHotReloadService
 
     private void QueueReload(string projectId)
     {
-        if (!enabled || lifetime?.IsCancellationRequested != false)
+        var currentLifetime = lifetime;
+        if (!enabled || currentLifetime?.IsCancellationRequested != false)
         {
             return;
         }
@@ -211,9 +258,12 @@ public sealed class YarnHotReloadService : IYarnHotReloadService
         CancellationTokenSource current;
         lock (sync)
         {
+            if (!enabled || !ReferenceEquals(lifetime, currentLifetime) ||
+                currentLifetime.IsCancellationRequested)
+                return;
             pendingReload?.Cancel();
             pendingReload?.Dispose();
-            pendingReload = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+            pendingReload = CancellationTokenSource.CreateLinkedTokenSource(currentLifetime.Token);
             current = pendingReload;
         }
         SetStatus(new YarnHotReloadStatus(
@@ -287,9 +337,12 @@ public sealed class YarnHotReloadService : IYarnHotReloadService
                     active.ProgramFingerprint, Array.Empty<YarnCompilationDiagnostic>(), null);
                 return;
             }
-            if (string.Equals(
-                lastRejectedSourceFingerprint,
-                snapshot.SourceFingerprint,
+            string? rejectedFingerprint;
+            lock (sync)
+            {
+                lastRejectedSourceFingerprints.TryGetValue(projectId, out rejectedFingerprint);
+            }
+            if (string.Equals(rejectedFingerprint, snapshot.SourceFingerprint,
                 StringComparison.Ordinal))
             {
                 SetWatching(generation, projectId, snapshot.SourceFingerprint,
@@ -300,7 +353,7 @@ public sealed class YarnHotReloadService : IYarnHotReloadService
                 return;
             }
 
-            var compilation = await compiler.CompileAsync(snapshot, cancellationToken);
+            var compilation = await compiler.CompileAsync(snapshot, generation, cancellationToken);
             if (generation != Volatile.Read(ref requestedGeneration))
             {
                 PublishAttempt(projectId, generation, YarnHotReloadOutcome.Superseded,
@@ -310,7 +363,10 @@ public sealed class YarnHotReloadService : IYarnHotReloadService
 
             if (compilation.HasErrors || compilation.Result.Program is null)
             {
-                lastRejectedSourceFingerprint = snapshot.SourceFingerprint;
+                lock (sync)
+                {
+                    lastRejectedSourceFingerprints[projectId] = snapshot.SourceFingerprint;
+                }
                 var message = "Yarn compilation failed; the last-known-good project remains active.";
                 SetWatching(generation, projectId, snapshot.SourceFingerprint, null,
                     compilation.Diagnostics, message);
@@ -325,7 +381,10 @@ public sealed class YarnHotReloadService : IYarnHotReloadService
             var version = await RunOnMainThreadAsync(
                 () => materializer.Materialize(generation, compilation),
                 cancellationToken);
-            lastRejectedSourceFingerprint = null;
+            lock (sync)
+            {
+                lastRejectedSourceFingerprints.Remove(projectId);
+            }
             if (generation != Volatile.Read(ref requestedGeneration))
             {
                 PublishAttempt(projectId, generation, YarnHotReloadOutcome.Superseded,
@@ -359,7 +418,7 @@ public sealed class YarnHotReloadService : IYarnHotReloadService
             {
                 lock (sync)
                 {
-                    pendingCandidate = version;
+                    pendingCandidates[projectId] = version;
                 }
                 var pending = "Yarn candidate is waiting for an awaiting-advance boundary.";
                 SetStatus(new YarnHotReloadStatus(
@@ -422,12 +481,18 @@ public sealed class YarnHotReloadService : IYarnHotReloadService
         YarnProjectVersion? candidate;
         lock (sync)
         {
-            candidate = pendingCandidate;
-            pendingCandidate = null;
+            candidate = pendingCandidates.Values
+                .OrderByDescending(value => value.Generation)
+                .FirstOrDefault();
+            if (candidate is not null)
+            {
+                pendingCandidates.Remove(candidate.ProjectId);
+            }
         }
-        if (candidate is not null && lifetime?.IsCancellationRequested == false)
+        var currentLifetime = lifetime;
+        if (candidate is not null && currentLifetime?.IsCancellationRequested == false)
         {
-            _ = ApplyCandidateSafelyAsync(candidate, lifetime.Token);
+            _ = ApplyCandidateSafelyAsync(candidate, currentLifetime.Token);
         }
     }
 
@@ -448,11 +513,22 @@ public sealed class YarnHotReloadService : IYarnHotReloadService
         }
     }
 
-    private Task ApplyCandidateAsync(
+    private async Task ApplyCandidateAsync(
         YarnProjectVersion candidate,
-        CancellationToken cancellationToken) => RunOnMainThreadAsync(
-            () => ApplyCandidateOnMainThreadAsync(candidate, cancellationToken),
-            cancellationToken);
+        CancellationToken cancellationToken)
+    {
+        await applyGate.WaitAsync(cancellationToken);
+        try
+        {
+            await RunOnMainThreadAsync(
+                () => ApplyCandidateOnMainThreadAsync(candidate, cancellationToken),
+                cancellationToken);
+        }
+        finally
+        {
+            applyGate.Release();
+        }
+    }
 
     private async Task ApplyCandidateOnMainThreadAsync(
         YarnProjectVersion candidate,
@@ -470,7 +546,7 @@ public sealed class YarnHotReloadService : IYarnHotReloadService
             {
                 if (candidate.Generation == Volatile.Read(ref requestedGeneration))
                 {
-                    pendingCandidate = candidate;
+                    pendingCandidates[candidate.ProjectId] = candidate;
                 }
             }
             return;
@@ -522,6 +598,7 @@ public sealed class YarnHotReloadService : IYarnHotReloadService
         backend.SetHotReloadProgressionFrozen(true);
         try
         {
+            versions.Activate(candidate);
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(configuration.ApplyTimeoutMilliseconds);
             await backend.ReplaceRunningProjectAsync(
@@ -563,6 +640,11 @@ public sealed class YarnHotReloadService : IYarnHotReloadService
                 backend.VariableStore.ReplaceAll(variables);
                 await WaitForStableBoundaryAsync(checkpoint.Spot, rollbackTimeout.Token);
                 versions.MarkRunning(running.ProjectId, running.Project);
+                // Keep the successfully compiled candidate available for the
+                // next session. A live apply can fail after the active version
+                // has already been switched, so Activate(running) alone would
+                // otherwise silently discard the candidate.
+                versions.StageForNextSession(candidate);
                 var message = "Yarn hot reload was rolled back to the last-known-good project.";
                 SetWatching(candidate.Generation, candidate.ProjectId,
                     candidate.SourceFingerprint, running.ProgramFingerprint,
@@ -668,6 +750,13 @@ public sealed class YarnHotReloadService : IYarnHotReloadService
             return Task.FromResult(action());
         }
         var completion = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var cancellationRegistration = cancellationToken.Register(
+            () => completion.TrySetCanceled(cancellationToken));
+        _ = completion.Task.ContinueWith(
+            _ => cancellationRegistration.Dispose(),
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
         mainContext.Post(_ =>
         {
             try
@@ -690,6 +779,13 @@ public sealed class YarnHotReloadService : IYarnHotReloadService
             return action();
         }
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var cancellationRegistration = cancellationToken.Register(
+            () => completion.TrySetCanceled(cancellationToken));
+        _ = completion.Task.ContinueWith(
+            _ => cancellationRegistration.Dispose(),
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
         mainContext.Post(async _ =>
         {
             try
@@ -820,6 +916,11 @@ public sealed class YarnHotReloadService : IYarnHotReloadService
             return false;
         }
 
+        if (!DirectionModulesEquivalent(active.DirectionModules, candidate.DirectionModules))
+        {
+            return false;
+        }
+
         var activeLoc = active.Project.baseLocalization;
         var candidateLoc = candidate.Project.baseLocalization;
 
@@ -835,5 +936,35 @@ public sealed class YarnHotReloadService : IYarnHotReloadService
 
         return true;
     }
-}
 
+    private static bool DirectionModulesEquivalent(
+        IReadOnlyList<NodeDirectionModule> active,
+        IReadOnlyList<NodeDirectionModule> candidate)
+    {
+        if (active.Count != candidate.Count)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < active.Count; index++)
+        {
+            var left = active[index];
+            var right = candidate[index];
+            if (!string.Equals(left.NodeId, right.NodeId, StringComparison.Ordinal) ||
+                !left.Symbols.Stages.SetEquals(right.Symbols.Stages) ||
+                !left.Symbols.Views.SetEquals(right.Symbols.Views) ||
+                !left.Symbols.ShotAliases.SetEquals(right.Symbols.ShotAliases) ||
+                !left.Symbols.Marks.SetEquals(right.Symbols.Marks) ||
+                !left.Resources.SequenceEqual(right.Resources) ||
+                !left.SourceMaps.SequenceEqual(right.SourceMaps) ||
+                !left.Imports.SequenceEqual(right.Imports) ||
+                !left.MarkDefinitions.SequenceEqual(right.MarkDefinitions) ||
+                !left.Diagnostics.SequenceEqual(right.Diagnostics))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+}

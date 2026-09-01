@@ -15,33 +15,17 @@ namespace Majo.Runtime.UnitTests;
 public sealed class ManosabaCommandTests
 {
 	[Fact]
-	public async Task AdvFrameCommand_SwitchesModes()
+	public void LegacyAdvFrameCommand_IsNotRegisteredAfterMigration()
 	{
-		var uiService = new ManosabaUiService();
-		var services = new ServiceResolverBuilder()
-			.Add<IManosabaUiService>(uiService)
-			.Build();
-
 		var registry = new RuntimeCommandRegistry();
 		ManosabaCommands.Register(registry);
 		var catalog = registry.BuildCatalog();
 
-		var dispatcher = new RuntimeCommandDispatcher(
-			new CommandBinder(new CommandBindingContext(0.35)),
-			services: services);
-
-		// Switch to stream mode
-		var advFrame = catalog.Get("adv_frame");
-		await dispatcher.ExecuteAsync(advFrame, ["stream"], CancellationToken.None);
-		Assert.Equal(ManosabaFrameMode.Stream, uiService.CurrentFrameMode);
-
-		// Switch back to default mode
-		await dispatcher.ExecuteAsync(advFrame, ["default"], CancellationToken.None);
-		Assert.Equal(ManosabaFrameMode.Default, uiService.CurrentFrameMode);
-
-		// Switch to normal mode (alias)
-		await dispatcher.ExecuteAsync(advFrame, ["normal"], CancellationToken.None);
-		Assert.Equal(ManosabaFrameMode.Default, uiService.CurrentFrameMode);
+		// adv_frame was replaced by the explicit boolean stream_frame command;
+		// keep this assertion so the old and new authoring APIs cannot silently
+		// become a dual-registration path again.
+		Assert.DoesNotContain(catalog.Commands, command => command.Name == "adv_frame");
+		Assert.Contains(catalog.Commands, command => command.Name == "stream_frame");
 	}
 
 	[Fact]
@@ -69,27 +53,6 @@ public sealed class ManosabaCommandTests
 		// stream_frame false -> Default
 		await dispatcher.ExecuteAsync(streamFrame, ["false"], CancellationToken.None);
 		Assert.Equal(ManosabaFrameMode.Default, uiService.CurrentFrameMode);
-	}
-
-	[Fact]
-	public async Task AdvFrameCommand_ThrowsOnUnknownMode()
-	{
-		var uiService = new ManosabaUiService();
-		var services = new ServiceResolverBuilder()
-			.Add<IManosabaUiService>(uiService)
-			.Build();
-
-		var registry = new RuntimeCommandRegistry();
-		ManosabaCommands.Register(registry);
-		var catalog = registry.BuildCatalog();
-
-		var dispatcher = new RuntimeCommandDispatcher(
-			new CommandBinder(new CommandBindingContext(0.35)),
-			services: services);
-
-		var advFrame = catalog.Get("adv_frame");
-		await Assert.ThrowsAsync<RuntimeCommandException>(() =>
-			dispatcher.ExecuteAsync(advFrame, ["invalid_mode"], CancellationToken.None));
 	}
 
 	[Fact]

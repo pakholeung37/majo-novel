@@ -16,7 +16,17 @@ public sealed record DirectionResourceClaim(DirectionResourceKind Kind, string S
 
 public sealed record DirectionTransition(
     IReadOnlyList<string> StablePaths,
-    DirectionTransitionSpec Spec);
+    DirectionTransitionSpec Spec,
+    DirectionSourceLocation? SourceLocation = null);
+
+/// <summary>
+/// Describes a view pose that must be published as the cut baseline before a
+/// later pose transition in the same Direction transaction starts.
+/// </summary>
+public sealed record DirectionViewTransitionSequence(
+    ViewId ViewId,
+    ViewState StartState,
+    DirectionTransitionSpec Transition);
 
 public enum DirectionCompletionBarrier
 {
@@ -31,7 +41,8 @@ public sealed record DirectionPlan(
     IReadOnlyList<DirectionTransition> Transitions,
     IReadOnlyList<ITransientDirectionCue> Cues,
     IReadOnlyList<DirectionResourceClaim> ResourceClaims,
-    DirectionCompletionBarrier Completion);
+    DirectionCompletionBarrier Completion,
+    IReadOnlyList<DirectionViewTransitionSequence>? ViewSequences = null);
 
 public readonly record struct DirectionCommitToken(
     DirectionTransactionId TransactionId,

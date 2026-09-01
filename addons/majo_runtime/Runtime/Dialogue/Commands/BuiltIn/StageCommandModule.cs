@@ -4,21 +4,34 @@ using System;
 using System.Threading.Tasks;
 using Majo.Runtime.Configuration;
 using Godot;
+using Majo.Runtime.Direction.Core;
+using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Stage;
 
 namespace Majo.Runtime.Dialogue.Commands;
 
 public sealed class StageCommandModule : IRuntimeCommandModule
 {
+    private readonly bool includeTransientCommands;
+
+    public StageCommandModule(bool includeTransientCommands = true)
+    {
+        this.includeTransientCommands = includeTransientCommands;
+    }
+
     public void Register(IRuntimeCommandRegistrar commands)
     {
         ArgumentNullException.ThrowIfNull(commands);
         commands
             .Register(new StageTransitionCommandHandler())
-            .Register(new StageCurtainCommandHandler())
             .Register(new StageOverlayCommandHandler())
-            .Register(new StageLetterboxCommandHandler())
-            .Register(new StageFlashCommandHandler());
+            .Register(new StageLetterboxCommandHandler());
+        if (includeTransientCommands)
+        {
+            commands
+                .Register(new StageCurtainCommandHandler())
+                .Register(new StageFlashCommandHandler());
+        }
     }
 }
 
@@ -75,12 +88,23 @@ public sealed class StageCurtainCommandArguments
 }
 public sealed class StageCurtainCommandHandler : IRuntimeCommandHandler<StageCurtainCommandArguments>
 {
-    public Task ExecuteAsync(StageCurtainCommandArguments a, RuntimeCommandContext c) =>
+    public Task ExecuteAsync(StageCurtainCommandArguments a, RuntimeCommandContext c)
+    {
+        var beats = c.Services?.Get<IDirectionBeatRuntime>();
+        if (beats?.HasOpenBeat == true)
+            return beats.SubmitAsync(new CurtainCue(
+                a.Position == StageCurtainPosition.Open,
+                DirectionColor.Black,
+                a.Duration),
+                a.Wait ? DirectionCompletionBarrier.Settle : DirectionCompletionBarrier.Commit,
+                c.CancellationToken);
+        return
         StageCommandExecution.TrackAndWaitAsync(
             StageCommandExecution.Require<IStageCurtainManager>(c).SetCurtain(
                 Colors.Black,
                 a.Position == StageCurtainPosition.Closed ? 1 : 0,
                 StageCommandExecution.Operation(a.Duration, a.Operation, a.Group)), a.Wait, c);
+    }
 }
 
 [RuntimeCommand("overlay", Category = "Stage", Usage = "overlay <opacity> [duration:<seconds>] [wait:<bool>] [group:<id>] [operation:<id>]")]
@@ -127,8 +151,19 @@ public sealed class StageFlashCommandArguments
 }
 public sealed class StageFlashCommandHandler : IRuntimeCommandHandler<StageFlashCommandArguments>
 {
-    public Task ExecuteAsync(StageFlashCommandArguments a, RuntimeCommandContext c) =>
+    public Task ExecuteAsync(StageFlashCommandArguments a, RuntimeCommandContext c)
+    {
+        var beats = c.Services?.Get<IDirectionBeatRuntime>();
+        if (beats?.HasOpenBeat == true)
+            return beats.SubmitAsync(new FlashCue(
+                DirectionColor.White,
+                (float)a.Intensity,
+                a.Duration),
+                a.Wait ? DirectionCompletionBarrier.Settle : DirectionCompletionBarrier.Commit,
+                c.CancellationToken);
+        return
         StageCommandExecution.TrackAndWaitAsync(
             StageCommandExecution.Require<IScreenEffectManager>(c).Flash(
                 Colors.White, (float)a.Intensity, StageCommandExecution.Operation(a.Duration, a.Operation, a.Group)), a.Wait, c);
+    }
 }

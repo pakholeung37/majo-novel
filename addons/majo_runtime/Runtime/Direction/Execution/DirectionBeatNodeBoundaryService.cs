@@ -28,6 +28,7 @@ public sealed class DirectionBeatNodeBoundaryService : IRuntimeService
         if (!subscribed)
         {
             dialogue.NodeExited += HandleNodeExited;
+            dialogue.Failed += HandleDialogueFailed;
             subscribed = true;
         }
         return Task.CompletedTask;
@@ -36,6 +37,7 @@ public sealed class DirectionBeatNodeBoundaryService : IRuntimeService
     public Task ResetAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        beats.AbortOpen();
         return Task.CompletedTask;
     }
 
@@ -45,10 +47,13 @@ public sealed class DirectionBeatNodeBoundaryService : IRuntimeService
         if (subscribed)
         {
             dialogue.NodeExited -= HandleNodeExited;
+            dialogue.Failed -= HandleDialogueFailed;
             subscribed = false;
         }
         return Task.CompletedTask;
     }
 
     private void HandleNodeExited(string nodeId) => beats.ValidateNodeBoundary(nodeId);
+
+    private void HandleDialogueFailed(Exception _) => beats.AbortOpen();
 }

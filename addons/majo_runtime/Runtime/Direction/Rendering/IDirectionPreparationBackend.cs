@@ -20,5 +20,10 @@ public interface IPreparedDirectionTransaction : IAsyncDisposable
 
     void Commit(DirectionCommitToken token);
 
+    /// <summary>Compensates any visible work from a failed Commit.</summary>
+    void Rollback(DirectionCommitToken token)
+    {
+    }
+
     ValueTask FinishAsync(CancellationToken cancellationToken);
 }

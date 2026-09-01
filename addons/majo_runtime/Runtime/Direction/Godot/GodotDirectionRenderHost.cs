@@ -20,9 +20,17 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
     private readonly Dictionary<StageId, GodotDirectionStageSurface> stages = new();
     private readonly Dictionary<ViewId, GodotDirectionViewSurface> views = new();
     private readonly Dictionary<LayoutSlotId, TextureRect> screenSlots = new();
+    private readonly Dictionary<ViewId, long> viewGenerations = new();
+    private readonly Dictionary<StageId, long> stageGenerations = new();
+    private long screenGeneration;
+    private long effectGeneration;
+    private ScreenState? screenLayoutBefore;
+    private ScreenState? screenLayoutTarget;
+    private float screenLayoutProgress;
     private BackdropState? transitionBackdrop;
     private Viewport? ownerViewport;
     private bool isInitialized;
+    private bool shutdownRequested;
 
     public GodotDirectionRenderHost(
         Node owner,
@@ -73,15 +81,19 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
         };
         ViewTransform = new Node2D { Name = "ViewTransform" };
         ViewContent = CreateTextureRect("ViewContent");
+        var viewTransition = CreateTextureRect("ViewTransition");
+        viewTransition.Visible = false;
         ViewTransform.AddChild(ViewContent);
         ViewCanvas.AddChild(ViewTransform);
+        ViewCanvas.AddChild(viewTransition);
         ViewViewport.AddChild(ViewCanvas);
         views.Add(ViewId.Main, new GodotDirectionViewSurface(
             ViewId.Main,
             ViewViewport,
             ViewCanvas,
             ViewTransform,
-            ViewContent));
+            ViewContent,
+            viewTransition));
 
         OutputLayer = new CanvasLayer
         {
@@ -90,8 +102,6 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
             Visible = false,
         };
         LiveOutput = CreateTextureRect("LiveOutput");
-        TransitionSource = CreateTextureRect("TransitionSource");
-        TransitionSource.Visible = false;
         Curtain = new ColorRect
         {
             Name = "DirectionCurtain",
@@ -99,7 +109,6 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
         OutputLayer.AddChild(LiveOutput);
-        OutputLayer.AddChild(TransitionSource);
         OutputLayer.AddChild(Curtain);
         screenSlots[LayoutSlotId.Main] = LiveOutput;
     }
@@ -116,7 +125,8 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
     public TextureRect ViewContent { get; }
     public CanvasLayer OutputLayer { get; }
     public TextureRect LiveOutput { get; }
-    public TextureRect TransitionSource { get; }
+    // Compatibility alias: Main View's isolated transition source.
+    public TextureRect TransitionSource => views[ViewId.Main].TransitionSource;
     public ColorRect Curtain { get; }
     public BackdropState? PublishedBackdrop { get; private set; }
     public ViewState? PublishedView { get; private set; }
@@ -126,10 +136,12 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
     public IReadOnlyCollection<StageId> StageIds => stages.Keys;
     public IReadOnlyCollection<ViewId> ViewIds => views.Keys;
 
-    public Task InitializeAsync(CancellationToken cancellationToken)
+    public async Task InitializeAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (isInitialized) return Task.CompletedTask;
+        if (shutdownRequested)
+            throw new DirectionException("Godot Direction render host cannot be reinitialized after shutdown.");
+        if (isInitialized) return;
 
         owner.AddChild(StageViewport);
         owner.AddChild(ViewViewport);
@@ -146,13 +158,17 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
         PublishEffects(StableEffectState.Default);
         ownerViewport = owner.GetViewport();
         ownerViewport.SizeChanged += Resize;
-        return Task.CompletedTask;
+        viewGenerations[ViewId.Main] = 0;
+        stageGenerations[StageId.Main] = 0;
+        ActivateViewports();
+        await WaitForRenderFenceAsync(cancellationToken);
     }
 
     public Task ResetAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         EnsureInitialized();
+        InvalidateGenerations();
         foreach (var surface in stages.Values.ToArray())
         {
             surface.Backdrop.Texture = null;
@@ -163,18 +179,18 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
             if (surface.Id != StageId.Main)
             {
                 stages.Remove(surface.Id);
-                surface.Viewport.QueueFree();
+                QueueFree(surface.Viewport);
             }
         }
         foreach (var view in views.Values.ToArray())
         {
             if (view.Id == ViewId.Main) continue;
-            view.Viewport.QueueFree();
+            QueueFree(view.Viewport);
             views.Remove(view.Id);
         }
         foreach (var slot in screenSlots.Keys.Where(slot => slot != LayoutSlotId.Main).ToArray())
         {
-            screenSlots[slot].QueueFree();
+            QueueFree(screenSlots[slot]);
             screenSlots.Remove(slot);
         }
         ViewContent.Texture = StageViewport.GetTexture();
@@ -196,25 +212,24 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (!isInitialized) return Task.CompletedTask;
+        InvalidateGenerations();
         if (ownerViewport is not null && GodotObject.IsInstanceValid(ownerViewport))
             ownerViewport.SizeChanged -= Resize;
         ClearBackdropTransition();
         ClearViewTransition();
-        if (GodotObject.IsInstanceValid(OutputLayer)) OutputLayer.QueueFree();
-        if (GodotObject.IsInstanceValid(ViewViewport)) ViewViewport.QueueFree();
+        QueueFree(OutputLayer);
+        QueueFree(ViewViewport);
         foreach (var surface in stages.Values)
-        {
-            if (GodotObject.IsInstanceValid(surface.Viewport)) surface.Viewport.QueueFree();
-        }
+            QueueFree(surface.Viewport);
         stages.Clear();
         foreach (var view in views.Values)
         {
             if (view.Id != ViewId.Main && GodotObject.IsInstanceValid(view.Viewport))
-                view.Viewport.QueueFree();
+                QueueFree(view.Viewport);
         }
         views.Clear();
         foreach (var slot in screenSlots.Values)
-            if (GodotObject.IsInstanceValid(slot)) slot.QueueFree();
+            QueueFree(slot);
         screenSlots.Clear();
         PublishedBackdrop = null;
         PublishedView = null;
@@ -222,6 +237,7 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
         PublishedEffects = StableEffectState.Default;
         ownerViewport = null;
         isInitialized = false;
+        shutdownRequested = true;
         return Task.CompletedTask;
     }
 
@@ -274,8 +290,41 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
         var surface = GetOrCreateView(viewId);
         surface.Content.Texture = texture;
         surface.Content.Modulate = Colors.White;
+        surface.PublishedView = state;
         ApplyViewPose(viewId, state.Pose);
         if (viewId == ViewId.Main) PublishedView = state;
+    }
+
+    internal long BeginViewGeneration(ViewId viewId) => ++viewGenerations[viewId];
+    internal bool IsCurrentViewGeneration(ViewId viewId, long generation) =>
+        viewGenerations.TryGetValue(viewId, out var current) && current == generation;
+    internal long BeginStageGeneration(StageId stageId)
+    {
+        stageGenerations.TryGetValue(stageId, out var current);
+        stageGenerations[stageId] = current + 1;
+        return current + 1;
+    }
+    internal bool IsCurrentStageGeneration(StageId stageId, long generation) =>
+        stageGenerations.TryGetValue(stageId, out var current) && current == generation;
+    internal long BeginScreenGeneration() => ++screenGeneration;
+    internal bool IsCurrentScreenGeneration(long generation) => screenGeneration == generation;
+    internal long BeginEffectGeneration() => ++effectGeneration;
+    internal bool IsCurrentEffectGeneration(long generation) => effectGeneration == generation;
+    private void InvalidateGenerations()
+    {
+        screenGeneration++;
+        effectGeneration++;
+        foreach (var id in viewGenerations.Keys.ToArray()) viewGenerations[id]++;
+        foreach (var id in stageGenerations.Keys.ToArray()) stageGenerations[id]++;
+    }
+    internal TextureRect GetViewTransitionSource(ViewId viewId) => GetOrCreateView(viewId).TransitionSource;
+    internal ViewPose GetCurrentViewPose(ViewId viewId) => GetOrCreateView(viewId).CurrentPose;
+    internal async Task WaitForRenderFenceAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (owner.GetTree() is SceneTree tree)
+            await owner.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+        cancellationToken.ThrowIfCancellationRequested();
     }
 
     public void PublishScreen(ScreenState state)
@@ -283,14 +332,48 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
         EnsureInitialized();
         Activate();
         PublishedScreen = state ?? throw new ArgumentNullException(nameof(state));
+        screenLayoutBefore = null;
+        screenLayoutTarget = null;
         foreach (var slot in screenSlots.Values) slot.Visible = false;
         foreach (var pair in state.Bindings)
         {
             var output = GetOrCreateScreenSlot(pair.Key);
-            var view = GetOrCreateView(pair.Value);
+            var view = RequireView(pair.Value);
             output.Texture = view.Viewport.GetTexture();
             output.Visible = true;
-            LayoutSlot(output, state.Layout, pair.Key, ViewViewport.Size);
+            LayoutSlot(output, state.Layout, pair.Key, ToSize(owner.GetViewport().GetVisibleRect().Size));
+        }
+    }
+
+    internal void PublishScreenLayout(ScreenState state, ScreenState before, float progress)
+    {
+        EnsureInitialized();
+        PublishedScreen = state;
+        screenLayoutBefore = before;
+        screenLayoutTarget = state;
+        screenLayoutProgress = Mathf.Clamp(progress, 0, 1);
+        foreach (var slot in screenSlots.Values) slot.Visible = false;
+        foreach (var slot in before.Bindings.Keys.Union(state.Bindings.Keys))
+        {
+            if (!state.Bindings.TryGetValue(slot, out var viewId) &&
+                !before.Bindings.TryGetValue(slot, out viewId))
+                continue;
+            var output = GetOrCreateScreenSlot(slot);
+            var view = RequireView(viewId);
+            output.Texture = view.Viewport.GetTexture();
+            var hasTarget = state.Bindings.ContainsKey(slot);
+            output.Visible = hasTarget || progress < 1;
+            var from = before.Bindings.ContainsKey(slot)
+                ? SlotRect(before.Layout, slot, ToSize(owner.GetViewport().GetVisibleRect().Size))
+                : SlotRect(state.Layout, slot, ToSize(owner.GetViewport().GetVisibleRect().Size));
+            var to = hasTarget
+                ? SlotRect(state.Layout, slot, ToSize(owner.GetViewport().GetVisibleRect().Size))
+                : new Rect2(from.Position, Vector2.Zero);
+            var rect = new Rect2(
+                from.Position.Lerp(to.Position, progress),
+                from.Size.Lerp(to.Size, progress));
+            output.Position = rect.Position;
+            output.Size = rect.Size;
         }
     }
 
@@ -350,6 +433,27 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
         return ImageTexture.CreateFromImage(image);
     }
 
+    internal async Task<ImageTexture> CaptureViewAsync(
+        ViewId viewId,
+        CancellationToken cancellationToken)
+    {
+        EnsureInitialized();
+        cancellationToken.ThrowIfCancellationRequested();
+        var view = GetOrCreateView(viewId);
+        var previousMode = view.Viewport.RenderTargetUpdateMode;
+        view.Viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
+        try
+        {
+            await WaitForRenderFenceAsync(cancellationToken);
+            return CaptureView(viewId);
+        }
+        finally
+        {
+            if (GodotObject.IsInstanceValid(view.Viewport))
+                view.Viewport.RenderTargetUpdateMode = previousMode;
+        }
+    }
+
     public void ApplyViewPose(ViewPose pose)
         => ApplyViewPose(ViewId.Main, pose);
 
@@ -371,6 +475,7 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
             basis.X,
             basis.Y,
             size / 2 - basis * sceneCenter);
+        surface.CurrentPose = pose;
     }
 
     public void ClearBackdropTransition()
@@ -388,11 +493,15 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
     }
 
     public void ClearViewTransition()
+        => ClearViewTransition(ViewId.Main);
+
+    public void ClearViewTransition(ViewId viewId)
     {
-        if (!GodotObject.IsInstanceValid(TransitionSource)) return;
-        TransitionSource.Visible = false;
-        TransitionSource.Texture = null;
-        TransitionSource.Modulate = Colors.White;
+        if (!views.TryGetValue(viewId, out var view) ||
+            !GodotObject.IsInstanceValid(view.TransitionSource)) return;
+        view.TransitionSource.Visible = false;
+        view.TransitionSource.Texture = null;
+        view.TransitionSource.Modulate = Colors.White;
     }
 
     private void Resize()
@@ -411,17 +520,21 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
             view.Viewport.Size = resolution;
             SetFullRect(view.Canvas, resolution);
             SetFullRect(view.Content, resolution);
+            SetFullRect(view.TransitionSource, resolution);
+            if (view.PublishedView is not null)
+                ApplyViewPose(view.Id, view.PublishedView.Pose);
         }
         var screenSize = visibleSize.X > 0 && visibleSize.Y > 0
             ? ToSize(visibleSize)
             : resolution;
         SetFullRect(LiveOutput, screenSize);
-        SetFullRect(TransitionSource, screenSize);
         SetFullRect(Curtain, screenSize);
+        if (PublishedView is not null) ApplyViewPose(ViewId.Main, PublishedView.Pose);
         foreach (var pair in screenSlots)
             if (pair.Value.Visible)
                 LayoutSlot(pair.Value, PublishedScreen.Layout, pair.Key, screenSize);
-        if (PublishedView is not null) ApplyViewPose(ViewId.Main, PublishedView.Pose);
+        if (screenLayoutBefore is not null && screenLayoutTarget is not null)
+            PublishScreenLayout(screenLayoutTarget, screenLayoutBefore, screenLayoutProgress);
     }
 
     private void EnsureInitialized()
@@ -432,18 +545,33 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
 
     private void Activate()
     {
-        foreach (var surface in stages.Values)
-            surface.Viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
-        ViewViewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
+        ActivateViewports();
         OutputLayer.Visible = true;
+    }
+
+    private void ActivateViewports()
+    {
+        foreach (var surface in stages.Values)
+            if (GodotObject.IsInstanceValid(surface.Viewport))
+                surface.Viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
+        if (GodotObject.IsInstanceValid(ViewViewport))
+            ViewViewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
+        foreach (var view in views.Values)
+            if (GodotObject.IsInstanceValid(view.Viewport))
+                view.Viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
     }
 
     private void Deactivate()
     {
         OutputLayer.Visible = false;
         foreach (var surface in stages.Values)
-            surface.Viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
-        ViewViewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
+            if (GodotObject.IsInstanceValid(surface.Viewport))
+                surface.Viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
+        if (GodotObject.IsInstanceValid(ViewViewport))
+            ViewViewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
+        foreach (var view in views.Values)
+            if (GodotObject.IsInstanceValid(view.Viewport))
+                view.Viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
     }
 
     private static SubViewport CreateViewport(string name) => new()
@@ -511,7 +639,7 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
         stages.Add(stageId, surface);
         owner.AddChild(viewport);
         ResizeStage(surface, StageViewport.Size);
-        if (OutputLayer.Visible)
+        if (isInitialized)
             viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
         return surface;
     }
@@ -521,6 +649,7 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
     internal void ReleasePreparedStage(StageId stageId)
     {
         if (stageId == StageId.Main || !stages.Remove(stageId, out var surface)) return;
+        stageGenerations.Remove(stageId);
         if (GodotObject.IsInstanceValid(surface.Viewport))
         {
             surface.Viewport.GetParent()?.RemoveChild(surface.Viewport);
@@ -533,6 +662,8 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
             ? surface
             : throw new DirectionReferenceException(
                 $"Direction Stage '{stageId}' has no prepared render surface.");
+
+    internal GodotDirectionStageSurface RequireStage(StageId stageId) => GetStage(stageId);
 
     internal BackdropState? GetPublishedBackdrop(StageId stageId) =>
         GetStage(stageId).PublishedBackdrop;
@@ -552,17 +683,47 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
         };
         var transform = new Node2D { Name = "ViewTransform" };
         var content = CreateTextureRect("ViewContent");
+        var viewTransition = CreateTextureRect("ViewTransition");
+        viewTransition.Visible = false;
         transform.AddChild(content);
         canvas.AddChild(transform);
+        canvas.AddChild(viewTransition);
         viewport.AddChild(canvas);
-        var surface = new GodotDirectionViewSurface(viewId, viewport, canvas, transform, content);
+        var surface = new GodotDirectionViewSurface(viewId, viewport, canvas, transform, content, viewTransition);
         views.Add(viewId, surface);
         owner.AddChild(viewport);
         viewport.Size = ViewViewport.Size;
         SetFullRect(canvas, viewport.Size);
         SetFullRect(content, viewport.Size);
-        if (OutputLayer.Visible) viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
+        SetFullRect(viewTransition, viewport.Size);
+        viewGenerations[viewId] = 0;
+        if (isInitialized) viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
         return surface;
+    }
+
+    internal bool HasView(ViewId viewId) => views.ContainsKey(viewId);
+
+    internal void ReleasePreparedView(ViewId viewId)
+    {
+        if (viewId == ViewId.Main || !views.Remove(viewId, out var surface)) return;
+        viewGenerations.Remove(viewId);
+        if (GodotObject.IsInstanceValid(surface.Viewport))
+        {
+            QueueFree(surface.Viewport);
+        }
+    }
+
+    internal GodotDirectionViewSurface RequireView(ViewId viewId) =>
+        views.TryGetValue(viewId, out var surface)
+            ? surface
+            : throw new DirectionReferenceException(
+                $"Direction View '{viewId}' has no prepared render surface.");
+
+    private static void QueueFree(Node node)
+    {
+        if (!GodotObject.IsInstanceValid(node)) return;
+        node.GetParent()?.RemoveChild(node);
+        node.QueueFree();
     }
 
     private TextureRect GetOrCreateScreenSlot(LayoutSlotId slot)
@@ -602,6 +763,17 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
             }
         }
         else output.Size = size;
+    }
+
+    private static Rect2 SlotRect(LayoutId layout, LayoutSlotId slot, Vector2I viewportSize)
+    {
+        var size = new Vector2(viewportSize.X, viewportSize.Y);
+        if (layout.Value.Equals("split", StringComparison.OrdinalIgnoreCase))
+            return new Rect2(slot.Value == "inset" ? new Vector2(size.X / 2, 0) : Vector2.Zero,
+                new Vector2(size.X / 2, size.Y));
+        if (layout.Value.Equals("pip", StringComparison.OrdinalIgnoreCase) && slot.Value == "inset")
+            return new Rect2(size.X * .70f, size.Y * .06f, size.X * .25f, size.Y * .25f);
+        return new Rect2(Vector2.Zero, size);
     }
 
     private void ResizeStage(GodotDirectionStageSurface surface, Vector2I resolution)
@@ -676,13 +848,15 @@ internal sealed class GodotDirectionViewSurface
         SubViewport viewport,
         Control canvas,
         Node2D transform,
-        TextureRect content)
+        TextureRect content,
+        TextureRect transitionSource)
     {
         Id = id;
         Viewport = viewport;
         Canvas = canvas;
         Transform = transform;
         Content = content;
+        TransitionSource = transitionSource;
     }
 
     public ViewId Id { get; }
@@ -690,4 +864,7 @@ internal sealed class GodotDirectionViewSurface
     public Control Canvas { get; }
     public Node2D Transform { get; }
     public TextureRect Content { get; }
+    public TextureRect TransitionSource { get; }
+    public ViewState? PublishedView { get; set; }
+    public ViewPose CurrentPose { get; set; } = ViewPose.Default;
 }

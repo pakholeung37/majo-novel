@@ -26,6 +26,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
 {
     private readonly Node owner;
     private readonly IYarnProjectVersionStore projectVersions;
+    private readonly IDirectionScopeResolver? directionScopes;
     private readonly IReadOnlyList<IDialoguePresenter> presenters;
     private readonly ILocaleManager? localeManager;
     private readonly DialogueSpeakerNameResolver? speakerNameResolver;
@@ -70,12 +71,14 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
         DialogueSpeakerNameResolver? speakerNameResolver = null,
         IRuntimeLogger? logger = null,
         bool requireExactProgramFingerprint = false,
-        IYarnProjectVersionStore? projectVersions = null)
+        IYarnProjectVersionStore? projectVersions = null,
+        IDirectionScopeResolver? directionScopes = null)
     {
         this.owner = owner ?? throw new ArgumentNullException(nameof(owner));
         ArgumentNullException.ThrowIfNull(resources);
         this.projectVersions = projectVersions ??
             new YarnProjectVersionStore(resources, scriptsPath);
+        this.directionScopes = directionScopes;
         this.presenters = presenters ?? throw new ArgumentNullException(nameof(presenters));
         this.localeManager = localeManager;
         this.speakerNameResolver = speakerNameResolver;
@@ -242,6 +245,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
 
     private void BeginProjectSession(string projectId, string startNode, bool resetCompletion)
     {
+        directionScopes?.ExitNode(currentNodeName);
         lock (sync)
         {
             currentProjectId = projectId;
@@ -592,10 +596,20 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
     private void HandleNodeStarted(string nodeName)
     {
         currentNodeName = nodeName;
+        var module = projectVersions.GetActiveVersion(currentProjectId)?.DirectionModules
+            .FirstOrDefault(candidate => candidate.NodeId.Equals(nodeName, StringComparison.Ordinal));
+        if (module is not null)
+            directionScopes?.ApplyModule(module);
+        else
+            directionScopes?.EnterNode(nodeName);
         NodeEntered?.Invoke(nodeName);
     }
 
-    private void HandleNodeCompleted(string nodeName) => NodeExited?.Invoke(nodeName);
+    private void HandleNodeCompleted(string nodeName)
+    {
+        NodeExited?.Invoke(nodeName);
+        directionScopes?.ExitNode(nodeName);
+    }
 
     private void HandleDialogueCompleted()
     {
@@ -878,6 +892,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
 
     private void CompleteSession(DialogueCompletionKind kind)
     {
+        directionScopes?.ExitNode(currentNodeName);
         lock (sync)
         {
             completion.TrySetResult(new DialogueCompletion(

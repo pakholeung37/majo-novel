@@ -37,13 +37,20 @@ public sealed class YarnRuntimeCompiler
     public Task<YarnRuntimeCompilation> CompileAsync(
         YarnSourceSnapshot snapshot,
         CancellationToken cancellationToken = default)
+        => CompileAsync(snapshot, 1, cancellationToken);
+
+    public Task<YarnRuntimeCompilation> CompileAsync(
+        YarnSourceSnapshot snapshot,
+        long directionVersion,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
-        return Task.Run(() => Compile(snapshot, cancellationToken), cancellationToken);
+        return Task.Run(() => Compile(snapshot, directionVersion, cancellationToken), cancellationToken);
     }
 
     private YarnRuntimeCompilation Compile(
         YarnSourceSnapshot snapshot,
+        long directionVersion,
         CancellationToken cancellationToken)
     {
         var files = snapshot.Files.Select(file => (ISourceInput)new CompilationJob.File
@@ -73,7 +80,7 @@ public sealed class YarnRuntimeCompiler
                 diagnostic.Range.End.Character,
                 diagnostic.Message);
         }).ToArray();
-        var directionModules = new NodeDirectionCompiler().Compile(snapshot);
+        var directionModules = new NodeDirectionCompiler().Compile(snapshot, directionVersion);
         var directionDiagnostics = directionModules
             .SelectMany(module => module.Diagnostics)
             .ToArray();

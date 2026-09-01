@@ -2,10 +2,13 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Majo.Runtime.Core;
 using Majo.Runtime.Direction.Core;
+using Majo.Runtime.Dialogue.Yarn.HotReload;
+using Majo.Runtime.Dialogue.Yarn;
 
 namespace Majo.Runtime.Dialogue.Commands;
 
@@ -22,6 +25,12 @@ public interface IDirectionScopeResolver : IRuntimeService
     void DefineShot(string nodeId, string alias, ViewPatch patch);
 
     ViewPatch ResolveShot(string nodeId, string alias);
+
+    void ApplyModule(NodeDirectionModule module);
+    void EnterNode(string nodeId);
+    void ExitNode(string nodeId);
+    void DefineMark(string nodeId, string name, DirectionPoint position);
+    DirectionPoint ResolveMark(string nodeId, string name);
 }
 
 /// <summary>
@@ -34,15 +43,19 @@ public sealed class DirectionScopeResolver : IDirectionScopeResolver
     private readonly Dictionary<(string Node, string Alias), StageId> stageImports = new();
     private readonly Dictionary<(string Node, string Alias), ViewId> viewImports = new();
     private readonly Dictionary<(string Node, string Alias), ViewPatch> shotAliases = new();
+    private readonly Dictionary<(string Node, string Name), DirectionPoint> marks = new();
+    private string? activeNode;
+    private NodeDirectionModule? activeModule;
 
     public StageId ResolveStage(string nodeId, string symbol)
     {
         var (node, local) = Validate(nodeId, symbol);
         if (string.Equals(local, StageId.Main.Value, StringComparison.Ordinal))
             return StageId.Main;
-        return stageImports.TryGetValue((node, local), out var imported)
-            ? imported
-            : new StageId(Qualify(node, "stages", local));
+        if (stageImports.TryGetValue((node, local), out var imported))
+            return imported;
+        EnsureKnownSymbol(node, local, isStage: true);
+        return new StageId(Qualify(node, "stages", local));
     }
 
     public ViewId ResolveView(string nodeId, string symbol)
@@ -50,9 +63,10 @@ public sealed class DirectionScopeResolver : IDirectionScopeResolver
         var (node, local) = Validate(nodeId, symbol);
         if (string.Equals(local, ViewId.Main.Value, StringComparison.Ordinal))
             return ViewId.Main;
-        return viewImports.TryGetValue((node, local), out var imported)
-            ? imported
-            : new ViewId(Qualify(node, "views", local));
+        if (viewImports.TryGetValue((node, local), out var imported))
+            return imported;
+        EnsureKnownSymbol(node, local, isStage: false);
+        return new ViewId(Qualify(node, "views", local));
     }
 
     public void ImportStage(
@@ -63,6 +77,11 @@ public sealed class DirectionScopeResolver : IDirectionScopeResolver
     {
         var (node, localAlias) = Validate(nodeId, alias);
         var source = ResolveLocalStage(sourceNodeId, sourceSymbol);
+        if (stageImports.TryGetValue((node, localAlias), out var existing))
+        {
+            if (existing == source) return;
+            throw Duplicate("Stage", node, localAlias);
+        }
         AddImport(stageImports, (node, localAlias), source, "Stage");
     }
 
@@ -74,6 +93,11 @@ public sealed class DirectionScopeResolver : IDirectionScopeResolver
     {
         var (node, localAlias) = Validate(nodeId, alias);
         var source = ResolveLocalView(sourceNodeId, sourceSymbol);
+        if (viewImports.TryGetValue((node, localAlias), out var existing))
+        {
+            if (existing == source) return;
+            throw Duplicate("View", node, localAlias);
+        }
         AddImport(viewImports, (node, localAlias), source, "View");
     }
 
@@ -93,6 +117,70 @@ public sealed class DirectionScopeResolver : IDirectionScopeResolver
         return patch;
     }
 
+    public void DefineMark(string nodeId, string name, DirectionPoint position)
+    {
+        var (node, local) = Validate(nodeId, name);
+        position.Validate();
+        if (marks.TryGetValue((node, local), out var existing))
+        {
+            if (existing == position) return;
+            throw Duplicate("Mark", node, local);
+        }
+        AddImport(marks, (node, local), position, "Mark");
+    }
+
+    public DirectionPoint ResolveMark(string nodeId, string name)
+    {
+        var (node, local) = Validate(nodeId, name);
+        if (!marks.TryGetValue((node, local), out var position))
+            throw new DirectionReferenceException($"Mark '{local}' is not defined in Node '{node}'.");
+        return position;
+    }
+
+    public void ApplyModule(NodeDirectionModule module)
+    {
+        ArgumentNullException.ThrowIfNull(module);
+        var error = module.Diagnostics.FirstOrDefault(diagnostic =>
+            diagnostic.Severity.Equals("error", StringComparison.OrdinalIgnoreCase));
+        if (error is not null)
+            throw new DirectionReferenceException(
+                $"Direction authoring error in Node '{module.NodeId}' at " +
+                $"{error.File}:{error.StartLine}:{error.StartColumn}: {error.Message}");
+        if (string.Equals(activeNode, module.NodeId, StringComparison.Ordinal))
+            ExitNode(module.NodeId);
+        EnterNode(module.NodeId);
+        foreach (var import in module.Imports)
+        {
+            if (import.Kind.Equals("stage", StringComparison.OrdinalIgnoreCase))
+                ImportStage(module.NodeId, import.Alias, import.SourceNode, import.SourceSymbol);
+            else if (import.Kind.Equals("view", StringComparison.OrdinalIgnoreCase))
+                ImportView(module.NodeId, import.Alias, import.SourceNode, import.SourceSymbol);
+        }
+        foreach (var mark in module.MarkDefinitions)
+            DefineMark(module.NodeId, mark.Name, mark.Position);
+        activeModule = module;
+    }
+
+    public void EnterNode(string nodeId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(nodeId);
+        var normalized = nodeId.Trim();
+        if (activeNode is not null && !activeNode.Equals(normalized, StringComparison.Ordinal))
+            ExitNode(activeNode);
+        activeNode = normalized;
+        activeModule = null;
+    }
+
+    public void ExitNode(string nodeId)
+    {
+        if (string.IsNullOrWhiteSpace(nodeId) ||
+            !string.Equals(activeNode, nodeId.Trim(), StringComparison.Ordinal)) return;
+        RemoveNode(stageImports); RemoveNode(viewImports); RemoveNode(shotAliases);
+        foreach (var key in marks.Keys.Where(key => key.Node == activeNode).ToArray()) marks.Remove(key);
+        activeNode = null;
+        activeModule = null;
+    }
+
     public Task InitializeAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -105,6 +193,9 @@ public sealed class DirectionScopeResolver : IDirectionScopeResolver
         stageImports.Clear();
         viewImports.Clear();
         shotAliases.Clear();
+        marks.Clear();
+        activeNode = null;
+        activeModule = null;
         return Task.CompletedTask;
     }
 
@@ -138,6 +229,25 @@ public sealed class DirectionScopeResolver : IDirectionScopeResolver
 
     private static string Escape(string value) => Uri.EscapeDataString(value);
 
+    private void EnsureKnownSymbol(string node, string symbol, bool isStage)
+    {
+        if (activeModule is null || !string.Equals(activeNode, node, StringComparison.Ordinal))
+            return;
+
+        var known = isStage
+            ? activeModule.Symbols.Stages.Contains(symbol) || activeModule.Imports.Any(import =>
+                import.Kind.Equals("stage", StringComparison.OrdinalIgnoreCase) &&
+                import.Alias.Equals(symbol, StringComparison.Ordinal))
+            : activeModule.Symbols.Views.Contains(symbol) || activeModule.Imports.Any(import =>
+                import.Kind.Equals("view", StringComparison.OrdinalIgnoreCase) &&
+                import.Alias.Equals(symbol, StringComparison.Ordinal));
+        if (!known)
+        {
+            throw new DirectionReferenceException(
+                $"{(isStage ? "Stage" : "View")} symbol '{symbol}' is not defined in Node '{node}'.");
+        }
+    }
+
     private static void AddImport<T>(
         IDictionary<(string Node, string Alias), T> imports,
         (string Node, string Alias) key,
@@ -146,8 +256,17 @@ public sealed class DirectionScopeResolver : IDirectionScopeResolver
     {
         if (!imports.TryAdd(key, value))
         {
-            throw new DirectionReferenceException(
-                $"{kind} import alias '{key.Alias}' is already defined in Node '{key.Node}'.");
+            throw Duplicate(kind, key.Node, key.Alias);
         }
+    }
+
+    private static DirectionReferenceException Duplicate(string kind, string node, string alias) =>
+        new($"{kind} import alias '{alias}' is already defined in Node '{node}'.");
+
+    private void RemoveNode<T>(IDictionary<(string Node, string Alias), T> values)
+    {
+        if (activeNode is null) return;
+        foreach (var key in values.Keys.Where(key => key.Node == activeNode).ToArray())
+            values.Remove(key);
     }
 }

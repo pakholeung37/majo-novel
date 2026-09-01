@@ -42,6 +42,9 @@ internal sealed class GodotDirectionEffectBackend : IDirectionEffectBackend
             TaskCreationOptions.RunContinuationsAsynchronously);
         private Tween? tween;
         private bool committed;
+        private bool rolledBack;
+        private bool disposed;
+        private long generation;
 
         public PreparedEffect(
             GodotDirectionRenderHost host,
@@ -59,8 +62,10 @@ internal sealed class GodotDirectionEffectBackend : IDirectionEffectBackend
 
         public void Commit(DirectionCommitToken token)
         {
-            if (committed) throw new InvalidOperationException("Effect already committed.");
+            if (committed || rolledBack || disposed)
+                throw new InvalidOperationException("Effect is no longer preparable.");
             committed = true;
+            generation = host.BeginEffectGeneration();
             if (transition.DurationSeconds <= 0 || transition.Kind == DirectionTransitionKind.Cut)
             {
                 Complete();
@@ -72,6 +77,7 @@ internal sealed class GodotDirectionEffectBackend : IDirectionEffectBackend
             tween.TweenMethod(
                 Callable.From<float>(progress =>
                 {
+                    if (!host.IsCurrentEffectGeneration(generation)) return;
                     var from = before.Curtain;
                     var to = target.Curtain;
                     host.PublishEffects(new StableEffectState(new CurtainState(
@@ -91,14 +97,30 @@ internal sealed class GodotDirectionEffectBackend : IDirectionEffectBackend
         public ValueTask FinishAsync(CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (!committed) throw new InvalidOperationException("Effect has not committed.");
+            if (!committed || rolledBack || disposed)
+                throw new InvalidOperationException("Effect cannot finish in its current state.");
             Complete();
             return ValueTask.CompletedTask;
         }
 
+        public void Rollback(DirectionCommitToken token)
+        {
+            if (rolledBack || disposed) return;
+            rolledBack = true;
+            if (tween is not null && GodotObject.IsInstanceValid(tween))
+                tween.Finished -= OnFinished;
+            GodotDirectionRendering.Kill(tween);
+            tween = null;
+            if (host.IsCurrentEffectGeneration(generation))
+                host.PublishEffects(before);
+            settlement.TrySetCanceled();
+        }
+
         public ValueTask DisposeAsync()
         {
-            if (!committed) settlement.TrySetCanceled();
+            if (disposed) return ValueTask.CompletedTask;
+            disposed = true;
+            if (!settlement.Task.IsCompleted) settlement.TrySetCanceled();
             if (tween is not null && GodotObject.IsInstanceValid(tween))
                 tween.Finished -= OnFinished;
             GodotDirectionRendering.Kill(tween);
@@ -110,12 +132,13 @@ internal sealed class GodotDirectionEffectBackend : IDirectionEffectBackend
 
         private void Complete()
         {
-            if (settlement.Task.IsCompleted) return;
+            if (settlement.Task.IsCompleted || rolledBack || disposed) return;
             if (tween is not null && GodotObject.IsInstanceValid(tween))
                 tween.Finished -= OnFinished;
             GodotDirectionRendering.Kill(tween);
             tween = null;
-            host.PublishEffects(target);
+            if (host.IsCurrentEffectGeneration(generation))
+                host.PublishEffects(target);
             settlement.TrySetResult();
         }
     }

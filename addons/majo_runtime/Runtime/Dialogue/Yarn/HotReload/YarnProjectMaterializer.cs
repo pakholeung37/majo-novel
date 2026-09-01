@@ -99,6 +99,8 @@ public sealed class YarnProjectMaterializer
             LastImportHadAnyStrings = lineNodes.Count > 0,
             LastImportHadImplicitStringIDs = implicitIds.Count > 0,
         };
+        project.CompiledDirectionModulesJson = YarnProjectDirectionMetadata.Serialize(
+            compilation.DirectionModules);
 
         var roundTrip = project.Program.ToByteArray();
         if (!programBytes.AsSpan().SequenceEqual(roundTrip))
@@ -118,7 +120,10 @@ public sealed class YarnProjectMaterializer
             lineNodes,
             implicitIds,
             compilation.Diagnostics,
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow)
+        {
+            DirectionModules = compilation.DirectionModules,
+        };
     }
 
     private static string ShortHash(string value) => Hash(Encoding.UTF8.GetBytes(value))[..8];

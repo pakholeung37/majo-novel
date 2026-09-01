@@ -63,7 +63,12 @@ public partial class HeadlessTestRunner
     {
         var service = new NonCooperativeInitializationService();
         var configuration = MajoProjectConfiguration.CreateDefault();
-        configuration.Runtime!.LifecycleTimeoutSeconds = 0.05;
+        // The production graph now includes the Direction render chain, whose
+        // initial render fence can legitimately consume more than one 50 ms
+        // frame in headless mode. Keep the deadline short while allowing the
+        // probe service to be reached before its deliberately non-cooperative
+        // initializer becomes the timed-out operation.
+        configuration.Runtime!.LifecycleTimeoutSeconds = 0.5;
         var bootstrap = new MajoRuntimeBootstrap
         {
             Name = "TimedOutRuntime",

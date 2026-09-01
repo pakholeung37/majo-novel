@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
 using Majo.Runtime.Resources;
 
 namespace Majo.Runtime.Direction.Core;
@@ -193,6 +194,57 @@ public sealed record DirectionState(
         ScreenState.Default,
         StableEffectState.Default,
         0);
+
+    public DirectionState Validate()
+    {
+        if (Stages is null || Views is null || Screen is null || Effects is null)
+            throw new DirectionException("Direction state is incomplete.");
+        if (Revision < 0 || !Stages.ContainsKey(StageId.Main) || !Views.ContainsKey(ViewId.Main))
+            throw new DirectionException("Direction state has no valid main Stage/View.");
+
+        foreach (var pair in Stages)
+        {
+            if (string.IsNullOrWhiteSpace(pair.Key.Value) || pair.Value is null ||
+                pair.Value.Id != pair.Key || pair.Value.Actors is null ||
+                pair.Value.Effects is null)
+                throw new DirectionException($"Direction state has an invalid Stage '{pair.Key}'.");
+            pair.Value.Backdrop?.Validate();
+            pair.Value.Effects.Tint.Validate();
+            foreach (var actor in pair.Value.Actors)
+            {
+                if (string.IsNullOrWhiteSpace(actor.Key.Value) || actor.Value is null ||
+                    actor.Value.Id != actor.Key)
+                    throw new DirectionException($"Direction state has an invalid Actor '{actor.Key}'.");
+                actor.Value.Validate();
+            }
+        }
+
+        foreach (var pair in Views)
+        {
+            if (string.IsNullOrWhiteSpace(pair.Key.Value) || pair.Value is null ||
+                pair.Value.Id != pair.Key || pair.Value.Source is null)
+                throw new DirectionException($"Direction state has an invalid View '{pair.Key}'.");
+            pair.Value.Pose.Validate();
+            if (pair.Value.Source is StageViewSource stage &&
+                (string.IsNullOrWhiteSpace(stage.StageId.Value) || !Stages.ContainsKey(stage.StageId)))
+                throw new DirectionReferenceException(
+                    $"View '{pair.Key}' references unknown Stage '{stage.StageId}'.");
+        }
+
+        if (string.IsNullOrWhiteSpace(Screen.Layout.Value) || Screen.Bindings is null)
+            throw new DirectionException("Direction screen is incomplete.");
+        var requiredSlots = DirectionLayoutCatalog.RequiredSlots(Screen.Layout);
+        if (
+            requiredSlots.Any(slot => !Screen.Bindings.ContainsKey(slot)) ||
+            Screen.Bindings.Keys.Any(slot => !requiredSlots.Contains(slot)) ||
+            Screen.Bindings.Keys.Any(slot => string.IsNullOrWhiteSpace(slot.Value)) ||
+            Screen.Bindings.Values.Any(view => string.IsNullOrWhiteSpace(view.Value) || !Views.ContainsKey(view)))
+            throw new DirectionReferenceException("Direction screen bindings do not match its layout.");
+        if (Effects.Curtain is null)
+            throw new DirectionException("Direction state has incomplete stable effects.");
+        Effects.Curtain.Validate();
+        return this;
+    }
 }
 
 internal static class DirectionCollections

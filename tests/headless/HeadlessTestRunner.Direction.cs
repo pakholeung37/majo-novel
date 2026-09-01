@@ -151,6 +151,54 @@ public partial class HeadlessTestRunner
         Assert(ReferenceEquals(stageBackdropTexture, host.Backdrop.Texture),
             "Returning from CG rebuilt or replaced the stable Stage Backdrop.");
 
+        var cutPose = new ViewPose(
+            new DirectionPoint(37.384f, 74.816f),
+            3,
+            10);
+        var movePose = new ViewPose(
+            new DirectionPoint(44.438f, 71.950f),
+            3,
+            10);
+        var sequenceTransaction = await coordinator.ExecuteAsync(
+            new IDirectionDirective[]
+            {
+                new ViewPatch(
+                    ViewId.Main,
+                    DirectionValue<ViewSource>.From(new CgViewSource(cgKey)),
+                    default,
+                    default,
+                    default,
+                    DirectionTransitionSpec.Cut),
+                new ViewPatch(
+                    ViewId.Main,
+                    default,
+                    DirectionValue<DirectionPoint>.From(cutPose.Center),
+                    DirectionValue<float>.From(cutPose.Zoom),
+                    DirectionValue<float>.From(cutPose.RotationDegrees),
+                    DirectionTransitionSpec.Cut),
+                new ViewPatch(
+                    ViewId.Main,
+                    default,
+                    DirectionValue<DirectionPoint>.From(movePose.Center),
+                    default,
+                    default,
+                    new DirectionTransitionSpec(
+                        DirectionTransitionKind.Move,
+                        0.4,
+                        DirectionEase.SineOut)),
+            });
+        Assert(Equals(host.PublishedView?.Pose, cutPose),
+            "A sequential View move did not publish its Cut pose before tweening.");
+        var poseAtCommit = host.ViewTransform.Transform;
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        var poseDuringMove = host.ViewTransform.Transform;
+        Assert(poseAtCommit.Origin.DistanceTo(poseDuringMove.Origin) > 0.01f,
+            "A sequential View move did not animate after its Cut pose.");
+        await coordinator.FinishAsync(sequenceTransaction);
+        Assert(Equals(host.PublishedView?.Pose, movePose),
+            "A sequential View move did not publish its final pose after settlement.");
+
         await coordinator.ExecuteAsync(
             new IDirectionDirective[]
             {

@@ -65,7 +65,10 @@ public sealed record YarnProjectVersion(
     IReadOnlyDictionary<string, string> LineNodes,
     IReadOnlySet<string> ImplicitLineIds,
     IReadOnlyList<YarnCompilationDiagnostic> Diagnostics,
-    DateTimeOffset CompiledAt);
+    DateTimeOffset CompiledAt)
+{
+    public IReadOnlyList<NodeDirectionModule> DirectionModules { get; init; } = Array.Empty<NodeDirectionModule>();
+}
 
 public sealed record YarnHotReloadStatus(
     YarnHotReloadState State,

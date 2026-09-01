@@ -38,16 +38,34 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
 
     public async Task ResetAsync(CancellationToken cancellationToken)
     {
-        foreach (var backend in actors.Values)
-            await backend.ResetAsync(cancellationToken);
+        List<Exception>? failures = null;
+        foreach (var backend in actors.Values.ToArray())
+        {
+            try { await backend.ResetAsync(cancellationToken); }
+            catch (Exception exception)
+            {
+                (failures ??= new List<Exception>()).Add(exception);
+            }
+        }
         actors.Clear();
+        if (failures is not null)
+            throw new AggregateException("One or more Direction stage actor trees failed to reset.", failures);
     }
 
     public async Task ShutdownAsync(CancellationToken cancellationToken)
     {
-        foreach (var backend in actors.Values)
-            await backend.ResetAsync(cancellationToken);
+        List<Exception>? failures = null;
+        foreach (var backend in actors.Values.ToArray())
+        {
+            try { await backend.ResetAsync(cancellationToken); }
+            catch (Exception exception)
+            {
+                (failures ??= new List<Exception>()).Add(exception);
+            }
+        }
         actors.Clear();
+        if (failures is not null)
+            throw new AggregateException("One or more Direction stage actor trees failed to shut down.", failures);
     }
 
     public async Task<IPreparedDirectionComponent> PrepareAsync(
@@ -64,7 +82,12 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
         var backdropChanged = !Equals(before?.Backdrop, target?.Backdrop);
         var actorsChanged = !DirectionActorsEqual(before, target);
         if (!backdropChanged && !actorsChanged)
-            return new ImmediatePreparedDirectionComponent();
+        {
+            var immediate = new ImmediatePreparedDirectionComponent();
+            return createdSurface
+                ? new PreparedStageLifecycle(this, stageId, immediate)
+                : immediate;
+        }
 
         IPreparedDirectionComponent? preparedBackdrop = null;
         IPreparedDirectionComponent? preparedActors = null;
@@ -112,11 +135,30 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
                 ? new PreparedStageLifecycle(this, stageId, component)
                 : component;
         }
-        catch
+        catch (Exception preparationException)
         {
-            if (preparedActors is not null) await preparedActors.DisposeAsync();
-            if (preparedBackdrop is not null) await preparedBackdrop.DisposeAsync();
-            if (createdSurface) await ReleasePreparedStageAsync(stageId);
+            List<Exception>? failures = null;
+            foreach (var prepared in new[] { preparedActors, preparedBackdrop })
+            {
+                if (prepared is null) continue;
+                try { await prepared.DisposeAsync(); }
+                catch (Exception exception)
+                {
+                    (failures ??= new List<Exception>()).Add(exception);
+                }
+            }
+            if (createdSurface)
+            {
+                try { await ReleasePreparedStageAsync(stageId); }
+                catch (Exception exception)
+                {
+                    (failures ??= new List<Exception>()).Add(exception);
+                }
+            }
+            if (failures is not null)
+                throw new AggregateException(
+                    "Direction stage preparation failed and cleanup also failed.",
+                    new[] { preparationException }.Concat(failures));
             throw;
         }
     }
@@ -164,9 +206,20 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
 
     private async ValueTask ReleasePreparedStageAsync(StageId stageId)
     {
+        Exception? failure = null;
         if (actors.Remove(stageId, out var actorBackend))
-            await actorBackend.ResetAsync(CancellationToken.None);
-        host.ReleasePreparedStage(stageId);
+        {
+            try { await actorBackend.ResetAsync(CancellationToken.None); }
+            catch (Exception exception) { failure = exception; }
+        }
+        try { host.ReleasePreparedStage(stageId); }
+        catch (Exception exception)
+        {
+            failure = failure is null
+                ? exception
+                : new AggregateException(failure, exception);
+        }
+        if (failure is not null) throw failure;
     }
 
     private sealed class PreparedStageLifecycle : IPreparedDirectionComponent
@@ -175,6 +228,7 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
         private readonly StageId stageId;
         private readonly IPreparedDirectionComponent component;
         private bool committed;
+        private bool commitStarted;
         private bool disposed;
 
         public PreparedStageLifecycle(
@@ -191,8 +245,18 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
 
         public void Commit(DirectionCommitToken token)
         {
+            if (committed)
+                throw new InvalidOperationException("Stage component already committed.");
+            commitStarted = true;
             component.Commit(token);
             committed = true;
+        }
+
+        public void Rollback(DirectionCommitToken token)
+        {
+            if (!commitStarted) return;
+            try { component.Rollback(token); }
+            finally { committed = false; }
         }
 
         public ValueTask FinishAsync(CancellationToken cancellationToken) =>
@@ -202,8 +266,16 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
         {
             if (disposed) return;
             disposed = true;
-            await component.DisposeAsync();
-            if (!committed) await backend.ReleasePreparedStageAsync(stageId);
+            List<Exception>? failures = null;
+            try { await component.DisposeAsync(); }
+            catch (Exception exception) { failures = new List<Exception> { exception }; }
+            if (!committed)
+            {
+                try { await backend.ReleasePreparedStageAsync(stageId); }
+                catch (Exception exception) { (failures ??= new()).Add(exception); }
+            }
+            if (failures is not null)
+                throw new AggregateException("Stage component cleanup failed.", failures);
         }
     }
 
@@ -220,6 +292,9 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
             TaskCreationOptions.RunContinuationsAsynchronously);
         private Tween? tween;
         private bool committed;
+        private bool rolledBack;
+        private bool disposed;
+        private long generation;
 
         public PreparedBackdrop(
             GodotDirectionRenderHost host,
@@ -243,9 +318,12 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
 
         public void Commit(DirectionCommitToken token)
         {
-            if (committed) throw new InvalidOperationException("Backdrop already committed.");
+            if (committed || rolledBack || disposed)
+                throw new InvalidOperationException("Backdrop is no longer preparable.");
             committed = true;
-            host.ClearBackdropTransition(surface.Id);
+            generation = host.BeginStageGeneration(surface.Id);
+            if (host.IsCurrentStageGeneration(surface.Id, generation))
+                host.ClearBackdropTransition(surface.Id);
             var animate = transition.DurationSeconds > 0 &&
                 transition.Kind is DirectionTransitionKind.Fade or
                     DirectionTransitionKind.Dissolve &&
@@ -265,29 +343,51 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
 
             tween = host.CreateTween();
             GodotDirectionRendering.Configure(tween, transition.Ease);
-            tween.TweenProperty(
-                surface.BackdropTransition,
-                "modulate:a",
-                0,
-                transition.DurationSeconds);
+            tween.TweenMethod(Callable.From<float>(progress =>
+            {
+                if (host.IsCurrentStageGeneration(surface.Id, generation))
+                    surface.BackdropTransition.Modulate = new Color(
+                        surface.BackdropTransition.Modulate, 1 - progress);
+            }), 0.0f, 1.0f, transition.DurationSeconds);
             tween.Finished += OnFinished;
         }
 
         public ValueTask FinishAsync(CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (!committed) throw new InvalidOperationException("Backdrop has not committed.");
+            if (!committed || rolledBack || disposed)
+                throw new InvalidOperationException("Backdrop cannot finish in its current state.");
             Complete();
             return ValueTask.CompletedTask;
         }
 
-        public ValueTask DisposeAsync()
+        public void Rollback(DirectionCommitToken token)
         {
-            if (!committed) settlement.TrySetCanceled();
+            if (rolledBack || disposed) return;
+            rolledBack = true;
             if (tween is not null && GodotObject.IsInstanceValid(tween))
                 tween.Finished -= OnFinished;
             GodotDirectionRendering.Kill(tween);
             tween = null;
+            if (host.IsCurrentStageGeneration(surface.Id, generation))
+            {
+                host.PublishBackdrop(surface.Id, source, sourceTexture);
+                host.ClearBackdropTransition(surface.Id);
+            }
+            settlement.TrySetCanceled();
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            if (disposed) return ValueTask.CompletedTask;
+            disposed = true;
+            if (!settlement.Task.IsCompleted) settlement.TrySetCanceled();
+            if (tween is not null && GodotObject.IsInstanceValid(tween))
+                tween.Finished -= OnFinished;
+            GodotDirectionRendering.Kill(tween);
+            tween = null;
+            if (host.IsCurrentStageGeneration(surface.Id, generation))
+                host.ClearBackdropTransition(surface.Id);
             return ValueTask.CompletedTask;
         }
 
@@ -295,13 +395,16 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
 
         private void Complete()
         {
-            if (settlement.Task.IsCompleted) return;
+            if (settlement.Task.IsCompleted || rolledBack || disposed) return;
             if (tween is not null && GodotObject.IsInstanceValid(tween))
                 tween.Finished -= OnFinished;
             GodotDirectionRendering.Kill(tween);
             tween = null;
-            host.PublishBackdrop(surface.Id, target, targetTexture);
-            host.ClearBackdropTransition(surface.Id);
+            if (host.IsCurrentStageGeneration(surface.Id, generation))
+            {
+                host.PublishBackdrop(surface.Id, target, targetTexture);
+                host.ClearBackdropTransition(surface.Id);
+            }
             settlement.TrySetResult();
         }
     }

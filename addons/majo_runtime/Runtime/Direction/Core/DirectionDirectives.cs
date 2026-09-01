@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using Majo.Runtime.Stage;
 
 namespace Majo.Runtime.Direction.Core;
 
@@ -136,4 +137,16 @@ public sealed record ScreenPatch(
 public sealed record DirectionCue(
     string Name,
     IReadOnlyDictionary<string, string> Arguments,
+    DirectionSourceLocation? SourceLocation = null) : ITransientDirectionCue;
+
+public sealed record ShakeCue(
+    float Strength, CameraShakeAxis Axis, int Frequency, double DurationSeconds,
+    DirectionSourceLocation? SourceLocation = null) : ITransientDirectionCue;
+
+public sealed record FlashCue(
+    DirectionColor Color, float Intensity, double DurationSeconds,
+    DirectionSourceLocation? SourceLocation = null) : ITransientDirectionCue;
+
+public sealed record CurtainCue(
+    bool Open, DirectionColor Color, double DurationSeconds,
     DirectionSourceLocation? SourceLocation = null) : ITransientDirectionCue;

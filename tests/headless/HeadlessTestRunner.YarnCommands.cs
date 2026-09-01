@@ -261,6 +261,11 @@ public partial class HeadlessTestRunner
                                 "headless/fixtures/background_dark") &&
                         mainStage.Actors.TryGetValue(new ActorId("hero"), out var placed) &&
                         placed.Appearance == "red" && placed.Z == 5 &&
+                        state.Views[ViewId.Main].Source is CgViewSource &&
+                        state.Views[ViewId.Main].Pose == new ViewPose(
+                            new DirectionPoint(44.438f, 71.950f), 3, 10) &&
+                        directionHost.PublishedView?.Pose == new ViewPose(
+                            new DirectionPoint(44.438f, 71.950f), 3, 10) &&
                         directionHost.PublishedBackdrop is not null;
                     break;
                 case "line:m4-direction-move":

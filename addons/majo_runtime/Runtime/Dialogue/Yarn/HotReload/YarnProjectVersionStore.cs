@@ -58,6 +58,11 @@ public sealed class YarnProjectVersionStore : IYarnProjectVersionStore
             foreach (var entry in entries.Values)
             {
                 entry.Running = null;
+                if (entry.Candidate is not null)
+                {
+                    entry.Active = entry.Candidate;
+                    entry.Candidate = null;
+                }
             }
         }
         return Task.CompletedTask;
@@ -114,12 +119,19 @@ public sealed class YarnProjectVersionStore : IYarnProjectVersionStore
         {
             if (entries.TryGetValue(candidate.ProjectId, out var entry))
             {
-                entry.Active = candidate;
-                entry.Candidate = candidate;
+                if (entry.Running is null)
+                {
+                    entry.Active = candidate;
+                    entry.Candidate = null;
+                }
+                else
+                {
+                    entry.Candidate = candidate;
+                }
             }
             else
             {
-                entries.Add(candidate.ProjectId, new Entry(candidate) { Candidate = candidate });
+                entries.Add(candidate.ProjectId, new Entry(candidate));
             }
         }
     }
@@ -135,6 +147,10 @@ public sealed class YarnProjectVersionStore : IYarnProjectVersionStore
                 return;
             }
             entry.Active = version;
+            if (ReferenceEquals(entry.Candidate?.Project, version.Project))
+            {
+                entry.Candidate = null;
+            }
         }
     }
 
@@ -219,7 +235,10 @@ public sealed class YarnProjectVersionStore : IYarnProjectVersionStore
                 ? new HashSet<string>(project.baseLocalization?.GetLineIDs() ?? Array.Empty<string>(), StringComparer.Ordinal)
                 : new HashSet<string>(StringComparer.Ordinal),
             Array.Empty<YarnCompilationDiagnostic>(),
-            DateTimeOffset.MinValue);
+            DateTimeOffset.MinValue)
+        {
+            DirectionModules = YarnProjectDirectionMetadata.Deserialize(project),
+        };
     }
 
     private sealed class Entry
