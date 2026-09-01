@@ -7,6 +7,7 @@
 - 核心能力：显式 Beat 事务、Multi-Stage、Multi-View、Screen Layout、Backdrop/CG 分离、原子 Prepare/Commit、Rollback、Hot Reload
 - Authoring 原则：inline-first、node-local、name-on-reuse、资源路径隐式解析
 - 兼容策略：不以旧 staging command 或旧存档 schema 兼容为设计约束
+- 实施进度（2026-09-01）：Phase A 的纯 Direction Core、Planner、Prepare/Commit 协调器、显式 Beat runtime 与 fake backend 单测已落地；尚未注册新 Yarn API，也未替换旧 Godot staging backend
 - 相关文档：
   - [`camera-runtime-next-phases.md`](camera-runtime-next-phases.md)
   - [`archive/camera-view-transition-design.md`](archive/camera-view-transition-design.md)
