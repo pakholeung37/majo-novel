@@ -60,7 +60,7 @@ Transition 契约必须能被未来的 `camera switch` 和 `camera compose` 复�
 | 命令 | 职责 | 是否接受 `via` |
 | --- | --- | --- |
 | `camera pose` | 原子声明一个或多个 Pose 属性的目标值 | 是 |
-| `camera reset` | 将完整 Pose 目标设为默认值 | 是 |
+| `camera reset` | 将完整 Pose 目标设为默认值，并保留当前 View Source | 是 |
 | `camera move` | 连续改变 center | 否，固定为 `move` |
 | `camera zoom` | 连续改变 zoom | 否，固定为 `move` |
 | `camera rotate` | 连续改变 rotation | 否，固定为 `move` |

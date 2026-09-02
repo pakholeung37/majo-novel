@@ -16,11 +16,13 @@ public sealed class StageCommandTests
         registry
             .Register<CameraMoveDirectionCommandArguments>((_, _) => Task.CompletedTask)
             .Register<CameraPoseDirectionCommandArguments>((_, _) => Task.CompletedTask)
+            .Register<CameraResetDirectionCommandArguments>((_, _) => Task.CompletedTask)
             .Register<CameraShakeDirectionCommandArguments>((_, _) => Task.CompletedTask);
         var catalog = registry.BuildCatalog();
 
         Assert.Contains(catalog.Commands, command => command.Name == "camera move");
         Assert.Contains(catalog.Commands, command => command.Name == "camera pose");
+        Assert.Contains(catalog.Commands, command => command.Name == "camera reset");
         Assert.Contains(catalog.Commands, command => command.Name == "camera shake");
 
         var binder = new CommandBinder(new CommandBindingContext(0.35));
@@ -50,6 +52,20 @@ public sealed class StageCommandTests
         Assert.Equal(DirectionTransitionKind.Dissolve, dissolveArguments.Via);
         Assert.Equal(0.6, dissolveArguments.Duration);
         Assert.Equal("sine-in-out", dissolveArguments.Ease);
+
+        var reset = catalog.Get("camera reset");
+        var resetArguments = binder.Bind<CameraResetDirectionCommandArguments>(
+            reset.Descriptor,
+            new[] { "via:dissolve", "duration:0.6", "wait:true" });
+        Assert.Equal("main", resetArguments.View);
+        Assert.Equal(DirectionTransitionKind.Dissolve, resetArguments.Via);
+        Assert.Equal(0.6, resetArguments.Duration);
+        Assert.True(resetArguments.Wait);
+        var resetStage = Assert.Throws<RuntimeCommandException>(() =>
+            binder.Bind<CameraResetDirectionCommandArguments>(
+                reset.Descriptor,
+                new[] { "stage:main" }));
+        Assert.Contains("unknown parameter 'stage'", resetStage.Message);
 
         var shake = catalog.Get("camera shake");
         var defaultShake = binder.Bind<CameraShakeDirectionCommandArguments>(

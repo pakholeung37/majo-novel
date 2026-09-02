@@ -106,6 +106,7 @@ public partial class HeadlessTestRunner
         var directionBeatCommitted = false;
         var directionActorMoved = false;
         var directionCgShown = false;
+        var directionCgReset = false;
         var directionStageRestored = false;
         var directionActorLeft = false;
         presenter.LinePresented += line =>
@@ -146,13 +147,21 @@ public partial class HeadlessTestRunner
                     break;
                 case "line:m4-direction-stage":
                     directionStageRestored =
-                        state.Revision == 4 &&
+                        state.Revision == 5 &&
                         state.Views[ViewId.Main].Source is StageViewSource stageSource &&
                         stageSource.StageId == StageId.Main;
                     break;
+                case "line:m4-direction-reset":
+                    directionCgReset =
+                        state.Revision == 4 &&
+                        state.Views[ViewId.Main].Source is CgViewSource &&
+                        state.Views[ViewId.Main].Pose == ViewPose.Default &&
+                        directionHost.PublishedView?.Source is CgViewSource &&
+                        directionHost.PublishedView.Pose == ViewPose.Default;
+                    break;
                 case "line:m4-direction-leave":
                     directionActorLeft =
-                        state.Revision == 5 &&
+                        state.Revision == 6 &&
                         mainStage?.Actors.Count == 0;
                     break;
             }
@@ -165,6 +174,8 @@ public partial class HeadlessTestRunner
             "Yarn character did not resolve a configured mark or settle its move.");
         Assert(directionCgShown,
             "Yarn cg did not replace only the View source.");
+        Assert(directionCgReset,
+            "Yarn camera reset changed the current CG View source instead of only resetting its Pose.");
         Assert(directionStageRestored,
             "Yarn camera pose did not restore the persistent Stage View.");
         Assert(directionActorLeft,
@@ -182,7 +193,7 @@ public partial class HeadlessTestRunner
             {
                 case "line:m4-direction-broadcast":
                     directionBroadcastShown =
-                        state.Revision == 6 &&
+                        state.Revision == 7 &&
                         state.Stages[StageId.Main].Actors[new ActorId("hero")].Appearance == "red" &&
                         state.Stages[broadcastStage].Actors[new ActorId("hero")].Appearance == "blue" &&
                         state.Views[ViewId.Main].Source is StageViewSource source &&
@@ -191,14 +202,14 @@ public partial class HeadlessTestRunner
                     break;
                 case "line:m4-direction-main-return":
                     directionMainReturned =
-                        state.Revision == 7 &&
+                        state.Revision == 8 &&
                         state.Views[ViewId.Main].Source is StageViewSource mainReturnSource &&
                         mainReturnSource.StageId == StageId.Main &&
                         state.Stages[broadcastStage].Actors[new ActorId("hero")].Appearance == "blue";
                     break;
                 case "line:m4-direction-split":
                     directionSplitShown =
-                        state.Revision == 9 &&
+                        state.Revision == 10 &&
                         state.Screen.Layout == new LayoutId("split") &&
                         state.Screen.Bindings.TryGetValue(new LayoutSlotId("inset"), out var insetView) &&
                         insetView == scopes.ResolveView("DirectionMultiStage", "reaction") &&

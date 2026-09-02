@@ -149,7 +149,7 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
 	{
 		var patch = new ViewPatch(
 			View(a.View),
-			DirectionValue<ViewSource>.From(new StageViewSource(Stage(a.Stage))),
+			default,
 			DirectionValue<DirectionPoint>.From(new DirectionPoint(50, 50)),
 			DirectionValue<float>.From(1),
 			DirectionValue<float>.From(0),
@@ -578,11 +578,10 @@ public sealed class CameraPoseDirectionCommandArguments : CameraPatchDirectionCo
 [CommandParameterSet(CommandParameterSetRule.AtLeastOne, "center", "zoom", "rotation")]
 public sealed class CameraMoveDirectionCommandArguments : CameraPatchDirectionCommandArguments;
 
-[RuntimeCommand("camera", "reset", Category = "Direction", Usage = "camera reset [stage:<id>] [view:<id>] [via:<kind>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]
+[RuntimeCommand("camera", "reset", Category = "Direction", Usage = "camera reset [view:<id>] [via:<kind>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]
 public sealed class CameraResetDirectionCommandArguments : DirectionTransitionCommandArguments
 {
-	[CommandParameter("stage", 0, DefaultValue = "main")] public string Stage { get; set; } = "main";
-	[CommandParameter("view", 1, DefaultValue = "main")] public string View { get; set; } = "main";
+	[CommandParameter("view", 0, DefaultValue = "main")] public string View { get; set; } = "main";
 }
 
 [RuntimeCommand("cg", Category = "Direction", Usage = "cg <resource> [view:<id>] [center:<x,y>] [zoom:<number>] [rotation:<degrees>] [via:<kind>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]

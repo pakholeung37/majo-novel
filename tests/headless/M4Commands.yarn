@@ -24,6 +24,8 @@ Narrator: direction beat committed #line:m4-direction-beat
 Narrator: direction actor moved #line:m4-direction-move
 <<cg background_light center:40,60 zoom:1.5 via:cut wait:true>>
 Narrator: direction cg shown #line:m4-direction-cg
+<<camera reset via:dissolve duration:0.08 wait:true>>
+Narrator: direction cg pose reset #line:m4-direction-reset
 <<camera pose stage:main center:50,50 zoom:1 rotation:0 via:cut wait:true>>
 Narrator: direction stage restored #line:m4-direction-stage
 <<leave hero via:fade duration:0.08 wait:true>>
