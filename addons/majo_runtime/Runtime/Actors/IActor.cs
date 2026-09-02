@@ -113,28 +113,6 @@ public interface IActor
         string? groupId = null) => ChangeOpacity(
             opacity, animation.DurationSeconds, operationId, groupId);
 
-    IOperationHandle Show(
-        double durationSeconds,
-        string? operationId = null,
-        string? groupId = null);
-
-    IOperationHandle Show(
-        AnimationSpec animation,
-        string? operationId = null,
-        string? groupId = null) => Show(
-            animation.DurationSeconds, operationId, groupId);
-
-    IOperationHandle Hide(
-        double durationSeconds,
-        string? operationId = null,
-        string? groupId = null);
-
-    IOperationHandle Hide(
-        AnimationSpec animation,
-        string? operationId = null,
-        string? groupId = null) => Hide(
-            animation.DurationSeconds, operationId, groupId);
-
     void Destroy();
 }
 
@@ -159,12 +137,6 @@ public interface ICharacterActor : IActor, IGodotActorView
 
     IOperationHandle ChangeAppearance(
         string appearance,
-        double durationSeconds,
-        string? operationId = null,
-        string? groupId = null);
-
-    IOperationHandle ChangeScenePosition(
-        Vector2 scenePosition,
         double durationSeconds,
         string? operationId = null,
         string? groupId = null);
@@ -201,16 +173,4 @@ public interface IBackgroundActor : IActor, IGodotActorView
 
     TextureRect CurrentView { get; }
 
-    IOperationHandle CrossFadeAppearance(
-        string appearance,
-        double durationSeconds,
-        string? operationId = null,
-        string? groupId = null);
-
-    IOperationHandle CrossFadeAppearance(
-        string appearance,
-        AnimationSpec animation,
-        string? operationId = null,
-        string? groupId = null) => CrossFadeAppearance(
-            appearance, animation.DurationSeconds, operationId, groupId);
 }

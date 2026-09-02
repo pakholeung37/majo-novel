@@ -71,8 +71,7 @@ public partial class HeadlessTestRunner
                 normalCheeks.Material is null,
             "Layered character did not isolate transparent Multiply pixels from default layers.");
 
-        var sceneMove = character.ChangeScenePosition(new Vector2(45, 0), 0);
-        await sceneMove.Completion;
+        character.SetScenePosition(new Vector2(45, 0));
         character.SetScale(new Vector2(0.75f, 0.75f));
         Assert(character.Position.IsEqualApprox(new Vector2(1152, 1296)) &&
                 character.Scale.IsEqualApprox(new Vector2(0.75f, 0.75f)),
@@ -130,18 +129,6 @@ public partial class HeadlessTestRunner
             LayerVisible(layers,
                 "Angle01_Head01_Facial01_Sweat01_Sweat01_01"),
             "Surprised1 did not select Ema's expected eye and sweat layers.");
-
-        var hide = character.Hide(0.2);
-        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        Assert(Mathf.IsEqualApprox(character.View.Modulate.A, 1) &&
-                character.Opacity is > 0 and < 1,
-            "Layered character hide did not fade its flattened composite.");
-        await hide.Completion;
-        var show = character.Show(0);
-        await show.Completion;
-        Assert(character.Visible && Mathf.IsEqualApprox(character.Opacity, 1),
-            "Layered character did not restore composite opacity after hide.");
 
         character.SetAppearance("Normal1,ArmR3");
         character.SetAppearance("Fearful1");

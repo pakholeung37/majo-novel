@@ -62,7 +62,13 @@ internal sealed class GodotDirectionActorTreeBackend
                 foreach (var actorState in target.Actors.Values
                     .OrderBy(actor => actor.Id.Value, StringComparer.Ordinal))
                 {
-                    await PrepareActorAsync(manager, actorState, cancellationToken);
+                    ActorState? sourceActorState = null;
+                    before?.Actors.TryGetValue(actorState.Id, out sourceActorState);
+                    await PrepareActorAsync(
+                        manager,
+                        actorState,
+                        sourceActorState,
+                        cancellationToken);
                 }
             }
 
@@ -71,6 +77,7 @@ internal sealed class GodotDirectionActorTreeBackend
             return new PreparedActorTree(
                 this,
                 prepared,
+                before,
                 target,
                 transitions);
         }
@@ -103,14 +110,16 @@ internal sealed class GodotDirectionActorTreeBackend
     private static async Task PrepareActorAsync(
         IActorManager manager,
         ActorState target,
+        ActorState? source,
         CancellationToken cancellationToken)
     {
         target.Validate();
+        var initialAppearance = source?.Appearance ?? target.Appearance ?? "Default";
         var actor = await manager.GetOrCreateAsync(
             new ActorSpawnRequest(
                 target.Id.Value,
                 ActorFactoryIds.Character,
-                target.Appearance ?? "Default",
+                initialAppearance,
                 creationMode: ActorCreationMode.Dormant),
             cancellationToken);
         if (actor is not ICharacterActor character)
@@ -119,10 +128,24 @@ internal sealed class GodotDirectionActorTreeBackend
                 $"Direction Actor '{target.Id.Value}' must use a character actor factory.");
         }
 
+        if (source?.Appearance is { } sourceAppearance &&
+            !string.Equals(sourceAppearance, target.Appearance, StringComparison.Ordinal))
+        {
+            // Factories initialize from their manifest/definition default. A
+            // replacement tree must start at the currently visible
+            // appearance so ChangeAppearance can transition from the real
+            // source expression instead of showing Default for one frame.
+            character.SetAppearance(sourceAppearance);
+        }
+
         if (target.Appearance is not null)
         {
             await character.PrepareAppearanceAsync(target.Appearance, cancellationToken);
-            character.SetAppearance(target.Appearance);
+            if (source is null ||
+                string.Equals(source.Appearance, target.Appearance, StringComparison.Ordinal))
+            {
+                character.SetAppearance(target.Appearance);
+            }
         }
 
         character.SetScenePosition(new Vector2(target.Position.X, target.Position.Y));
@@ -162,6 +185,15 @@ internal sealed class GodotDirectionActorTreeBackend
                 _ => throw new DirectionException(
                     $"Direction Actor '{actorId.Value}' has multiple transition specifications."),
             };
+            // An appearance replacement must keep the old and new visuals on
+            // screen together. Treat a legacy/default fade as a dissolve for
+            // this case so there is no blank frame between expressions.
+            if (source is not null && destination is not null &&
+                !string.Equals(source.Appearance, destination.Appearance, StringComparison.Ordinal) &&
+                transition.Kind == DirectionTransitionKind.Fade)
+            {
+                transition = transition with { Kind = DirectionTransitionKind.Dissolve };
+            }
             ValidateTransition(actorId, source, destination, transition);
             transitions.Add(actorId, transition);
         }
@@ -176,18 +208,12 @@ internal sealed class GodotDirectionActorTreeBackend
         DirectionTransitionSpec transition)
     {
         transition.Validate();
-        if (transition.Kind == DirectionTransitionKind.Dissolve)
-        {
-            throw new DirectionException(
-                $"Direction Actor '{actorId.Value}' does not support dissolve; use fade.");
-        }
-
         if (transition.Kind == DirectionTransitionKind.Move &&
             (before is null || target is null))
         {
             throw new DirectionException(
                 $"Direction Actor '{actorId.Value}' can only move when it exists in both " +
-                "the source and target states; use cut or fade for entrance and leave.");
+                "the source and target states; use cut, fade, or dissolve for entrance and leave.");
         }
     }
 
@@ -207,7 +233,13 @@ internal sealed class GodotDirectionActorTreeBackend
                 continue;
             }
 
-            if (pair.Value.Kind == DirectionTransitionKind.Fade)
+            if (IsAppearanceChange(before, target, pair.Key) &&
+                pair.Value.Kind != DirectionTransitionKind.Move)
+            {
+                continue;
+            }
+
+            if (pair.Value.Kind is DirectionTransitionKind.Fade or DirectionTransitionKind.Dissolve)
             {
                 actor!.SetOpacity(0);
             }
@@ -220,6 +252,14 @@ internal sealed class GodotDirectionActorTreeBackend
             }
         }
     }
+
+    private static bool IsAppearanceChange(
+        StageState? before,
+        StageState? target,
+        ActorId actorId) =>
+        before?.Actors.TryGetValue(actorId, out var source) == true &&
+        target?.Actors.TryGetValue(actorId, out var destination) == true &&
+        !string.Equals(source.Appearance, destination.Appearance, StringComparison.Ordinal);
 
     private PreparedActorTreeState? Publish(PreparedActorTreeState target)
     {
@@ -250,6 +290,7 @@ internal sealed class GodotDirectionActorTreeBackend
     {
         private readonly GodotDirectionActorTreeBackend backend;
         private readonly PreparedActorTreeState target;
+        private readonly StageState? sourceState;
         private readonly StageState? targetState;
         private readonly IReadOnlyDictionary<ActorId, DirectionTransitionSpec> transitions;
         private readonly TaskCompletionSource settlement = new(
@@ -263,11 +304,13 @@ internal sealed class GodotDirectionActorTreeBackend
         public PreparedActorTree(
             GodotDirectionActorTreeBackend backend,
             PreparedActorTreeState target,
+            StageState? sourceState,
             StageState? targetState,
             IReadOnlyDictionary<ActorId, DirectionTransitionSpec> transitions)
         {
             this.backend = backend;
             this.target = target;
+            this.sourceState = sourceState;
             this.targetState = targetState;
             this.transitions = transitions;
         }
@@ -342,13 +385,47 @@ internal sealed class GodotDirectionActorTreeBackend
             HideNonTransitioningSourceActors();
             foreach (var pair in transitions)
             {
-                if (pair.Value.DurationSeconds <= 0) continue;
-                var animation = ToAnimationSpec(pair.Value);
                 ICharacterActor? source = null;
                 var hasSource = replaced is not null &&
                     replaced.TryGetCharacter(pair.Key, out source);
                 var hasTarget = target.TryGetCharacter(pair.Key, out var destination);
-                if (pair.Value.Kind == DirectionTransitionKind.Fade)
+                if (hasSource && hasTarget && IsAppearanceChange(pair.Key))
+                {
+                    var targetAppearance = targetState!.Actors[pair.Key].Appearance;
+                    if (targetAppearance is not null)
+                    {
+                        if (pair.Value.DurationSeconds > 0)
+                        {
+                            operations.Add(destination!.ChangeAppearance(
+                                targetAppearance,
+                                pair.Value.DurationSeconds));
+                        }
+                        else
+                        {
+                            destination!.SetAppearance(targetAppearance);
+                        }
+                    }
+
+                    if (pair.Value.Kind == DirectionTransitionKind.Move &&
+                        pair.Value.DurationSeconds > 0)
+                    {
+                        var state = targetState!.Actors[pair.Key];
+                        destination!.SetScenePosition(new Vector2(
+                            state.Position.X,
+                            state.Position.Y));
+                        var targetPixelPosition = destination.Position;
+                        var sourcePosition = source!.Position;
+                        destination.SetPosition(sourcePosition);
+                        operations.Add(destination.ChangePosition(
+                            targetPixelPosition,
+                            ToAnimationSpec(pair.Value)));
+                    }
+                    continue;
+                }
+
+                if (pair.Value.DurationSeconds <= 0) continue;
+                var animation = ToAnimationSpec(pair.Value);
+                if (pair.Value.Kind is DirectionTransitionKind.Fade or DirectionTransitionKind.Dissolve)
                 {
                     if (hasSource) operations.Add(source!.ChangeOpacity(0, animation));
                     if (hasTarget) operations.Add(destination!.ChangeOpacity(1, animation));
@@ -369,6 +446,12 @@ internal sealed class GodotDirectionActorTreeBackend
             }
         }
 
+        private bool IsAppearanceChange(ActorId actorId) =>
+            GodotDirectionActorTreeBackend.IsAppearanceChange(
+                sourceState,
+                targetState,
+                actorId);
+
         private void HideNonTransitioningSourceActors()
         {
             if (replaced is null) return;
@@ -376,10 +459,11 @@ internal sealed class GodotDirectionActorTreeBackend
             foreach (var actor in replaced.Manager.Actors)
             {
                 var actorId = new ActorId(actor.Id);
-                var keepForFade = transitions.TryGetValue(actorId, out var transition) &&
-                    transition.Kind == DirectionTransitionKind.Fade &&
+                var keepForCrossfade = !IsAppearanceChange(actorId) &&
+                    transitions.TryGetValue(actorId, out var transition) &&
+                    (transition.Kind is DirectionTransitionKind.Fade or DirectionTransitionKind.Dissolve) &&
                     transition.DurationSeconds > 0;
-                if (keepForFade)
+                if (keepForCrossfade)
                     retainsVisibleSource = true;
                 else
                     actor.SetVisible(false);

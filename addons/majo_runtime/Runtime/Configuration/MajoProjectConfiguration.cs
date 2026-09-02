@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using Godot;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Core;
+using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Resources;
 using RuntimeResourcePath = Majo.Runtime.Resources.ResourcePath;
 
@@ -437,6 +438,14 @@ public partial class MajoProjectConfiguration : Resource
             issues.Add(new ConfigurationIssue(
                 $"{nameof(Operations)}.{nameof(Operations.DefaultCharacterAnimationDurationSeconds)}",
                 "Value must be finite and greater than zero."));
+        }
+
+        if (!Enum.IsDefined(Operations.DefaultCharacterAnimationKind) ||
+            Operations.DefaultCharacterAnimationKind == DirectionTransitionKind.Move)
+        {
+            issues.Add(new ConfigurationIssue(
+                $"{nameof(Operations)}.{nameof(Operations.DefaultCharacterAnimationKind)}",
+                "Default character animation kind must be cut, fade, or dissolve."));
         }
     }
 

@@ -100,7 +100,8 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
                     c,
                     DirectionTransitionKind.Cut,
                     DirectionTransitionKind.Move,
-                    DirectionTransitionKind.Fade)),
+                    DirectionTransitionKind.Fade,
+                    DirectionTransitionKind.Dissolve)),
             Barrier(a.Wait),
             c.CancellationToken);
     });
@@ -117,7 +118,8 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
                     a,
                     c,
                     DirectionTransitionKind.Cut,
-                    DirectionTransitionKind.Fade)),
+                    DirectionTransitionKind.Fade,
+                    DirectionTransitionKind.Dissolve)),
             Barrier(a.Wait),
             c.CancellationToken);
     });
@@ -329,7 +331,10 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
         RuntimeCommandContext context,
         params DirectionTransitionKind[] allowed)
     {
-        var kind = a.Via ?? DirectionTransitionKind.Cut;
+        var isCharacterCommand = a is CharacterDirectionCommandArguments or LeaveDirectionCommandArguments;
+        var kind = a.Via ?? (isCharacterCommand
+            ? context.Binding?.DefaultCharacterAnimationKind ?? DirectionTransitionKind.Fade
+            : DirectionTransitionKind.Cut);
         if (Array.IndexOf(allowed, kind) < 0)
         {
             throw new DirectionException(
@@ -338,8 +343,11 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
         var defaults = beats.OpenBeatDefaults;
         var duration = a.Duration ?? (kind == DirectionTransitionKind.Cut
             ? 0
-            : defaults?.DurationSeconds ??
-                context.Binding?.DefaultAnimationDurationSeconds ?? 0);
+            : isCharacterCommand
+                ? context.Binding?.DefaultCharacterAnimationDurationSeconds ??
+                    defaults?.DurationSeconds ?? 0
+                : defaults?.DurationSeconds ??
+                    context.Binding?.DefaultAnimationDurationSeconds ?? 0);
         var ease = ParseEase(a.Ease) ?? defaults?.Ease ?? DirectionEase.Linear;
         return new DirectionTransitionSpec(kind, duration, ease).Validate();
     }
@@ -547,7 +555,7 @@ public sealed class CharacterDirectionCommandArguments : DirectionTransitionComm
     [CommandParameter("z", 5)] public int? Z { get; set; }
 }
 
-[RuntimeCommand("leave", Category = "Direction", Usage = "leave <character> [stage:<id>] [via:<cut|fade>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]
+[RuntimeCommand("leave", Category = "Direction", Usage = "leave <character> [stage:<id>] [via:<cut|fade|dissolve>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]
 public sealed class LeaveDirectionCommandArguments : DirectionTransitionCommandArguments
 {
     [CommandParameter("actor", 0, Primary = true, Required = true)]

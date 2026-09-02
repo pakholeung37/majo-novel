@@ -65,16 +65,6 @@ public sealed class CharacterActor : ActorBase, ICharacterActor
             groupId);
     }
 
-    public IOperationHandle ChangeScenePosition(
-        Vector2 scenePosition,
-        double durationSeconds,
-        string? operationId = null,
-        string? groupId = null) => ChangePosition(
-            positions.GetScenePosition(scenePosition),
-            durationSeconds,
-            operationId,
-            groupId);
-
     public IOperationHandle ChangePosition(
         CharacterPositionPreset preset,
         double durationSeconds,

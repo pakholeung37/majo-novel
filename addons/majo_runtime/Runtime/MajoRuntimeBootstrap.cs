@@ -1039,7 +1039,8 @@ public partial class MajoRuntimeBootstrap : Node
             new CommandBindingContext(
                 Configuration!.Operations!.DefaultAnimationDurationSeconds,
                 Configuration.Audio!.DefaultFadeDurationSeconds,
-                Configuration.Operations.DefaultCharacterAnimationDurationSeconds),
+                Configuration.Operations.DefaultCharacterAnimationDurationSeconds,
+                Configuration.Operations.DefaultCharacterAnimationKind),
             converters);
         var dispatcher = new RuntimeCommandDispatcher(
             binder,

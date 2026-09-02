@@ -257,21 +257,20 @@ public partial class HeadlessTestRunner
                     "blue",
                     1,
                     0,
-                    new DirectionTransitionSpec(DirectionTransitionKind.Fade, 0.2)),
+                    new DirectionTransitionSpec(DirectionTransitionKind.Dissolve, 1.0)),
             });
         var fadedActorRoot = GetLatestVisibleActorRoot(host);
         var fadedActor = fadedActorRoot.GetNode<Sprite2D>("hero");
-        Assert(movedActorRoot.Visible && Mathf.IsZeroApprox(fadedActor.Modulate.A),
-            "Direction fade did not retain the old Actor visual over a transparent target.");
+        Assert(!movedActorRoot.Visible && fadedActorRoot.GetChildCount() > 1,
+            "Direction dissolve did not publish the target Actor tree.");
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        Assert(fadedActor.Modulate.A is > 0 and < 1 &&
-                movedActor.Modulate.A is > 0 and < 1,
-            "Direction fade did not expose an intermediate per-Actor mix.");
+        Assert(fadedActorRoot.GetChildCount() > 1 && !movedActorRoot.Visible,
+            "Direction dissolve did not delegate to the Actor appearance transition.");
         await coordinator.FinishAsync(fadeTransaction);
         Assert(Mathf.IsEqualApprox(fadedActor.Modulate.A, 1) &&
                 (!IsInstanceValid(movedActorRoot) || !movedActorRoot.Visible),
-            "Finishing Direction fade did not publish only the target Actor visual.");
+            "Finishing Direction dissolve did not publish only the target Actor visual.");
 
         var revisionBeforeFailure = coordinator.State.Revision;
         var backdropBeforeFailure = host.PublishedBackdrop;

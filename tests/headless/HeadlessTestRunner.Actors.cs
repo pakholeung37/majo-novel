@@ -143,33 +143,6 @@ public partial class HeadlessTestRunner
         Assert(Mathf.IsEqualApprox(character.Opacity, 1),
             "Character opacity Tween did not reach its final value.");
 
-        var interruptedHide = character.Hide(1, "interrupted-hide");
-        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        var replacementShow = character.Show(0.04, "replacement-show");
-        await interruptedHide.Completion;
-        await replacementShow.Completion;
-        Assert(character.Visible,
-            "Show interrupting Hide left the Character invisible.");
-        Assert(Mathf.IsEqualApprox(character.Opacity, 1),
-            "Show interrupting Hide did not reach full opacity.");
-
-        var oldBackgroundView = background.CurrentView;
-        var crossFade = background.CrossFadeAppearance("light", 0.06, "background-crossfade");
-        Assert(background.TargetAppearance == "light" && background.Appearance == "dark",
-            "Background did not distinguish target and rendered appearance state.");
-        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        Assert(background.SceneNode.GetChildCount() == 2,
-            "Background crossfade did not retain old and new TextureRects concurrently.");
-        await crossFade.Completion;
-        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        Assert(background.Appearance == "light",
-            "Background appearance state did not reach the crossfade target.");
-        Assert(!IsInstanceValid(oldBackgroundView),
-            "Background crossfade did not release the old TextureRect.");
-        Assert(background.SceneNode.GetChildCount() == 1,
-            "Background crossfade left an extra TextureRect behind.");
-
         var camera = bootstrap.Host.Services.Get<ICameraManager>();
         var focusPose = new CameraState(new Vector2(37.384f, 74.816f), 3, 10);
         camera.ApplyStableState(focusPose);

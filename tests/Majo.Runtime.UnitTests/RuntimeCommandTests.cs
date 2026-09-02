@@ -776,15 +776,6 @@ public sealed class RuntimeCommandTests
             base.SetOpacity(opacity);
         }
 
-        public IOperationHandle CrossFadeAppearance(
-            string appearance,
-            double durationSeconds,
-            string? operationId = null,
-            string? groupId = null)
-        {
-            Appearance = appearance;
-            return LastOperation = new FakeOperationHandle(operationId, groupId);
-        }
     }
 
 

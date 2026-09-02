@@ -77,9 +77,11 @@ Ema: （这是噩梦的后续……？） #line:0101Adv02_Ema007
 // ========================================
 
 <<beat begin>>
-<<backdrop Background_001_001>>
-<<camera pose stage:main via:dissolve>>
-<<character Ema at:center appearance:Surprised1>>
+// Cell stage and its dedicated camera stay alive while the broadcast stage is shown later.
+<<backdrop Background_001_001 stage:cell via:dissolve duration:0.4>>
+<<camera pose view:cell stage:cell center:50,50 zoom:1 rotation:0 via:cut>>
+<<character Ema stage:cell at:center appearance:Surprised1>>
+<<layout single main:cell via:cut>>
 <<beat end wait:false>>
 
 Ema: 我说，这里究竟是什么地方！？ #line:0101Adv02_Ema008
@@ -88,7 +90,7 @@ Ema: 我说，这里究竟是什么地方！？ #line:0101Adv02_Ema008
 
 紧接着，远远地从其他地方传来了[br /]其他少女们的叫喊声。 #line:0101Adv02_Narrative018
 
-<<leave Ema>>
+<<leave Ema stage:cell>>
 
 // ＠遠野ハンナ
 Unknown: 竟把本小姐关在这种地方！[br /]究竟是什么意思啊！？ #line:0101Adv02_Unknown001
@@ -99,13 +101,13 @@ Unknown: 监禁少女可是犯罪欸！虽然不知是谁，[br /]可干出来�
 // ＠紫藤アリサ
 Unknown: 喂，开什么玩笑，我要杀了你！放我出去！！ #line:0101Adv02_Unknown003
 
-<<character Ema at:center appearance:"Normal1,ArmR3">>
+<<character Ema stage:cell at:center appearance:"Normal1,ArmR3">>
 
 Ema: （……太好了，被关进来的[br /]　不止我一个人） #line:0101Adv02_Ema009
 
 现场忽然吵闹起来，[br /]艾玛的脸上露出了安心。紧接着—— #line:0101Adv02_Narrative019
 
-<<leave Ema>>
+<<leave Ema stage:cell>>
 
 // ＠二階堂ヒロ
 Unknown: ——能不能给我安静一下？ #line:0101Adv02_Unknown004
@@ -116,7 +118,7 @@ Unknown: ——能不能给我安静一下？ #line:0101Adv02_Unknown004
 
 艾玛顺着声音望去，[br /]发现双层床的上铺有个刚起身的人。 #line:0101Adv02_Narrative021
 
-<<character Hiro at:center appearance:Angry1>>
+<<character Hiro stage:cell at:center appearance:Angry1>>
 
 // ＠二階堂ヒロ
 Unknown: 大吵大闹是不对的。 #line:0101Adv02_Unknown005
@@ -132,7 +134,7 @@ Ema: （真的假的……[br /]　是二阶堂希罗……？） #line:0101Adv0
 
 是在艾玛的初中时代，令她深陷黑暗的同窗，[br /]也是广受众人仰慕，常在人群中心可爱地微笑着的少女…… #line:0101Adv02_Narrative024
 
-<<character Hiro at:center appearance:Surprised1>>
+<<character Hiro stage:cell at:center appearance:Surprised1>>
 
 和她对上眼的希罗，也大大的瞪圆了眼睛。[br /]艾玛还是第一次见有人把眼睛瞪得那么大。 #line:0101Adv02_Narrative025
 
@@ -145,8 +147,8 @@ Hiro: 为什么你会在这里？ #line:0101Adv02_Hiro001
 往日同窗竟出现在眼前，[br /]惊慌失措的艾玛哑口无言。 #line:0101Adv02_Narrative027
 
 <<beat begin>>
-<<character Hiro at:30,0 appearance:Surprised1>>
-<<character Ema at:70,0 appearance:Fearful1>>
+<<character Hiro stage:cell at:30,0 appearance:Surprised1>>
+<<character Ema stage:cell at:70,0 appearance:Fearful1>>
 <<beat end wait:false>>
 
 Ema: 啊…… #line:0101Adv02_Ema012
@@ -159,18 +161,17 @@ Ema: 我、我说，希罗…… #line:0101Adv02_Ema013
 
 艾玛鼓起勇气，[br /]尝试向往日旧识搭话。 #line:0101Adv02_Narrative029
 
-// <<hideAllCharacters Lazy:0>>
-<<leave Hiro>>
-<<leave Ema>>
-
 这时—— #line:0101Adv02_Narrative030
 
 <<sfx Sfx_Scenario_003>>
 声音从墙壁上的显示屏幕传来。[br /]艾玛和希罗吓了一跳，然后望向屏幕。 #line:0101Adv02_Narrative031
 
 <<beat begin>>
-<<backdrop Background_025_001>>
-<<character Warden at:50,40 appearance:1 scale:0.56>>
+// The wall monitor is a second stage observed through a second camera.
+<<backdrop Background_025_001 stage:broadcast via:dissolve duration:0.4>>
+<<character Warden stage:broadcast at:50,40 appearance:1 scale:0.56>>
+<<camera pose view:broadcast stage:broadcast center:50,50 zoom:1 rotation:0 via:cut>>
+<<layout single main:broadcast via:dissolve duration:0.4>>
 <<beat end wait:false>>
 <<stream_frame true>>
 <<wait 0.3>>
@@ -201,13 +202,15 @@ Warden: 想反抗也没问题……[br /]只不过小命不保罢了……嗯…
 
 显示屏幕再次回归一片漆黑。 #line:0101Adv02_Narrative032
 
-<<leave Warden via:cut>>
 <<stream_frame false>>
+
 <<beat begin>>
-<<backdrop Background_001_001>>
-<<character Hiro at:30,0 appearance:Surprised1>>
-<<character Ema at:70,0 appearance:"Surprised1,ArmR3">>
+<<backdrop Background_001_001 stage:cell via:dissolve duration:0.3>>
+<<character Hiro stage:cell at:30,0 appearance:Surprised1>>
+<<character Ema stage:cell at:70,0 appearance:"Surprised1,ArmR3">>
+<<layout single main:cell via:dissolve duration:0.4>>
 <<beat end wait:false>>
+
 <<curtain open duration:0.5>>
 <<wait 0.3>>
 
@@ -215,8 +218,8 @@ Ema: 典狱长……？看守……？ #line:0101Adv02_Ema015
 
 艾玛似乎思考不太跟得上状况的变化，呆站在原地一动不动——[br /]而她身边的希罗也一样。紧接着—— #line:0101Adv02_Narrative033
 
-<<leave Hiro>>
-<<leave Ema>>
+<<leave Hiro stage:cell>>
+<<leave Ema stage:cell>>
 
 <<sfx Sfx_Scenario_005>>
 
@@ -226,12 +229,12 @@ Ema: 典狱长……？看守……？ #line:0101Adv02_Ema015
 
 艾玛和希罗绷紧了身子，[br /]——然后缓慢地将视线挪动到过道上。 #line:0101Adv02_Narrative036
 
-<<camera pose center:35,50 zoom:2 via:dissolve duration:0.6>>
+<<camera pose view:cell stage:cell center:35,50 zoom:2 via:dissolve duration:0.6>>
 
 <<wait 1.2>>
 // <<animateActorExtended ActorIds:MainBackground Loop:0 ScenePositionY:45 EasingTypeName:EaseOutQuad Duration:0.8>>
 // <<animateActorExtended ActorIds:MainBackground-Middle Loop:0 ScenePositionY:45 EasingTypeName:EaseOutQuad Duration:0.8>>
-<<backdrop Background_001_002>>
+<<backdrop Background_001_002 stage:cell via:dissolve duration:0.2>>
 <<wait 0.6>>
 
 // ========================================
@@ -254,8 +257,8 @@ Ema: 希、希罗…… #line:0101Adv02_Ema017
 // 看守 ＯＵＴ
 // ========================================
 
-<<backdrop Background_001_001>>
-<<camera pose center:50,50 zoom:1 rotation:0 via:dissolve>>
+<<backdrop Background_001_001 stage:cell via:dissolve duration:0.3>>
+<<camera pose view:cell stage:cell center:50,50 zoom:1 rotation:0 via:dissolve duration:0.4>>
 <<sfx Sfx_Scenario_005>>
 <<bgm Bgm_023_001_Loop>>
 // ＠沢渡ココ
@@ -267,8 +270,8 @@ Unknown: 呀啊啊啊！怪物别碰我！好恶心！[br /]好了，好了啦�
 这让她们两个感到越来越害怕了。 #line:0101Adv02_Narrative042
 
 <<beat begin>>
-<<character Hiro at:45,0 appearance:"Head1,Pale1-Off,Sweat1-Off,Cheeks1-Normal,Angle01/Head01/Facial01/Eyes01~Eyes01_Angry_Open,Angle01/Head01/Facial01/Mouth01~Mouth01_Fearful_Open" z:1>>
-<<character Ema at:60,0 appearance:"Fearful1,ArmR1">>
+<<character Hiro stage:cell at:45,0 appearance:"Head1,Pale1-Off,Sweat1-Off,Cheeks1-Normal,Angle01/Head01/Facial01/Eyes01~Eyes01_Angry_Open,Angle01/Head01/Facial01/Mouth01~Mouth01_Fearful_Open" z:1>>
+<<character Ema stage:cell at:60,0 appearance:"Fearful1,ArmR1">>
 <<beat end wait:false>>
 
 Hiro: 所谓的说明，会解释清楚情况吗。[br /]那我得快点过去…… #line:0101Adv02_Hiro003
@@ -279,8 +282,8 @@ Hiro: 所谓的说明，会解释清楚情况吗。[br /]那我得快点过去�
 
 <<sfx Sfx_Scenario_018>>
 <<beat begin>>
-<<character Hiro at:40,0 appearance:Angry2>>
-<<character Ema at:80,0 appearance:"Fearful1,ArmR3">>
+<<character Hiro stage:cell at:40,0 appearance:Angry2>>
+<<character Ema stage:cell at:80,0 appearance:"Fearful1,ArmR3">>
 <<beat end wait:false>>
 
 ——唰。[br /]她用力地甩开了艾玛的手。 #line:0101Adv02_Narrative045
@@ -289,7 +292,7 @@ Ema: ……！ #line:0101Adv02_Ema018
 
 Hiro: 不要随便碰我。[br /]你可别忘了，我讨厌你。 #line:0101Adv02_Hiro004
 
-<<leave Hiro>>
+<<leave Hiro stage:cell via:fade duration:0.3>>
 
 希罗的眼神中[br /]透着一股深深的厌弃。 #line:0101Adv02_Narrative046
 
@@ -297,7 +300,7 @@ Hiro: 不要随便碰我。[br /]你可别忘了，我讨厌你。 #line:0101Adv
 // 二階堂ヒロ ＯＵＴ
 // ========================================
 
-<<character Ema at:80,0 appearance:Fearful1>>
+<<character Ema stage:cell at:80,0 appearance:Fearful1>>
 
 // <<gosub Path:System/System_Subroutine.EndAdv>>
 

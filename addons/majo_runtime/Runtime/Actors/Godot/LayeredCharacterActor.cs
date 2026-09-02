@@ -128,74 +128,6 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IDisposa
             animation.ConflictPolicy);
     }
 
-    public override IOperationHandle Show(
-        double durationSeconds,
-        string? operationId = null,
-        string? groupId = null) => Show(
-        new AnimationSpec(durationSeconds), operationId, groupId);
-
-    public override IOperationHandle Show(
-        AnimationSpec animation,
-        string? operationId = null,
-        string? groupId = null)
-    {
-        TargetVisible = true;
-        TargetOpacity = 1;
-        var tween = CreateCompositeOpacityTween(1, animation);
-        var operation = new OperationDefinition(
-            async context =>
-            {
-                View.Visible = true;
-                await tween.ExecuteAsync(context);
-            },
-            completeAsync: async cancellationToken =>
-            {
-                View.Visible = true;
-                await tween.CompleteAsync(cancellationToken);
-            },
-            cancelAsync: tween.CancelAsync);
-        return StartSequencedOperation(
-            OpacityProperty,
-            operation,
-            operationId,
-            groupId,
-            animation.ConflictPolicy);
-    }
-
-    public override IOperationHandle Hide(
-        double durationSeconds,
-        string? operationId = null,
-        string? groupId = null) => Hide(
-        new AnimationSpec(durationSeconds), operationId, groupId);
-
-    public override IOperationHandle Hide(
-        AnimationSpec animation,
-        string? operationId = null,
-        string? groupId = null)
-    {
-        TargetVisible = false;
-        TargetOpacity = 0;
-        var tween = CreateCompositeOpacityTween(0, animation);
-        var operation = new OperationDefinition(
-            async context =>
-            {
-                await tween.ExecuteAsync(context);
-                View.Visible = false;
-            },
-            completeAsync: async cancellationToken =>
-            {
-                await tween.CompleteAsync(cancellationToken);
-                View.Visible = false;
-            },
-            cancelAsync: tween.CancelAsync);
-        return StartSequencedOperation(
-            OpacityProperty,
-            operation,
-            operationId,
-            groupId,
-            animation.ConflictPolicy);
-    }
-
     public void SetScale(Vector2 scale)
     {
         ValidateScale(scale);
@@ -311,16 +243,6 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IDisposa
             operationId,
             groupId);
     }
-
-    public IOperationHandle ChangeScenePosition(
-        Vector2 scenePosition,
-        double durationSeconds,
-        string? operationId = null,
-        string? groupId = null) => ChangePosition(
-            positions.GetScenePosition(scenePosition),
-            durationSeconds,
-            operationId,
-            groupId);
 
     public override void SetAppearance(string appearance)
     {

@@ -1,4 +1,5 @@
 using Godot;
+using Majo.Runtime.Direction.Core;
 
 namespace Majo.Runtime.Configuration;
 
@@ -10,4 +11,14 @@ public partial class OperationConfiguration : Resource
 
     [Export(PropertyHint.Range, "0.01,10,0.01,or_greater")]
     public double DefaultCharacterAnimationDurationSeconds { get; set; } = RuntimeDefaults.AnimationDurationSeconds;
+
+    /// <summary>
+    /// The transition used when a character command omits <c>via</c>.
+    /// Appearance changes are rendered as a cross-dissolve by the Direction
+    /// actor backend, while entrance and leave use the same effect as a
+    /// character fade.
+    /// </summary>
+    [Export]
+    public DirectionTransitionKind DefaultCharacterAnimationKind { get; set; } =
+        DirectionTransitionKind.Fade;
 }

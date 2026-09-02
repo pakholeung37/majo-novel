@@ -6,6 +6,7 @@ using System.Globalization;
 using System.Linq;
 using Godot;
 using Majo.Runtime.Configuration;
+using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Stage;
 
 namespace Majo.Runtime.Dialogue.Commands;
@@ -13,7 +14,8 @@ namespace Majo.Runtime.Dialogue.Commands;
 public sealed record CommandBindingContext(
     double DefaultAnimationDurationSeconds,
     double DefaultAudioFadeDurationSeconds = RuntimeDefaults.AnimationDurationSeconds,
-    double DefaultCharacterAnimationDurationSeconds = RuntimeDefaults.CommandBindingCharacterAnimationDurationSeconds)
+    double DefaultCharacterAnimationDurationSeconds = RuntimeDefaults.CommandBindingCharacterAnimationDurationSeconds,
+    DirectionTransitionKind DefaultCharacterAnimationKind = DirectionTransitionKind.Fade)
 {
     public CommandBindingContext Validate()
     {
@@ -39,6 +41,14 @@ public sealed record CommandBindingContext(
             throw new ArgumentOutOfRangeException(
                 nameof(DefaultCharacterAnimationDurationSeconds),
                 "Default character animation duration must be finite and non-negative.");
+        }
+
+        if (!Enum.IsDefined(DefaultCharacterAnimationKind) ||
+            DefaultCharacterAnimationKind == DirectionTransitionKind.Move)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(DefaultCharacterAnimationKind),
+                "Default character animation kind must be cut, fade, or dissolve.");
         }
 
         return this;

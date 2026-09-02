@@ -2,8 +2,8 @@ namespace Majo.Runtime.Configuration;
 
 public static class RuntimeDefaults
 {
-    public const double AnimationDurationSeconds = 0.35;
-    public const string AnimationDurationSecondsText = "0.35";
+    public const double AnimationDurationSeconds = 0.2;
+    public const string AnimationDurationSecondsText = "0.2";
 
     public const double TransitionDurationSeconds = 0.5;
     public const string TransitionDurationSecondsText = "0.5";
