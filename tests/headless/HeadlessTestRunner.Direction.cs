@@ -124,7 +124,7 @@ public partial class HeadlessTestRunner
         Assert(Equals(host.PublishedView?.Pose,
                 new ViewPose(new DirectionPoint(37.384f, 74.816f), 3, 10)),
             "CG View Pose was not committed atomically.");
-        Assert(host.TransitionSource.Visible,
+        Assert(host.GetViewTransitionSource(ViewId.Main).Visible,
             "CG dissolve did not retain a prepared source frame.");
         Assert(ReferenceEquals(stageBackdropTexture, host.Backdrop.Texture),
             "CG View mutation replaced the Stage Backdrop texture.");
@@ -132,7 +132,8 @@ public partial class HeadlessTestRunner
             "CG View mutation changed the Stage Backdrop state.");
 
         await coordinator.FinishAsync(cgTransaction);
-        Assert(!host.TransitionSource.Visible && host.TransitionSource.Texture is null,
+        Assert(!host.GetViewTransitionSource(ViewId.Main).Visible &&
+                host.GetViewTransitionSource(ViewId.Main).Texture is null,
             "Finishing a CG dissolve leaked its transition capture.");
 
         await coordinator.ExecuteAsync(

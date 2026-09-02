@@ -125,8 +125,6 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
     public TextureRect ViewContent { get; }
     public CanvasLayer OutputLayer { get; }
     public TextureRect LiveOutput { get; }
-    // Compatibility alias: Main View's isolated transition source.
-    public TextureRect TransitionSource => views[ViewId.Main].TransitionSource;
     public ColorRect Curtain { get; }
     public BackdropState? PublishedBackdrop { get; private set; }
     public ViewState? PublishedView { get; private set; }
@@ -154,7 +152,7 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
             ViewId.Main,
             new StageViewSource(StageId.Main),
             ViewPose.Default);
-        ApplyViewPose(ViewPose.Default);
+        ApplyViewPose(ViewId.Main, ViewPose.Default);
         PublishEffects(StableEffectState.Default);
         ownerViewport = owner.GetViewport();
         ownerViewport.SizeChanged += Resize;
@@ -195,13 +193,13 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
         }
         ViewContent.Texture = StageViewport.GetTexture();
         ViewContent.Modulate = Colors.White;
-        ClearViewTransition();
+        ClearViewTransition(ViewId.Main);
         PublishedBackdrop = null;
         PublishedView = new ViewState(
             ViewId.Main,
             new StageViewSource(StageId.Main),
             ViewPose.Default);
-        ApplyViewPose(ViewPose.Default);
+        ApplyViewPose(ViewId.Main, ViewPose.Default);
         PublishedScreen = ScreenState.Default;
         PublishEffects(StableEffectState.Default);
         Deactivate();
@@ -215,8 +213,8 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
         InvalidateGenerations();
         if (ownerViewport is not null && GodotObject.IsInstanceValid(ownerViewport))
             ownerViewport.SizeChanged -= Resize;
-        ClearBackdropTransition();
-        ClearViewTransition();
+        ClearBackdropTransition(StageId.Main);
+        ClearViewTransition(ViewId.Main);
         QueueFree(OutputLayer);
         QueueFree(ViewViewport);
         foreach (var surface in stages.Values)
@@ -241,9 +239,6 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
         return Task.CompletedTask;
     }
 
-    public void PublishBackdrop(BackdropState? state, Texture2D? texture)
-        => PublishBackdrop(StageId.Main, state, texture);
-
     public void PublishBackdrop(StageId stageId, BackdropState? state, Texture2D? texture)
     {
         EnsureInitialized();
@@ -260,9 +255,6 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
             LayoutBackdrop(surface, surface.Backdrop, state.Fit);
     }
 
-    public void PublishBackdropTransition(BackdropState state, Texture2D texture)
-        => PublishBackdropTransition(StageId.Main, state, texture);
-
     public void PublishBackdropTransition(
         StageId stageId,
         BackdropState state,
@@ -277,9 +269,6 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
         surface.BackdropTransition.Visible = true;
         LayoutBackdrop(surface, surface.BackdropTransition, state.Fit);
     }
-
-    public void PublishView(ViewState state, Texture2D texture)
-        => PublishView(state.Id, state, texture);
 
     public void PublishView(ViewId viewId, ViewState state, Texture2D texture)
     {
@@ -403,8 +392,6 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
         Activate();
     }
 
-    public ImageTexture CaptureView() => CaptureView(ViewId.Main);
-
     public ImageTexture CaptureView(ViewId viewId)
     {
         EnsureInitialized();
@@ -454,9 +441,6 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
         }
     }
 
-    public void ApplyViewPose(ViewPose pose)
-        => ApplyViewPose(ViewId.Main, pose);
-
     public void ApplyViewPose(ViewId viewId, ViewPose pose)
     {
         EnsureInitialized();
@@ -478,9 +462,6 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
         surface.CurrentPose = pose;
     }
 
-    public void ClearBackdropTransition()
-        => ClearBackdropTransition(StageId.Main);
-
     public void ClearBackdropTransition(StageId stageId)
     {
         if (!stages.TryGetValue(stageId, out var surface) ||
@@ -491,9 +472,6 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
         surface.TransitionBackdrop = null;
         if (stageId == StageId.Main) transitionBackdrop = null;
     }
-
-    public void ClearViewTransition()
-        => ClearViewTransition(ViewId.Main);
 
     public void ClearViewTransition(ViewId viewId)
     {

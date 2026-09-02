@@ -675,7 +675,6 @@ public partial class MajoRuntimeBootstrap : Node
                     resolver.Get<IFrameClock>(),
                     resolver.Get<IInputManager>(),
                     resolver.Get<IHistoryManager>(),
-                    resolver.Get<IDialoguePresentation>(),
                     resolver.Get<IPlayedRegister>(),
                     resolver.Get<IOperationScheduler>(),
                     TimeSpan.FromSeconds(Configuration!.Auto!.ExtraDelaySeconds),
@@ -691,12 +690,8 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(IFrameClock),
                 typeof(IInputManager),
                 typeof(IHistoryManager),
-                typeof(IDialoguePresentation),
                 typeof(IPlayedRegister),
-                typeof(IOperationScheduler))
-            .AddSingleton<IAutoManager>(
-                resolver => new AutoManager(resolver.Get<IPlaybackModeManager>()),
-                typeof(IPlaybackModeManager));
+                typeof(IOperationScheduler));
 
         if (Configuration!.History!.ShowDefaultUi)
         {

@@ -59,29 +59,21 @@ public sealed class GodotConsoleSink : IRuntimeLogSink
 		{
 			builder.Append(" [Correlation: ");
 			builder.Append("runtime=").Append(logEvent.Correlation.RuntimeId);
-			var hasPrev = true;
 			if (!string.IsNullOrEmpty(logEvent.Correlation.SessionId))
 			{
-				if (hasPrev) builder.Append(", ");
-				builder.Append("session=").Append(logEvent.Correlation.SessionId);
-				hasPrev = true;
+				builder.Append(", session=").Append(logEvent.Correlation.SessionId);
 			}
 			if (!string.IsNullOrEmpty(logEvent.Correlation.DialogueSessionId))
 			{
-				if (hasPrev) builder.Append(", ");
-				builder.Append("dialogue=").Append(logEvent.Correlation.DialogueSessionId);
-				hasPrev = true;
+				builder.Append(", dialogue=").Append(logEvent.Correlation.DialogueSessionId);
 			}
 			if (!string.IsNullOrEmpty(logEvent.Correlation.CommandId))
 			{
-				if (hasPrev) builder.Append(", ");
-				builder.Append("cmd=").Append(logEvent.Correlation.CommandId);
-				hasPrev = true;
+				builder.Append(", cmd=").Append(logEvent.Correlation.CommandId);
 			}
 			if (!string.IsNullOrEmpty(logEvent.Correlation.OperationId))
 			{
-				if (hasPrev) builder.Append(", ");
-				builder.Append("op=").Append(logEvent.Correlation.OperationId);
+				builder.Append(", op=").Append(logEvent.Correlation.OperationId);
 			}
 			builder.Append(']');
 		}

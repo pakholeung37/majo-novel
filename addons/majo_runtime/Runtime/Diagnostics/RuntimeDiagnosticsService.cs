@@ -275,14 +275,13 @@ public sealed class RuntimeDiagnosticsService : IRuntimeDiagnostics
                     : null);
         }
 
-        PlaybackDiagnostics? playbackDiag = null;
         var modeStr = "Manual";
         var isPaused = false;
-        if (services.TryGet<IAutoManager>(out var auto) && auto is not null)
+        if (services.TryGet<IPlaybackModeManager>(out var playback) && playback is not null)
         {
-            initializedServicesList.Add(nameof(IAutoManager));
-            modeStr = auto.Mode.ToString();
-            isPaused = auto.IsPaused;
+            initializedServicesList.Add(nameof(IPlaybackModeManager));
+            modeStr = playback.Mode.ToString();
+            isPaused = playback.IsPaused;
         }
 
         var historyIsOpen = false;
@@ -296,15 +295,15 @@ public sealed class RuntimeDiagnosticsService : IRuntimeDiagnostics
             historyCapacity = history.Capacity;
         }
 
-        playbackDiag = new PlaybackDiagnostics(
+        var playbackDiag = new PlaybackDiagnostics(
             modeStr,
             isPaused,
             historyIsOpen,
             historyCount,
             historyCapacity,
             modeStr == "Auto",
-            auto?.ExtraDelay.TotalSeconds ?? 0,
-            auto?.WaitForVoice ?? false);
+            playback?.ExtraDelay.TotalSeconds ?? 0,
+            playback?.WaitForVoice ?? false);
 
         SaveSlotDiagnostics? saveSlotDiag = null;
         if (services.TryGet<ISaveSlotManager>(out var saveSlots) && saveSlots is not null)

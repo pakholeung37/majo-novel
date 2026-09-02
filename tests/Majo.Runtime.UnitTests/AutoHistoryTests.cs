@@ -20,7 +20,7 @@ public sealed class AutoHistoryTests
     {
         var harness = await AutoHarness.CreateAsync();
         var voice = harness.Audio.StartVoice("voiced-line");
-        harness.Manager.SetMode(AutoMode.Auto);
+        harness.Playback.SetMode(PlaybackMode.Auto);
         harness.Script.SetPhase(ScriptPlaybackPhase.AwaitingAdvance);
 
         Assert.Equal(0, harness.Clock.PendingDelayCount);
@@ -40,7 +40,7 @@ public sealed class AutoHistoryTests
     public async Task AutoWithoutVoiceStartsDelayOnlyAtAwaitingAdvance()
     {
         var harness = await AutoHarness.CreateAsync();
-        harness.Manager.SetMode(AutoMode.Auto);
+        harness.Playback.SetMode(PlaybackMode.Auto);
 
         Assert.Equal(0, harness.Clock.PendingDelayCount);
         harness.Script.SetPhase(ScriptPlaybackPhase.PresentingLine);
@@ -59,7 +59,7 @@ public sealed class AutoHistoryTests
     {
         var harness = await AutoHarness.CreateAsync();
         var first = harness.Audio.StartVoice("first");
-        harness.Manager.SetMode(AutoMode.Auto);
+        harness.Playback.SetMode(PlaybackMode.Auto);
         harness.Script.SetPhase(ScriptPlaybackPhase.AwaitingAdvance);
 
         harness.Audio.PreemptVoice("replacement");
@@ -76,16 +76,16 @@ public sealed class AutoHistoryTests
     public async Task HistoryPausesAutoAndClosingRestartsAFullDeadline()
     {
         var harness = await AutoHarness.CreateAsync();
-        harness.Manager.SetMode(AutoMode.Auto);
+        harness.Playback.SetMode(PlaybackMode.Auto);
         harness.Script.SetPhase(ScriptPlaybackPhase.AwaitingAdvance);
         await harness.Clock.WaitForPendingDelayAsync();
 
         harness.History.Open();
-        Assert.True(harness.Manager.IsPaused);
+        Assert.True(harness.Playback.IsPaused);
         Assert.Equal(0, harness.Clock.PendingDelayCount);
 
         harness.History.Close();
-        Assert.False(harness.Manager.IsPaused);
+        Assert.False(harness.Playback.IsPaused);
         await harness.Clock.WaitForPendingDelayAsync();
 
         harness.Clock.CompleteNextDelay();
@@ -97,16 +97,16 @@ public sealed class AutoHistoryTests
     public async Task OptionsPauseAutoAndReturningToLineRestartsAFullDeadline()
     {
         var harness = await AutoHarness.CreateAsync();
-        harness.Manager.SetMode(AutoMode.Auto);
+        harness.Playback.SetMode(PlaybackMode.Auto);
         harness.Script.SetPhase(ScriptPlaybackPhase.AwaitingAdvance);
         await harness.Clock.WaitForPendingDelayAsync();
 
         harness.Script.SetPhase(ScriptPlaybackPhase.PresentingOptions);
-        Assert.True(harness.Manager.IsPaused);
+        Assert.True(harness.Playback.IsPaused);
         Assert.Equal(0, harness.Clock.PendingDelayCount);
 
         harness.Script.SetPhase(ScriptPlaybackPhase.AwaitingAdvance);
-        Assert.False(harness.Manager.IsPaused);
+        Assert.False(harness.Playback.IsPaused);
         await harness.Clock.WaitForPendingDelayAsync();
         harness.Clock.CompleteNextDelay();
         await harness.Dialogue.WaitForNextLineRequestAsync();
@@ -122,7 +122,7 @@ public sealed class AutoHistoryTests
             new object(),
             new InputScopeOptions([MajoInputActions.Advance]));
         manual.Activated += _ => harness.Dialogue.RequestNextLine();
-        harness.Manager.SetMode(AutoMode.Auto);
+        harness.Playback.SetMode(PlaybackMode.Auto);
         harness.Script.SetPhase(ScriptPlaybackPhase.AwaitingAdvance);
         await harness.Clock.WaitForPendingDelayAsync();
 
@@ -140,15 +140,15 @@ public sealed class AutoHistoryTests
         var harness = await AutoHarness.CreateAsync();
 
         harness.InputBackend.Activate(MajoInputActions.Auto, 1);
-        Assert.Equal(AutoMode.Auto, harness.Manager.Mode);
+        Assert.Equal(PlaybackMode.Auto, harness.Playback.Mode);
         harness.InputBackend.Activate(MajoInputActions.Auto, 2);
-        Assert.Equal(AutoMode.Manual, harness.Manager.Mode);
-        harness.Manager.SetMode(AutoMode.Auto);
+        Assert.Equal(PlaybackMode.Manual, harness.Playback.Mode);
+        harness.Playback.SetMode(PlaybackMode.Auto);
 
-        await harness.Manager.ResetAsync(CancellationToken.None);
+        await harness.Playback.ResetAsync(CancellationToken.None);
 
-        Assert.Equal(AutoMode.Manual, harness.Manager.Mode);
-        Assert.False(harness.Manager.IsPaused);
+        Assert.Equal(PlaybackMode.Manual, harness.Playback.Mode);
+        Assert.False(harness.Playback.IsPaused);
         await harness.ShutdownAsync();
     }
 
@@ -236,28 +236,6 @@ public sealed class AutoHistoryTests
         Assert.True(second.IsPlayed("test", "line:1", "zh-Hans", "v1"));
         Assert.Equal(first.Entries, second.Entries);
         await first.ShutdownAsync(default);
-    }
-
-    [Fact(Timeout = 5_000)]
-    public async Task AutoFacadeProjectsTheSinglePlaybackOwner()
-    {
-        var harness = await AutoHarness.CreateAsync();
-
-        harness.Manager.SetMode(AutoMode.Auto);
-        Assert.Equal(PlaybackMode.Auto, harness.Playback.Mode);
-        Assert.Single(harness.Input.ActiveHandles, value =>
-            value.Name == "playback-auto-toggle");
-        Assert.DoesNotContain(harness.Input.ActiveHandles, value => value.Name == "auto-toggle");
-
-        using (harness.Playback.AcquirePause(PlaybackPauseReason.External))
-        {
-            Assert.True(harness.Manager.IsPaused);
-        }
-
-        Assert.False(harness.Manager.IsPaused);
-        harness.Playback.SetMode(PlaybackMode.Manual);
-        Assert.Equal(AutoMode.Manual, harness.Manager.Mode);
-        await harness.ShutdownAsync();
     }
 
     [Fact(Timeout = 5_000)]
@@ -351,8 +329,7 @@ public sealed class AutoHistoryTests
             FakeDialoguePresentation presentation,
             PlayedRegister played,
             RecordingOperationScheduler operations,
-            PlaybackModeManager playback,
-            AutoManager manager)
+            PlaybackModeManager playback)
         {
             InputBackend = inputBackend;
             Input = input;
@@ -365,7 +342,6 @@ public sealed class AutoHistoryTests
             Played = played;
             Operations = operations;
             Playback = playback;
-            Manager = manager;
         }
 
         public FakeInputBackend InputBackend { get; }
@@ -379,7 +355,6 @@ public sealed class AutoHistoryTests
         public PlayedRegister Played { get; }
         public RecordingOperationScheduler Operations { get; }
         public PlaybackModeManager Playback { get; }
-        public AutoManager Manager { get; }
 
         public static async Task<AutoHarness> CreateAsync()
         {
@@ -402,16 +377,13 @@ public sealed class AutoHistoryTests
                 clock,
                 input,
                 history,
-                presentation,
                 played,
                 operations,
                 TimeSpan.FromSeconds(1),
                 waitForVoice: true,
                 skipDelay: TimeSpan.FromMilliseconds(10));
-            var manager = new AutoManager(playback);
             await played.InitializeAsync(CancellationToken.None);
             await playback.InitializeAsync(CancellationToken.None);
-            await manager.InitializeAsync(CancellationToken.None);
             return new AutoHarness(
                 inputBackend,
                 input,
@@ -423,13 +395,11 @@ public sealed class AutoHistoryTests
                 presentation,
                 played,
                 operations,
-                playback,
-                manager);
+                playback);
         }
 
         public async Task ShutdownAsync()
         {
-            await Manager.ShutdownAsync(CancellationToken.None);
             await Playback.ShutdownAsync(CancellationToken.None);
             await Played.ShutdownAsync(CancellationToken.None);
             await Input.ShutdownAsync(CancellationToken.None);

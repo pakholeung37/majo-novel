@@ -9,7 +9,6 @@ using Majo.Runtime.Audio;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue;
-using Majo.Runtime.Dialogue.Presentation;
 using Majo.Runtime.History;
 using Majo.Runtime.Input;
 using Majo.Runtime.Operations;
@@ -27,7 +26,6 @@ public sealed class PlaybackModeManager : IPlaybackModeManager
 	private readonly IFrameClock clock;
 	private readonly IInputManager input;
 	private readonly IHistoryManager history;
-	private readonly IDialoguePresentation presentation;
 	private readonly IPlayedRegister played;
 	private readonly IOperationScheduler operations;
 	private readonly IRuntimeLogger logger;
@@ -45,33 +43,6 @@ public sealed class PlaybackModeManager : IPlaybackModeManager
 		IFrameClock clock,
 		IInputManager input,
 		IHistoryManager history,
-		TimeSpan extraDelay,
-		bool waitForVoice,
-		IRuntimeLogger? logger = null)
-		: this(
-			script,
-			dialogue,
-			audio,
-			clock,
-			input,
-			history,
-			NullDialoguePresentation.Instance,
-			new LegacyPlayedRegister(dialogue),
-			NullOperationScheduler.Instance,
-			extraDelay,
-			waitForVoice,
-			logger: logger)
-	{
-	}
-
-	public PlaybackModeManager(
-		IScriptPlayback script,
-		IDialoguePlayer dialogue,
-		IAudioManager audio,
-		IFrameClock clock,
-		IInputManager input,
-		IHistoryManager history,
-		IDialoguePresentation presentation,
 		IPlayedRegister played,
 		IOperationScheduler operations,
 		TimeSpan extraDelay,
@@ -86,7 +57,6 @@ public sealed class PlaybackModeManager : IPlaybackModeManager
 		this.clock = clock ?? throw new ArgumentNullException(nameof(clock));
 		this.input = input ?? throw new ArgumentNullException(nameof(input));
 		this.history = history ?? throw new ArgumentNullException(nameof(history));
-		this.presentation = presentation ?? throw new ArgumentNullException(nameof(presentation));
 		this.played = played ?? throw new ArgumentNullException(nameof(played));
 		this.operations = operations ?? throw new ArgumentNullException(nameof(operations));
 		this.logger = logger ?? NullRuntimeLogger.Instance;
@@ -605,51 +575,4 @@ public sealed class PlaybackModeManager : IPlaybackModeManager
 		}
 	}
 
-	private sealed class NullDialoguePresentation : IDialoguePresentation
-	{
-		public static NullDialoguePresentation Instance { get; } = new();
-		public event Action? LineDisplayCompleted { add { } remove { } }
-		public event Action? LineDismissed { add { } remove { } }
-		public bool IsLineActive => false;
-		public bool IsLineDisplayComplete => true;
-		public bool IsPresentingOptions => false;
-		public void ReRenderLine(DialogueLine line) { }
-		public void ReRenderOptions(IReadOnlyList<DialogueOption> options) { }
-		public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-		public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-		public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-	}
-
-	private sealed class LegacyPlayedRegister : IPlayedRegister
-	{
-		private readonly IDialoguePlayer dialogue;
-		public LegacyPlayedRegister(IDialoguePlayer dialogue) => this.dialogue = dialogue;
-		public event Action? Changed { add { } remove { } }
-		public PlayedLocalePolicy LocalePolicy => PlayedLocalePolicy.Shared;
-		public PlayedContentChangePolicy ContentChangePolicy => PlayedContentChangePolicy.KeepPlayed;
-		public IReadOnlyCollection<PlayedEntry> Entries => Array.Empty<PlayedEntry>();
-		public PlayedPresentation? CurrentPresentation => dialogue.CurrentProjectId is { } project &&
-			dialogue.CurrentLineId is { } line
-				? new PlayedPresentation(new PlayedIdentity(project, line), null, true, null)
-				: null;
-		public bool IsPlayed(string projectId, string lineId, string? locale = null, string? contentFingerprint = null) => true;
-		public void Clear() { }
-		public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-		public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-		public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-	}
-
-	private sealed class NullOperationScheduler : IOperationScheduler
-	{
-		public static NullOperationScheduler Instance { get; } = new();
-		public IReadOnlyCollection<IOperationHandle> ActiveOperations => Array.Empty<IOperationHandle>();
-		public IOperationHandle Start(OperationDefinition definition) => throw new NotSupportedException();
-		public Task WaitAsync(OperationTarget target, CancellationToken cancellationToken = default) => Task.CompletedTask;
-		public Task CancelAsync(OperationTarget target, CancellationToken cancellationToken = default) => Task.CompletedTask;
-		public Task CompleteAsync(OperationTarget target, CancellationToken cancellationToken = default) => Task.CompletedTask;
-		public Task CompleteSkippableAsync(string groupId, CancellationToken cancellationToken = default) => Task.CompletedTask;
-		public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-		public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-		public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-	}
 }

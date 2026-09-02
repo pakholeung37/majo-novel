@@ -55,7 +55,7 @@ public partial class HeadlessTestRunner
         var dialogue = services.Get<IDialoguePlayer>();
         var presentation = services.Get<IDialoguePresentation>();
         var script = services.Get<IScriptPlayback>();
-        var auto = services.Get<IAutoManager>();
+        var playback = services.Get<IPlaybackModeManager>();
         var history = services.Get<IHistoryManager>();
         var audio = services.Get<IAudioManager>();
         var clock = services.Get<IFrameClock>();
@@ -86,9 +86,9 @@ public partial class HeadlessTestRunner
         Assert(dialogue.CurrentLineId == "line:m10-first",
             "M10 Manual mode advanced without player input.");
 
-        auto.SetMode(AutoMode.Auto);
+        playback.SetMode(PlaybackMode.Auto);
         history.Open();
-        Assert(auto.IsPaused && historyOverlay.Visible,
+        Assert(playback.IsPaused && historyOverlay.Visible,
             "M10 History modal did not pause Auto and reveal the default overlay.");
         await clock.DelayAsync(TimeSpan.FromSeconds(0.08), FrameTimeMode.Unscaled);
         Assert(dialogue.CurrentLineId == "line:m10-first",
@@ -99,7 +99,7 @@ public partial class HeadlessTestRunner
                 presentation.IsLineDisplayComplete &&
                 audio.CurrentVoice?.State == AudioPlaybackState.Playing,
             2);
-        Assert(!auto.IsPaused &&
+        Assert(!playback.IsPaused &&
                 history.Entries.Count == 2 &&
                 history.Entries[1].VoiceId == "m10-voice",
             "M10 did not resume Auto or retain the resolved Voice ID in History.");
@@ -113,7 +113,7 @@ public partial class HeadlessTestRunner
             () => script.Phase == ScriptPlaybackPhase.PresentingOptions &&
                 presentation.IsPresentingOptions,
             2);
-        Assert(auto.IsPaused,
+        Assert(playback.IsPaused,
             "M10 Auto did not pause while Yarn options were presented.");
 
         await InjectKeyAsync(Key.Enter);
@@ -121,7 +121,7 @@ public partial class HeadlessTestRunner
             () => dialogue.CurrentLineId == "line:m10-final" &&
                 presentation.IsLineDisplayComplete,
             2);
-        Assert(!auto.IsPaused,
+        Assert(!playback.IsPaused,
             "M10 Auto did not resume after the option was selected.");
         var result = await completion.WaitAsync(TimeSpan.FromSeconds(2));
         Assert(result.Kind == DialogueCompletionKind.Completed &&
@@ -149,8 +149,8 @@ public partial class HeadlessTestRunner
         Assert(history.Entries.Count == 0 &&
                 !history.IsOpen &&
                 !historyOverlay.Visible &&
-                auto.Mode == AutoMode.Manual &&
-                !auto.IsPaused &&
+                playback.Mode == PlaybackMode.Manual &&
+                !playback.IsPaused &&
                 input.ActiveHandleCount == 3 &&
                 operations.ActiveOperations.Count == 0,
             "M10 Reset did not clear Session History, restore Manual mode, or rebind input.");
