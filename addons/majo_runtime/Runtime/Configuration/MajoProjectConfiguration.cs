@@ -255,7 +255,7 @@ public partial class MajoProjectConfiguration : Resource
 
         if (string.IsNullOrWhiteSpace(State.StorageNamespace) ||
             State.StorageNamespace.Contains("..", StringComparison.Ordinal) ||
-            State.StorageNamespace.StartsWith("/", StringComparison.Ordinal))
+            State.StorageNamespace.StartsWith('/'))
         {
             issues.Add(new ConfigurationIssue(
                 $"{nameof(State)}.{nameof(State.StorageNamespace)}",

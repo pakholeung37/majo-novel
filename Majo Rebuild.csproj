@@ -3,7 +3,9 @@
     <TargetFramework>net8.0</TargetFramework>
     <EnableDynamicLoading>true</EnableDynamicLoading>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <WarningsNotAsErrors>$(WarningsNotAsErrors);SYSLIB1220</WarningsNotAsErrors>
+    <AnalysisLevel>latest-Recommended</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <NoWarn>$(NoWarn);SYSLIB1220</NoWarn>
     <DefaultItemExcludes>$(DefaultItemExcludes);tests/Majo.Runtime.UnitTests/**;tests/fixtures/**;**/bin/**;**/obj/**</DefaultItemExcludes>
   </PropertyGroup>
 

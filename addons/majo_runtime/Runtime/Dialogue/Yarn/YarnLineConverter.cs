@@ -14,7 +14,6 @@ public static class YarnLineConverter
 {
     public static DialogueText Convert(MarkupParseResult text)
     {
-        ArgumentNullException.ThrowIfNull(text);
         return new DialogueText(
             text.Text,
             text.Attributes.Select(Convert).ToArray());
