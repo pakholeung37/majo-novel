@@ -2,6 +2,7 @@ using Godot;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Resources;
+using Majo.Runtime.UnitTests.Testing;
 using Xunit;
 
 namespace Majo.Runtime.UnitTests;
@@ -333,23 +334,7 @@ public sealed class ActorManagerTests
         "default",
         [new KeyValuePair<string, string>("default", $"res://{id}.svg")]);
 
-    private sealed class FakeActorFactory : IActorFactory
-    {
-        public FakeActorFactory(string factoryId)
-        {
-            FactoryId = factoryId;
-        }
 
-        public string FactoryId { get; }
-
-        public int CreateCount { get; private set; }
-
-        public IActor Create(ActorDefinition definition)
-        {
-            CreateCount++;
-            return new FakeActor(definition.Id, definition.DefaultAppearance);
-        }
-    }
 
     private sealed class CapturingActorFactory : IActorFactory
     {
@@ -453,139 +438,4 @@ public sealed class ActorManagerTests
         public void Complete(IActor actor) => completion.SetResult(actor);
     }
 
-    private sealed class FakeActor : IActor
-    {
-        public FakeActor(
-            string id,
-            string appearance,
-            string factoryId = "test")
-        {
-            Id = id;
-            Appearance = appearance;
-            FactoryId = factoryId;
-        }
-
-        public string Id { get; }
-
-        public string FactoryId { get; }
-
-        public string Appearance { get; private set; }
-
-        public bool Visible { get; private set; } = true;
-
-        public Vector2 Position { get; private set; }
-
-        public Color Tint { get; private set; } = Colors.White;
-
-        public float Opacity { get; private set; } = 1;
-
-        public int ZIndex { get; private set; }
-
-        public Node SceneNode => null!;
-
-        public bool IsDestroyed { get; private set; }
-
-        public FakeOperationHandle ActiveOperation { get; set; } = new();
-
-        public void SetAppearance(string appearance) => Appearance = appearance;
-
-        public void SetVisible(bool visible) => Visible = visible;
-
-        public void SetPosition(Vector2 position) => Position = position;
-
-        public void SetTint(Color tint) => Tint = tint;
-
-        public void SetOpacity(float opacity) => Opacity = opacity;
-
-        public void SetZIndex(int zIndex)
-        {
-            ActorZIndexRange.Validate(zIndex);
-            ZIndex = zIndex;
-        }
-
-        public IOperationHandle ChangePosition(
-            Vector2 position,
-            double durationSeconds,
-            string? operationId = null,
-            string? groupId = null)
-        {
-            Position = position;
-            return new FakeOperationHandle(OperationState.Completed);
-        }
-
-        public IOperationHandle ChangeOpacity(
-            float opacity,
-            double durationSeconds,
-            string? operationId = null,
-            string? groupId = null)
-        {
-            Opacity = opacity;
-            return new FakeOperationHandle(OperationState.Completed);
-        }
-
-        public IOperationHandle Show(
-            double durationSeconds,
-            string? operationId = null,
-            string? groupId = null)
-        {
-            Visible = true;
-            return new FakeOperationHandle(OperationState.Completed);
-        }
-
-        public IOperationHandle Hide(
-            double durationSeconds,
-            string? operationId = null,
-            string? groupId = null)
-        {
-            Visible = false;
-            return new FakeOperationHandle(OperationState.Completed);
-        }
-
-        public void Destroy()
-        {
-            IsDestroyed = true;
-            ActiveOperation.Cancel();
-        }
-    }
-
-    private sealed class FakeOperationHandle : IOperationHandle
-    {
-        private readonly TaskCompletionSource completion = new(
-            TaskCreationOptions.RunContinuationsAsynchronously);
-
-        public FakeOperationHandle(OperationState initialState = OperationState.Running)
-        {
-            State = initialState;
-            if (initialState == OperationState.Completed)
-            {
-                completion.SetResult();
-            }
-        }
-
-        public string? Id => null;
-
-        public string? GroupId => null;
-
-        public OperationState State { get; private set; }
-
-        public Task Completion => completion.Task;
-
-        public void Cancel()
-        {
-            if (State == OperationState.Completed)
-            {
-                return;
-            }
-
-            State = OperationState.Cancelled;
-            completion.TrySetCanceled();
-            _ = completion.Task.Exception;
-        }
-
-        public void Complete()
-        {
-            State = OperationState.Completed;
-            completion.TrySetResult();
-        }
-    }
 }

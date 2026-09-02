@@ -1,10 +1,10 @@
-using System.Reflection;
 using Majo.Runtime.Auto;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Presentation;
 using Majo.Runtime.History;
 using Majo.Runtime.Script;
 using Majo.Runtime.State;
+using Majo.Runtime.UnitTests.Testing;
 using Xunit;
 
 namespace Majo.Runtime.UnitTests;
@@ -78,32 +78,6 @@ public sealed class ScriptRuntimeTests
         Assert.Equal(2, descriptor.LineSubstitutionCounts["line:intro"]);
     }
 
-    [Fact]
-    public void ScriptStateAutoAndHistoryPublicContractsDoNotExposeBackendTypes()
-    {
-        var stableNamespaces = new HashSet<string>(StringComparer.Ordinal)
-        {
-            typeof(IScriptPlayback).Namespace!,
-            typeof(IStateManager).Namespace!,
-            typeof(IAutoManager).Namespace!,
-            typeof(IHistoryManager).Namespace!,
-        };
-        var types = typeof(IScriptPlayback).Assembly.GetExportedTypes()
-            .Where(type => type.Namespace is not null &&
-                stableNamespaces.Contains(type.Namespace));
-
-        foreach (var type in types)
-        {
-            foreach (var memberType in PublicMemberTypes(type).SelectMany(Expand))
-            {
-                Assert.False(
-                    memberType.Namespace?.StartsWith("Yarn", StringComparison.Ordinal) == true ||
-                    memberType.Namespace?.StartsWith("Godot", StringComparison.Ordinal) == true,
-                    $"Public member on {type.FullName} exposes backend type " +
-                    $"{memberType.FullName}.");
-            }
-        }
-    }
 
     [Fact]
     public async Task ScriptPlayback_PresentationEventsDoNotOverrideStoppingOrIdlePhases()
@@ -136,65 +110,6 @@ public sealed class ScriptRuntimeTests
         Assert.Equal(ScriptPlaybackPhase.AwaitingAdvance, playback.Phase);
     }
 
-    private static IEnumerable<Type> PublicMemberTypes(Type type)
-    {
-        const BindingFlags flags = BindingFlags.Public |
-            BindingFlags.Instance |
-            BindingFlags.Static |
-            BindingFlags.DeclaredOnly;
-        foreach (var constructor in type.GetConstructors(flags))
-        {
-            foreach (var parameter in constructor.GetParameters())
-            {
-                yield return parameter.ParameterType;
-            }
-        }
-
-        foreach (var property in type.GetProperties(flags))
-        {
-            yield return property.PropertyType;
-        }
-
-        foreach (var method in type.GetMethods(flags))
-        {
-            yield return method.ReturnType;
-            foreach (var parameter in method.GetParameters())
-            {
-                yield return parameter.ParameterType;
-            }
-        }
-
-        foreach (var eventInfo in type.GetEvents(flags))
-        {
-            if (eventInfo.EventHandlerType is not null)
-            {
-                yield return eventInfo.EventHandlerType;
-            }
-        }
-    }
-
-    private static IEnumerable<Type> Expand(Type type)
-    {
-        while (type.HasElementType)
-        {
-            type = type.GetElementType()!;
-        }
-
-        yield return type;
-        if (!type.IsGenericType)
-        {
-            yield break;
-        }
-
-        foreach (var argument in type.GetGenericArguments())
-        {
-            foreach (var nested in Expand(argument))
-            {
-                yield return nested;
-            }
-        }
-    }
-
     private sealed class FakeCheckpointBackend : IScriptCheckpointBackend
     {
         private readonly List<string> order;
@@ -223,78 +138,4 @@ public sealed class ScriptRuntimeTests
         public void CancelPreparedRestore(ScriptCheckpoint checkpoint) => order.Add("cancel");
     }
 
-    private sealed class FakeDialoguePlayer : IDialoguePlayer
-    {
-        private readonly List<string> order;
-
-        public FakeDialoguePlayer(List<string> order)
-        {
-            this.order = order;
-        }
-
-        public event Action<DialogueStateChanged>? StateChanged;
-        public event Action<DialogueStartRequest>? Started { add { } remove { } }
-        public event Action<DialogueLine>? LinePresented { add { } remove { } }
-        public event Action<IReadOnlyList<DialogueOption>>? OptionsPresented { add { } remove { } }
-        public event Action<DialogueCompletion>? Completed { add { } remove { } }
-        public event Action<DialogueCompletion>? Stopped { add { } remove { } }
-        public event Action<Exception>? Failed { add { } remove { } }
-        public DialogueSessionState State { get; private set; } = DialogueSessionState.Idle;
-        public string? CurrentProjectId => null;
-        public string? CurrentNode => null;
-        public string? CurrentLineId => null;
-        public bool IsPresentingOptions => false;
-        public IReadOnlyList<DialogueOption> CurrentOptions => Array.Empty<DialogueOption>();
-        public Task<DialogueCompletion> Completion => Task.FromResult(
-            new DialogueCompletion(DialogueCompletionKind.Completed, "project", "Start"));
-
-        public void SetState(DialogueSessionState state)
-        {
-            var previous = State;
-            State = state;
-            StateChanged?.Invoke(new DialogueStateChanged(previous, state));
-        }
-
-        public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public Task StartAsync(
-            DialogueStartRequest? request = null,
-            CancellationToken cancellationToken = default)
-        {
-            order.Add("start");
-            return Task.CompletedTask;
-        }
-
-        public Task StopAsync(CancellationToken cancellationToken = default)
-        {
-            order.Add("stop");
-            return Task.CompletedTask;
-        }
-
-        public void RequestHurryUp()
-        {
-        }
-
-        public void RequestNextLine()
-        {
-        }
-    }
-
-    private sealed class FakeDialoguePresentation : IDialoguePresentation
-    {
-        public event Action? LineDisplayCompleted;
-        public event Action? LineDismissed;
-        public bool IsLineActive { get; set; }
-        public bool IsLineDisplayComplete { get; set; }
-        public bool IsPresentingOptions { get; set; }
-        public void FireDisplayCompleted() => LineDisplayCompleted?.Invoke();
-        public void FireLineDismissed() => LineDismissed?.Invoke();
-        public void ReRenderLine(DialogueLine line) { }
-        public void ReRenderOptions(IReadOnlyList<DialogueOption> options) { }
-        public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-    }
 }

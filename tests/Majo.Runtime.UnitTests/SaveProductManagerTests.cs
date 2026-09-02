@@ -3,6 +3,7 @@ using Majo.Runtime.Dialogue.Presentation;
 using Majo.Runtime.Input;
 using Majo.Runtime.Save;
 using Majo.Runtime.Script;
+using Majo.Runtime.UnitTests.Testing;
 using Xunit;
 
 namespace Majo.Runtime.UnitTests;
@@ -13,9 +14,9 @@ public sealed class SaveProductManagerTests
     public async Task ConfiguredCandidateCommitsOnlyAtAwaitingAdvanceAndOnlyOnce()
     {
         var slots = new FakeSlots();
-        var dialogue = new FakeDialogue();
-        var presentation = new FakePresentation();
-        var script = new FakeScript();
+        var dialogue = new FakeDialoguePlayer();
+        var presentation = new FakeDialoguePresentation();
+        var script = new FakeScriptPlayback();
         var backend = new FakeInputBackend();
         var input = new InputManager(backend);
         await input.InitializeAsync(CancellationToken.None);
@@ -51,9 +52,9 @@ public sealed class SaveProductManagerTests
     public async Task ProjectCandidateTargetsAssociatedLineAndQuickSaveUsesIndependentChain()
     {
         var slots = new FakeSlots();
-        var dialogue = new FakeDialogue();
-        var presentation = new FakePresentation();
-        var script = new FakeScript();
+        var dialogue = new FakeDialoguePlayer();
+        var presentation = new FakeDialoguePresentation();
+        var script = new FakeScriptPlayback();
         var backend = new FakeInputBackend();
         var input = new InputManager(backend);
         await input.InitializeAsync(CancellationToken.None);
@@ -81,9 +82,9 @@ public sealed class SaveProductManagerTests
     public async Task ScriptSaveAndAutoSaveCandidatesUseIndependentSlotKinds()
     {
         var slots = new FakeSlots();
-        var dialogue = new FakeDialogue();
-        var presentation = new FakePresentation();
-        var script = new FakeScript();
+        var dialogue = new FakeDialoguePlayer();
+        var presentation = new FakeDialoguePresentation();
+        var script = new FakeScriptPlayback();
         var input = new InputManager(new FakeInputBackend());
         await input.InitializeAsync(CancellationToken.None);
         var product = new SaveProductManager(slots, dialogue, presentation, script, input);
@@ -107,9 +108,9 @@ public sealed class SaveProductManagerTests
     public async Task CandidateRequestedBetweenLinesTargetsTheFollowingBoundary()
     {
         var slots = new FakeSlots();
-        var dialogue = new FakeDialogue();
-        var presentation = new FakePresentation();
-        var script = new FakeScript();
+        var dialogue = new FakeDialoguePlayer();
+        var presentation = new FakeDialoguePresentation();
+        var script = new FakeScriptPlayback();
         var input = new InputManager(new FakeInputBackend());
         await input.InitializeAsync(CancellationToken.None);
         var product = new SaveProductManager(slots, dialogue, presentation, script, input);
@@ -216,81 +217,4 @@ public sealed class SaveProductManagerTests
             new Dictionary<string, string>());
     }
 
-    private sealed class FakeDialogue : IDialoguePlayer
-    {
-        public event Action<DialogueStateChanged>? StateChanged { add { } remove { } }
-        public event Action<DialogueStartRequest>? Started { add { } remove { } }
-        public event Action<DialogueLine>? LinePresented;
-        public event Action<IReadOnlyList<DialogueOption>>? OptionsPresented { add { } remove { } }
-        public event Action<DialogueCompletion>? Completed { add { } remove { } }
-        public event Action<DialogueCompletion>? Stopped { add { } remove { } }
-        public event Action<Exception>? Failed { add { } remove { } }
-        public DialogueSessionState State => DialogueSessionState.Running;
-        public string? CurrentProjectId { get; private set; }
-        public string? CurrentNode { get; private set; }
-        public string? CurrentLineId { get; private set; }
-        public bool IsPresentingOptions => false;
-        public IReadOnlyList<DialogueOption> CurrentOptions => [];
-        public Task<DialogueCompletion> Completion => Task.FromResult(
-            new DialogueCompletion(DialogueCompletionKind.Completed, "project", "node"));
-        public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task StartAsync(
-            DialogueStartRequest? request = null,
-            CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task StopAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public void RequestHurryUp() { }
-        public void RequestNextLine() { }
-        public void Present(string project, string node, DialogueLine line)
-        {
-            CurrentProjectId = project;
-            CurrentNode = node;
-            CurrentLineId = line.Id;
-            LinePresented?.Invoke(line);
-        }
-    }
-
-    private sealed class FakePresentation : IDialoguePresentation
-    {
-        public event Action? LineDisplayCompleted;
-        public event Action? LineDismissed;
-        public bool IsLineActive => true;
-        public bool IsLineDisplayComplete => true;
-        public bool IsPresentingOptions => false;
-        public void ReRenderLine(DialogueLine line) { }
-        public void ReRenderOptions(IReadOnlyList<DialogueOption> options) { }
-        public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public void CompleteLine() => LineDisplayCompleted?.Invoke();
-        public void DismissLine() => LineDismissed?.Invoke();
-    }
-
-    private sealed class FakeScript : IScriptPlayback
-    {
-        public event Action<ScriptPlaybackPhaseChanged>? PhaseChanged { add { } remove { } }
-        public ScriptPlaybackPhase Phase { get; private set; }
-        public ScriptPlaybackSpot? CurrentSpot { get; private set; }
-        public bool CanCaptureCheckpoint => Phase == ScriptPlaybackPhase.AwaitingAdvance;
-        public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public ScriptCheckpoint CaptureCheckpoint() => throw new NotSupportedException();
-        public Task ValidateCheckpointAsync(
-            ScriptCheckpoint checkpoint,
-            CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task RestoreCheckpointAsync(
-            ScriptCheckpoint checkpoint,
-            CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public void SetLine(
-            string project,
-            string node,
-            string line,
-            ScriptPlaybackPhase phase)
-        {
-            Phase = phase;
-            CurrentSpot = new ScriptPlaybackSpot(new ScriptId(project, node), line);
-        }
-    }
 }

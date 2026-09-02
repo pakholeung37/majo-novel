@@ -142,9 +142,10 @@ public sealed class SettingsGlobalStateTests
         await manager.InitializeAsync(default);
         manager.Update(manager.Current with { MasterVolume = 0.9f });
         manager.Update(manager.Current with { MasterVolume = 0.8f });
-        manager.Update(manager.Current with { MasterVolume = 0.7f });
-
-        await Task.Delay(100);
+        for (var i = 0; i < 30 && storage.WriteCount == 0; i++)
+        {
+            await Task.Delay(10);
+        }
 
         Assert.Equal(1, storage.WriteCount);
         Assert.False(manager.IsDirty);

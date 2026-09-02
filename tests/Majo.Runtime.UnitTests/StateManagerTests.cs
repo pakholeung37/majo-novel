@@ -4,6 +4,7 @@ using Majo.Runtime.Dialogue;
 using Majo.Runtime.Input;
 using Majo.Runtime.Operations;
 using Majo.Runtime.State;
+using Majo.Runtime.UnitTests.Testing;
 using Xunit;
 
 namespace Majo.Runtime.UnitTests;
@@ -342,59 +343,6 @@ public sealed class StateManagerTests
         await manager.ShutdownAsync(CancellationToken.None);
     }
 
-    private sealed class FakeActorFactory : IActorFactory
-    {
-        public FakeActorFactory(string factoryId) => FactoryId = factoryId;
-        public string FactoryId { get; }
-        public void ValidateDefinition(ActorDefinition definition) { }
-        public IActor Create(ActorDefinition definition) => new FakeActor(definition.Id, definition.DefaultAppearance);
-        public IActor Create(ActorDefinition definition, ActorCreationMode mode) =>
-            new FakeActor(definition.Id, definition.DefaultAppearance, mode == ActorCreationMode.Active);
-    }
-
-    private sealed class FakeActor : IActor
-    {
-        public FakeActor(string id, string appearance, bool visible = true)
-        {
-            Id = id;
-            Appearance = TargetAppearance = appearance;
-            Visible = TargetVisible = visible;
-        }
-
-        public string Id { get; }
-        public string FactoryId => "test";
-        public string Appearance { get; set; }
-        public string TargetAppearance { get; }
-        public bool Visible { get; set; }
-        public bool TargetVisible { get; }
-        public Godot.Vector2 Position => Godot.Vector2.Zero;
-        public Godot.Vector2 TargetPosition => Godot.Vector2.Zero;
-        public Godot.Color Tint => Godot.Colors.White;
-        public float Opacity { get; set; } = 1f;
-        public float TargetOpacity => 1f;
-        public int ZIndex { get; private set; }
-
-        public void SetAppearance(string appearance) => Appearance = appearance;
-        public Task PrepareAppearanceAsync(string appearance, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public void SetVisible(bool visible) => Visible = visible;
-        public void SetPosition(Godot.Vector2 position) { }
-        public void SetTint(Godot.Color tint) { }
-        public void SetOpacity(float opacity) => Opacity = opacity;
-        public void SetZIndex(int zIndex)
-        {
-            ActorZIndexRange.Validate(zIndex);
-            ZIndex = zIndex;
-        }
-        public IOperationHandle ChangePosition(Godot.Vector2 position, double durationSeconds, string? operationId = null, string? groupId = null) => throw new NotImplementedException();
-        public IOperationHandle ChangePosition(Godot.Vector2 position, AnimationSpec animation, string? operationId = null, string? groupId = null) => throw new NotImplementedException();
-        public IOperationHandle ChangeOpacity(float opacity, double durationSeconds, string? operationId = null, string? groupId = null) => throw new NotImplementedException();
-        public IOperationHandle ChangeOpacity(float opacity, AnimationSpec animation, string? operationId = null, string? groupId = null) => throw new NotImplementedException();
-        public IOperationHandle Show(double durationSeconds, string? operationId = null, string? groupId = null) => throw new NotImplementedException();
-        public IOperationHandle Show(AnimationSpec animation, string? operationId = null, string? groupId = null) => throw new NotImplementedException();
-        public IOperationHandle Hide(double durationSeconds, string? operationId = null, string? groupId = null) => throw new NotImplementedException();
-        public IOperationHandle Hide(AnimationSpec animation, string? operationId = null, string? groupId = null) => throw new NotImplementedException();
-        public void Destroy() { }
-    }
 
     private static StateManager CreateManager(
         IReadOnlyList<IStateContributor> contributors,

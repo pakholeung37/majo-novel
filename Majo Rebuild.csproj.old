@@ -1,8 +1,0 @@
-<Project Sdk="Godot.NET.Sdk/4.6.2">
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <EnableDynamicLoading>true</EnableDynamicLoading>
-  </PropertyGroup>
-
-  <Import Project="addons\YarnSpinner-Godot\YarnSpinner-Godot.props" />
-</Project>

@@ -3,6 +3,7 @@ using Majo.Runtime.Dialogue;
 using Majo.Runtime.Script;
 using Majo.Runtime.State;
 using Majo.Runtime.Travel;
+using Majo.Runtime.UnitTests.Testing;
 using Xunit;
 
 namespace Majo.Runtime.UnitTests;
@@ -128,7 +129,7 @@ public sealed class DialogueTravelTests
     {
         private TravelHarness(
             FakeStateManager state,
-            FakeSessions sessions,
+            FakeGameSessionCoordinator sessions,
             FakeScriptPlayback script,
             FakeDialoguePlayer dialogue,
             FakePlaybackModeManager playback,
@@ -143,7 +144,7 @@ public sealed class DialogueTravelTests
         }
 
         public FakeStateManager State { get; }
-        public FakeSessions Sessions { get; }
+        public FakeGameSessionCoordinator Sessions { get; }
         public FakeScriptPlayback Script { get; }
         public FakeDialoguePlayer Dialogue { get; }
         public FakePlaybackModeManager Playback { get; }
@@ -152,7 +153,7 @@ public sealed class DialogueTravelTests
         public static async Task<TravelHarness> CreateAsync(int capacity)
         {
             var state = new FakeStateManager();
-            var sessions = new FakeSessions();
+            var sessions = new FakeGameSessionCoordinator();
             var script = new FakeScriptPlayback();
             var dialogue = new FakeDialoguePlayer();
             var playback = new FakePlaybackModeManager();
@@ -218,146 +219,6 @@ public sealed class DialogueTravelTests
         }
     }
 
-    private sealed class FakeStateManager : IStateManager
-    {
-        public event Action<StateStatusChanged>? StatusChanged { add { } remove { } }
-        public event Action<StateSnapshot>? Captured { add { } remove { } }
-        public event Action<StateSnapshot>? Restored { add { } remove { } }
-        public event Action<Exception>? Failed { add { } remove { } }
-        public StateManagerStatus Status => StateManagerStatus.Idle;
-        public StateSnapshot? CurrentSnapshot { get; private set; }
-        public IStateRestoreTransaction RestoreTransaction => throw new NotSupportedException();
-        public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task<StateSnapshot> CaptureAsync(
-            StateScope scope,
-            CancellationToken cancellationToken = default) => CaptureGameAsync(cancellationToken);
-        public Task<StateSnapshot> CaptureGameAsync(
-            CancellationToken cancellationToken = default)
-        {
-            CurrentSnapshot = new StateSnapshot(
-                StateSnapshot.CurrentFormatVersion,
-                DateTimeOffset.UtcNow,
-                []);
-            return Task.FromResult(CurrentSnapshot);
-        }
-        public StateEnvelope CreateEnvelope(
-            StateSnapshot snapshot,
-            StateScope scope,
-            string runtimeVersion,
-            string gameBuildId,
-            string storageNamespace,
-            IReadOnlyDictionary<string, string>? displayMetadata = null) =>
-            throw new NotSupportedException();
-        public Task ResetScopeAsync(
-            StateScope scope,
-            CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task RestoreGameAsync(
-            StateSnapshot snapshot,
-            CancellationToken cancellationToken = default) => Task.CompletedTask;
-    }
-
-    private sealed class FakeSessions : IGameSessionCoordinator
-    {
-        public event Action<GameSessionChanged>? SessionChanged;
-        public StateSnapshot? LastRollback { get; private set; }
-        public Exception? RollbackFailure { get; set; }
-        public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task NewGameAsync(CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
-        public Task LoadGameAsync(
-            StateSnapshot snapshot,
-            CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task LoadGameAsync(
-            StateRestorePlan plan,
-            CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task ReturnToTitleAsync(CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
-        public Task RollbackAsync(
-            StateSnapshot snapshot,
-            CancellationToken cancellationToken = default)
-        {
-            if (RollbackFailure is not null)
-            {
-                return Task.FromException(RollbackFailure);
-            }
-            LastRollback = snapshot;
-            SessionChanged?.Invoke(new GameSessionChanged(
-                GameSessionTransition.Rollback,
-                "session",
-                false));
-            return Task.CompletedTask;
-        }
-        public void BeginNewSession() => SessionChanged?.Invoke(new GameSessionChanged(
-            GameSessionTransition.NewGame,
-            "new-session",
-            true));
-        public void BeginLoadedSession() => SessionChanged?.Invoke(new GameSessionChanged(
-            GameSessionTransition.LoadGame,
-            "loaded-session",
-            true));
-    }
-
-    private sealed class FakeScriptPlayback : IScriptPlayback
-    {
-        public event Action<ScriptPlaybackPhaseChanged>? PhaseChanged;
-        public ScriptPlaybackPhase Phase { get; private set; } = ScriptPlaybackPhase.Idle;
-        public ScriptPlaybackSpot? Spot { get; set; }
-        public ScriptPlaybackSpot? CurrentSpot => Spot;
-        public bool CanCaptureCheckpoint => Phase == ScriptPlaybackPhase.AwaitingAdvance;
-        public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public ScriptCheckpoint CaptureCheckpoint() => throw new NotSupportedException();
-        public Task ValidateCheckpointAsync(
-            ScriptCheckpoint checkpoint,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task RestoreCheckpointAsync(
-            ScriptCheckpoint checkpoint,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public void SetPhase(ScriptPlaybackPhase phase)
-        {
-            var previous = Phase;
-            Phase = phase;
-            PhaseChanged?.Invoke(new ScriptPlaybackPhaseChanged(previous, phase));
-        }
-    }
-
-    private sealed class FakeDialoguePlayer : IDialoguePlayer
-    {
-        public event Action<DialogueStateChanged>? StateChanged { add { } remove { } }
-        public event Action<DialogueStartRequest>? Started { add { } remove { } }
-        public event Action<DialogueLine>? LinePresented;
-        public event Action<IReadOnlyList<DialogueOption>>? OptionsPresented { add { } remove { } }
-        public event Action<DialogueCompletion>? Completed { add { } remove { } }
-        public event Action<DialogueCompletion>? Stopped { add { } remove { } }
-        public event Action<Exception>? Failed { add { } remove { } }
-        public DialogueSessionState State => DialogueSessionState.Running;
-        public string? CurrentProjectId => "main";
-        public string? CurrentNode => "Start";
-        public string? CurrentLineId { get; private set; }
-        public bool IsPresentingOptions => false;
-        public IReadOnlyList<DialogueOption> CurrentOptions => [];
-        public Task<DialogueCompletion> Completion => Task.FromResult(
-            new DialogueCompletion(DialogueCompletionKind.Completed, "main", "Start"));
-        public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task StartAsync(
-            DialogueStartRequest? request = null,
-            CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task StopAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public void RequestHurryUp() { }
-        public void RequestNextLine() { }
-        public void Present(DialogueLine line)
-        {
-            CurrentLineId = line.Id;
-            LinePresented?.Invoke(line);
-        }
-    }
 
     private sealed class FakePlaybackModeManager : IPlaybackModeManager
     {

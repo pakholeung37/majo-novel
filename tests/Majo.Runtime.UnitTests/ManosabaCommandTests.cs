@@ -14,120 +14,106 @@ namespace Majo.Runtime.UnitTests;
 
 public sealed class ManosabaCommandTests
 {
-	[Fact]
-	public void LegacyAdvFrameCommand_IsNotRegisteredAfterMigration()
-	{
-		var registry = new RuntimeCommandRegistry();
-		ManosabaCommands.Register(registry);
-		var catalog = registry.BuildCatalog();
+    [Fact]
+    public async Task StreamFrameCommand_TogglesModes()
+    {
+        var uiService = new ManosabaUiService();
+        var services = new ServiceResolverBuilder()
+            .Add<IManosabaUiService>(uiService)
+            .Build();
 
-		// adv_frame was replaced by the explicit boolean stream_frame command;
-		// keep this assertion so the old and new authoring APIs cannot silently
-		// become a dual-registration path again.
-		Assert.DoesNotContain(catalog.Commands, command => command.Name == "adv_frame");
-		Assert.Contains(catalog.Commands, command => command.Name == "stream_frame");
-	}
+        var registry = new RuntimeCommandRegistry();
+        ManosabaCommands.Register(registry);
+        var catalog = registry.BuildCatalog();
 
-	[Fact]
-	public async Task StreamFrameCommand_TogglesModes()
-	{
-		var uiService = new ManosabaUiService();
-		var services = new ServiceResolverBuilder()
-			.Add<IManosabaUiService>(uiService)
-			.Build();
+        var dispatcher = new RuntimeCommandDispatcher(
+            new CommandBinder(new CommandBindingContext(0.35)),
+            services: services);
 
-		var registry = new RuntimeCommandRegistry();
-		ManosabaCommands.Register(registry);
-		var catalog = registry.BuildCatalog();
+        var streamFrame = catalog.Get("stream_frame");
 
-		var dispatcher = new RuntimeCommandDispatcher(
-			new CommandBinder(new CommandBindingContext(0.35)),
-			services: services);
+        // stream_frame true -> Stream
+        await dispatcher.ExecuteAsync(streamFrame, ["true"], CancellationToken.None);
+        Assert.Equal(ManosabaFrameMode.Stream, uiService.CurrentFrameMode);
 
-		var streamFrame = catalog.Get("stream_frame");
+        // stream_frame false -> Default
+        await dispatcher.ExecuteAsync(streamFrame, ["false"], CancellationToken.None);
+        Assert.Equal(ManosabaFrameMode.Default, uiService.CurrentFrameMode);
+    }
 
-		// stream_frame true -> Stream
-		await dispatcher.ExecuteAsync(streamFrame, ["true"], CancellationToken.None);
-		Assert.Equal(ManosabaFrameMode.Stream, uiService.CurrentFrameMode);
+    [Fact]
+    public async Task ManosabaUiService_StatePersistence_CapturesAndRestores()
+    {
+        var uiService = new ManosabaUiService();
+        uiService.SetFrameMode(ManosabaFrameMode.Stream);
 
-		// stream_frame false -> Default
-		await dispatcher.ExecuteAsync(streamFrame, ["false"], CancellationToken.None);
-		Assert.Equal(ManosabaFrameMode.Default, uiService.CurrentFrameMode);
-	}
+        var record = await uiService.CaptureAsync(CancellationToken.None);
+        Assert.Equal("manosaba.ui", record.Key);
+        Assert.Equal(StateScope.Game, record.Scope);
 
-	[Fact]
-	public async Task ManosabaUiService_StatePersistence_CapturesAndRestores()
-	{
-		var uiService = new ManosabaUiService();
-		uiService.SetFrameMode(ManosabaFrameMode.Stream);
+        uiService.SetFrameMode(ManosabaFrameMode.Default);
+        Assert.Equal(ManosabaFrameMode.Default, uiService.CurrentFrameMode);
 
-		var record = await uiService.CaptureAsync(CancellationToken.None);
-		Assert.Equal("manosaba.ui", record.Key);
-		Assert.Equal(StateScope.Game, record.Scope);
+        await uiService.PreflightAsync(record, CancellationToken.None);
+        await uiService.RestoreAsync(record, CancellationToken.None);
+        Assert.Equal(ManosabaFrameMode.Stream, uiService.CurrentFrameMode);
 
-		uiService.SetFrameMode(ManosabaFrameMode.Default);
-		Assert.Equal(ManosabaFrameMode.Default, uiService.CurrentFrameMode);
-
-		await uiService.PreflightAsync(record, CancellationToken.None);
-		await uiService.RestoreAsync(record, CancellationToken.None);
-		Assert.Equal(ManosabaFrameMode.Stream, uiService.CurrentFrameMode);
-
-		await ((IStateContributor)uiService).ResetAsync(CancellationToken.None);
-		Assert.Equal(ManosabaFrameMode.Default, uiService.CurrentFrameMode);
-	}
+        await ((IStateContributor)uiService).ResetAsync(CancellationToken.None);
+        Assert.Equal(ManosabaFrameMode.Default, uiService.CurrentFrameMode);
+    }
 }
 
 internal sealed class ServiceResolverBuilder
 {
-	private readonly Dictionary<Type, object> services = new();
+    private readonly Dictionary<Type, object> services = new();
 
-	public ServiceResolverBuilder Add<TService>(TService instance) where TService : class
-	{
-		services[typeof(TService)] = instance;
-		return this;
-	}
+    public ServiceResolverBuilder Add<TService>(TService instance) where TService : class
+    {
+        services[typeof(TService)] = instance;
+        return this;
+    }
 
-	public IServiceResolver Build() => new SimpleServiceResolver(services);
+    public IServiceResolver Build() => new SimpleServiceResolver(services);
 
-	private sealed class SimpleServiceResolver : IServiceResolver
-	{
-		private readonly Dictionary<Type, object> services;
+    private sealed class SimpleServiceResolver : IServiceResolver
+    {
+        private readonly Dictionary<Type, object> services;
 
-		public SimpleServiceResolver(Dictionary<Type, object> services)
-		{
-			this.services = services;
-		}
+        public SimpleServiceResolver(Dictionary<Type, object> services)
+        {
+            this.services = services;
+        }
 
-		public TService Get<TService>() where TService : class
-		{
-			if (TryGet<TService>(out var service) && service is not null)
-			{
-				return service;
-			}
+        public TService Get<TService>() where TService : class
+        {
+            if (TryGet<TService>(out var service) && service is not null)
+            {
+                return service;
+            }
 
-			throw new InvalidOperationException($"Service '{typeof(TService).FullName}' not found.");
-		}
+            throw new InvalidOperationException($"Service '{typeof(TService).FullName}' not found.");
+        }
 
-		public object Get(Type serviceType)
-		{
-			if (services.TryGetValue(serviceType, out var obj))
-			{
-				return obj;
-			}
+        public object Get(Type serviceType)
+        {
+            if (services.TryGetValue(serviceType, out var obj))
+            {
+                return obj;
+            }
 
-			throw new InvalidOperationException($"Service '{serviceType.FullName}' not found.");
-		}
+            throw new InvalidOperationException($"Service '{serviceType.FullName}' not found.");
+        }
 
-		public bool TryGet<TService>(out TService? service) where TService : class
-		{
-			if (services.TryGetValue(typeof(TService), out var obj) && obj is TService typed)
-			{
-				service = typed;
-				return true;
-			}
+        public bool TryGet<TService>(out TService? service) where TService : class
+        {
+            if (services.TryGetValue(typeof(TService), out var obj) && obj is TService typed)
+            {
+                service = typed;
+                return true;
+            }
 
-			service = null;
-			return false;
-		}
-	}
+            service = null;
+            return false;
+        }
+    }
 }

@@ -7,6 +7,7 @@ using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Dialogue.Yarn;
 using Majo.Runtime.Diagnostics;
 using Majo.Runtime.Operations;
+using Majo.Runtime.UnitTests.Testing;
 using Xunit;
 
 namespace Majo.Runtime.UnitTests;
@@ -659,15 +660,15 @@ public sealed class RuntimeCommandTests
             IActor actor = request.ActorId == "broken"
                 ? new FailingAppearanceActor(request.ActorId, request.InitialAppearance)
                 : request.FallbackFactoryId switch
-            {
-                ActorFactoryIds.Background =>
-                    new FakeBackgroundActor(request.ActorId, request.InitialAppearance),
-                ActorFactoryIds.Character =>
-                    new FakeCharacterActor(request.ActorId, request.InitialAppearance),
-                _ => throw new ActorFactoryNotFoundException(
-                    request.FallbackFactoryId,
-                    request.ActorId),
-            };
+                {
+                    ActorFactoryIds.Background =>
+                        new FakeBackgroundActor(request.ActorId, request.InitialAppearance),
+                    ActorFactoryIds.Character =>
+                        new FakeCharacterActor(request.ActorId, request.InitialAppearance),
+                    _ => throw new ActorFactoryNotFoundException(
+                        request.FallbackFactoryId,
+                        request.ActorId),
+                };
             actors.Add(request.ActorId, actor);
             return actor;
         }
@@ -689,90 +690,6 @@ public sealed class RuntimeCommandTests
         public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
-    private abstract class FakeActor : IActor
-    {
-        protected FakeActor(string id, string appearance)
-        {
-            Id = id;
-            Appearance = appearance;
-        }
-
-        public string Id { get; }
-
-        public string Appearance { get; protected set; }
-
-        public bool Visible { get; protected set; } = true;
-
-        public Vector2 Position { get; protected set; }
-
-        public Color Tint { get; private set; } = Colors.White;
-
-        public float Opacity { get; protected set; } = 1;
-
-        public int ZIndex { get; private set; }
-
-        public Node SceneNode => null!;
-
-        public FakeOperationHandle LastOperation { get; protected set; } = new();
-
-        public virtual void SetAppearance(string appearance) => Appearance = appearance;
-
-        public void SetVisible(bool visible) => Visible = visible;
-
-        public void SetPosition(Vector2 position) => Position = position;
-
-        public void SetTint(Color tint) => Tint = tint;
-
-        public virtual void SetOpacity(float opacity) => Opacity = opacity;
-
-        public void SetZIndex(int zIndex)
-        {
-            ActorZIndexRange.Validate(zIndex);
-            ZIndex = zIndex;
-        }
-
-        public IOperationHandle ChangePosition(
-            Vector2 position,
-            double durationSeconds,
-            string? operationId = null,
-            string? groupId = null)
-        {
-            Position = position;
-            return LastOperation = new FakeOperationHandle(operationId, groupId);
-        }
-
-        public IOperationHandle ChangeOpacity(
-            float opacity,
-            double durationSeconds,
-            string? operationId = null,
-            string? groupId = null)
-        {
-            Opacity = opacity;
-            return LastOperation = new FakeOperationHandle(operationId, groupId);
-        }
-
-        public IOperationHandle Show(
-            double durationSeconds,
-            string? operationId = null,
-            string? groupId = null)
-        {
-            Visible = true;
-            return LastOperation = new FakeOperationHandle(operationId, groupId);
-        }
-
-        public IOperationHandle Hide(
-            double durationSeconds,
-            string? operationId = null,
-            string? groupId = null)
-        {
-            Visible = false;
-            return LastOperation = new FakeOperationHandle(operationId, groupId);
-        }
-
-        public void Destroy()
-        {
-        }
-    }
 
     private class FakeCharacterActor : FakeActor, ICharacterActor
     {
@@ -870,37 +787,6 @@ public sealed class RuntimeCommandTests
         }
     }
 
-    private sealed class FakeOperationHandle : IOperationHandle
-    {
-        private readonly TaskCompletionSource completion = new(
-            TaskCreationOptions.RunContinuationsAsynchronously);
-
-        public FakeOperationHandle(string? id = null, string? groupId = null)
-        {
-            Id = id;
-            GroupId = groupId;
-        }
-
-        public string? Id { get; }
-
-        public string? GroupId { get; }
-
-        public OperationState State { get; private set; } = OperationState.Running;
-
-        public Task Completion => completion.Task;
-
-        public void Cancel()
-        {
-            State = OperationState.Cancelled;
-            completion.TrySetCanceled();
-        }
-
-        public void Complete()
-        {
-            State = OperationState.Completed;
-            completion.TrySetResult();
-        }
-    }
 
     private sealed class FakeOperationScheduler : IOperationScheduler
     {

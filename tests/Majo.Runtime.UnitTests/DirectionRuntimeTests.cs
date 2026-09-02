@@ -1,14 +1,18 @@
+#nullable enable
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
+using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Direction.Rendering;
-using Majo.Runtime.Dialogue.Commands;
-using Majo.Runtime.Dialogue.Yarn;
-using Majo.Runtime.Dialogue.Yarn.HotReload;
 using Majo.Runtime.Resources;
 using Majo.Runtime.State;
-using System.Runtime.CompilerServices;
-using System.Text.Json;
-using YarnSpinnerGodot;
+using Majo.Runtime.UnitTests.Testing;
 using Xunit;
 
 namespace Majo.Runtime.UnitTests;
@@ -57,308 +61,6 @@ public sealed class DirectionRuntimeTests
         Assert.DoesNotContain(names, name => name is
             "back" or "char" or "hide" or "place" or "shot cg" or
             "shot pose" or "shake" or "camera zoom" or "camera rotate");
-    }
-
-    [Theory]
-    [InlineData(DirectionEase.BackIn, DirectionEaseCurve.Back, DirectionEaseMode.In)]
-    [InlineData(DirectionEase.BackOut, DirectionEaseCurve.Back, DirectionEaseMode.Out)]
-    [InlineData(DirectionEase.BackInOut, DirectionEaseCurve.Back, DirectionEaseMode.InOut)]
-    [InlineData(DirectionEase.CubicOut, DirectionEaseCurve.Cubic, DirectionEaseMode.Out)]
-    public void DirectionEaseDecomposesIntoCurveAndMode(
-        DirectionEase ease,
-        DirectionEaseCurve curve,
-        DirectionEaseMode mode)
-    {
-        Assert.Equal(new DirectionEaseParts(curve, mode), ease.Decompose());
-    }
-
-    [Fact]
-    public void NodeDirectionCompilerBuildsNodeLocalSymbolsAndTypedPreloadReferences()
-    {
-        var compiler = new NodeDirectionCompiler();
-        var snapshot = new YarnSourceSnapshot(
-            "test",
-            "test.yarnproject",
-            1,
-            "en",
-            new[]
-            {
-                new YarnSourceFileSnapshot(
-                    "main.yarn",
-                    "main.yarn",
-                    "title: Opening\n---\n<<backdrop Background_001>>\n<<camera pose view:reaction stage:cell>>\n<<cg Still_001>>\n<<layout split main:main inset:reaction>>\n===\n",
-                    "hash"),
-            },
-            "fingerprint");
-
-        var module = Assert.Single(compiler.Compile(snapshot));
-        Assert.Equal("Opening", module.NodeId);
-        Assert.Contains("cell", module.Symbols.Stages);
-        Assert.Contains("reaction", module.Symbols.Views);
-        Assert.Contains(module.Resources, resource =>
-            resource.Kind == DirectionResourceKind.Backdrop &&
-            resource.SemanticId == "Background_001");
-        Assert.Contains(module.Resources, resource =>
-            resource.Kind == DirectionResourceKind.Cg &&
-            resource.SemanticId == "Still_001");
-        Assert.Equal(4, module.SourceMaps.Count);
-    }
-
-    [Fact]
-    public void NodeDirectionCompilerRetainsVersionAndNodeLocalMarks()
-    {
-        var snapshot = new YarnSourceSnapshot(
-            "test", "test.yarnproject", 1, "en",
-            new[]
-            {
-                new YarnSourceFileSnapshot(
-                    "main.yarn", "main.yarn",
-                    "title: Opening\n---\n<<mark focus at:25,75>>\n<<character Ema at:focus>>\n===\n",
-                    "hash"),
-            },
-            "fingerprint");
-
-        var module = Assert.Single(new NodeDirectionCompiler().Compile(snapshot, 42));
-
-        Assert.Equal(42, module.Version);
-        var mark = Assert.Single(module.MarkDefinitions);
-        Assert.Equal("focus", mark.Name);
-        Assert.Equal(new DirectionPoint(25, 75), mark.Position);
-        Assert.Contains("focus", module.Symbols.Marks);
-    }
-
-    [Fact]
-    public void NodeDirectionCompilerResolvesShotUseAsAReference()
-    {
-        var snapshot = new YarnSourceSnapshot(
-            "test", "test.yarnproject", 1, "en",
-            new[]
-            {
-                new YarnSourceFileSnapshot(
-                    "main.yarn", "main.yarn",
-                    "title: Opening\n---\n<<camera pose zoom:2 as:close>>\n<<shot use close>>\n<<shot use missing>>\n===\n",
-                    "hash"),
-            },
-            "fingerprint");
-
-        var module = Assert.Single(new NodeDirectionCompiler().Compile(snapshot));
-
-        Assert.Contains("close", module.Symbols.ShotAliases);
-        var diagnostic = Assert.Single(
-            module.Diagnostics,
-            value => value.Code == "DIR007");
-        Assert.Contains("missing", diagnostic.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void NodeDirectionCompilerCollectsExplicitImportsAndAuthoringDiagnostics()
-    {
-        var compiler = new NodeDirectionCompiler();
-        var snapshot = new YarnSourceSnapshot(
-            "test", "test.yarnproject", 1, "en",
-            new[]
-            {
-                new YarnSourceFileSnapshot(
-                    "main.yarn", "main.yarn",
-                    "title: Opening\n---\n<<import stage news from Broadcast:broadcast>>\n<<backdrop>>\n===\n",
-                    "hash"),
-            },
-            "fingerprint");
-
-        var module = Assert.Single(compiler.Compile(snapshot));
-        var import = Assert.Single(module.Imports);
-        Assert.Equal("stage", import.Kind);
-        Assert.Equal("news", import.Alias);
-        Assert.Equal("Broadcast", import.SourceNode);
-        Assert.Contains(module.Diagnostics, diagnostic => diagnostic.Code == "DIR001");
-    }
-
-    [Fact]
-    public void DirectionMetadataRoundTripsNodeModules()
-    {
-        var module = new NodeDirectionModule(
-            "Opening", 7,
-            new DirectionSymbolTable(
-                new HashSet<string> { "cell" },
-                new HashSet<string> { "reaction" },
-                new HashSet<string> { "wide" },
-                new HashSet<string> { "focus" }),
-            new[]
-            {
-                new TypedDirectionResourceReference(
-                    DirectionResourceKind.Cg, "Still_001", "main.yarn", 4, 1),
-            },
-            new[] { new DirectionSourceMap("shot", "main.yarn", 4, 1) },
-            new[]
-            {
-                new DirectionImport("stage", "cell", "Broadcast", "main", "main.yarn", 3, 1),
-            },
-            new[] { new DirectionMark("focus", new DirectionPoint(25, 75), "main.yarn", 5, 1) },
-            Array.Empty<YarnCompilationDiagnostic>());
-        var project = (YarnProject)RuntimeHelpers.GetUninitializedObject(typeof(YarnProject));
-        project.CompiledDirectionModulesJson = YarnProjectDirectionMetadata.Serialize(new[] { module });
-
-        var roundTrip = Assert.Single(YarnProjectDirectionMetadata.Deserialize(project));
-        Assert.Equal(module.NodeId, roundTrip.NodeId);
-        Assert.Equal(module.Version, roundTrip.Version);
-        Assert.Equal(module.Symbols.Stages, roundTrip.Symbols.Stages);
-        Assert.Equal(module.Resources, roundTrip.Resources);
-        Assert.Equal(module.Imports, roundTrip.Imports);
-        Assert.Equal(module.MarkDefinitions, roundTrip.MarkDefinitions);
-    }
-    [Fact]
-    public void DirectionScopeQualifiesNodeLocalSymbolsAndResolvesExplicitImports()
-    {
-        var scopes = new DirectionScopeResolver();
-
-        var first = scopes.ResolveStage("Adv02", "broadcast");
-        var second = scopes.ResolveStage("Trial01", "broadcast");
-
-        Assert.NotEqual(first, second);
-        Assert.Equal(StageId.Main, scopes.ResolveStage("Adv02", "main"));
-        Assert.Equal(first, scopes.ResolveStage("Adv02", "broadcast"));
-
-        scopes.ImportStage("Trial01", "news", "Adv02", "broadcast");
-        Assert.Equal(first, scopes.ResolveStage("Trial01", "news"));
-        Assert.Throws<DirectionReferenceException>(() =>
-            scopes.ImportStage("Trial01", "news", "Adv03", "broadcast"));
-    }
-
-    [Fact]
-    public void DirectionScopeKeepsShotAliasesNodeLocal()
-    {
-        var scopes = new DirectionScopeResolver();
-        var patch = new ViewPatch(
-            ViewId.Main,
-            default,
-            default,
-            DirectionValue<float>.From(1.5f),
-            default,
-            DirectionTransitionSpec.Cut);
-        scopes.EnterNode("Opening");
-        scopes.DefineShot("Opening", "wide", patch);
-        Assert.Equal(patch, scopes.ResolveShot("Opening", "wide"));
-        Assert.Throws<DirectionReferenceException>(() => scopes.DefineShot("Opening", "wide", patch));
-        scopes.ExitNode("Opening");
-        Assert.Throws<DirectionReferenceException>(() => scopes.ResolveShot("Opening", "wide"));
-
-        scopes.EnterNode("Other");
-        Assert.Throws<DirectionReferenceException>(() => scopes.ResolveShot("Other", "wide"));
-    }
-
-    [Fact]
-    public void BeatBeginAllowsAnonymousBeats()
-    {
-        var registry = new RuntimeCommandRegistry();
-        registry.Register<BeatBeginDirectionCommandArguments>((_, _) => Task.CompletedTask);
-        var descriptor = Assert.Single(registry.Registrations).Descriptor;
-        var arguments = new CommandBinder(new CommandBindingContext(0.35))
-            .Bind<BeatBeginDirectionCommandArguments>(descriptor, Array.Empty<string>());
-
-        Assert.Null(arguments.Id);
-    }
-
-    [Fact]
-    public void DirectionEaseAcceptsLegacyBackCurves()
-    {
-        var registry = new RuntimeCommandRegistry();
-        registry.Register<CameraPoseDirectionCommandArguments>((_, _) => Task.CompletedTask);
-        var descriptor = Assert.Single(registry.Registrations).Descriptor;
-        var arguments = new CommandBinder(new CommandBindingContext(0.35))
-            .Bind<CameraPoseDirectionCommandArguments>(
-                descriptor,
-                new[] { "center:44.438,71.950", "duration:0.4", "ease:back-out" });
-
-        Assert.Equal("back-out", arguments.Ease);
-    }
-
-    [Fact]
-    public void DirectionScopeReapplyingModuleReplacesHotReloadDefinitions()
-    {
-        var scopes = new DirectionScopeResolver();
-        var first = new NodeDirectionModule(
-            "Opening", 1,
-            new DirectionSymbolTable(
-                new HashSet<string>(), new HashSet<string>(), new HashSet<string>(),
-                new HashSet<string> { "focus" }),
-            Array.Empty<TypedDirectionResourceReference>(),
-            Array.Empty<DirectionSourceMap>(),
-            Array.Empty<DirectionImport>(),
-            new[] { new DirectionMark("focus", new DirectionPoint(10, 20), "test", 1, 1) },
-            Array.Empty<YarnCompilationDiagnostic>());
-        var second = first with
-        {
-            Version = 2,
-            MarkDefinitions = new[]
-            {
-                new DirectionMark("focus", new DirectionPoint(80, 90), "test", 1, 1),
-            },
-        };
-
-        scopes.ApplyModule(first);
-        Assert.Equal(new DirectionPoint(10, 20), scopes.ResolveMark("Opening", "focus"));
-        scopes.ApplyModule(second);
-        Assert.Equal(new DirectionPoint(80, 90), scopes.ResolveMark("Opening", "focus"));
-    }
-
-    [Fact]
-    public void YarnProjectVersionStoreKeepsRunningVersionActiveWhileStagingCandidate()
-    {
-        var store = new YarnProjectVersionStore(new VersionStoreResourceManager(), "scripts");
-        // YarnProject is a Godot Resource and constructing it requires a live
-        // Godot runtime. This store test only needs identity, so use managed
-        // uninitialized instances and never access Resource members.
-        var runningProject = (YarnProject)RuntimeHelpers.GetUninitializedObject(typeof(YarnProject));
-        var candidateProject = (YarnProject)RuntimeHelpers.GetUninitializedObject(typeof(YarnProject));
-        var running = CreateVersion(1, runningProject);
-        var candidate = CreateVersion(2, candidateProject);
-
-        store.StageForNextSession(running);
-        store.MarkRunning("test", runningProject);
-        store.StageForNextSession(candidate);
-
-        Assert.Same(runningProject, store.GetActiveVersion("test")?.Project);
-        Assert.Same(runningProject, store.GetRunningVersion("test")?.Project);
-
-        store.Activate(candidate);
-        Assert.Same(candidateProject, store.GetActiveVersion("test")?.Project);
-        Assert.Same(runningProject, store.GetRunningVersion("test")?.Project);
-    }
-
-    private static YarnProjectVersion CreateVersion(long generation, YarnProject project) =>
-        new(
-            generation,
-            "test",
-            $"source-{generation}",
-            $"program-{generation}",
-            project,
-            new HashSet<string>(),
-            new HashSet<string>(),
-            new Dictionary<string, string>(),
-            new HashSet<string>(),
-            Array.Empty<YarnCompilationDiagnostic>(),
-            DateTimeOffset.UtcNow);
-
-    [Fact]
-    public void ActorAddressDistinguishesTheSameActorAcrossStages()
-    {
-        var actor = new ActorId("Ema");
-
-        Assert.NotEqual(
-            new ActorAddress(new StageId("cell"), actor),
-            new ActorAddress(new StageId("broadcast"), actor));
-    }
-
-    [Fact]
-    public void DefaultStateProvidesMainStageViewAndScreen()
-    {
-        var state = DirectionState.CreateDefault();
-
-        Assert.Contains(StageId.Main, state.Stages.Keys);
-        var view = Assert.IsType<StageViewSource>(state.Views[ViewId.Main].Source);
-        Assert.Equal(StageId.Main, view.StageId);
-        Assert.Equal(ViewId.Main, state.Screen.Bindings[LayoutSlotId.Main]);
-        Assert.Equal(0, state.Revision);
     }
 
     [Fact]
@@ -423,142 +125,14 @@ public sealed class DirectionRuntimeTests
         await contributor.PreflightAsync(record, CancellationToken.None);
     }
 
-    private static StateRecord CreateDirectionRecord(string stages, string views)
-    {
-        var json = "{\"stages\":" + stages +
-            ",\"views\":" + views +
-            ",\"layout\":\"single\",\"bindings\":{\"main\":\"main\"}," +
-            "\"effects\":{\"curtain\":{\"color\":{\"r\":0,\"g\":0,\"b\":0,\"a\":1},\"opacity\":0}}," +
-            "\"revision\":0}";
-        return new StateRecord(
-            BuiltInStateKeys.Direction,
-            StateScope.Game,
-            1,
-            JsonDocument.Parse(json).RootElement.Clone());
-    }
-
-    [Fact]
-    public void PlannerBuildsCompleteTargetStateAndResolvesSameBeatDefinitions()
-    {
-        var planner = new DirectionPlanner();
-        var cell = new StageId("cell");
-        var reaction = new ViewId("reaction");
-        var ema = new ActorId("Ema");
-
-        var plan = planner.Plan(
-            DirectionState.CreateDefault(),
-            new IDirectionDirective[]
-            {
-                View(reaction, source: new StageViewSource(cell), zoom: 1.8f),
-                Actor(ema, cell, position: new DirectionPoint(70, 0)),
-                Actor(ema, cell, appearance: "Fearful1,ArmR1"),
-                new BackdropPatch(
-                    cell,
-                    new BackdropState(new ResourceKey("Background_025_001")),
-                    DirectionTransitionSpec.Cut),
-                new ScreenPatch(
-                    new LayoutId("split"),
-                    new Dictionary<LayoutSlotId, ViewId>
-                    {
-                        [new LayoutSlotId("main")] = ViewId.Main,
-                        [new LayoutSlotId("inset")] = reaction,
-                    },
-                    DirectionTransitionSpec.Cut),
-            });
-
-        var stage = plan.TargetState.Stages[cell];
-        Assert.Equal("Background_025_001", stage.Backdrop?.Resource.ToString());
-        Assert.Equal(new DirectionPoint(70, 0), stage.Actors[ema].Position);
-        Assert.Equal("Fearful1,ArmR1", stage.Actors[ema].Appearance);
-        Assert.Equal(cell, Assert.IsType<StageViewSource>(
-            plan.TargetState.Views[reaction].Source).StageId);
-        Assert.Equal(1.8f, plan.TargetState.Views[reaction].Pose.Zoom);
-        Assert.Equal(reaction, plan.TargetState.Screen.Bindings[new LayoutSlotId("inset")]);
-        Assert.Equal(1, plan.TargetState.Revision);
-        Assert.Contains(plan.ResourceClaims, claim =>
-            claim.Kind == DirectionResourceKind.Backdrop &&
-            claim.SemanticId == "Background_025_001");
-        Assert.Contains(plan.ResourceClaims, claim =>
-            claim.Kind == DirectionResourceKind.ActorAppearance &&
-            claim.SemanticId == "Ema/Fearful1,ArmR1");
-    }
-
-    [Fact]
-    public void PlannerRejectsTwoWritesToTheSameStablePathWithLocations()
-    {
-        var planner = new DirectionPlanner();
-        var first = new DirectionSourceLocation("Trial", 12, 1);
-        var second = new DirectionSourceLocation("Trial", 13, 2);
-
-        var exception = Assert.Throws<DirectionConflictException>(() => planner.Plan(
-            DirectionState.CreateDefault(),
-            new IDirectionDirective[]
-            {
-                View(ViewId.Main, zoom: 1.5f, location: first),
-                View(ViewId.Main, zoom: 2, location: second),
-            }));
-
-        Assert.Equal("view/main/zoom", exception.StablePath);
-        Assert.Equal(first, exception.First);
-        Assert.Equal(second, exception.Second);
-        Assert.Contains("Trial:12#1", exception.Message);
-        Assert.Contains("Trial:13#2", exception.Message);
-    }
-
-    [Fact]
-    public void PlannerRejectsUnknownStageAndViewReferences()
-    {
-        var planner = new DirectionPlanner();
-
-        Assert.Throws<DirectionReferenceException>(() => planner.Plan(
-            DirectionState.CreateDefault(),
-            new[]
-            {
-                View(ViewId.Main, source: new StageViewSource(new StageId("missing"))),
-            }));
-
-        Assert.Throws<DirectionReferenceException>(() => planner.Plan(
-            DirectionState.CreateDefault(),
-            new IDirectionDirective[]
-            {
-                new ScreenPatch(
-                    LayoutId.Single,
-                    new Dictionary<LayoutSlotId, ViewId>
-                    {
-                        [LayoutSlotId.Main] = new ViewId("missing"),
-                    },
-                    DirectionTransitionSpec.Cut),
-            }));
-    }
-
-    [Fact]
-    public void CgChangesViewSourceWithoutMutatingStage()
-    {
-        var before = DirectionState.CreateDefault();
-        var planner = new DirectionPlanner();
-
-        var plan = planner.Plan(before, new[]
-        {
-            View(
-                ViewId.Main,
-                source: new CgViewSource(new ResourceKey("Still_490_001")),
-                zoom: 3),
-        });
-
-        Assert.Same(before.Stages[StageId.Main], plan.TargetState.Stages[StageId.Main]);
-        var source = Assert.IsType<CgViewSource>(plan.TargetState.Views[ViewId.Main].Source);
-        Assert.Equal("Still_490_001", source.Resource.ToString());
-        Assert.Equal(3, plan.TargetState.Views[ViewId.Main].Pose.Zoom);
-    }
-
     [Fact(Timeout = 5_000)]
     public async Task PrepareFailureDoesNotPublishStateOrCommitBackend()
     {
-        var backend = new FakeDirectionBackend { PrepareException = new ExpectedException() };
+        var backend = new FakeDirectionBackend { PrepareException = new ExpectedDirectionException() };
         var coordinator = CreateCoordinator(backend);
         var before = coordinator.State;
 
-        await Assert.ThrowsAsync<ExpectedException>(() => coordinator.ExecuteAsync(new[]
+        await Assert.ThrowsAsync<ExpectedDirectionException>(() => coordinator.ExecuteAsync(new[]
         {
             new BackdropPatch(
                 StageId.Main,
@@ -889,7 +463,7 @@ public sealed class DirectionRuntimeTests
                 View(ViewId.Main, zoom: 2),
             });
 
-        await Assert.ThrowsAsync<ExpectedException>(() =>
+        await Assert.ThrowsAsync<ExpectedDirectionException>(() =>
             backend.PrepareAsync(plan, CancellationToken.None));
 
         Assert.Equal(1, components.DisposeCount);
@@ -918,7 +492,7 @@ public sealed class DirectionRuntimeTests
 
         var prepared = await backend.PrepareAsync(plan, CancellationToken.None);
 
-        Assert.Throws<ExpectedException>(() => prepared.Commit(
+        Assert.Throws<ExpectedDirectionException>(() => prepared.Commit(
             new DirectionCommitToken(plan.Id, plan.TargetState.Revision)));
         // Rollback is attempted for the component whose Commit threw as well:
         // a backend may have published partial state before reporting failure.
@@ -955,37 +529,34 @@ public sealed class DirectionRuntimeTests
     [Fact(Timeout = 5_000)]
     public async Task FaultedSettlementIsNotSilentlyAcceptedByFinish()
     {
-        var backend = new FakeDirectionBackend { SettlementException = new ExpectedException() };
+        var backend = new FakeDirectionBackend { SettlementException = new ExpectedDirectionException() };
         var coordinator = CreateCoordinator(backend);
         var transaction = await coordinator.ExecuteAsync(new[]
         {
             View(ViewId.Main, zoom: 2),
         });
 
-        await Assert.ThrowsAsync<ExpectedException>(() => transaction.Settlement);
-        await Assert.ThrowsAsync<ExpectedException>(() => coordinator.FinishAsync(transaction));
+        await Assert.ThrowsAsync<ExpectedDirectionException>(() => transaction.Settlement);
+        await Assert.ThrowsAsync<ExpectedDirectionException>(() => coordinator.FinishAsync(transaction));
     }
 
     private static DirectionTransactionCoordinator CreateCoordinator(
         IDirectionPreparationBackend backend) =>
         new(new DirectionPlanner(), backend);
 
-    private static ActorPatch Actor(
-        ActorId actorId,
-        StageId stageId,
-        DirectionPoint? position = null,
-        string? appearance = null) => new(
-            stageId,
-            actorId,
-            position is { } point
-                ? DirectionValue<DirectionPoint>.From(point)
-                : default,
-            appearance is not null
-                ? DirectionValue<string?>.From(appearance)
-                : default,
-            default,
-            default,
-            DirectionTransitionSpec.Cut);
+    private static StateRecord CreateDirectionRecord(string stages, string views)
+    {
+        var json = "{\"stages\":" + stages +
+            ",\"views\":" + views +
+            ",\"layout\":\"single\",\"bindings\":{\"main\":\"main\"}," +
+            "\"effects\":{\"curtain\":{\"color\":{\"r\":0,\"g\":0,\"b\":0,\"a\":1},\"opacity\":0}}," +
+            "\"revision\":0}";
+        return new StateRecord(
+            BuiltInStateKeys.Direction,
+            StateScope.Game,
+            1,
+            JsonDocument.Parse(json).RootElement.Clone());
+    }
 
     private static ViewPatch View(
         ViewId viewId,
@@ -1007,243 +578,4 @@ public sealed class DirectionRuntimeTests
                 : default,
             transition ?? DirectionTransitionSpec.Cut,
             location);
-
-    private sealed class FakeDirectionBackend : IDirectionPreparationBackend
-    {
-        public Exception? PrepareException { get; init; }
-        public Exception? SettlementException { get; init; }
-        public bool AutoSettle { get; init; }
-        public int CommitCount { get; private set; }
-        public int FinishCount { get; private set; }
-        public DirectionState? VisibleState { get; private set; }
-        public DirectionCommitToken? LastToken { get; private set; }
-
-        public Task<IPreparedDirectionTransaction> PrepareAsync(
-            DirectionPlan plan,
-            CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (PrepareException is not null) throw PrepareException;
-            return Task.FromResult<IPreparedDirectionTransaction>(new Prepared(this, plan));
-        }
-
-        private sealed class Prepared : IPreparedDirectionTransaction
-        {
-            private readonly FakeDirectionBackend owner;
-            private readonly DirectionPlan plan;
-            private readonly TaskCompletionSource settlement = new(
-                TaskCreationOptions.RunContinuationsAsynchronously);
-            private bool committed;
-
-            public Prepared(FakeDirectionBackend owner, DirectionPlan plan)
-            {
-                this.owner = owner;
-                this.plan = plan;
-            }
-
-            public Task Settlement => settlement.Task;
-
-            public void Commit(DirectionCommitToken token)
-            {
-                if (committed) throw new InvalidOperationException("Already committed.");
-                committed = true;
-                owner.CommitCount++;
-                owner.LastToken = token;
-                owner.VisibleState = plan.TargetState;
-                if (owner.SettlementException is not null)
-                    settlement.TrySetException(owner.SettlementException);
-                else if (owner.AutoSettle) settlement.TrySetResult();
-            }
-
-            public ValueTask FinishAsync(CancellationToken cancellationToken)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                if (!committed) throw new InvalidOperationException("Not committed.");
-                owner.FinishCount++;
-                settlement.TrySetResult();
-                return ValueTask.CompletedTask;
-            }
-
-            public ValueTask DisposeAsync()
-            {
-                if (!committed) settlement.TrySetCanceled();
-                return ValueTask.CompletedTask;
-            }
-        }
-    }
-
-    private sealed class ComponentBackendHarness :
-        IDirectionStageBackend,
-        IDirectionViewBackend,
-        IDirectionScreenBackend,
-        IDirectionEffectBackend
-    {
-        public bool FailViewPreparation { get; init; }
-        public bool FailViewCommit { get; init; }
-        public bool ThrowOnDispose { get; init; }
-        public List<string> PrepareCalls { get; } = new();
-        public List<DirectionCommitToken> CommitTokens { get; } = new();
-        public int FinishCount { get; private set; }
-        public int DisposeCount { get; private set; }
-        public int RollbackCount { get; private set; }
-
-        public Task<IPreparedDirectionComponent> PrepareAsync(
-            DirectionPlan plan,
-            StageId stageId,
-            StageState? before,
-            StageState? target,
-            CancellationToken cancellationToken) =>
-            Prepare($"stage:{stageId}", fail: false, cancellationToken);
-
-        public Task<IPreparedDirectionComponent> PrepareAsync(
-            DirectionPlan plan,
-            ViewId viewId,
-            ViewState? before,
-            ViewState? target,
-            CancellationToken cancellationToken) =>
-            Prepare($"view:{viewId}", FailViewPreparation, cancellationToken);
-
-        public Task<IPreparedDirectionComponent> PrepareAsync(
-            DirectionPlan plan,
-            ScreenState before,
-            ScreenState target,
-            CancellationToken cancellationToken) =>
-            Prepare("screen", fail: false, cancellationToken);
-
-        public Task<IPreparedDirectionComponent> PrepareAsync(
-            DirectionPlan plan,
-            StableEffectState before,
-            StableEffectState target,
-            CancellationToken cancellationToken) =>
-            Prepare("effects", fail: false, cancellationToken);
-
-        private Task<IPreparedDirectionComponent> Prepare(
-            string name,
-            bool fail,
-            CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            PrepareCalls.Add(name);
-            if (fail) return Task.FromException<IPreparedDirectionComponent>(new ExpectedException());
-            return Task.FromResult<IPreparedDirectionComponent>(new Component(this, name));
-        }
-
-        private sealed class Component : IPreparedDirectionComponent
-        {
-            private readonly ComponentBackendHarness owner;
-            private readonly string name;
-            private readonly TaskCompletionSource settlement = new(
-                TaskCreationOptions.RunContinuationsAsynchronously);
-
-            public Component(ComponentBackendHarness owner, string name)
-            {
-                this.owner = owner;
-                this.name = name;
-            }
-
-            public Task Settlement => settlement.Task;
-
-            public void Commit(DirectionCommitToken token)
-            {
-                if (owner.FailViewCommit && name == "view:main")
-                    throw new ExpectedException();
-                owner.CommitTokens.Add(token);
-            }
-
-            public void Rollback(DirectionCommitToken token) => owner.RollbackCount++;
-
-            public ValueTask FinishAsync(CancellationToken cancellationToken)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                owner.FinishCount++;
-                settlement.TrySetResult();
-                return ValueTask.CompletedTask;
-            }
-
-            public ValueTask DisposeAsync()
-            {
-                owner.DisposeCount++;
-                if (owner.ThrowOnDispose)
-                    throw new ExpectedException();
-                return ValueTask.CompletedTask;
-            }
-        }
-    }
-
-    private sealed class ExpectedException : Exception;
-
-    private sealed class CatalogResourceResolver : IDirectionResourceKeyResolver
-    {
-        public ResourceKey ResolveBackdrop(string semanticId) => new(semanticId);
-        public ResourceKey ResolveCg(string semanticId) => new(semanticId);
-    }
-
-    private sealed class CatalogPositionResolver : IDirectionPositionResolver
-    {
-        public DirectionPoint Resolve(string value) => new(50, 50);
-    }
-
-    private sealed class VersionStoreResourceManager : IResourceManager
-    {
-        public int LoadedResourceCount => 0;
-
-        public TResource Load<TResource>(ResourceKey key, string? overridePath = null)
-            where TResource : class => throw new NotSupportedException();
-
-        public Task<TResource> LoadAsync<TResource>(
-            ResourceKey key,
-            string? overridePath = null,
-            CancellationToken cancellationToken = default)
-            where TResource : class => throw new NotSupportedException();
-
-        public bool Exists<TResource>(ResourceKey key, string? overridePath = null)
-            where TResource : class => false;
-
-        public IResourceLoader<TResource> CreateLoader<TResource>(string pathPrefix)
-            where TResource : class => new VersionStoreResourceLoader<TResource>(pathPrefix);
-
-        public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-    }
-
-    private sealed class VersionStoreResourceLoader<TResource> : IResourceLoader<TResource>
-        where TResource : class
-    {
-        public VersionStoreResourceLoader(string pathPrefix) => PathPrefix = pathPrefix;
-        public string PathPrefix { get; }
-        public ResourceKey GetKey(string localPath) => new($"{PathPrefix}/{localPath}");
-        public bool Exists(string localPath, string? overridePath = null) => false;
-        public TResource Load(string localPath, string? overridePath = null) => throw new NotSupportedException();
-        public Task<TResource> LoadAsync(
-            string localPath,
-            string? overridePath = null,
-            CancellationToken cancellationToken = default) =>
-            Task.FromException<TResource>(new NotSupportedException());
-    }
-
-    private sealed class RecordingCueExecutor : ITransientDirectionCueExecutor
-    {
-        public List<ITransientDirectionCue> Cues { get; } = new();
-        public DirectionCommitToken? Token { get; private set; }
-
-        public Task ExecuteAsync(
-            IEnumerable<ITransientDirectionCue> cues,
-            DirectionCompletionBarrier completion,
-            CancellationToken cancellationToken)
-        {
-            Cues.AddRange(cues);
-            return Task.CompletedTask;
-        }
-
-        public Task ExecuteCommittedAsync(
-            IEnumerable<ITransientDirectionCue> cues,
-            DirectionCommitToken token,
-            DirectionCompletionBarrier completion,
-            CancellationToken cancellationToken)
-        {
-            Token = token;
-            return ExecuteAsync(cues, completion, cancellationToken);
-        }
-    }
 }

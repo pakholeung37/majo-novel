@@ -8,6 +8,7 @@ using Majo.Runtime.Operations;
 using Majo.Runtime.Played;
 using Majo.Runtime.Script;
 using Majo.Runtime.State;
+using Majo.Runtime.UnitTests.Testing;
 using Xunit;
 
 namespace Majo.Runtime.UnitTests;
@@ -207,7 +208,7 @@ public sealed class AutoHistoryTests
     public async Task PlayedRegisterRoundTripsLocaleAndFingerprintPolicy()
     {
         var dialogue = new FakeDialoguePlayer();
-        var presentation = new FakePresentation();
+        var presentation = new FakeDialoguePresentation();
         var locale = "zh-Hans";
         var first = new PlayedRegister(
             dialogue,
@@ -267,7 +268,7 @@ public sealed class AutoHistoryTests
         await inputBackend.InitializeAsync(CancellationToken.None);
         await input.InitializeAsync(CancellationToken.None);
         var dialogue = new FakeDialoguePlayer();
-        var presentation = new FakePresentation();
+        var presentation = new FakeDialoguePresentation();
         var audio = new FakeAudioManager();
         audio.VoiceClips.Register("en/voice-2");
         var history = new HistoryManager(dialogue, presentation, audio, input, 2);
@@ -306,7 +307,7 @@ public sealed class AutoHistoryTests
         await input.InitializeAsync(CancellationToken.None);
         var history = new HistoryManager(
             new FakeDialoguePlayer(),
-            new FakePresentation(),
+            new FakeDialoguePresentation(),
             new FakeAudioManager(),
             input,
             10);
@@ -347,7 +348,7 @@ public sealed class AutoHistoryTests
             FakeAudioManager audio,
             FakeFrameClock clock,
             FakeHistoryManager history,
-            FakePresentation presentation,
+            FakeDialoguePresentation presentation,
             PlayedRegister played,
             RecordingOperationScheduler operations,
             PlaybackModeManager playback,
@@ -374,7 +375,7 @@ public sealed class AutoHistoryTests
         public FakeAudioManager Audio { get; }
         public FakeFrameClock Clock { get; }
         public FakeHistoryManager History { get; }
-        public FakePresentation Presentation { get; }
+        public FakeDialoguePresentation Presentation { get; }
         public PlayedRegister Played { get; }
         public RecordingOperationScheduler Operations { get; }
         public PlaybackModeManager Playback { get; }
@@ -391,7 +392,7 @@ public sealed class AutoHistoryTests
             var audio = new FakeAudioManager();
             var clock = new FakeFrameClock();
             var history = new FakeHistoryManager();
-            var presentation = new FakePresentation();
+            var presentation = new FakeDialoguePresentation();
             var played = new PlayedRegister(dialogue, presentation);
             var operations = new RecordingOperationScheduler();
             var playback = new PlaybackModeManager(
@@ -526,30 +527,6 @@ public sealed class AutoHistoryTests
         }
     }
 
-    private sealed class FakeScriptPlayback : IScriptPlayback
-    {
-        public event Action<ScriptPlaybackPhaseChanged>? PhaseChanged;
-        public ScriptPlaybackPhase Phase { get; private set; }
-        public ScriptPlaybackSpot? CurrentSpot => null;
-        public bool CanCaptureCheckpoint => false;
-        public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public ScriptCheckpoint CaptureCheckpoint() => throw new NotSupportedException();
-        public Task ValidateCheckpointAsync(
-            ScriptCheckpoint checkpoint,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task RestoreCheckpointAsync(
-            ScriptCheckpoint checkpoint,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
-
-        public void SetPhase(ScriptPlaybackPhase phase)
-        {
-            var previous = Phase;
-            Phase = phase;
-            PhaseChanged?.Invoke(new ScriptPlaybackPhaseChanged(previous, phase));
-        }
-    }
 
     private sealed class FakeHistoryManager : IHistoryManager
     {
@@ -578,60 +555,6 @@ public sealed class AutoHistoryTests
             CancellationToken cancellationToken = default) => Task.FromResult(false);
     }
 
-    private sealed class FakePresentation : IDialoguePresentation
-    {
-        public event Action? LineDisplayCompleted;
-        public event Action? LineDismissed { add { } remove { } }
-        public bool IsLineActive => false;
-        public bool IsLineDisplayComplete => false;
-        public bool IsPresentingOptions => false;
-        public void ReRenderLine(DialogueLine line) { }
-        public void ReRenderOptions(IReadOnlyList<DialogueOption> options) { }
-        public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public void CompleteLine() => LineDisplayCompleted?.Invoke();
-    }
-
-    private sealed class FakeDialoguePlayer : IDialoguePlayer
-    {
-        private readonly TaskCompletionSource nextLineRequested = new(
-            TaskCreationOptions.RunContinuationsAsynchronously);
-        public event Action<DialogueStateChanged>? StateChanged { add { } remove { } }
-        public event Action<DialogueStartRequest>? Started { add { } remove { } }
-        public event Action<DialogueLine>? LinePresented;
-        public event Action<IReadOnlyList<DialogueOption>>? OptionsPresented { add { } remove { } }
-        public event Action<DialogueCompletion>? Completed { add { } remove { } }
-        public event Action<DialogueCompletion>? Stopped { add { } remove { } }
-        public event Action<Exception>? Failed { add { } remove { } }
-        public DialogueSessionState State => DialogueSessionState.Running;
-        public string? CurrentProjectId => "test";
-        public string? CurrentNode => "Start";
-        public string? CurrentLineId => null;
-        public bool IsPresentingOptions => false;
-        public IReadOnlyList<DialogueOption> CurrentOptions => [];
-        public Task<DialogueCompletion> Completion => Task.FromResult(
-            new DialogueCompletion(DialogueCompletionKind.Completed, "test", "Start"));
-        public int NextLineRequests { get; private set; }
-        public int HurryUpRequests { get; private set; }
-        public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task StartAsync(
-            DialogueStartRequest? request = null,
-            CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task StopAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public void RequestHurryUp() => HurryUpRequests++;
-        public void RequestNextLine()
-        {
-            NextLineRequests++;
-            nextLineRequested.TrySetResult();
-        }
-
-        public Task WaitForNextLineRequestAsync() =>
-            NextLineRequests > 0 ? Task.CompletedTask : nextLineRequested.Task;
-        public void EmitLine(DialogueLine line) => LinePresented?.Invoke(line);
-    }
 
     private sealed class FakeAudioManager : IAudioManager
     {
