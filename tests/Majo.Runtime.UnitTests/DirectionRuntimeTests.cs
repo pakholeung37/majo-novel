@@ -15,6 +15,50 @@ namespace Majo.Runtime.UnitTests;
 
 public sealed class DirectionRuntimeTests
 {
+    [Fact]
+    public void DirectionCommandModuleRegistersOnlyTheFinalDslSurface()
+    {
+        var commands = new RuntimeCommandRegistry();
+        commands.RegisterModule(new DirectionCommandModule(
+            new DirectionBeatRuntime(CreateCoordinator(
+                new FakeDirectionBackend { AutoSettle = true })),
+            new CatalogResourceResolver(),
+            new CatalogPositionResolver(),
+            new DirectionScopeResolver(),
+            () => "Opening"));
+
+        var names = commands.BuildCatalog().Commands
+            .Select(command => command.Name)
+            .ToArray();
+
+        Assert.Equal(
+            [
+                "backdrop",
+                "character",
+                "leave",
+                "cg",
+                "camera pose",
+                "camera move",
+                "camera reset",
+                "camera shake",
+                "shot use",
+                "layout",
+                "import",
+                "mark",
+                "flash",
+                "curtain",
+                "beat begin",
+                "beat end",
+                "beat join",
+                "beat finish",
+                "beat abort",
+            ],
+            names);
+        Assert.DoesNotContain(names, name => name is
+            "back" or "char" or "hide" or "place" or "shot cg" or
+            "shot pose" or "shake" or "camera zoom" or "camera rotate");
+    }
+
     [Theory]
     [InlineData(DirectionEase.BackIn, DirectionEaseCurve.Back, DirectionEaseMode.In)]
     [InlineData(DirectionEase.BackOut, DirectionEaseCurve.Back, DirectionEaseMode.Out)]
@@ -42,7 +86,7 @@ public sealed class DirectionRuntimeTests
                 new YarnSourceFileSnapshot(
                     "main.yarn",
                     "main.yarn",
-                    "title: Opening\n---\n<<backdrop Background_001>>\n<<shot pose view:reaction stage:cell>>\n<<shot cg Still_001>>\n<<layout split main:main inset:reaction>>\n===\n",
+                    "title: Opening\n---\n<<backdrop Background_001>>\n<<camera pose view:reaction stage:cell>>\n<<cg Still_001>>\n<<layout split main:main inset:reaction>>\n===\n",
                     "hash"),
             },
             "fingerprint");
@@ -69,7 +113,7 @@ public sealed class DirectionRuntimeTests
             {
                 new YarnSourceFileSnapshot(
                     "main.yarn", "main.yarn",
-                    "title: Opening\n---\n<<mark focus at:25,75>>\n<<place Ema at:focus>>\n===\n",
+                    "title: Opening\n---\n<<mark focus at:25,75>>\n<<character Ema at:focus>>\n===\n",
                     "hash"),
             },
             "fingerprint");
@@ -81,6 +125,29 @@ public sealed class DirectionRuntimeTests
         Assert.Equal("focus", mark.Name);
         Assert.Equal(new DirectionPoint(25, 75), mark.Position);
         Assert.Contains("focus", module.Symbols.Marks);
+    }
+
+    [Fact]
+    public void NodeDirectionCompilerResolvesShotUseAsAReference()
+    {
+        var snapshot = new YarnSourceSnapshot(
+            "test", "test.yarnproject", 1, "en",
+            new[]
+            {
+                new YarnSourceFileSnapshot(
+                    "main.yarn", "main.yarn",
+                    "title: Opening\n---\n<<camera pose zoom:2 as:close>>\n<<shot use close>>\n<<shot use missing>>\n===\n",
+                    "hash"),
+            },
+            "fingerprint");
+
+        var module = Assert.Single(new NodeDirectionCompiler().Compile(snapshot));
+
+        Assert.Contains("close", module.Symbols.ShotAliases);
+        var diagnostic = Assert.Single(
+            module.Diagnostics,
+            value => value.Code == "DIR007");
+        Assert.Contains("missing", diagnostic.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -195,12 +262,12 @@ public sealed class DirectionRuntimeTests
     public void DirectionEaseAcceptsLegacyBackCurves()
     {
         var registry = new RuntimeCommandRegistry();
-        registry.Register<ShotPoseDirectionCommandArguments>((_, _) => Task.CompletedTask);
+        registry.Register<CameraPoseDirectionCommandArguments>((_, _) => Task.CompletedTask);
         var descriptor = Assert.Single(registry.Registrations).Descriptor;
         var arguments = new CommandBinder(new CommandBindingContext(0.35))
-            .Bind<ShotPoseDirectionCommandArguments>(
+            .Bind<CameraPoseDirectionCommandArguments>(
                 descriptor,
-                new[] { "center:44.438,71.950", "over:0.4", "ease:back-out" });
+                new[] { "center:44.438,71.950", "duration:0.4", "ease:back-out" });
 
         Assert.Equal("back-out", arguments.Ease);
     }
@@ -1104,6 +1171,17 @@ public sealed class DirectionRuntimeTests
     }
 
     private sealed class ExpectedException : Exception;
+
+    private sealed class CatalogResourceResolver : IDirectionResourceKeyResolver
+    {
+        public ResourceKey ResolveBackdrop(string semanticId) => new(semanticId);
+        public ResourceKey ResolveCg(string semanticId) => new(semanticId);
+    }
+
+    private sealed class CatalogPositionResolver : IDirectionPositionResolver
+    {
+        public DirectionPoint Resolve(string value) => new(50, 50);
+    }
 
     private sealed class VersionStoreResourceManager : IResourceManager
     {

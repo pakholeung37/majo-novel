@@ -8,7 +8,7 @@
 - Authoring 原则：inline-first、node-local、name-on-reuse、资源路径隐式解析
 - 兼容策略：不以旧 staging command 或旧存档 schema 兼容为设计约束
 - 实施进度（2026-09-01）：Phase A 的纯 Direction Core、Planner、Prepare/Commit 协调器、显式 Beat runtime 与 fake backend 单测已完成
-- Phase B 进度（2026-09-01）：独立 StageViewport → ViewViewport → Screen 的单 Stage/单 View Godot render chain、Backdrop/CG typed texture Prepare、Pose/Cut/Move/Dissolve、Curtain backend，以及 Actor `place/leave` 的完整隐藏树 Prepare、cut root swap、actor-level move/fade/finish 已落地；`backdrop/place/leave/shot pose/shot cg/beat` 已注册到 Yarn adapter，Bootstrap 已装配 Direction service graph，真实 Yarn headless vertical slice 已覆盖显式 Beat 原子提交、单命令事务、CG/Stage 往返和 Actor transition。Phase B 完成，下一阶段进入 Multi-Stage
+- Phase B 进度（2026-09-01）：独立 StageViewport → ViewViewport → Screen 的单 Stage/单 View Godot render chain、Backdrop/CG typed texture Prepare、Pose/Cut/Move/Dissolve、Curtain backend，以及 Actor `character/leave` 的完整隐藏树 Prepare、cut root swap、actor-level move/fade/finish 已落地；`backdrop/character/leave/camera pose/cg/beat` 已注册到 Yarn adapter，Bootstrap 已装配 Direction service graph，真实 Yarn headless vertical slice 已覆盖显式 Beat 原子提交、单命令事务、CG/Stage 往返和 Actor transition。Phase B 完成，下一阶段进入 Multi-Stage
 - Phase C 进度（2026-09-01）：Stage Registry、独立 Stage SubViewport/Backdrop/Actor tree、`ActorAddress`、可配置 Stage limit、`stage:` node-local qualification 和 compiler-facing explicit import resolver 已落地；main View 已能在多个 Stage 间顺序切换并保留 dormant Stage 状态。真实 Yarn headless 测试覆盖同 Actor ID 跨 Stage 隔离、切入/返回和失败 Prepare 清理。Phase C runtime vertical slice 完成，下一阶段进入 Multi-View/Layout
 - Phase D 进度（2026-09-01）：View Registry、每 View 独立观察 SubViewport、`layout single/split/pip` 与 Screen slot binding 已落地；同一 Stage 可被多个 View 观察，View 状态与 Stage Actor tree 不复制；真实 headless 测试覆盖 reaction View、split layout、Stage/CG 既有行为和 reset/shutdown。Phase D runtime vertical slice 完成，下一阶段进入 Node Compiler/Preload/Alias
 - Phase E 进度（2026-09-01）：`NodeDirectionCompiler` 已接入 Yarn runtime compiler，生成 node-local symbols、source maps、显式 `import stage/view ... from Node:symbol`、Shot alias/mark 收集、typed preload references 与 authoring diagnostics；编译诊断会阻止含 Direction authoring error 的 hot-reload candidate。
@@ -62,7 +62,7 @@ Runtime 负责：
 2. 一次性 Stage、站位、Shot 和 CG 直接写在 Yarn body。
 3. 只有复用时才建立 local mark、Shot alias 或 import。
 4. Yarn 不出现资源路径、texture bounds、ready fence、CommitToken、lease 或 backend 名称。
-5. staging command 不携带 `wait:false`、`group:` 和 `operation:`。
+5. staging command 只用 `duration:` 和 `wait:` 表达时间行为，不携带 `group:` 或 `operation:`。
 6. 多 View、Skip、Interrupt、Rollback 和 Save/Load 不要求剧本编写补偿逻辑。
 7. 复杂声明必须 colocate 在使用它的 Yarn Node 中。
 
@@ -90,7 +90,7 @@ Runtime 负责：
 - `zoom`
 - `rotation`
 - `via`
-- `over`
+- `duration`
 - `ease`
 
 第一版不包含 `focus`、`framing`、Actor bounds 驱动的自动构图、自动多人构图或 Follow Driver。这些能力不得成为第一版数据模型、事务模型或 backend 接口的前提。
@@ -101,8 +101,8 @@ Yarn 写语义 ID：
 
 ```yarn
 <<backdrop Background_001_001>>
-<<place Ema look:"Fearful1,ArmR1">>
-<<shot cg Still_490_001>>
+<<character Ema appearance:"Fearful1,ArmR1">>
+<<cg Still_490_001>>
 ```
 
 内部转换：
@@ -262,17 +262,17 @@ CG 是已经完成构图的视觉 Plate，通过 `CgViewSource` 进入 View。CG
 
 ```yarn
 <<backdrop Background_001_001 stage:cell>>
-<<place Ema stage:cell at:center>>
+<<character Ema stage:cell at:center>>
 ```
 
-`backdrop` 和 `place` 可以定义 Stage；`leave`、`shot` 和 `layout` 只能引用已定义或 import 的 Stage。同一显式 Beat 内的定义和引用由 Planner 排序，不依赖文本顺序。
+`backdrop` 和 `character` 可以定义 Stage；`leave`、`shot` 和 `layout` 只能引用已定义或 import 的 Stage。同一显式 Beat 内的定义和引用由 Planner 排序，不依赖文本顺序。
 
 ### 5.3 建立 View
 
 具名 View 由第一次带 `view:` 的 Shot 建立：
 
 ```yarn
-<<shot pose view:wide stage:cell center:50,50 zoom:1>>
+<<camera pose view:wide stage:cell center:50,50 zoom:1>>
 ```
 
 `layout` 只能引用已经由 Shot 建立或 import 的 View。未知 View 是 authoring error，不能因拼写错误静默建立。
@@ -337,48 +337,48 @@ Act01_Chapter01_Adv02/shots/cell-wide
 stage:<id>       目标 Stage，默认 main
 view:<id>        目标 View，默认 main
 via:<kind>       过渡方式
-over:<seconds>   过渡时长
+duration:<seconds>  过渡时长
 ease:<curve>     动画曲线
-join:<barrier>   commit 或 settle
+wait:<bool>      是否等待动画完成
 ```
 
 规则：
 
 - 资源使用 primary semantic ID，不写路径。
-- 时间统一使用 `over:`，不再混用 `duration:`。
+- 时间统一使用 `duration:`。
 - 动画曲线统一使用 `ease:`，不再混用 `curve:`。
-- 单指令事务默认 `join:commit`。
-- `join:settle` 等待动画完成。
+- 单指令事务默认 `wait:false`。
+- `wait:true` 等待动画完成。
 - 需要异步开始后稍后 join 的多指令演出必须使用具名 Beat。
 
 ### 7.2 `backdrop`
 
 ```yarn
 <<backdrop Background_001_001>>
-<<backdrop Background_025_001 stage:broadcast via:dissolve over:0.4>>
+<<backdrop Background_025_001 stage:broadcast via:dissolve duration:0.4>>
 ```
 
 产生 `BackdropPatch`，修改目标 Stage 的 Backdrop。
 
-### 7.3 `place`
+### 7.3 `character`
 
 ```yarn
-<<place Ema at:left look:"Fearful1,ArmR1">>
-<<place Hiro stage:cell at:70,0 look:Angry2>>
-<<place Ema at:right via:move over:0.3 ease:cubic-out>>
+<<character Ema at:left appearance:"Fearful1,ArmR1">>
+<<character Hiro stage:cell at:70,0 appearance:Angry2>>
+<<character Ema at:right via:move duration:0.3 ease:cubic-out>>
 ```
 
-产生稀疏 `ActorPatch`。Actor 不存在时建立 Stage-scoped instance；Actor 已存在时只修改明确字段；未提供字段保持稳定目标不变。`look:` 交给 Actor Manifest 和 LayerCompositionResolver。
+产生稀疏 `ActorPatch`。Actor 不存在时建立 Stage-scoped instance；Actor 已存在时只修改明确字段；未提供字段保持稳定目标不变。`appearance:` 交给 Actor Manifest 和 LayerCompositionResolver。
 
 第一版参数：
 
 ```text
 at:<mark|x,y>
-look:<appearance-id>
+appearance:<appearance-id>
 scale:<number>
 z:<integer>
 via:<cut|move|fade>
-over:<seconds>
+duration:<seconds>
 ease:<curve>
 ```
 
@@ -386,27 +386,27 @@ ease:<curve>
 
 ```yarn
 <<leave Hiro>>
-<<leave Guard stage:corridor toward:right over:0.4>>
+<<leave Guard stage:corridor toward:right duration:0.4>>
 ```
 
 `leave` 表示 Actor 真正离开 Stage。未被当前 View 拍到不是 `leave`；对未知 Actor 执行 `leave` 是 authoring error。
 
-### 7.5 `shot pose`
+### 7.5 `camera pose`
 
 ```yarn
-<<shot pose center:35,50 zoom:2 rotation:0 via:cut>>
-<<shot pose stage:cell center:50,50 zoom:1 via:dissolve over:0.4>>
-<<shot pose view:reaction stage:cell center:70,45 zoom:1.8>>
+<<camera pose center:35,50 zoom:2 rotation:0 via:cut>>
+<<camera pose stage:cell center:50,50 zoom:1 via:dissolve duration:0.4>>
+<<camera pose view:reaction stage:cell center:70,45 zoom:1.8>>
 ```
 
 修改目标 View。`stage:` 存在时将 Source 改为对应 Stage；省略 Source 时保持当前 Source；未提供的 Pose 字段保持不变。新建具名 View 时必须提供 Source，缺省 Pose 使用 `ViewPose.Default`。
 
-### 7.6 `shot cg`
+### 7.6 `cg`
 
 ```yarn
-<<shot cg Still_490_001 via:cut>>
-<<shot cg Still_490_001 center:37.384,74.816 zoom:3 rotation:10>>
-<<shot cg Evidence_001 view:evidence>>
+<<cg Still_490_001 via:cut>>
+<<cg Still_490_001 center:37.384,74.816 zoom:3 rotation:10>>
+<<cg Evidence_001 view:evidence>>
 ```
 
 将目标 View Source 改为 CG；Stage 不被修改；Pose 作用于 Plate backend。
@@ -414,7 +414,7 @@ ease:<curve>
 ### 7.7 `shot use`
 
 ```yarn
-<<shot pose stage:cell center:50,50 zoom:1 as:cell-wide>>
+<<camera pose stage:cell center:50,50 zoom:1 as:cell-wide>>
 ...
 <<shot use cell-wide>>
 <<shot use cell-wide view:preview via:dissolve>>
@@ -426,7 +426,7 @@ Alias 保存 ViewPatch recipe，不保存运行时 View 实例。
 
 ```yarn
 <<layout single main:main>>
-<<layout split main:cell inset:warden via:dissolve over:0.3>>
+<<layout split main:cell inset:warden via:dissolve duration:0.3>>
 <<layout pip main:main inset:evidence>>
 ```
 
@@ -435,19 +435,19 @@ Alias 保存 ViewPatch recipe，不保存运行时 View 实例。
 ### 7.9 `beat`
 
 ```yarn
-<<beat begin id:hiro-descends over:0.3 ease:cubic-out>>
-<<place Hiro at:left look:Surprised1>>
-<<place Ema at:right look:Fearful1>>
-<<shot pose center:55,50 zoom:1.2 via:move>>
-<<beat end join:settle>>
+<<beat begin id:hiro-descends duration:0.3 ease:cubic-out>>
+<<character Hiro at:left appearance:Surprised1>>
+<<character Ema at:right appearance:Fearful1>>
+<<camera pose center:55,50 zoom:1.2 via:move>>
+<<beat end wait:true>>
 ```
 
 异步开始：
 
 ```yarn
-<<beat begin id:slow-pan over:4>>
-<<shot pose center:75,50 via:move>>
-<<beat end join:commit>>
+<<beat begin id:slow-pan duration:4>>
+<<camera pose center:75,50 via:move>>
+<<beat end wait:false>>
 
 Narrator: 镜头继续移动。
 
@@ -464,14 +464,14 @@ beat finish
 beat abort
 ```
 
-Beat 不能嵌套或跨 Node。Choice、jump、stop、save 等控制流命令不能出现在开放 Beat 内。Beat 级 `over/ease` 作为命令缺省值，命令可以明确覆盖。
+Beat 不能嵌套或跨 Node。Choice、jump、stop、save 等控制流命令不能出现在开放 Beat 内。Beat 级 `duration/ease` 作为命令缺省值，命令可以明确覆盖。
 
 ### 7.10 `mark`
 
 ```yarn
 <<mark witness at:37,0>>
 <<mark presenter stage:broadcast at:50,40>>
-<<place Ema at:witness>>
+<<character Ema at:witness>>
 ```
 
 Mark 属于 Stage 坐标空间，默认 Node-local。
@@ -479,9 +479,9 @@ Mark 属于 Stage 坐标空间，默认 Node-local。
 ### 7.11 瞬态 Cue
 
 ```yarn
-<<shake strength:8 axis:x over:0.4>>
-<<flash intensity:0.8 over:0.15>>
-<<curtain open over:1.2>>
+<<camera shake strength:8 axis:x duration:0.4>>
+<<flash intensity:0.8 duration:0.15>>
+<<curtain open duration:1.2>>
 ```
 
 高频 Cue 直接使用动词，不要求 `cue` 包装层。Cue 在 Beat 中只在 Commit 成功后触发，不进入稳定 DirectionState。
@@ -549,7 +549,7 @@ DirectionPlan
 
 ### 8.4 合并与冲突
 
-同一 Beat 中，不同字段可以合并；同一路径被写入两次默认报错。`leave` 与同一 Actor 的 `place` 冲突；`shot cg` 与同一 View 的 Stage Source 写入冲突；`layout` 写入两次冲突。禁止使用“最后一条获胜”。
+同一 Beat 中，不同字段可以合并；同一路径被写入两次默认报错。`leave` 与同一 Actor 的 `character` 冲突；`cg` 与同一 View 的 Stage Source 写入冲突；`layout` 写入两次冲突。禁止使用“最后一条获胜”。
 
 稳定路径：
 
@@ -609,8 +609,8 @@ Commit 同时发布 Actor、Backdrop、View Source/TargetPose、Screen Layout/bi
 
 ### 9.4 Transition、Finish 与 Rollback
 
-- `join:commit` 在 Commit 完成后返回。
-- `join:settle` 等待所有 transition 到达 TargetState。
+- `wait:false` 在 Commit 完成后返回。
+- `wait:true` 等待所有 transition 到达 TargetState。
 - `finish` 立即提交已 Commit 事务的 TargetState。
 - `abort` 撤销尚未 Commit 的事务并释放 Prepare 资源。
 - `rollback` 对已 Commit 事务应用 BeforeState 恢复事务。
@@ -660,7 +660,7 @@ Core 不依赖 Godot Node、SubViewport、TextureRect 或具体裁剪实现。
 
 ## 11. Preload 与资源推导
 
-Node Direction Compiler 收集 `backdrop`、`place look:`、`shot cg`、`layout` 和 import 的 typed resource references，生成 `DirectionPreloadManifest`。
+Node Direction Compiler 收集 `backdrop`、`character appearance:`、`cg`、`layout` 和 import 的 typed resource references，生成 `DirectionPreloadManifest`。
 
 规则：
 
@@ -746,8 +746,8 @@ Runtime/Dialogue/Direction/
 |---|---|
 | `RuntimeCommandRegistry` / `RuntimeCommandDispatcher` | 保留通用注册与 Yarn 调用桥；Direction handler 只提交 Directive，不直接调用 Actor/Camera service |
 | `AwaitScopeCoordinator` / `await` handlers | 不再参与 staging；若 Audio 等非 staging command 仍需要，则缩减为其私有机制，不让它进入 Direction transaction |
-| `ActorCommandService` | staging 路径由 ActorPatch + Planner 取代；仅保留不属于 Direction 的职责，之后删除无调用部分 |
-| `CameraCommandModule` / `ICameraManager` / `CameraManager` | 由 `shot` adapter、ViewState、Planner 和 View backend 取代 |
+| `ActorCommandService` | 已删除；`character` / `backdrop` 统一经 ActorPatch / BackdropPatch + Planner 执行 |
+| 旧 `CameraCommandModule` | 已删除；`camera` 统一经 ViewPatch + Planner 执行，底层 `ICameraManager` 仅保留非 Direction 服务用途 |
 | `GodotStageBackend` | 拆出 Stage renderer、Stage Camera View renderer 和可复用 transition primitives；不得继续保存唯一 Camera/Output 状态 |
 | `BackgroundActor` / `BackgroundActorFactory` | 删除；以 Stage-owned Backdrop renderer 取代 |
 | `BuiltInStateContributors` 中 Camera/Actor staging payload | 迁移为单一 DirectionState schema 与 transactional load |
@@ -765,7 +765,7 @@ Runtime/Dialogue/Direction/
 
 ### Phase B：单 Stage、单 View、Backdrop/CG Vertical Slice
 
-交付默认 main Stage/View/Screen、独立 Backdrop、StageSource/CgSource、ViewPose、Stage/Plate backend，以及 `backdrop/place/leave/shot pose/shot cg/beat`。
+交付默认 main Stage/View/Screen、独立 Backdrop、StageSource/CgSource、ViewPose、Stage/Plate backend，以及 `backdrop/character/leave/camera pose/cg/beat`。
 
 验收：CG 切入不改变 Stage；返回时 Actor 状态保留；Backdrop/Actor/Shot 原子发布；Stage/CG dissolve 无黑帧；不读取 Actor bounds。
 
@@ -842,7 +842,7 @@ Runtime/Dialogue/Direction/
 3. 建立默认 main Stage/View/Screen。
 4. 将 Backdrop 从 Background Actor 中分离。
 5. 实现 StageSource 与 CgSource。
-6. 实现 `backdrop/place/shot pose/shot cg/beat` 最小 Yarn adapter。
+6. 实现 `backdrop/character/camera pose/cg/beat` 最小 Yarn adapter。
 7. 迁移 Adv02 开场 CG Pose、Camera move 和 Curtain open。
 8. 从 CG 切回默认 `main View -> main Stage`，验证 CG 演出未修改 Stage 稳定状态。
 9. 验证 Skip、Rollback、Reset 和 Save/Load 稳定终态。

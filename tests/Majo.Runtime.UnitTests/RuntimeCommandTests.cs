@@ -2,6 +2,7 @@ using System.Reflection;
 using Godot;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Core;
+using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Dialogue.Yarn;
 using Majo.Runtime.Diagnostics;
@@ -15,53 +16,37 @@ public sealed class RuntimeCommandTests
     [Fact]
     public void BinderConvertsTypedArgumentsAndIgnoresNamedArgumentOrder()
     {
-        var character = Bind<CharacterCommandArguments>(
+        var character = Bind<CharacterDirectionCommandArguments>(
             [
                 "maya",
-                "operation:maya-move",
-                "WAIT:true",
-                "position:RIGHT",
+                "wait:true",
+                "at:right",
                 "duration:0.5",
                 "appearance:happy",
-                "group:setup",
-                "scenePosition:45,0",
                 "scale:0.75",
-                "zIndex:12",
+                "z:12",
             ]);
 
         Assert.Equal("maya", character.Actor);
         Assert.Equal("happy", character.Appearance);
-        Assert.Equal(CharacterPositionPreset.Right, character.Position);
+        Assert.Equal("right", character.At);
         Assert.Equal(0.5, character.Duration);
         Assert.True(character.Wait);
-        Assert.Equal("setup", character.Group);
-        Assert.Equal("maya-move", character.Operation);
-        Assert.Equal(new Vector2(45, 0), character.ScenePosition);
         Assert.Equal(0.75, character.Scale);
-        Assert.Equal(12, character.ZIndex);
+        Assert.Equal(12, character.Z);
     }
 
     [Fact]
     public void BinderUsesConfiguredAndLanguageDefaults()
     {
-        var background = Bind<BackCommandArguments>(
-            ["backdrop", "appearance:courtroom"]);
-        var character = Bind<CharacterCommandArguments>(
-            ["maya", "appearance:happy", "position:center"]);
-        var hiddenWithDefaultDuration = Bind<HideCommandArguments>(["maya"]);
-        var hiddenImmediately = Bind<HideCommandArguments>(
-            ["maya", "operation:hide-maya", "duration:0"]);
+        var backdrop = Bind<BackdropDirectionCommandArguments>(["courtroom"]);
+        var character = Bind<CharacterDirectionCommandArguments>(
+            ["maya", "appearance:happy", "at:center"]);
 
-        Assert.Equal(0.35, background.Duration);
-        Assert.False(background.Wait);
-        Assert.Null(background.Group);
-        Assert.Null(background.Operation);
-        Assert.Equal(BackgroundSlotIds.Main, background.Slot);
-        Assert.Equal(0.1, character.Duration);
-        Assert.Equal(0.1, hiddenWithDefaultDuration.Duration);
-        Assert.Equal(0, hiddenImmediately.Duration);
-        Assert.Null(hiddenImmediately.Group);
-        Assert.Equal("hide-maya", hiddenImmediately.Operation);
+        Assert.Equal("courtroom", backdrop.Resource);
+        Assert.False(backdrop.Wait);
+        Assert.Equal("center", character.At);
+        Assert.False(character.Wait);
 
         var constant = Bind<ConstantDefaultCommandArguments>([]);
         Assert.True(constant.Enabled);
@@ -83,16 +68,15 @@ public sealed class RuntimeCommandTests
     }
 
     [Theory]
-    [InlineData("appearance", "char hero position:left")]
-    [InlineData("position", "char hero appearance:happy position:diagonal")]
-    [InlineData("integer", "char hero appearance:happy position:center zIndex:1.5")]
-    [InlineData("duration", "back backdrop appearance:dark duration:NaN")]
-    [InlineData("at least 0", "back backdrop appearance:dark duration:-0.1")]
-    [InlineData("wait", "hide hero duration:0.2 wait:sometimes")]
+    [InlineData("at least one", "character hero")]
+    [InlineData("integer", "character hero appearance:happy z:1.5")]
+    [InlineData("duration", "backdrop dark duration:NaN")]
+    [InlineData("at least 0", "backdrop dark duration:-0.1")]
     [InlineData("mutually exclusive", "await group:setup operation:move")]
-    [InlineData("unexpected positional", "back backdrop dark")]
-    [InlineData("duplicated", "hide hero wait:true WAIT:false")]
-    [InlineData("unknown parameter", "back backdrop appearance:dark time:1")]
+    [InlineData("duplicated", "character hero appearance:happy wait:false WAIT:true")]
+    [InlineData("unknown parameter", "backdrop dark time:1")]
+    [InlineData("unknown parameter", "backdrop dark over:0.3")]
+    [InlineData("unknown parameter", "character hero appearance:happy until:settle")]
     [InlineData("unexpected positional", "endAwait now")]
     [InlineData("either group or operation", "cancel")]
     public void BinderRejectsInvalidArgumentsWithUsage(
@@ -105,14 +89,11 @@ public sealed class RuntimeCommandTests
         {
             switch (pieces[0])
             {
-                case "char":
-                    Bind<CharacterCommandArguments>(pieces[1..]);
+                case "character":
+                    Bind<CharacterDirectionCommandArguments>(pieces[1..]);
                     break;
-                case "back":
-                    Bind<BackCommandArguments>(pieces[1..]);
-                    break;
-                case "hide":
-                    Bind<HideCommandArguments>(pieces[1..]);
+                case "backdrop":
+                    Bind<BackdropDirectionCommandArguments>(pieces[1..]);
                     break;
                 case "await":
                     Bind<AwaitCommandArguments>(pieces[1..]);
@@ -130,183 +111,15 @@ public sealed class RuntimeCommandTests
         Assert.Contains("Usage:", exception.Message, StringComparison.Ordinal);
     }
 
-    [Fact(Timeout = 5_000)]
-    public async Task NonWaitingCharacterCommandReturnsWhileOperationRemainsActive()
-    {
-        var actor = new FakeCharacterActor("hero", "idle");
-        var service = CreateService(actor);
-
-        var task = service.CharacterAsync(new CharacterCommand(
-            "hero", "happy", CharacterPositionPreset.Left, 1, false, "setup", "move"));
-
-        Assert.True(task.IsCompletedSuccessfully);
-        Assert.False(actor.LastOperation.Completion.IsCompleted);
-        Assert.Equal("happy", actor.Appearance);
-        Assert.True(actor.Visible);
-        Assert.Equal(CharacterPositionPreset.Left, actor.PositionPreset);
-        Assert.Equal("setup", actor.LastOperation.GroupId);
-        Assert.Equal("move", actor.LastOperation.Id);
-        actor.LastOperation.Complete();
-        await actor.LastOperation.Completion;
-    }
-
-    [Fact(Timeout = 5_000)]
-    public async Task CharacterCommandAppliesScenePositionRootScaleAndZIndex()
-    {
-        var actor = new FakeCharacterActor("hero", "idle");
-        var service = CreateService(actor);
-
-        var task = service.CharacterAsync(new CharacterCommand(
-            "hero",
-            "happy",
-            CharacterPositionPreset.Center,
-            1,
-            false,
-            null,
-            "scene-move",
-            new Vector2(45, 0),
-            0.75f,
-            20));
-
-        Assert.True(task.IsCompletedSuccessfully);
-        Assert.Equal(new Vector2(45, 0), actor.Position);
-        Assert.Equal(new Vector2(0.75f, 0.75f), actor.Scale);
-        Assert.Equal(20, actor.ZIndex);
-        actor.LastOperation.Complete();
-        await actor.LastOperation.Completion;
-    }
-
-    [Fact(Timeout = 5_000)]
-    public async Task CharacterCommandActivatesDormantActorWithPreparedAppearance()
-    {
-        var actor = new FakeCharacterActor("hero", "idle");
-        actor.SetVisible(false);
-        var service = CreateService(actor);
-
-        await service.CharacterAsync(new CharacterCommand(
-            "hero", "happy", CharacterPositionPreset.Center, 1, false, null, null));
-
-        Assert.Equal("happy", actor.Appearance);
-        Assert.True(actor.Visible);
-        Assert.Equal(0, actor.Opacity);
-        actor.LastOperation.Complete();
-    }
-
-    [Fact(Timeout = 5_000)]
-    public async Task WaitingHideCommandDoesNotFinishBeforeActorOperation()
-    {
-        var actor = new FakeCharacterActor("hero", "idle");
-        var service = CreateService(actor);
-
-        var task = service.HideAsync(new HideCommand(
-            "hero", 1, true, null, "hide-hero"));
-
-        Assert.False(task.IsCompleted);
-        actor.LastOperation.Complete();
-        await task;
-        Assert.False(actor.Visible);
-    }
-
-    [Fact(Timeout = 5_000)]
-    public async Task BackCommandCreatesBackgroundAndUsesFadeOperation()
-    {
-        var manager = new FakeActorManager();
-        var service = new ActorCommandService(manager);
-
-        await service.BackAsync(new BackCommand(
-            "backdrop", "courtroom", 0.5, false, "setup", "background"));
-
-        var background = manager.Get<FakeBackgroundActor>("backdrop");
-        Assert.Equal("courtroom", background.Appearance);
-        Assert.True(background.Visible);
-        Assert.Equal(0, background.StartOpacity);
-        Assert.Equal("setup", background.LastOperation.GroupId);
-        Assert.Equal("background", background.LastOperation.Id);
-        background.LastOperation.Complete();
-    }
-
-    [Fact(Timeout = 5_000)]
-    public async Task BackCommandInfersBackgroundForPreviouslyUnknownActorId()
-    {
-        var manager = new FakeActorManager();
-        var service = new ActorCommandService(manager);
-
-        await service.BackAsync(new BackCommand(
-            "chapter-one-stage", "courtroom", 0, false, null, null));
-
-        var background = manager.Get<FakeBackgroundActor>("chapter-one-stage");
-        Assert.Equal("courtroom", background.Appearance);
-    }
-
-    [Fact(Timeout = 5_000)]
-    public async Task BackCommandCrossFadesAndHidesThePreviousBackgroundInMainSlot()
-    {
-        var previous = new FakeBackgroundActor("stills", "dream");
-        var manager = new FakeActorManager(previous);
-        var service = new ActorCommandService(manager);
-
-        var transition = service.BackAsync(new BackCommand(
-            "scenes", "courtroom", 0.5, true, null, null));
-
-        var current = manager.Get<FakeBackgroundActor>("scenes");
-        Assert.Equal(BackgroundSlotIds.Main, current.Slot);
-        Assert.False(previous.Visible);
-        Assert.True(current.Visible);
-        Assert.False(transition.IsCompleted);
-
-        current.LastOperation.Complete();
-        Assert.False(transition.IsCompleted);
-        previous.LastOperation.Complete();
-        await transition;
-    }
-
-    [Fact]
-    public async Task BackCommandOnlyReplacesBackgroundsInTheSameSlot()
-    {
-        var main = new FakeBackgroundActor("main-stage", "courtroom");
-        var overlay = new FakeBackgroundActor("fog", "thin");
-        var manager = new FakeActorManager(main, overlay);
-        var service = new ActorCommandService(manager);
-
-        await service.BackAsync(new BackCommand(
-            "fog", "thick", 0.5, false, null, null, "overlay"));
-        await service.BackAsync(new BackCommand(
-            "next-stage", "hall", 0.5, false, null, null));
-
-        Assert.False(main.Visible);
-        Assert.True(overlay.Visible);
-        Assert.Equal("overlay", overlay.Slot);
-        Assert.True(manager.Get<FakeBackgroundActor>("next-stage").Visible);
-    }
-
-    [Fact(Timeout = 5_000)]
-    public async Task HideMissingActorIsNoOp()
-    {
-        var manager = new FakeActorManager();
-        var logs = new RecordingLogSink();
-        var logger = new StructuredRuntimeLogger(logs, RuntimeLogLevel.Debug);
-        var service = new ActorCommandService(manager, logger);
-
-        await service.HideAsync(new HideCommand(
-            "not-active", 0.2, true, null, null));
-
-        Assert.Empty(manager.Actors);
-        var warning = Assert.Single(
-            logs.Events,
-            log => log.EventId == "actor.missing_noop");
-        Assert.Equal(RuntimeLogLevel.Warning, warning.Level);
-        Assert.Equal("no-op", warning.Properties["fallback"]);
-    }
-
     [Fact]
     public void CatalogIsTheSingleSourceOfBuiltInCommandNames()
     {
         var commands = new RuntimeCommandRegistry();
-        BuiltInRuntimeCommands.Register(commands, new RecordingCommandService());
+        BuiltInRuntimeCommands.Register(commands);
         var catalog = commands.BuildCatalog();
 
         Assert.Equal(
-            ["back", "char", "hide", "await", "endAwait", "cancel", "save", "autoSave"],
+            ["await", "endAwait", "cancel", "save", "autoSave"],
             catalog.Commands.Select(command => command.Name));
         Assert.Equal(
             catalog.Commands.Count,
@@ -318,7 +131,7 @@ public sealed class RuntimeCommandTests
     public void RegistryRejectsReservedDuplicateAndLateRegistrations()
     {
         var commands = new RuntimeCommandRegistry();
-        BuiltInRuntimeCommands.Register(commands, new RecordingCommandService());
+        BuiltInRuntimeCommands.Register(commands);
 
         var duplicate = Assert.Throws<RuntimeCommandException>(() =>
             commands.Register<DuplicateEndAwaitArguments>((_, _) => Task.CompletedTask));
@@ -353,7 +166,7 @@ public sealed class RuntimeCommandTests
     public void FailedCommandModuleRegistrationRollsBackPartialModule()
     {
         var commands = new RuntimeCommandRegistry();
-        BuiltInRuntimeCommands.Register(commands, new RecordingCommandService());
+        BuiltInRuntimeCommands.Register(commands);
 
         Assert.Throws<RuntimeCommandException>(() =>
             commands.RegisterModule(new FailingCommandModule()));
@@ -361,7 +174,7 @@ public sealed class RuntimeCommandTests
         Assert.DoesNotContain(
             commands.Registrations,
             registration => registration.Name == "probe");
-        Assert.Equal(8, commands.Registrations.Count);
+        Assert.Equal(5, commands.Registrations.Count);
     }
 
     [Fact]
@@ -398,8 +211,7 @@ public sealed class RuntimeCommandTests
     public async Task AdapterRegistersOnlyMajoNamesAndUnregistersInReverseOrder()
     {
         var registry = new FakeCommandRegistry();
-        var service = new RecordingCommandService();
-        var adapter = CreateAdapter(registry, service, out var catalog);
+        var adapter = CreateAdapter(registry, out var catalog);
 
         await adapter.InitializeAsync(CancellationToken.None);
 
@@ -414,12 +226,6 @@ public sealed class RuntimeCommandTests
             var parameter = Assert.Single(handler.Method.GetParameters());
             Assert.NotNull(parameter.GetCustomAttribute<ParamArrayAttribute>());
         });
-        var characterHandler = Assert.IsType<Func<string[], Task>>(registry.Handlers["char"]);
-        await characterHandler(
-            ["hero", "group:setup", "position:center", "appearance:happy", "duration:0.2"]);
-        Assert.Equal("hero", service.Character!.ActorId);
-        Assert.Equal(CharacterPositionPreset.Center, service.Character.Position);
-
         await adapter.ShutdownAsync(CancellationToken.None);
         Assert.Empty(registry.Handlers);
         Assert.Equal(
@@ -435,7 +241,6 @@ public sealed class RuntimeCommandTests
         HierarchicalProbeArguments? received = null;
         var adapter = CreateAdapter(
             registry,
-            new RecordingCommandService(),
             out var catalog,
             configure: commands => commands.Register<HierarchicalProbeArguments>(
                 (arguments, _) =>
@@ -463,19 +268,20 @@ public sealed class RuntimeCommandTests
         var logger = new StructuredRuntimeLogger(logs, RuntimeLogLevel.Debug);
         var adapter = CreateAdapter(
             registry,
-            new RecordingCommandService(),
             out var catalog,
-            logger: logger);
+            logger: logger,
+            configure: commands => commands.Register<CharacterDirectionCommandArguments>(
+                (_, _) => Task.CompletedTask));
         await adapter.InitializeAsync(CancellationToken.None);
-        var handler = Assert.IsType<Func<string[], Task>>(registry.Handlers["char"]);
+        var handler = Assert.IsType<Func<string[], Task>>(registry.Handlers["character"]);
 
         var exception = await Assert.ThrowsAsync<RuntimeCommandException>(() =>
-            handler(["hero", "appearance:happy", "position:somewhere"]));
+            handler(["hero"]));
 
         Assert.Same(exception, adapter.LastFailure);
-        Assert.Contains("position", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("at least one", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(
-            catalog.Get("char").Descriptor.Usage,
+            catalog.Get("character").Descriptor.Usage,
             exception.Message,
             StringComparison.Ordinal);
         Assert.Equal(1, registry.AbortCount);
@@ -495,14 +301,15 @@ public sealed class RuntimeCommandTests
         var logger = new StructuredRuntimeLogger(logs, RuntimeLogLevel.Debug);
         var adapter = CreateAdapter(
             registry,
-            new RecordingCommandService(),
             out _,
             logger: logger,
+            configure: commands => commands.Register<CharacterDirectionCommandArguments>(
+                (_, _) => Task.CompletedTask),
             abortOnRecoverableFailure: false);
         await adapter.InitializeAsync(CancellationToken.None);
-        var handler = Assert.IsType<Func<string[], Task>>(registry.Handlers["char"]);
+        var handler = Assert.IsType<Func<string[], Task>>(registry.Handlers["character"]);
 
-        await handler(["hero", "appearance:happy", "position:somewhere"]);
+        await handler(["hero"]);
 
         Assert.NotNull(adapter.LastFailure);
         Assert.True(adapter.LastFailure!.IsRecoverable);
@@ -523,7 +330,6 @@ public sealed class RuntimeCommandTests
         var logger = new StructuredRuntimeLogger(logs, RuntimeLogLevel.Debug);
         var adapter = CreateAdapter(
             registry,
-            new RecordingCommandService(),
             out _,
             logger: logger,
             abortOnRecoverableFailure: false);
@@ -550,7 +356,6 @@ public sealed class RuntimeCommandTests
         var logger = new StructuredRuntimeLogger(logs, RuntimeLogLevel.Debug);
         var adapter = CreateAdapter(
             registry,
-            new RecordingCommandService(),
             out _,
             logger: logger,
             configure: commands => commands.Register<ProbeCommandArguments>(
@@ -580,7 +385,6 @@ public sealed class RuntimeCommandTests
         var scheduler = new FakeOperationScheduler();
         var adapter = CreateAdapter(
             registry,
-            new ActorCommandService(actors),
             out _,
             actors,
             scheduler);
@@ -598,107 +402,8 @@ public sealed class RuntimeCommandTests
         await adapter.ShutdownAsync(CancellationToken.None);
     }
 
-    [Fact(Timeout = 5_000)]
-    public async Task AwaitBlockWaitsForAllTrackedOperations()
-    {
-        var registry = new FakeCommandRegistry();
-        var hero = new FakeCharacterActor("hero", "idle");
-        var actors = new FakeActorManager(hero);
-        var scheduler = new FakeOperationScheduler();
-        var adapter = CreateAdapter(
-            registry,
-            new ActorCommandService(actors),
-            out _,
-            actors,
-            scheduler);
-        await adapter.InitializeAsync(CancellationToken.None);
 
-        await Handler("await")([]);
-        await Handler("back")(
-            ["backdrop", "appearance:courtroom", "duration:1"]);
-        await Handler("char")(
-            ["hero", "appearance:happy", "position:left", "duration:1"]);
-        var backdrop = actors.Get<FakeBackgroundActor>("backdrop");
 
-        var endTask = Handler("endAwait")([]);
-        Assert.False(endTask.IsCompleted);
-        backdrop.LastOperation.Complete();
-        await Task.Yield();
-        Assert.False(endTask.IsCompleted);
-        hero.LastOperation.Complete();
-        await endTask;
-
-        await adapter.ShutdownAsync(CancellationToken.None);
-
-        Func<string[], Task> Handler(string name) =>
-            Assert.IsType<Func<string[], Task>>(registry.Handlers[name]);
-    }
-
-    [Fact(Timeout = 5_000)]
-    public async Task AwaitBlockCompleteFinishesTrackedOperationsAtBoundary()
-    {
-        var registry = new FakeCommandRegistry();
-        var hero = new FakeCharacterActor("hero", "idle");
-        var actors = new FakeActorManager(hero);
-        var scheduler = new FakeOperationScheduler();
-        var adapter = CreateAdapter(
-            registry,
-            new ActorCommandService(actors),
-            out _,
-            actors,
-            scheduler);
-        await adapter.InitializeAsync(CancellationToken.None);
-
-        await Handler("await")(["complete:true"]);
-        await Handler("char")(
-            ["hero", "appearance:happy", "position:right", "duration:10"]);
-        await Handler("endAwait")([]);
-
-        Assert.Equal(OperationState.Completed, hero.LastOperation.State);
-        await adapter.ShutdownAsync(CancellationToken.None);
-
-        Func<string[], Task> Handler(string name) =>
-            Assert.IsType<Func<string[], Task>>(registry.Handlers[name]);
-    }
-
-    [Fact(Timeout = 5_000)]
-    public async Task NestedAwaitBlocksTrackInnerOperationsInBothScopes()
-    {
-        var registry = new FakeCommandRegistry();
-        var hero = new FakeCharacterActor("hero", "idle");
-        var actors = new FakeActorManager(hero);
-        var scheduler = new FakeOperationScheduler();
-        var adapter = CreateAdapter(
-            registry,
-            new ActorCommandService(actors),
-            out _,
-            actors,
-            scheduler);
-        await adapter.InitializeAsync(CancellationToken.None);
-
-        await Handler("await")([]);
-        await Handler("char")(
-            ["hero", "appearance:happy", "position:left", "duration:1"]);
-        await Handler("await")([]);
-        await Handler("back")(
-            ["backdrop", "appearance:courtroom", "duration:1"]);
-        var backdrop = actors.Get<FakeBackgroundActor>("backdrop");
-
-        var innerEnd = Handler("endAwait")([]);
-        Assert.False(innerEnd.IsCompleted);
-        backdrop.LastOperation.Complete();
-        await innerEnd;
-
-        var outerEnd = Handler("endAwait")([]);
-        Assert.False(outerEnd.IsCompleted);
-        hero.LastOperation.Complete();
-        await outerEnd;
-
-        await adapter.ShutdownAsync(CancellationToken.None);
-
-        Func<string[], Task> Handler(string name) =>
-            Assert.IsType<Func<string[], Task>>(registry.Handlers[name]);
-    }
 
     [Fact(Timeout = 5_000)]
     public async Task UnmatchedEndAwaitAbortsDialogueWithClearFailure()
@@ -706,7 +411,6 @@ public sealed class RuntimeCommandTests
         var registry = new FakeCommandRegistry();
         var adapter = CreateAdapter(
             registry,
-            new RecordingCommandService(),
             out _);
         await adapter.InitializeAsync(CancellationToken.None);
 
@@ -719,16 +423,6 @@ public sealed class RuntimeCommandTests
         await adapter.ShutdownAsync(CancellationToken.None);
     }
 
-    [Fact]
-    public void ActorCommandServiceDependsOnlyOnActorManagerInterface()
-    {
-        var constructor = Assert.Single(typeof(ActorCommandService).GetConstructors());
-        var parameters = constructor.GetParameters();
-
-        Assert.Equal([typeof(IActorManager), typeof(IRuntimeLogger)],
-            parameters.Select(parameter => parameter.ParameterType));
-        Assert.All(parameters, parameter => Assert.True(parameter.ParameterType.IsInterface));
-    }
 
     [Fact(Timeout = 5_000)]
     public async Task ExtensionCommandUsesPublicRegistryAndRuntimeContext()
@@ -740,7 +434,6 @@ public sealed class RuntimeCommandTests
         ProbeCommandArguments? received = null;
         var adapter = CreateAdapter(
             yarnRegistry,
-            new ActorCommandService(actorManager),
             out _,
             actorManager,
             scheduler,
@@ -769,62 +462,7 @@ public sealed class RuntimeCommandTests
         await adapter.ShutdownAsync(CancellationToken.None);
     }
 
-    [Fact(Timeout = 5_000)]
-    public async Task DialogueCancellationCancelsTrackedNonWaitingOperation()
-    {
-        var yarnRegistry = new FakeCommandRegistry();
-        var actor = new FakeCharacterActor("hero", "idle");
-        var actorManager = new FakeActorManager(actor);
-        var scheduler = new FakeOperationScheduler();
-        var adapter = CreateAdapter(
-            yarnRegistry,
-            new ActorCommandService(actorManager),
-            out _,
-            actorManager,
-            scheduler);
-        await adapter.InitializeAsync(CancellationToken.None);
-        var handler = Assert.IsType<Func<string[], Task>>(yarnRegistry.Handlers["char"]);
 
-        await handler(
-            ["hero", "appearance:happy", "position:center", "duration:10"]);
-        Assert.Equal(OperationState.Running, actor.LastOperation.State);
-        adapter.CancelDialogue();
-        await adapter.DrainDialogueOperationsAsync(CancellationToken.None);
-
-        Assert.Equal(OperationState.Cancelled, actor.LastOperation.State);
-        Assert.Null(adapter.LastFailure);
-        await adapter.ShutdownAsync(CancellationToken.None);
-    }
-
-    [Fact(Timeout = 5_000)]
-    public async Task DialogueCancellationClearsOpenAwaitBlocks()
-    {
-        var yarnRegistry = new FakeCommandRegistry();
-        var actor = new FakeCharacterActor("hero", "idle");
-        var actorManager = new FakeActorManager(actor);
-        var scheduler = new FakeOperationScheduler();
-        var adapter = CreateAdapter(
-            yarnRegistry,
-            new ActorCommandService(actorManager),
-            out _,
-            actorManager,
-            scheduler);
-        await adapter.InitializeAsync(CancellationToken.None);
-        var begin = Assert.IsType<Func<string[], Task>>(yarnRegistry.Handlers["await"]);
-        var character = Assert.IsType<Func<string[], Task>>(yarnRegistry.Handlers["char"]);
-        var end = Assert.IsType<Func<string[], Task>>(yarnRegistry.Handlers["endAwait"]);
-
-        await begin([]);
-        await character(
-            ["hero", "appearance:happy", "position:center", "duration:10"]);
-        yarnRegistry.CancelDialogue();
-        yarnRegistry.BeginDialogue();
-
-        var exception = await Assert.ThrowsAsync<RuntimeCommandException>(() => end([]));
-        Assert.Contains("matching await block", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(OperationState.Cancelled, actor.LastOperation.State);
-        await adapter.ShutdownAsync(CancellationToken.None);
-    }
 
     [Fact(Timeout = 5_000)]
     public async Task CommandsDispatchedAfterDialogueCancellationAreIgnored()
@@ -832,7 +470,6 @@ public sealed class RuntimeCommandTests
         var yarnRegistry = new FakeCommandRegistry();
         var adapter = CreateAdapter(
             yarnRegistry,
-            new RecordingCommandService(),
             out _);
         await adapter.InitializeAsync(CancellationToken.None);
         var end = Assert.IsType<Func<string[], Task>>(yarnRegistry.Handlers["endAwait"]);
@@ -843,25 +480,6 @@ public sealed class RuntimeCommandTests
         Assert.Null(adapter.LastFailure);
         Assert.Equal(0, yarnRegistry.AbortCount);
         await adapter.ShutdownAsync(CancellationToken.None);
-    }
-
-    [Fact(Timeout = 5_000)]
-    public async Task FailedInitialModificationRollsBackNewActor()
-    {
-        var manager = new FakeActorManager();
-        var service = new ActorCommandService(manager);
-
-        await Assert.ThrowsAsync<RuntimeCommandException>(() =>
-            service.CharacterAsync(new CharacterCommand(
-                "broken", "invalid", CharacterPositionPreset.Center, 0, false, null, null)));
-
-        Assert.False(manager.TryGet("broken", out _));
-    }
-
-    private static ActorCommandService CreateService(FakeCharacterActor actor)
-    {
-        var manager = new FakeActorManager(actor);
-        return new ActorCommandService(manager);
     }
 
     private static TArguments Bind<TArguments>(
@@ -878,7 +496,6 @@ public sealed class RuntimeCommandTests
 
     private static YarnCommandAdapter CreateAdapter(
         FakeCommandRegistry yarnRegistry,
-        IActorCommandService actorCommands,
         out RuntimeCommandCatalog catalog,
         IActorManager? actors = null,
         IOperationScheduler? operations = null,
@@ -887,7 +504,7 @@ public sealed class RuntimeCommandTests
         bool abortOnRecoverableFailure = true)
     {
         var commands = new RuntimeCommandRegistry();
-        BuiltInRuntimeCommands.Register(commands, actorCommands);
+        BuiltInRuntimeCommands.Register(commands);
         configure?.Invoke(commands);
         catalog = commands.BuildCatalog();
         var dispatcher = new RuntimeCommandDispatcher(
@@ -1004,22 +621,6 @@ public sealed class RuntimeCommandTests
             UnhandledCommand?.Invoke(commandText);
 
         public void Dispose() => dialogueCancellation.Dispose();
-    }
-
-    private sealed class RecordingCommandService : IActorCommandService
-    {
-        public CharacterCommand? Character { get; private set; }
-
-        public Task BackAsync(BackCommand command) => Task.CompletedTask;
-
-        public Task CharacterAsync(CharacterCommand command)
-        {
-            Character = command;
-            return Task.CompletedTask;
-        }
-
-        public Task HideAsync(HideCommand command) => Task.CompletedTask;
-
     }
 
     private sealed class FakeActorManager : IActorManager

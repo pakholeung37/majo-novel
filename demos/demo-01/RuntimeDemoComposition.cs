@@ -7,7 +7,6 @@ using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime;
 using Majo.Runtime.Actors;
-using Majo.Runtime.Actors.Godot;
 using Majo.Runtime.Audio;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
@@ -157,61 +156,6 @@ public sealed class DemoSessionService : IRuntimeService
 	}
 }
 
-public sealed class DemoPortraitActorFactory : IActorFactory
-{
-	public const string Id = "demo-portrait";
-
-	private readonly Node2D host;
-	private readonly Func<IOperationScheduler> scheduler;
-	private readonly Func<IActorTextureLoader> textureLoader;
-	private readonly CharacterPositionMap positions;
-
-	public DemoPortraitActorFactory(
-		Node2D host,
-		Func<IOperationScheduler> scheduler,
-		Func<IActorTextureLoader> textureLoader,
-		CharacterPositionMap positions)
-	{
-		this.host = host ?? throw new ArgumentNullException(nameof(host));
-		this.scheduler = scheduler ?? throw new ArgumentNullException(nameof(scheduler));
-		this.textureLoader = textureLoader ?? throw new ArgumentNullException(nameof(textureLoader));
-		this.positions = positions ?? throw new ArgumentNullException(nameof(positions));
-	}
-
-	string IActorFactory.FactoryId => Id;
-
-	public int CreateCount { get; private set; }
-
-	public void ValidateDefinition(ActorDefinition definition) =>
-		_ = definition.GetFactoryData<TextureActorDefinitionData>();
-
-	public IActor Create(ActorDefinition definition)
-	{
-		var view = new Sprite2D
-		{
-			Name = $"{definition.Id}-DemoPortrait",
-			Centered = true,
-		};
-		host.AddChild(view);
-		try
-		{
-			var actor = new CharacterActor(
-				definition,
-				view,
-				scheduler(),
-				textureLoader(),
-				positions);
-			CreateCount++;
-			return actor;
-		}
-		catch
-		{
-			view.QueueFree();
-			throw;
-		}
-	}
-}
-
 public static class RuntimeDemoComposition
 {
 	public const string DialogueProjectId = "main";
@@ -236,38 +180,24 @@ public static class RuntimeDemoComposition
 		configuration.Settings!.ShowDefaultUi = true;
 		configuration.Settings.SkipDelaySeconds = 0.08;
 		configuration.GlobalState!.Enabled = true;
+		configuration.Actors!.ReferenceResolution = new Vector2I(1920, 1080);
 		configuration.Actors!.LeftPosition = new Vector2(560, 610);
 		configuration.Actors.CenterPosition = new Vector2(960, 610);
 		configuration.Actors.RightPosition = new Vector2(1360, 610);
 		configuration.Actors.Actors.Add(CreateActorDefinition(
-			"backdrop",
-			ActorFactoryIds.Background,
-			"courtroom",
-			CharacterPositionPreset.Center));
-		configuration.Actors.Actors.Add(CreateActorDefinition(
 			"hero",
-			DemoPortraitActorFactory.Id,
+			ActorFactoryIds.Character,
 			"calm",
 			CharacterPositionPreset.Right,
 			configuration.Resources!.CharactersPath));
 		return configuration;
 	}
 
-	public static DemoPortraitActorFactory ConfigureRuntime(
+	public static void ConfigureRuntime(
 		MajoRuntimeBootstrap runtime,
-		Node2D portraitHost,
-		ActorConfiguration actorConfiguration,
 		bool useFakeAudio = false)
 	{
 		ArgumentNullException.ThrowIfNull(runtime);
-		ArgumentNullException.ThrowIfNull(portraitHost);
-		ArgumentNullException.ThrowIfNull(actorConfiguration);
-
-		var factory = new DemoPortraitActorFactory(
-			portraitHost,
-			() => runtime.Host!.Services.Get<IOperationScheduler>(),
-			() => runtime.Host!.Services.Get<IActorTextureLoader>(),
-			new CharacterPositionMap(actorConfiguration));
 		runtime.ConfigureServices += services =>
 		{
 			services.AddSingleton<DemoSessionService>(
@@ -302,9 +232,7 @@ public static class RuntimeDemoComposition
 				typeof(IOperationScheduler),
 				typeof(IMissingResourceReporter));
 		};
-		runtime.ConfigureActorFactories += actors => actors.RegisterFactory(factory);
 		runtime.ConfigureCommands += RegisterCommands;
-		return factory;
 	}
 
 	public static void RegisterCommands(RuntimeCommandRegistry commands)

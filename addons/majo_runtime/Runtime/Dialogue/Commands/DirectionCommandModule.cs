@@ -39,15 +39,17 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
 		ArgumentNullException.ThrowIfNull(commands);
 		commands
 			.Register<BackdropDirectionCommandArguments>(BackdropAsync)
-			.Register<PlaceDirectionCommandArguments>(PlaceAsync)
+			.Register<CharacterDirectionCommandArguments>(CharacterAsync)
 			.Register<LeaveDirectionCommandArguments>(LeaveAsync)
-			.Register<ShotPoseDirectionCommandArguments>(ShotPoseAsync)
-			.Register<ShotCgDirectionCommandArguments>(ShotCgAsync)
+			.Register<CgDirectionCommandArguments>(CgAsync)
+			.Register<CameraPoseDirectionCommandArguments>(CameraPoseAsync)
+			.Register<CameraMoveDirectionCommandArguments>(CameraMoveAsync)
+			.Register<CameraResetDirectionCommandArguments>(CameraResetAsync)
+			.Register<CameraShakeDirectionCommandArguments>(CameraShakeAsync)
 			.Register<ShotUseDirectionCommandArguments>(ShotUseAsync)
 			.Register<LayoutDirectionCommandArguments>(LayoutAsync)
 			.Register<DirectionImportCommandArguments>(ImportAsync)
 			.Register<DirectionMarkCommandArguments>(MarkAsync)
-			.Register<ShakeDirectionCommandArguments>(ShakeAsync)
 			.Register<FlashDirectionCommandArguments>(FlashAsync)
 			.Register<CurtainDirectionCommandArguments>(CurtainAsync)
 			.Register<BeatBeginDirectionCommandArguments>(BeatBeginAsync)
@@ -71,13 +73,13 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
 					DirectionTransitionKind.Cut,
 					DirectionTransitionKind.Fade,
 					DirectionTransitionKind.Dissolve)),
-			a.Join,
+			Barrier(a.Wait),
 			c.CancellationToken);
 	});
 
-	private Task PlaceAsync(
-		PlaceDirectionCommandArguments a,
-		RuntimeCommandContext c) => ExecuteAsync("place", async () =>
+	private Task CharacterAsync(
+		CharacterDirectionCommandArguments a,
+		RuntimeCommandContext c) => ExecuteAsync("character", async () =>
 	{
 		await beats.SubmitAsync(
 			new ActorPatch(
@@ -86,9 +88,9 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
 				a.At is null
 					? default
 					: DirectionValue<DirectionPoint>.From(ResolvePosition(a.At)),
-				a.Look is null
+				a.Appearance is null
 					? default
-					: DirectionValue<string?>.From(a.Look),
+					: DirectionValue<string?>.From(a.Appearance),
 				a.Scale is null
 					? default
 					: DirectionValue<float>.From((float)a.Scale.Value),
@@ -99,7 +101,7 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
 					DirectionTransitionKind.Cut,
 					DirectionTransitionKind.Move,
 					DirectionTransitionKind.Fade)),
-			a.Join,
+			Barrier(a.Wait),
 			c.CancellationToken);
 	});
 
@@ -116,36 +118,57 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
 					c,
 					DirectionTransitionKind.Cut,
 					DirectionTransitionKind.Fade)),
-			a.Join,
+			Barrier(a.Wait),
 			c.CancellationToken);
 	});
 
-	private Task ShotPoseAsync(
-		ShotPoseDirectionCommandArguments a,
-		RuntimeCommandContext c) => ExecuteAsync("shot pose", async () =>
+	private Task CameraPoseAsync(
+		CameraPoseDirectionCommandArguments a,
+		RuntimeCommandContext c) => ExecuteAsync("camera pose", async () =>
 	{
-		var patch = new ViewPatch(
-				View(a.View),
-				a.Stage is null
-					? default
-					: DirectionValue<ViewSource>.From(
-						new StageViewSource(Stage(a.Stage))),
-				a.Center is null
-					? default
-					: DirectionValue<DirectionPoint>.From(
-						new DirectionPoint(a.Center.Value.X, a.Center.Value.Y)),
-				a.Zoom is null
-					? default
-					: DirectionValue<float>.From((float)a.Zoom.Value),
-				a.Rotation is null
-					? default
-					: DirectionValue<float>.From((float)a.Rotation.Value),
-				ShotPoseTransition(a, c));
+		var patch = CameraPatch(a, CameraPoseTransition(a, a.Via, c));
 		if (a.As is not null)
 			scopes.DefineShot(RequireNode(), a.As, patch);
+		await beats.SubmitAsync(patch, Barrier(a.Wait), c.CancellationToken);
+	});
+
+	private Task CameraMoveAsync(
+		CameraMoveDirectionCommandArguments a,
+		RuntimeCommandContext c) => ExecuteAsync("camera move", async () =>
+	{
+		var transition = MotionTransition(a, c, DirectionTransitionKind.Move);
 		await beats.SubmitAsync(
-			patch,
-			a.Join,
+			CameraPatch(a, transition),
+			Barrier(a.Wait),
+			c.CancellationToken);
+	});
+
+	private Task CameraResetAsync(
+		CameraResetDirectionCommandArguments a,
+		RuntimeCommandContext c) => ExecuteAsync("camera reset", async () =>
+	{
+		var patch = new ViewPatch(
+			View(a.View),
+			DirectionValue<ViewSource>.From(new StageViewSource(Stage(a.Stage))),
+			DirectionValue<DirectionPoint>.From(new DirectionPoint(50, 50)),
+			DirectionValue<float>.From(1),
+			DirectionValue<float>.From(0),
+			CameraPoseTransition(a, a.Via, c));
+		await beats.SubmitAsync(patch, Barrier(a.Wait), c.CancellationToken);
+	});
+
+	private Task CameraShakeAsync(
+		CameraShakeDirectionCommandArguments a,
+		RuntimeCommandContext c) => ExecuteAsync("camera shake", async () =>
+	{
+		await beats.SubmitAsync(
+			new ShakeCue(
+				(float)a.Strength,
+				a.Axis,
+				a.Frequency,
+				a.Duration,
+				new DirectionSourceLocation(RequireNode(), 0, 0)),
+			Barrier(a.Wait),
 			c.CancellationToken);
 	});
 
@@ -157,12 +180,12 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
 		if (a.View is not null)
 			patch = patch with { ViewId = View(a.View) };
 		patch = patch with { Transition = Transition(a, c, Enum.GetValues<DirectionTransitionKind>()) };
-		await beats.SubmitAsync(patch, a.Join, c.CancellationToken);
+		await beats.SubmitAsync(patch, Barrier(a.Wait), c.CancellationToken);
 	});
 
-	private Task ShotCgAsync(
-		ShotCgDirectionCommandArguments a,
-		RuntimeCommandContext c) => ExecuteAsync("shot cg", async () =>
+	private Task CgAsync(
+		CgDirectionCommandArguments a,
+		RuntimeCommandContext c) => ExecuteAsync("cg", async () =>
 	{
 		await beats.SubmitAsync(
 			new ViewPatch(
@@ -180,7 +203,7 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
 					? default
 					: DirectionValue<float>.From((float)a.Rotation.Value),
 				Transition(a, c, Enum.GetValues<DirectionTransitionKind>())),
-			a.Join,
+			Barrier(a.Wait),
 			c.CancellationToken);
 	});
 
@@ -196,7 +219,7 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
 				new LayoutId(a.Layout),
 				bindings,
 				Transition(a, c, DirectionTransitionKind.Cut, DirectionTransitionKind.Dissolve)),
-			a.Join,
+			Barrier(a.Wait),
 			c.CancellationToken);
 	});
 
@@ -227,79 +250,31 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
 		return Task.CompletedTask;
 	});
 
-	private Task ShakeAsync(ShakeDirectionCommandArguments a, RuntimeCommandContext c) =>
-		ExecuteAsync("shake", async () =>
-		{
-			await beats.SubmitAsync(
-				new ShakeCue(
-					(float)a.Strength,
-					a.Axis,
-					a.Frequency,
-					a.Over,
-					new DirectionSourceLocation(RequireNode(), 0, 0)),
-				a.Join,
-				c.CancellationToken);
-		});
-
 	private Task FlashAsync(FlashDirectionCommandArguments a, RuntimeCommandContext c) =>
 		ExecuteAsync("flash", async () =>
 		{
-			if (IsLegacyStageInvocation(a) && !beats.HasOpenBeat)
-			{
-				var operation = StageCommandExecution.Require<IScreenEffectManager>(c).Flash(
-					new Color((float)a.R, (float)a.G, (float)a.B, 1),
-					(float)a.Intensity,
-					StageCommandExecution.Operation(
-						a.EffectiveOver,
-						a.Operation,
-						a.Group));
-				await StageCommandExecution.TrackAndWaitAsync(operation, a.Wait, c);
-				return;
-			}
 			await beats.SubmitAsync(
 				new FlashCue(
 					new DirectionColor((float)a.R, (float)a.G, (float)a.B),
 					(float)a.Intensity,
-					a.EffectiveOver,
+					a.Duration,
 					new DirectionSourceLocation(RequireNode(), 0, 0)),
-				a.EffectiveJoin,
+				Barrier(a.Wait),
 				c.CancellationToken);
 		});
 
 	private Task CurtainAsync(CurtainDirectionCommandArguments a, RuntimeCommandContext c) =>
 		ExecuteAsync("curtain", async () =>
 		{
-			if (IsLegacyStageInvocation(a) && !beats.HasOpenBeat)
-			{
-				var operation = StageCommandExecution.Require<IStageCurtainManager>(c).SetCurtain(
-					new Color((float)a.R, (float)a.G, (float)a.B, 1),
-					a.Position == StageCurtainPosition.Closed ? 1 : 0,
-					StageCommandExecution.Operation(
-						a.EffectiveOver,
-						a.Operation,
-						a.Group));
-				await StageCommandExecution.TrackAndWaitAsync(operation, a.Wait, c);
-				return;
-			}
 			await beats.SubmitAsync(
 				new CurtainCue(
 					a.Position == StageCurtainPosition.Open,
 					new DirectionColor((float)a.R, (float)a.G, (float)a.B),
-					a.EffectiveOver,
+					a.Duration,
 					new DirectionSourceLocation(RequireNode(), 0, 0)),
-				a.EffectiveJoin,
+				Barrier(a.Wait),
 				c.CancellationToken);
 		});
-
-	private static bool IsLegacyStageInvocation(
-		FlashDirectionCommandArguments arguments) =>
-		arguments.Duration.HasValue || arguments.Group is not null ||
-		arguments.Operation is not null || arguments.Wait;
-
-	private static bool IsLegacyStageInvocation(
-		CurtainDirectionCommandArguments arguments) =>
-		arguments.Duration.HasValue || arguments.Group is not null ||
-		arguments.Operation is not null || arguments.Wait;
 
 	private DirectionPoint ResolvePosition(string value)
 	{
@@ -320,7 +295,7 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
 		beats.Begin(
 			beatId,
 			node,
-			new DirectionBeatDefaults(a.Over, ParseEase(a.Ease)));
+			new DirectionBeatDefaults(a.Duration, ParseEase(a.Ease)));
 		return Task.CompletedTask;
 	});
 
@@ -328,7 +303,7 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
 		BeatEndDirectionCommandArguments a,
 		RuntimeCommandContext c) => ExecuteAsync("beat end", async () =>
 	{
-		await beats.EndAsync(a.Join, c.CancellationToken);
+		await beats.EndAsync(Barrier(a.Wait), c.CancellationToken);
 	});
 
 	private Task BeatJoinAsync(
@@ -361,7 +336,7 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
 				$"Transition '{kind.ToString().ToLowerInvariant()}' is not supported by this command.");
 		}
 		var defaults = beats.OpenBeatDefaults;
-		var duration = a.Over ?? (kind == DirectionTransitionKind.Cut
+		var duration = a.Duration ?? (kind == DirectionTransitionKind.Cut
 			? 0
 			: defaults?.DurationSeconds ??
 				context.Binding?.DefaultAnimationDurationSeconds ?? 0);
@@ -369,14 +344,27 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
 		return new DirectionTransitionSpec(kind, duration, ease).Validate();
 	}
 
-	private DirectionTransitionSpec ShotPoseTransition(
-		ShotPoseDirectionCommandArguments a,
+	private DirectionTransitionSpec MotionTransition(
+		DirectionTimingCommandArguments a,
+		RuntimeCommandContext context,
+		DirectionTransitionKind kind)
+	{
+		var defaults = beats.OpenBeatDefaults;
+		var duration = a.Duration ?? defaults?.DurationSeconds ??
+			context.Binding?.DefaultAnimationDurationSeconds ?? 0;
+		var ease = ParseEase(a.Ease) ?? defaults?.Ease ?? DirectionEase.Linear;
+		return new DirectionTransitionSpec(kind, duration, ease).Validate();
+	}
+
+	private DirectionTransitionSpec CameraPoseTransition(
+		DirectionTimingCommandArguments a,
+		DirectionTransitionKind? via,
 		RuntimeCommandContext context)
 	{
 		// A pose command with an explicit duration but no `via` is the common
 		// camera-pan shorthand. The cut remains the default when no duration
-		// is supplied, while `via:cut` still requires over:0.
-		var kind = a.Via ?? (a.Over.HasValue
+		// is supplied, while `via:cut` still requires duration:0.
+		var kind = via ?? (a.Duration.HasValue
 			? DirectionTransitionKind.Move
 			: DirectionTransitionKind.Cut);
 		var allowed = Enum.GetValues<DirectionTransitionKind>();
@@ -384,12 +372,35 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
 			throw new DirectionException(
 				$"Transition '{kind.ToString().ToLowerInvariant()}' is not supported by this command.");
 		var defaults = beats.OpenBeatDefaults;
-		var duration = a.Over ?? (kind == DirectionTransitionKind.Cut
+		var duration = a.Duration ?? (kind == DirectionTransitionKind.Cut
 			? 0
 			: defaults?.DurationSeconds ??
 				context.Binding?.DefaultAnimationDurationSeconds ?? 0);
 		var ease = ParseEase(a.Ease) ?? defaults?.Ease ?? DirectionEase.Linear;
 		return new DirectionTransitionSpec(kind, duration, ease).Validate();
+	}
+
+	private ViewPatch CameraPatch(
+		CameraPatchDirectionCommandArguments a,
+		DirectionTransitionSpec transition)
+	{
+		var stage = (a as CameraPoseDirectionCommandArguments)?.Stage;
+		return new ViewPatch(
+		View(a.View),
+		stage is null
+			? default
+			: DirectionValue<ViewSource>.From(new StageViewSource(Stage(stage))),
+		a.Center is null
+			? default
+			: DirectionValue<DirectionPoint>.From(
+				new DirectionPoint(a.Center.Value.X, a.Center.Value.Y)),
+		a.Zoom is null
+			? default
+			: DirectionValue<float>.From((float)a.Zoom.Value),
+		a.Rotation is null
+			? default
+			: DirectionValue<float>.From((float)a.Rotation.Value),
+		transition);
 	}
 
 	private static DirectionEase? ParseEase(string? value)
@@ -411,6 +422,10 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
 				$"Unsupported Direction ease '{value}'."),
 		};
 	}
+
+	private static DirectionCompletionBarrier Barrier(bool wait) => wait
+		? DirectionCompletionBarrier.Settle
+		: DirectionCompletionBarrier.Commit;
 
 	private StageId Stage(string value) => scopes.ResolveStage(RequireNode(), value);
 
@@ -464,67 +479,52 @@ public sealed class DirectionMarkCommandArguments
 	[CommandParameter("at", 1, Required = true)] public string At { get; set; } = string.Empty;
 }
 
-[RuntimeCommand("shake", Category = "Direction", Usage = "shake [strength:<number>] [axis:<all|x|y|diagonal>] [frequency:<number>] [over:<seconds>] [join:<commit|settle>]")]
-public sealed class ShakeDirectionCommandArguments
+[RuntimeCommand("camera", "shake", Category = "Direction", Usage = "camera shake [strength:<number>] [axis:<all|x|y|diagonal>] [frequency:<number>] [duration:<seconds>] [wait:<bool>]")]
+public sealed class CameraShakeDirectionCommandArguments
 {
 	[CommandParameter("strength", 0, DefaultValue = "8", Minimum = 0)] public double Strength { get; set; }
 	[CommandParameter("axis", 1, DefaultValue = "all")] public CameraShakeAxis Axis { get; set; }
 	[CommandParameter("frequency", 2, DefaultValue = "20", Minimum = 0.001)] public int Frequency { get; set; }
-	[CommandParameter("over", 3, DefaultValue = "0.4", Minimum = 0)] public double Over { get; set; }
-	[CommandParameter("join", 4, DefaultValue = "commit")] public DirectionCompletionBarrier Join { get; set; }
+	[CommandParameter("duration", 3, DefaultValue = "0.4", Minimum = 0)] public double Duration { get; set; }
+	[CommandParameter("wait", 4, DefaultValue = "false")] public bool Wait { get; set; }
 }
 
-[RuntimeCommand("flash", Category = "Direction", Usage = "flash [intensity:<0..1>] [over:<seconds>] [r:<0..1>] [g:<0..1>] [b:<0..1>] [join:<commit|settle>]")]
+[RuntimeCommand("flash", Category = "Direction", Usage = "flash [intensity:<0..1>] [duration:<seconds>] [r:<0..1>] [g:<0..1>] [b:<0..1>] [wait:<bool>]")]
 public sealed class FlashDirectionCommandArguments
 {
 	[CommandParameter("intensity", 0, DefaultValue = "1", Minimum = 0)] public double Intensity { get; set; }
-	[CommandParameter("over", 1, DefaultValue = "0.15", Minimum = 0)] public double Over { get; set; }
+	[CommandParameter("duration", 1, DefaultValue = "0.15", Minimum = 0)] public double Duration { get; set; }
 	[CommandParameter("r", 2, DefaultValue = "1", Minimum = 0)] public double R { get; set; }
 	[CommandParameter("g", 3, DefaultValue = "1", Minimum = 0)] public double G { get; set; }
 	[CommandParameter("b", 4, DefaultValue = "1", Minimum = 0)] public double B { get; set; }
-	[CommandParameter("join", 5, DefaultValue = "commit")] public DirectionCompletionBarrier Join { get; set; }
-	// Legacy Stage command aliases. Bootstrap routes flash through this
-	// handler, so old scripts using duration:/wait: remain executable while
-	// Direction remains the single transient-cue entry point.
-	[CommandParameter("duration", 6, Minimum = 0)] public double? Duration { get; set; }
-	[CommandParameter("wait", 7)] public bool Wait { get; set; }
-	[CommandParameter("group", 8)] public string? Group { get; set; }
-	[CommandParameter("operation", 9)] public string? Operation { get; set; }
-
-	public double EffectiveOver => Duration ?? Over;
-	public DirectionCompletionBarrier EffectiveJoin =>
-		Wait ? DirectionCompletionBarrier.Settle : Join;
+	[CommandParameter("wait", 5, DefaultValue = "false")] public bool Wait { get; set; }
 }
 
-[RuntimeCommand("curtain", Category = "Direction", Usage = "curtain <open|closed> [over:<seconds>] [r:<0..1>] [g:<0..1>] [b:<0..1>] [join:<commit|settle>]")]
+[RuntimeCommand("curtain", Category = "Direction", Usage = "curtain <open|closed> [duration:<seconds>] [r:<0..1>] [g:<0..1>] [b:<0..1>] [wait:<bool>]")]
 public sealed class CurtainDirectionCommandArguments
 {
 	[CommandParameter("state", 0, Primary = true, Required = true)] public StageCurtainPosition Position { get; set; }
-	[CommandParameter("over", 1, DefaultValue = "0.4", Minimum = 0)] public double Over { get; set; }
+	[CommandParameter("duration", 1, DefaultValue = "0.4", Minimum = 0)] public double Duration { get; set; }
 	[CommandParameter("r", 2, DefaultValue = "0", Minimum = 0)] public double R { get; set; }
 	[CommandParameter("g", 3, DefaultValue = "0", Minimum = 0)] public double G { get; set; }
 	[CommandParameter("b", 4, DefaultValue = "0", Minimum = 0)] public double B { get; set; }
-	[CommandParameter("join", 5, DefaultValue = "commit")] public DirectionCompletionBarrier Join { get; set; }
-	[CommandParameter("duration", 6, Minimum = 0)] public double? Duration { get; set; }
-	[CommandParameter("wait", 7)] public bool Wait { get; set; }
-	[CommandParameter("group", 8)] public string? Group { get; set; }
-	[CommandParameter("operation", 9)] public string? Operation { get; set; }
-
-	public double EffectiveOver => Duration ?? Over;
-	public DirectionCompletionBarrier EffectiveJoin =>
-		Wait ? DirectionCompletionBarrier.Settle : Join;
+	[CommandParameter("wait", 5, DefaultValue = "false")] public bool Wait { get; set; }
 }
 
-public abstract class DirectionTransitionCommandArguments
+public abstract class DirectionTimingCommandArguments
+{
+	[CommandParameter("duration", 21, Minimum = 0)] public double? Duration { get; set; }
+	[CommandParameter("ease", 22)] public string? Ease { get; set; }
+	[CommandParameter("wait", 23, DefaultValue = "false")]
+	public bool Wait { get; set; }
+}
+
+public abstract class DirectionTransitionCommandArguments : DirectionTimingCommandArguments
 {
 	[CommandParameter("via", 20)] public DirectionTransitionKind? Via { get; set; }
-	[CommandParameter("over", 21, Minimum = 0)] public double? Over { get; set; }
-	[CommandParameter("ease", 22)] public string? Ease { get; set; }
-	[CommandParameter("join", 23, DefaultValue = "commit")]
-	public DirectionCompletionBarrier Join { get; set; }
 }
 
-[RuntimeCommand("backdrop", Category = "Direction", Usage = "backdrop <resource> [stage:<id>] [via:<kind>] [over:<seconds>] [ease:<curve>] [join:<commit|settle>]")]
+[RuntimeCommand("backdrop", Category = "Direction", Usage = "backdrop <resource> [stage:<id>] [via:<kind>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]
 public sealed class BackdropDirectionCommandArguments : DirectionTransitionCommandArguments
 {
 	[CommandParameter("resource", 0, Primary = true, Required = true)]
@@ -533,21 +533,21 @@ public sealed class BackdropDirectionCommandArguments : DirectionTransitionComma
 	public string Stage { get; set; } = "main";
 }
 
-[RuntimeCommand("place", Category = "Direction", Usage = "place <actor> [stage:<id>] [at:<mark|x,y>] [look:<appearance>] [scale:<number>] [z:<integer>] [via:<kind>] [over:<seconds>] [ease:<curve>] [join:<commit|settle>]")]
-[CommandParameterSet(CommandParameterSetRule.AtLeastOne, "at", "look", "scale", "z")]
-public sealed class PlaceDirectionCommandArguments : DirectionTransitionCommandArguments
+[RuntimeCommand("character", Category = "Direction", Usage = "character <id> [stage:<id>] [appearance:<id>] [at:<mark|x,y>] [scale:<number>] [z:<integer>] [via:<kind>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]
+[CommandParameterSet(CommandParameterSetRule.AtLeastOne, "appearance", "at", "scale", "z")]
+public sealed class CharacterDirectionCommandArguments : DirectionTransitionCommandArguments
 {
 	[CommandParameter("actor", 0, Primary = true, Required = true)]
 	public string Actor { get; set; } = string.Empty;
 	[CommandParameter("stage", 1, DefaultValue = "main")]
 	public string Stage { get; set; } = "main";
-	[CommandParameter("at", 2)] public string? At { get; set; }
-	[CommandParameter("look", 3)] public string? Look { get; set; }
+	[CommandParameter("appearance", 2)] public string? Appearance { get; set; }
+	[CommandParameter("at", 3)] public string? At { get; set; }
 	[CommandParameter("scale", 4, Minimum = 0.001)] public double? Scale { get; set; }
 	[CommandParameter("z", 5)] public int? Z { get; set; }
 }
 
-[RuntimeCommand("leave", Category = "Direction", Usage = "leave <actor> [stage:<id>] [via:<cut|fade>] [over:<seconds>] [ease:<curve>] [join:<commit|settle>]")]
+[RuntimeCommand("leave", Category = "Direction", Usage = "leave <character> [stage:<id>] [via:<cut|fade>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]
 public sealed class LeaveDirectionCommandArguments : DirectionTransitionCommandArguments
 {
 	[CommandParameter("actor", 0, Primary = true, Required = true)]
@@ -556,21 +556,37 @@ public sealed class LeaveDirectionCommandArguments : DirectionTransitionCommandA
 	public string Stage { get; set; } = "main";
 }
 
-[RuntimeCommand("shot", "pose", Category = "Direction", Usage = "shot pose [stage:<id>] [view:<id>] [center:<x,y>] [zoom:<number>] [rotation:<degrees>] [as:<alias>] [via:<kind>] [over:<seconds>] [ease:<curve>] [join:<commit|settle>]")]
-[CommandParameterSet(CommandParameterSetRule.AtLeastOne, "stage", "center", "zoom", "rotation", "as")]
-public sealed class ShotPoseDirectionCommandArguments : DirectionTransitionCommandArguments
+public abstract class CameraPatchDirectionCommandArguments : DirectionTimingCommandArguments
 {
-	[CommandParameter("stage", 0)] public string? Stage { get; set; }
-	[CommandParameter("view", 1, DefaultValue = "main")]
+	[CommandParameter("view", 0, DefaultValue = "main")]
 	public string View { get; set; } = "main";
-	[CommandParameter("center", 2)] public Vector2? Center { get; set; }
-	[CommandParameter("zoom", 3, Minimum = 0.001)] public double? Zoom { get; set; }
-	[CommandParameter("rotation", 4)] public double? Rotation { get; set; }
-	[CommandParameter("as", 5)] public string? As { get; set; }
+	[CommandParameter("center", 1)] public Vector2? Center { get; set; }
+	[CommandParameter("zoom", 2, Minimum = 0.001)] public double? Zoom { get; set; }
+	[CommandParameter("rotation", 3)] public double? Rotation { get; set; }
 }
 
-[RuntimeCommand("shot", "cg", Category = "Direction", Usage = "shot cg <resource> [view:<id>] [center:<x,y>] [zoom:<number>] [rotation:<degrees>] [via:<kind>] [over:<seconds>] [ease:<curve>] [join:<commit|settle>]")]
-public sealed class ShotCgDirectionCommandArguments : DirectionTransitionCommandArguments
+[RuntimeCommand("camera", "pose", Category = "Direction", Usage = "camera pose [stage:<id>] [view:<id>] [center:<x,y>] [zoom:<number>] [rotation:<degrees>] [as:<shot>] [via:<kind>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]
+[CommandParameterSet(CommandParameterSetRule.AtLeastOne, "stage", "center", "zoom", "rotation", "as")]
+public sealed class CameraPoseDirectionCommandArguments : CameraPatchDirectionCommandArguments
+{
+	[CommandParameter("stage", 4)] public string? Stage { get; set; }
+	[CommandParameter("as", 5)] public string? As { get; set; }
+	[CommandParameter("via", 20)] public DirectionTransitionKind? Via { get; set; }
+}
+
+[RuntimeCommand("camera", "move", Category = "Direction", Usage = "camera move [view:<id>] [center:<x,y>] [zoom:<number>] [rotation:<degrees>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]
+[CommandParameterSet(CommandParameterSetRule.AtLeastOne, "center", "zoom", "rotation")]
+public sealed class CameraMoveDirectionCommandArguments : CameraPatchDirectionCommandArguments;
+
+[RuntimeCommand("camera", "reset", Category = "Direction", Usage = "camera reset [stage:<id>] [view:<id>] [via:<kind>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]
+public sealed class CameraResetDirectionCommandArguments : DirectionTransitionCommandArguments
+{
+	[CommandParameter("stage", 0, DefaultValue = "main")] public string Stage { get; set; } = "main";
+	[CommandParameter("view", 1, DefaultValue = "main")] public string View { get; set; } = "main";
+}
+
+[RuntimeCommand("cg", Category = "Direction", Usage = "cg <resource> [view:<id>] [center:<x,y>] [zoom:<number>] [rotation:<degrees>] [via:<kind>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]
+public sealed class CgDirectionCommandArguments : DirectionTransitionCommandArguments
 {
 	[CommandParameter("resource", 0, Primary = true, Required = true)]
 	public string Resource { get; set; } = string.Empty;
@@ -581,7 +597,7 @@ public sealed class ShotCgDirectionCommandArguments : DirectionTransitionCommand
 	[CommandParameter("rotation", 4)] public double? Rotation { get; set; }
 }
 
-[RuntimeCommand("shot", "use", Category = "Direction", Usage = "shot use <alias> [view:<id>] [via:<kind>] [over:<seconds>] [ease:<curve>] [join:<commit|settle>]")]
+[RuntimeCommand("shot", "use", Category = "Direction", Usage = "shot use <alias> [view:<id>] [via:<kind>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]
 public sealed class ShotUseDirectionCommandArguments : DirectionTransitionCommandArguments
 {
 	[CommandParameter("alias", 0, Primary = true, Required = true)]
@@ -589,7 +605,7 @@ public sealed class ShotUseDirectionCommandArguments : DirectionTransitionComman
 	[CommandParameter("view", 1)] public string? View { get; set; }
 }
 
-[RuntimeCommand("layout", Category = "Direction", Usage = "layout <single|split|pip> <slot:view> ...")]
+[RuntimeCommand("layout", Category = "Direction", Usage = "layout <single|split|pip> <slot:view> ... [via:<kind>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]
 public sealed class LayoutDirectionCommandArguments : DirectionTransitionCommandArguments
 {
 	[CommandParameter("layout", 0, Primary = true, Required = true)]
@@ -612,19 +628,19 @@ public sealed class LayoutDirectionCommandArguments : DirectionTransitionCommand
 	}
 }
 
-[RuntimeCommand("beat", "begin", Category = "Direction", Usage = "beat begin [id:<id>] [over:<seconds>] [ease:<curve>]")]
+[RuntimeCommand("beat", "begin", Category = "Direction", Usage = "beat begin [id:<id>] [duration:<seconds>] [ease:<curve>]")]
 public sealed class BeatBeginDirectionCommandArguments
 {
 	[CommandParameter("id", 0)] public string? Id { get; set; }
-	[CommandParameter("over", 1, Minimum = 0)] public double? Over { get; set; }
+	[CommandParameter("duration", 1, Minimum = 0)] public double? Duration { get; set; }
 	[CommandParameter("ease", 2)] public string? Ease { get; set; }
 }
 
-[RuntimeCommand("beat", "end", Category = "Direction", Usage = "beat end [join:<commit|settle>]")]
+[RuntimeCommand("beat", "end", Category = "Direction", Usage = "beat end [wait:<bool>]")]
 public sealed class BeatEndDirectionCommandArguments
 {
-	[CommandParameter("join", 0, DefaultValue = "settle")]
-	public DirectionCompletionBarrier Join { get; set; }
+	[CommandParameter("wait", 0, DefaultValue = "true")]
+	public bool Wait { get; set; }
 }
 
 [RuntimeCommand("beat", "join", Category = "Direction", Usage = "beat join <id>")]

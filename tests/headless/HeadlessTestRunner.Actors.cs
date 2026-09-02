@@ -170,23 +170,6 @@ public partial class HeadlessTestRunner
         Assert(background.SceneNode.GetChildCount() == 1,
             "Background crossfade left an extra TextureRect behind.");
 
-        var actorCommands = new ActorCommandService(manager);
-        await actorCommands.BackAsync(new BackCommand(
-            "gallery",
-            "dark",
-            0.06,
-            true,
-            null,
-            "background-main-slot"));
-        var gallery = manager.Get<IBackgroundActor>("gallery");
-        Assert(gallery.Slot == BackgroundSlotIds.Main && gallery.Visible,
-            "Back command did not activate its target in the default main slot.");
-        Assert(!background.Visible,
-            "Back command left the previous main-slot Background visible.");
-        Assert(backgroundLayer.GetChildren().Count(child =>
-                child is CanvasItem canvas && canvas.Visible) == 1,
-            "Main Background slot retained more than one stable visible Actor.");
-
         var camera = bootstrap.Host.Services.Get<ICameraManager>();
         var focusPose = new CameraState(new Vector2(37.384f, 74.816f), 3, 10);
         camera.ApplyStableState(focusPose);

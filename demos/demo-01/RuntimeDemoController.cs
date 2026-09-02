@@ -39,11 +39,6 @@ public partial class RuntimeDemoController : Node
 			var configuration = RuntimeDemoComposition.CreateConfiguration();
 			configuration.Presentation!.Enabled = !automatic;
 
-			var portraitLayer = new CanvasLayer { Name = "DemoPortraitLayer", Layer = 5 };
-			var portraitHost = new Node2D { Name = "Portraits" };
-			portraitLayer.AddChild(portraitHost);
-			AddChild(portraitLayer);
-
 			RuntimeDialogueProbe? dialoguePresenter = null;
 			if (automatic)
 			{
@@ -71,8 +66,6 @@ public partial class RuntimeDemoController : Node
 			}
 			RuntimeDemoComposition.ConfigureRuntime(
 				runtime,
-				portraitHost,
-				configuration.Actors!,
 				useFakeAudio: automatic);
 
 			AddChild(runtime);
@@ -122,7 +115,6 @@ public partial class RuntimeDemoController : Node
 			if (automatic)
 			{
 				await runtime.RequestShutdownAsync();
-				portraitLayer.QueueFree();
 				if (caseService.ShutdownCount != 1 ||
 					!caseService.RuntimeWasCancelledAtShutdown)
 				{

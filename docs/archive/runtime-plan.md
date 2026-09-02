@@ -343,13 +343,13 @@ Command 依赖参数顺序。Command 名的规范拼写使用 camelCase。示意
 
 ```yarn
 <<await>>
-<<back backdrop appearance:courtroom duration:0.5 operation:back-fade>>
-<<char Maya appearance:happy position:left duration:0.5 operation:maya-left>>
+<<backdrop courtroom via:dissolve duration:0.5>>
+<<character Maya appearance:happy at:left via:move duration:0.5>>
 <<endAwait>>
 
 Maya: 准备完成了。
 
-<<char Maya appearance:surprised position:center duration:0.35 wait:true operation:maya-center>>
+<<character Maya appearance:surprised at:center via:move duration:0.35 wait:true>>
 Maya: 等一下！
 ```
 
@@ -599,7 +599,7 @@ Headless 验收：
 
 - 新增可见主场景；现已稳定命名为 `demo/RuntimeDemo.tscn`，项目默认启动场景指向该演示。
 - 新增独立的 M5 Yarn 项目，单一剧本覆盖背景和角色并行动画、组汇合、等待型动画、台词、选项、分支与正常结束；资源层完成后迁至 `assets/scripts/main.yarnproject`。
-- 所有扩展均位于插件目录外的 `Majo.Demo`：`DemoSessionService`、`DemoPortraitActorFactory` 和 `demo_route` Command 未修改 Runtime Core。
+- 所有扩展均位于插件目录外的 `Majo.Demo`：`DemoSessionService` 和 `demo_route` Command 未修改 Runtime Core；角色演出统一走 Direction actor tree。
 - `RuntimeDialogueProbe` 记录对话、Node、Line 和 Option 事件，并能确定性选择分支；真实 Yarn VM headless 同时断言 Actor 最终状态和事件顺序。
 - 关闭验收会检查自定义 Service 接收到 Runtime cancellation、Actor Node 被释放、Operation 为零以及 Runtime/Runner/外部 Host 无残留。
 - 主场景支持 `--demo-auto`，严格门禁会额外运行一次主场景装配 smoke test，再连续运行三轮完整 headless suite 与失败探针。
@@ -649,7 +649,7 @@ Scripts = scripts/<project-id>
 - `RuntimeCommandDispatcher` 统一执行绑定、异常归一、对话取消和 await scope 上下文；
   Yarn Adapter 只遍历 Catalog 注册和逆序卸载，不包含具体 Command 分支。
 - 内建六条 Command、Demo 和 headless 自定义 Command 使用同一类型化注册路径。
-- Actor 执行收敛到 `IActorCommandService`，等待和取消 Handler 直接依赖 Operation
+- 该阶段曾让 Actor Command 直接依赖 Operation；现已由 Direction transaction 取代
   capability，不再使用随所有 Command 增长的全局 `IRuntimeCommandService`。
 - 运行时元数据使用显式注册和一次性缓存，不做程序集扫描；待 API 稳定后再以独立
   milestone 引入 Source Generator，替换反射绑定并生成注册模块和编译期诊断。

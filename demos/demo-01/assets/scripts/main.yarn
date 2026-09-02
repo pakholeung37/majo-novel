@@ -6,11 +6,11 @@ tags: runtime validation demo
 <<bgm demo-theme track:music duration:0.35 operation:demo-music-in>>
 Narrator: 欢迎来到 Majo Runtime 第三阶段验证场景，{$visitor}。除了基础演出，右侧面板现在覆盖 M11 Diagnostics 到 M15 Played/Skip 的完整玩家循环。 #line:demo-welcome #voice:narrator-welcome
 
-<<await>>
-<<back backdrop appearance:courtroom duration:0.45 operation:demo-backdrop-opening>>
-<<char hero appearance:calm position:left duration:0.45 operation:demo-hero-opening>>
-<<endAwait>>
-Maya: 背景和角色由两个并行 Operation 驱动，并在两者都到达确定终态后才显示这句话。 #line:demo-parallel-ready #voice:maya-ready
+<<beat begin>>
+<<backdrop backdrop/courtroom via:dissolve duration:0.45>>
+<<character hero appearance:calm at:left via:fade duration:0.45>>
+<<beat end wait:true>>
+Maya: 背景和角色由同一个演出 Beat 原子提交，并在两者都到达确定终态后才显示这句话。 #line:demo-parallel-ready #voice:maya-ready
 
 Narrator: M17 会把 Dialogue locale 与 Voice locale 分开管理；下一句语音会请求简体中文，并按 fallback chain 回退到现有英文资源。 #line:demo-m17-intro
 <<demo_voice_locale zh-CN>>
@@ -19,16 +19,15 @@ Narrator: Voice locale 已切换为 zh-CN，文本、语音与资源解析各自
 <<demo_preload m18-opening>>
 Narrator: M18 显式预取了本章背景、立绘、BGM 与 Voice；preload group 完成后才继续，离开演示段落时会释放 lease。 #line:demo-m18-preload
 
-<<camera move to:48,50 duration:0.25 group:m19-stage operation:demo-camera-pan>>
-<<camera zoom to:1.08 duration:0.25 group:m19-stage operation:demo-camera-zoom>>
+<<camera move center:48,50 zoom:1.08 duration:0.25 wait:true>>
 <<transition wipeLeft appearance:spotlight duration:0.3 group:m19-stage operation:demo-stage-transition>>
 <<overlay 0.18 duration:0.25 group:m19-stage operation:demo-stage-overlay>>
 <<letterbox 0.08 duration:0.25 group:m19-stage operation:demo-stage-letterbox>>
-<<flash intensity:0.35 duration:0.15 group:m19-stage operation:demo-stage-flash>>
+<<flash intensity:0.35 duration:0.15 wait:true>>
 <<await group:m19-stage>>
 Narrator: M19 Stage 已汇合 Camera、Transition 与 Screen FX Operation；这些效果可独立等待、取消、Skip，并把稳定终态写入 Game State。 #line:demo-m19-stage
 
-<<camera reset via:move duration:0.2 wait:true operation:demo-stage-camera-reset>>
+<<camera reset via:move duration:0.2 wait:true>>
 <<overlay 0 duration:0.2 wait:true operation:demo-stage-overlay-reset>>
 <<letterbox 0 duration:0.2 wait:true operation:demo-stage-letterbox-reset>>
 <<demo_release_preload>>
@@ -37,18 +36,16 @@ Narrator: M17-M19 演示资源已释放，接下来继续原有的 Audio、State
 <<sfx demo-chime instance:checkpoint-chime>>
 Narrator: 刚才的提示音、循环背景音与角色语音分别走 SFX、BGM 和单通道 Voice。 #line:demo-audio-ready
 
-<<char hero appearance:determined position:center duration:0.35 wait:true operation:demo-hero-center>>
+<<character hero appearance:determined at:center via:move duration:0.35 wait:true>>
 Maya: `wait:true` 会阻止脚本越过动画；现在我已经移动到中央并切换立绘。 #line:demo-operation-wait
 
-<<hide hero duration:2 operation:demo-cancelled-hide>>
-<<cancel operation:demo-cancelled-hide>>
-Narrator: 这个隐藏 Operation 被取消，因此角色保持可见，取消路径不会偷偷应用终态。 #line:demo-operation-cancel
+<<beat begin id:demo-completed-leave>>
+<<leave hero via:fade duration:2>>
+<<beat end wait:false>>
+<<beat finish demo-completed-leave>>
+Narrator: 这个已提交的退场 Beat 被强制完成，因此立即应用隐藏终态。 #line:demo-operation-complete
 
-<<hide hero duration:2 operation:demo-completed-hide>>
-<<await operation:demo-completed-hide complete:true>>
-Narrator: 第二个隐藏 Operation 被强制完成，因此立即应用隐藏终态。 #line:demo-operation-complete
-
-<<char hero appearance:calm position:left duration:0.3 wait:true operation:demo-hero-return>>
+<<character hero appearance:calm at:left via:fade duration:0.3 wait:true>>
 Narrator: `IDialoguePlayer` 负责这个 Yarn Session；角色名与正文已经投影为不含 Yarn 类型的稳定对话模型。 #line:demo-dialogue-facade
 
 Maya: 用 Space 或鼠标左键先完成打字、再推进；方向键与 Enter 操作选项。每个物理输入在一帧内最多分发一次。 #line:demo-input-guide
@@ -61,11 +58,11 @@ Narrator: M11 的 Debug Inspector 展示结构化日志、关联 ID 与只读快
 
 Narrator: 在这行完整显示后点击右侧“Capture”。M12 快照会保存 Script、变量、角色、背景与 BGM；资格栏则会解释为什么某个边界不能保存。 #line:demo-state-checkpoint
 
-<<back backdrop appearance:spotlight duration:0.35 operation:demo-state-background>>
-<<char hero appearance:determined position:right duration:0.35 operation:demo-state-hero>>
+<<beat begin>>
+<<backdrop backdrop/spotlight via:dissolve duration:0.35>>
+<<character hero appearance:determined at:right via:move duration:0.35>>
+<<beat end wait:true>>
 <<bgm demo-tension track:music duration:0.35 operation:demo-state-music>>
-<<await operation:demo-state-background>>
-<<await operation:demo-state-hero>>
 <<await operation:demo-state-music>>
 Narrator: Game State 已被明显改变。现在可点击“Restore”，验证背景、角色、BGM 和当前脚本行一起回到快照，History 则继续保留。 #line:demo-state-mutated
 

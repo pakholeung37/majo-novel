@@ -4,10 +4,11 @@ using System.Linq;
 using System.Threading.Tasks;
 using Godot;
 using Majo.Demo;
-using Majo.Runtime.Actors;
 using Majo.Runtime.Diagnostics;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Yarn;
+using Majo.Runtime.Direction.Core;
+using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Played;
 using Majo.Runtime.Resources;
@@ -29,8 +30,6 @@ public partial class HeadlessTestRunner
             PreferredOptionIndex = 1,
         };
         AddChild(presenter);
-        var portraitHost = new Node2D { Name = "DemoPortraitHost" };
-        AddChild(portraitHost);
         var configuration = RuntimeDemoComposition.CreateConfiguration();
         configuration.Presentation!.Enabled = false;
         var bootstrap = new MajoRuntimeBootstrap
@@ -40,10 +39,8 @@ public partial class HeadlessTestRunner
         };
         bootstrap.ConfigureDialoguePresenters += presenters =>
             presenters.Register(presenter);
-        var customFactory = RuntimeDemoComposition.ConfigureRuntime(
+        RuntimeDemoComposition.ConfigureRuntime(
             bootstrap,
-            portraitHost,
-            configuration.Actors!,
             useFakeAudio: true);
         AddChild(bootstrap);
         await bootstrap.InitializationCompletion;
@@ -66,12 +63,12 @@ public partial class HeadlessTestRunner
             narratorVoice.GetLength() > 10 &&
             mayaVoice.GetLength() > 5,
             "Runtime Demo audio assets were missing, invalid, or configured with unsafe loops.");
-        var manager = bootstrap.Host!.Services.Get<IActorManager>();
         var scheduler = bootstrap.Host.Services.Get<IOperationScheduler>();
         var caseService = bootstrap.Host.Services.Get<DemoSessionService>();
         var dialogue = bootstrap.Host.Services.Get<IDialoguePlayer>();
         var variables = bootstrap.Host.Services.Get<IDialogueVariables>();
         var ownedRunner = bootstrap.Host.Services.Get<IYarnDialogueBackend>().Runner;
+        var direction = bootstrap.Host.Services.Get<IDirectionTransactionCoordinator>();
         var sessionEvents = new List<string>();
         dialogue.Started += _ => sessionEvents.Add("started");
         dialogue.Completed += _ => sessionEvents.Add("completed");
@@ -82,20 +79,21 @@ public partial class HeadlessTestRunner
         {
             if (line.Id == "line:demo-parallel-ready")
             {
-                var hero = manager.Get<ICharacterActor>("hero");
-                var backdrop = manager.Get<IBackgroundActor>("backdrop");
+                var stage = direction.State.Stages[StageId.Main];
+                var hero = stage.Actors[new ActorId("hero")];
                 joinedAtFinalState =
                     hero.Appearance == "calm" &&
-                    hero.Position.IsEqualApprox(configuration.Actors.LeftPosition) &&
-                    backdrop.Appearance == "courtroom" &&
+                    hero.Position.X < 50 &&
+                    stage.Backdrop?.Resource.ToString().EndsWith(
+                        "courtroom", StringComparison.Ordinal) == true &&
                     scheduler.ActiveOperations.Count == 0;
             }
             else if (line.Id == "line:demo-operation-wait")
             {
-                var hero = manager.Get<ICharacterActor>("hero");
+                var hero = direction.State.Stages[StageId.Main].Actors[new ActorId("hero")];
                 waitedAtFinalState =
                     hero.Appearance == "determined" &&
-                    hero.Position.IsEqualApprox(configuration.Actors.CenterPosition);
+                    Mathf.IsEqualApprox(hero.Position.X, 50);
             }
         };
 
@@ -112,10 +110,6 @@ public partial class HeadlessTestRunner
             "M6 StartAsync returned before the dialogue entered Running.");
         Assert(dialogue.CurrentProjectId == "main" && dialogue.CurrentNode == "Start",
             "M6 dialogue did not expose its resolved project and node.");
-        await WaitForConditionAsync(() => scheduler.ActiveOperations.Count >= 2, 2);
-        Assert(presenter.Lines.Select(line => line.Id).SequenceEqual(
-                ["line:demo-welcome"]),
-            "Runtime Demo advanced past its parallel opening animations before joining.");
         await dialogue.Completion;
 
         Assert(dialogue.State == DialogueSessionState.Idle,
@@ -125,7 +119,7 @@ public partial class HeadlessTestRunner
         Assert(joinedAtFinalState,
             "Runtime Demo parallel animation join did not expose both final Actor states.");
         Assert(waitedAtFinalState,
-            "Runtime Demo wait=true animation did not finish before the next line.");
+            "Runtime Demo wait:true animation did not finish before the next line.");
         Assert(presenter.Lines.Select(line => line.Id).SequenceEqual(new[]
             {
                 "line:demo-welcome",
@@ -137,7 +131,6 @@ public partial class HeadlessTestRunner
                 "line:demo-m17-m19-complete",
                 "line:demo-audio-ready",
                 "line:demo-operation-wait",
-                "line:demo-operation-cancel",
                 "line:demo-operation-complete",
                 "line:demo-dialogue-facade",
                 "line:demo-input-guide",
@@ -167,10 +160,6 @@ public partial class HeadlessTestRunner
             "M17/M18 Demo commands did not switch voice locale or release the preload group.");
         Assert(caseService.InitializeCount == 1,
             "Demo custom service was not initialized exactly once.");
-        Assert(customFactory.CreateCount == 1,
-            "Demo custom Actor factory did not create the hero exactly once.");
-        Assert(manager.Get<ICharacterActor>("hero").SceneNode.GetParent() == portraitHost,
-            "Demo custom Actor factory did not use its external host.");
         Assert(presenter.Events
                 .Where(entry => entry.Kind == "dialogue")
                 .Select(entry => entry.Value)
@@ -223,13 +212,16 @@ public partial class HeadlessTestRunner
             "Dialogue project load failure leaked Runner or Operation work.");
 
         var lineCountBeforeStop = presenter.Lines.Count;
+        var revisionBeforeStopRun = direction.State.Revision;
         await dialogue.StartAsync();
         var stoppedCompletion = dialogue.Completion;
         await WaitForConditionAsync(
             () => presenter.Lines.Count == lineCountBeforeStop + 1 &&
                 presenter.Lines[^1].Id == "line:demo-welcome",
             2);
-        await WaitForConditionAsync(() => scheduler.ActiveOperations.Count >= 2, 2);
+        await WaitForConditionAsync(
+            () => direction.State.Revision > revisionBeforeStopRun,
+            2);
         await dialogue.StopAsync();
         var stopped = await stoppedCompletion;
         Assert(stopped.Kind == DialogueCompletionKind.Stopped,
@@ -246,14 +238,13 @@ public partial class HeadlessTestRunner
             "M6 stopped dialogue session events were out of order.");
         Assert(presenter.Lines.Count == lineCountBeforeStop + 1,
             "M6 stop allowed a line after the expected welcome boundary to escape.");
+        await WaitForConditionAsync(() => scheduler.ActiveOperations.Count == 0, 2);
         Assert(scheduler.ActiveOperations.Count == 0,
             "M6 stop left dialogue-owned operations active.");
 
-        var heroNode = manager.Get<ICharacterActor>("hero").SceneNode;
         Assert(resources.LoadedResourceCount >= 3,
             "Convention-based Actor and Yarn resources did not enter the Runtime cache.");
         await bootstrap.RequestShutdownAsync();
-        portraitHost.QueueFree();
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
 
@@ -261,11 +252,8 @@ public partial class HeadlessTestRunner
             "Demo custom service was not shut down exactly once.");
         Assert(caseService.RuntimeWasCancelledAtShutdown,
             "Demo custom service did not observe Runtime cancellation during shutdown.");
-        Assert(!IsInstanceValid(heroNode),
-            "Demo custom Actor node survived Runtime shutdown.");
         Assert(!IsInstanceValid(bootstrap), "Demo Runtime node leaked after shutdown.");
         Assert(!IsInstanceValid(ownedRunner), "Demo DialogueRunner leaked after cleanup.");
-        Assert(!IsInstanceValid(portraitHost), "Demo custom Actor host leaked after cleanup.");
         Assert(resources.LoadedResourceCount == 0,
             "Runtime resource cache survived shutdown.");
     }

@@ -1024,10 +1024,9 @@ public partial class MajoRuntimeBootstrap : Node
         IDirectionBeatRuntime direction)
     {
         var commands = new RuntimeCommandRegistry();
-        BuiltInRuntimeCommands.Register(commands, new ActorCommandService(actors, Logger));
+        BuiltInRuntimeCommands.Register(commands);
         commands.RegisterModule(new AudioCommandModule(audio));
-        commands.RegisterModule(new CameraCommandModule());
-        commands.RegisterModule(new StageCommandModule(includeTransientCommands: false));
+        commands.RegisterModule(new StageCommandModule());
         commands.RegisterModule(new DirectionCommandModule(
             direction,
             DirectionResourceResolver ??

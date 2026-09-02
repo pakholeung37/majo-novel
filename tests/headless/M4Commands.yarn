@@ -1,48 +1,7 @@
-title: Start
-tags: headless
----
-<<await>>
-<<back backdrop appearance:dark duration:0.12 operation:back-fade>>
-<<char hero appearance:red position:left zIndex:20 duration:0.12 operation:hero-left>>
-<<endAwait>>
-Narrator: after join #line:m4-after-join
-<<char hero appearance:blue position:right duration:0.08 wait:true operation:hero-right>>
-Narrator: after wait #line:m4-after-wait
-<<hide hero duration:1 operation:cancelled-hide>>
-<<cancel operation:cancelled-hide>>
-Narrator: after cancel #line:m4-after-cancel
-<<hide hero duration:1 operation:completed-hide>>
-<<await operation:completed-hide complete:true>>
-Narrator: after complete #line:m4-after-complete
-<<curtain closed duration:0.12 wait:true operation:curtain-close>>
-Narrator: after curtain close #line:m4-after-curtain-close
-<<curtain open duration:0.08 wait:true operation:curtain-open>>
-Narrator: after curtain open #line:m4-after-curtain-open
-<<curtain closed duration:1 operation:cancelled-curtain>>
-<<cancel operation:cancelled-curtain>>
-Narrator: after curtain cancel #line:m4-after-curtain-cancel
-<<curtain closed duration:1 operation:completed-curtain>>
-<<await operation:completed-curtain complete:true>>
-Narrator: after curtain complete #line:m4-after-curtain-complete
-<<curtain open duration:0 wait:true operation:curtain-reset>>
-===
-
-title: BadArguments
----
-<<char hero appearance:happy position:nowhere>>
-Narrator: after bad command #line:m4-after-bad-command
-===
-
 title: UnknownCommand
 ---
 <<majo_unknown detail>>
 Narrator: after unknown command #line:m4-after-unknown-command
-===
-
-title: StopCancellation
----
-<<char hero appearance:red position:center duration:10 wait:true operation:stop-cancelled>>
-Narrator: should not be presented #line:m45-after-stop
 ===
 
 title: CustomCommand
@@ -53,21 +12,21 @@ Narrator: custom command completed #line:m45-custom-command
 
 title: DirectionCommands
 ---
-<<beat begin over:0.08 ease:cubic-out>>
+<<beat begin duration:0.08 ease:cubic-out>>
 <<backdrop background_dark>>
-<<place hero at:left look:red scale:1 z:5>>
-<<shot cg background_light via:cut>>
-<<shot pose center:37.384,74.816 zoom:3 rotation:10 via:cut>>
-<<shot pose center:44.438,71.950 over:0.4 ease:back-out>>
-<<beat end join:settle>>
+<<character hero at:left appearance:red scale:1 z:5>>
+<<cg background_light via:cut>>
+<<camera pose center:37.384,74.816 zoom:3 rotation:10 via:cut>>
+<<camera pose center:44.438,71.950 duration:0.4 ease:back-out>>
+<<beat end wait:true>>
 Narrator: direction beat committed #line:m4-direction-beat
-<<place hero at:right look:blue via:move over:0.08 join:settle>>
+<<character hero at:right appearance:blue via:move duration:0.08 wait:true>>
 Narrator: direction actor moved #line:m4-direction-move
-<<shot cg background_light center:40,60 zoom:1.5 via:cut join:settle>>
+<<cg background_light center:40,60 zoom:1.5 via:cut wait:true>>
 Narrator: direction cg shown #line:m4-direction-cg
-<<shot pose stage:main center:50,50 zoom:1 rotation:0 via:cut join:settle>>
+<<camera pose stage:main center:50,50 zoom:1 rotation:0 via:cut wait:true>>
 Narrator: direction stage restored #line:m4-direction-stage
-<<leave hero via:fade over:0.08 join:settle>>
+<<leave hero via:fade duration:0.08 wait:true>>
 Narrator: direction actor left #line:m4-direction-leave
 ===
 
@@ -75,15 +34,15 @@ title: DirectionMultiStage
 ---
 <<beat begin id:direction-multi-stage>>
 <<backdrop background_dark stage:main>>
-<<place hero stage:main at:left look:red>>
+<<character hero stage:main at:left appearance:red>>
 <<backdrop background_light stage:broadcast>>
-<<place hero stage:broadcast at:right look:blue>>
-<<shot pose stage:broadcast center:50,50 zoom:1>>
-<<beat end join:settle>>
+<<character hero stage:broadcast at:right appearance:blue>>
+<<camera pose stage:broadcast center:50,50 zoom:1>>
+<<beat end wait:true>>
 Narrator: broadcast stage shown #line:m4-direction-broadcast
-<<shot pose stage:main via:cut join:settle>>
+<<camera pose stage:main via:cut wait:true>>
 Narrator: main stage restored #line:m4-direction-main-return
-<<shot pose view:reaction stage:main center:65,50 zoom:1.8 via:cut>>
-<<layout split main:main inset:reaction via:cut join:settle>>
+<<camera pose view:reaction stage:main center:65,50 zoom:1.8 via:cut>>
+<<layout split main:main inset:reaction via:cut wait:true>>
 Narrator: split layout shown #line:m4-direction-split
 ===

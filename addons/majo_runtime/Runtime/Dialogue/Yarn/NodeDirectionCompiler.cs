@@ -68,8 +68,8 @@ public sealed record NodeDirectionModule(
 public sealed class NodeDirectionCompiler
 {
     private static readonly IReadOnlySet<string> DirectionCommands = new HashSet<string>(
-        new[] { "backdrop", "place", "leave", "shot", "layout", "import", "mark",
-            "shake", "flash", "curtain", "beat" },
+        new[] { "backdrop", "cg", "character", "leave", "camera", "shot", "layout",
+            "import", "mark", "flash", "curtain", "beat" },
         StringComparer.OrdinalIgnoreCase);
     private static readonly Regex NodeHeader = new(
         "^title:\\s*(?<id>.+?)\\s*$",
@@ -169,11 +169,20 @@ public sealed class NodeDirectionCompiler
         var maps = new List<DirectionSourceMap>();
         var imports = new List<DirectionImport>();
         var markDefinitions = new List<DirectionMark>();
+        var shotReferences = new List<(string Alias, string File, int Line, int Column, int Length)>();
         var diagnostics = new List<YarnCompilationDiagnostic>();
 
         void Flush()
         {
             if (node is null) return;
+            foreach (var reference in shotReferences)
+            {
+                if (aliases.Contains(reference.Alias)) continue;
+                diagnostics.Add(new YarnCompilationDiagnostic(
+                    "error", "DIR007", reference.File, reference.Line, reference.Column,
+                    reference.Line, reference.Column + reference.Length,
+                    $"Shot alias '{reference.Alias}' is not defined in Node '{node}'."));
+            }
             modules.Add(new NodeDirectionModule(
                 node,
                 version,
@@ -195,6 +204,7 @@ public sealed class NodeDirectionCompiler
             maps.Clear();
             imports.Clear();
             markDefinitions.Clear();
+            shotReferences.Clear();
             diagnostics.Clear();
         }
 
@@ -269,36 +279,49 @@ public sealed class NodeDirectionCompiler
                     resources.Add(new(DirectionResourceKind.Backdrop, Unquote(resource), file.LogicalPath, index + 1, match.Index + 1));
                     if (TryOption(options, raw, "stage", out var stage)) stages.Add(stage);
                 }
-                else if (tokens[0].Equals("place", StringComparison.OrdinalIgnoreCase))
+                else if (tokens[0].Equals("character", StringComparison.OrdinalIgnoreCase))
                 {
                     if (TryOption(options, raw, "stage", out var stage)) stages.Add(stage);
-                    if (TryOption(options, raw, "look", out var look) && tokens.Length > 1)
-                        resources.Add(new(DirectionResourceKind.ActorAppearance, $"{tokens[1]}/{look}", file.LogicalPath, index + 1, match.Index + 1));
+                    if (TryOption(options, raw, "appearance", out var appearance) && tokens.Length > 1)
+                        resources.Add(new(DirectionResourceKind.ActorAppearance, $"{tokens[1]}/{appearance}", file.LogicalPath, index + 1, match.Index + 1));
                 }
                 else if (tokens[0].Equals("leave", StringComparison.OrdinalIgnoreCase))
                 {
                     if (TryOption(options, raw, "stage", out var stage)) stages.Add(stage);
                 }
-                else if (tokens[0].Equals("shot", StringComparison.OrdinalIgnoreCase))
+                else if (tokens[0].Equals("cg", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (TryOption(options, raw, "view", out var view)) views.Add(view);
+                    var resource = tokens.Length > 1 ? tokens[1] : string.Empty;
+                    if (string.IsNullOrWhiteSpace(resource))
+                    {
+                        diagnostics.Add(new YarnCompilationDiagnostic(
+                            "error", "DIR002", file.LogicalPath, index + 1, match.Index + 1,
+                            index + 1, match.Index + 1 + match.Length,
+                            "cg requires a semantic resource id."));
+                        continue;
+                    }
+                    resources.Add(new(DirectionResourceKind.Cg, Unquote(resource), file.LogicalPath, index + 1, match.Index + 1));
+                }
+                else if (tokens[0].Equals("camera", StringComparison.OrdinalIgnoreCase))
                 {
                     if (TryOption(options, raw, "view", out var view)) views.Add(view);
                     if (TryOption(options, raw, "stage", out var stage)) stages.Add(stage);
-                    if (tokens.Length > 2 && tokens[1].Equals("cg", StringComparison.OrdinalIgnoreCase))
-                    {
-                        if (string.IsNullOrWhiteSpace(tokens[2]))
-                        {
-                            diagnostics.Add(new YarnCompilationDiagnostic(
-                                "error", "DIR002", file.LogicalPath, index + 1, match.Index + 1,
-                                index + 1, match.Index + 1 + match.Length,
-                                "shot cg requires a semantic resource id."));
-                            continue;
-                        }
-                        resources.Add(new(DirectionResourceKind.Cg, Unquote(tokens[2]), file.LogicalPath, index + 1, match.Index + 1));
-                    }
                     if (TryOption(options, raw, "as", out var alias))
                         AddSymbol(aliases, alias, "shot alias", file.LogicalPath, index + 1, match.Index + 1, match.Length);
+                }
+                else if (tokens[0].Equals("shot", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (TryOption(options, raw, "view", out var view)) views.Add(view);
                     if (tokens.Length > 2 && tokens[1].Equals("use", StringComparison.OrdinalIgnoreCase))
-                        AddSymbol(aliases, Unquote(tokens[2]), "shot alias", file.LogicalPath, index + 1, match.Index + 1, match.Length);
+                    {
+                        shotReferences.Add((
+                            Unquote(tokens[2]),
+                            file.LogicalPath,
+                            index + 1,
+                            match.Index + 1,
+                            match.Length));
+                    }
                 }
                 else if (tokens[0].Equals("mark", StringComparison.OrdinalIgnoreCase) && tokens.Length > 1)
                 {

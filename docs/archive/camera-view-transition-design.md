@@ -28,11 +28,11 @@ Transition 契约必须能被未来的 `camera switch` 和 `camera compose` 复�
 
 ```yarn
 <<camera pose center:50,60 zoom:2 rotation:0 via:cut>>
-<<camera pose center:50,60 zoom:2 rotation:0 via:move duration:0.5 curve:cubic-out>>
-<<camera pose center:50,60 zoom:2 rotation:0 via:dissolve duration:0.6 curve:sine-in-out>>
+<<camera pose center:50,60 zoom:2 rotation:0 via:move duration:0.5 ease:cubic-out>>
+<<camera pose center:50,60 zoom:2 rotation:0 via:dissolve duration:0.6 ease:sine-in-out>>
 
 <<camera reset via:cut>>
-<<camera reset via:move duration:0.5 curve:cubic-out>>
+<<camera reset via:move duration:0.5 ease:cubic-out>>
 <<camera reset via:dissolve duration:0.6 wait:true>>
 ```
 
@@ -42,9 +42,9 @@ Transition 契约必须能被未来的 `camera switch` 和 `camera compose` 复�
 ### 2.2 本场景的最终写法
 
 ```yarn
-<<back stills appearance:Still_490_001 duration:0>>
+<<cg Still_490_001>>
 <<camera pose center:37.384,74.816 zoom:3 rotation:10 via:cut>>
-<<camera move to:44.438,71.950 duration:0.4 curve:back-out>>
+<<camera move center:44.438,71.950 duration:0.4 ease:back-out>>
 
 // Dialogue...
 

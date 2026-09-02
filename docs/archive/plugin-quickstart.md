@@ -62,11 +62,11 @@ Actor 纹理由 `characters/<actor-id>/<appearance>` 或
 
 ```yarn
 <<await>>
-<<back backdrop appearance:courtroom duration:0.5 operation:backdrop-fade>>
-<<char hero appearance:calm position:left duration:0.5 operation:hero-move>>
+<<backdrop courtroom via:dissolve duration:0.5>>
+<<character hero appearance:calm at:left via:move duration:0.5>>
 <<endAwait>>
 Narrator: 两个动画已经汇合。
-<<char hero appearance:determined position:center duration:0.3 wait:true operation:hero-focus>>
+<<character hero appearance:determined at:center via:move duration:0.3 wait:true>>
 Narrator: 等待型动画已经完成。
 ```
 

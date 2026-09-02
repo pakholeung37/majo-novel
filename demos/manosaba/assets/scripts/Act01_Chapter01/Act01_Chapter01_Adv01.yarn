@@ -15,9 +15,9 @@ title: Act01_Chapter01_Adv01
 // ========================================
 // ●シーン1‐0-1
 // ========================================
-<<curtain closed over:0>>
-<<shot cg Still_140_001 via:cut>>
-<<curtain open over:1.2>>
+<<curtain closed duration:0>>
+<<cg Still_140_001 via:cut>>
+<<curtain open duration:1.2>>
 <<wait 1.8>>
 
 <<bgm Ambient_011_001 track:ambi>>
@@ -68,19 +68,19 @@ title: Act01_Chapter01_Adv01
 // [back 黒]
 // ========================================
 
-<<curtain closed over:0>>
+<<curtain closed duration:0>>
 
 但某天她忽然发现了答案。 #line:0101Adv01_Narrative022
 
 啊，对了—— #line:0101Adv01_Narrative023
 
-<<shot cg Still_140_002 via:cut>>
-<<curtain open over:1.2>>
+<<cg Still_140_002 via:cut>>
+<<curtain open duration:1.2>>
 <<wait 1.8>>
 
 大家都去死就好了。 #line:0101Adv01_Narrative024
 
-<<curtain closed over:1.5>>
+<<curtain closed duration:1.5>>
 <<detour EndAdv>>
 <<jump Act01_Chapter01_Adv02>>
 

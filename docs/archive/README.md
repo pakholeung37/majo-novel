@@ -615,20 +615,20 @@ positional parameters fail the command with its exact usage.
 
 ```yarn
 <<await>>
-<<back backdrop appearance:courtroom duration:0.5 operation:back-fade>>
-<<char maya appearance:happy position:left duration:0.5 operation:maya-move>>
+<<backdrop courtroom via:dissolve duration:0.5>>
+<<character maya appearance:happy at:left via:move duration:0.5>>
 <<endAwait>>
 
 Maya: 准备完成了。
 
-<<char maya appearance:surprised position:center duration:0.35 wait:true operation:maya-center>>
+<<character maya appearance:surprised at:center via:move duration:0.35 wait:true>>
 Maya: 等一下！
 ```
 
 Actor z-index is shared visual state on `IActor`, is preserved by save/load, and
 uses Godot's inclusive `-4096..4096` range. Higher values render in front of lower
 values. Omitting `zIndex` preserves the actor's current value; for example,
-`<<char maya appearance:happy position:left zIndex:20>>` places Maya in front of
+`<<character maya appearance:happy at:left z:20>>` places Maya in front of
 an actor at `zIndex:10`.
 
 An `await` block collects operation handles directly, so custom commands are
@@ -701,7 +701,7 @@ structured log count, Slot state, Settings/Global recovery, and Played count.
 All extension code lives outside the plugin under `res://demo`:
 
 - `DemoSessionService` demonstrates a service with Runtime lifetime dependency.
-- `DemoPortraitActorFactory` demonstrates a custom Actor factory ID.
+- Demo characters now use the same Direction actor tree as production `character` commands.
 - `assets/audio` contains the Demo's loopable ambient BGM, soft notification SFX,
   and localized Narrator/Maya Voice assets. Headless and `--demo-auto` runs
   substitute `FakeAudioClipLoader`/`FakeAudioBackend` so validation does not

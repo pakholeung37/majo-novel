@@ -76,129 +76,7 @@ public partial class HeadlessTestRunner
         var dialogue = bootstrap.Host.Services.Get<IDialoguePlayer>();
         var runner = yarnBackend.Runner;
 
-        var manager = bootstrap.Host!.Services.Get<IActorManager>();
-        var curtain = bootstrap.Host.Services.Get<IStageCurtainManager>();
-        var scheduler = bootstrap.Host.Services.Get<IOperationScheduler>();
         var adapter = bootstrap.Host.Services.Get<IYarnCommandAdapter>();
-        var joinedAtFinalState = false;
-        var waitedAtFinalState = false;
-        var cancelKeptCharacterVisible = false;
-        var completeAppliedHiddenState = false;
-        var curtainClosedAtFinalState = false;
-        var curtainOpenedAtFinalState = false;
-        var curtainCancelKeptOpenState = false;
-        var curtainCompleteAppliedClosedState = false;
-        presenter.LinePresented += line =>
-        {
-            var character = manager.Get<ICharacterActor>("hero");
-            switch (line.Id)
-            {
-                case "line:m4-after-join":
-                    var background = manager.Get<IBackgroundActor>("backdrop");
-                    joinedAtFinalState =
-                        character.Position.IsEqualApprox(configuration.Actors.LeftPosition) &&
-                        character.ZIndex == 20 &&
-                        character.View.ZIndex == 20 &&
-                        background.Appearance == "dark" &&
-                        scheduler.ActiveOperations.Count == 0;
-                    break;
-                case "line:m4-after-wait":
-                    waitedAtFinalState =
-                        character.Position.IsEqualApprox(configuration.Actors.RightPosition) &&
-                        character.Appearance == "blue";
-                    break;
-                case "line:m4-after-cancel":
-                    cancelKeptCharacterVisible = character.Visible && character.Opacity > 0;
-                    break;
-                case "line:m4-after-complete":
-                    completeAppliedHiddenState =
-                        !character.Visible && Mathf.IsZeroApprox(character.Opacity);
-                    break;
-                case "line:m4-after-curtain-close":
-                    curtainClosedAtFinalState =
-                        Mathf.IsEqualApprox(curtain.State.Opacity, 1) &&
-                        scheduler.ActiveOperations.Count == 0;
-                    break;
-                case "line:m4-after-curtain-open":
-                    curtainOpenedAtFinalState =
-                        Mathf.IsZeroApprox(curtain.State.Opacity) &&
-                        scheduler.ActiveOperations.Count == 0;
-                    break;
-                case "line:m4-after-curtain-cancel":
-                    curtainCancelKeptOpenState =
-                        Mathf.IsZeroApprox(curtain.State.Opacity);
-                    break;
-                case "line:m4-after-curtain-complete":
-                    curtainCompleteAppliedClosedState =
-                        Mathf.IsEqualApprox(curtain.State.Opacity, 1);
-                    break;
-            }
-        };
-
-        await dialogue.StartAsync();
-        await WaitForConditionAsync(
-            () => scheduler.ActiveOperations.Count >= 2,
-            2);
-        Assert(presenter.Lines.Count == 0,
-            "Yarn advanced past await while grouped animations were active.");
-        await dialogue.Completion;
-
-        Assert(presenter.Lines.SequenceEqual(new[]
-            {
-                "after join",
-                "after wait",
-                "after cancel",
-                "after complete",
-                "after curtain close",
-                "after curtain open",
-                "after curtain cancel",
-                "after curtain complete",
-            }),
-            "Yarn command test lines were delivered out of order.");
-        Assert(joinedAtFinalState,
-            "Yarn await did not join both non-waiting grouped animations.");
-        Assert(waitedAtFinalState,
-            "wait=true allowed Yarn to present the next line before the move completed.");
-        Assert(cancelKeptCharacterVisible,
-            "cancel incorrectly applied the hide operation's final state.");
-        Assert(completeAppliedHiddenState,
-            "await complete did not apply the hide operation's final state.");
-        Assert(curtainClosedAtFinalState,
-            "Waiting curtain close did not reach its stable opaque state.");
-        Assert(curtainOpenedAtFinalState,
-            "Waiting curtain open did not reach its stable transparent state.");
-        Assert(curtainCancelKeptOpenState,
-            "Cancelling curtain close did not preserve the previous open state.");
-        Assert(curtainCompleteAppliedClosedState,
-            "Completing curtain close did not apply the opaque target state.");
-        Assert(scheduler.ActiveOperations.Count == 0,
-            "Completed Yarn dialogue left active operations.");
-
-        var commandFailureSignal = string.Empty;
-        bootstrap.Connect(
-            MajoRuntimeBootstrap.SignalName.RuntimeCommandFailed,
-            Callable.From<string, string>((command, message) =>
-                commandFailureSignal = $"{command}:{message}"));
-        var badArgumentsStart = dialogue.StartAsync(
-            new DialogueStartRequest(StartNode: "BadArguments"));
-        var badArgumentsCompletion = dialogue.Completion;
-        await badArgumentsStart;
-        await WaitForConditionAsync(() => adapter.LastFailure is not null, 2);
-        Assert(adapter.LastFailure!.CommandName == "char",
-            "Bad Yarn arguments were attributed to the wrong command.");
-        Assert(adapter.LastFailure.Message.Contains(
-                "Usage: char <actor>",
-                StringComparison.Ordinal),
-            "Bad Yarn arguments did not include command usage.");
-        Assert(commandFailureSignal.StartsWith("char:", StringComparison.Ordinal),
-            "Command failure was not exposed through the Runtime signal.");
-        var badArgumentsResult = await badArgumentsCompletion;
-        Assert(badArgumentsResult.Kind == DialogueCompletionKind.Completed,
-            "Recoverable Yarn argument failure did not allow the dialogue to complete.");
-        Assert(dialogue.State == DialogueSessionState.Idle,
-            "Recoverable Yarn argument failure left the dialogue in a faulted state.");
-        Assert(presenter.Lines.LastOrDefault() == "after bad command",
-            "Yarn did not advance after a recoverable command failure.");
 
         var unhandledCommand = string.Empty;
         runner.Connect(
@@ -215,23 +93,6 @@ public partial class HeadlessTestRunner
             "Unknown Yarn command was not exposed through Runtime diagnostics.");
         Assert(presenter.Lines.LastOrDefault() == "after unknown command",
             "Yarn did not advance after an unknown command.");
-
-        var lineCountBeforeStop = presenter.Lines.Count;
-        await dialogue.StartAsync(new DialogueStartRequest(StartNode: "StopCancellation"));
-        await WaitForConditionAsync(
-            () => scheduler.ActiveOperations.Any(
-                operation => operation.Id == "stop-cancelled"),
-            2);
-        var dialogueScopedOperation = scheduler.ActiveOperations.Single(
-            operation => operation.Id == "stop-cancelled");
-        await dialogue.StopAsync();
-        await WaitForConditionAsync(
-            () => dialogueScopedOperation.State == OperationState.Cancelled,
-            2);
-        Assert(presenter.Lines.Count == lineCountBeforeStop,
-            "Yarn presented a line after dialogue-scoped command cancellation.");
-        Assert(scheduler.ActiveOperations.Count == 0,
-            "Stopping Yarn dialogue left a dialogue-scoped operation active.");
 
         await dialogue.StartAsync(new DialogueStartRequest(StartNode: "CustomCommand"));
         await dialogue.Completion;
@@ -301,11 +162,11 @@ public partial class HeadlessTestRunner
         Assert(directionBeatCommitted,
             "Explicit Yarn Direction Beat did not atomically publish its directives.");
         Assert(directionActorMoved,
-            "Yarn place did not resolve a configured mark or settle its move.");
+            "Yarn character did not resolve a configured mark or settle its move.");
         Assert(directionCgShown,
-            "Yarn shot cg did not replace only the View source.");
+            "Yarn cg did not replace only the View source.");
         Assert(directionStageRestored,
-            "Yarn shot pose did not restore the persistent Stage View.");
+            "Yarn camera pose did not restore the persistent Stage View.");
         Assert(directionActorLeft,
             "Yarn leave did not settle the target Actor state.");
 

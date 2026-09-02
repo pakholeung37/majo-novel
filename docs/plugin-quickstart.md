@@ -83,10 +83,9 @@ public partial class MyVisualNovelScene : Node
 }
 ```
 
-对于内置 `char` 和 `back` command，Actor 配置是可选覆盖而不是创建前提。若省略上例中的
-`ActorDefinitionConfiguration`，Runtime 会分别按
-`characters/<actor-id>/<appearance>` 和 `backgrounds/<actor-id>/<appearance>` 推导资源；
-自定义 Actor factory、特殊资源前缀或默认位置仍通过显式配置提供。
+`character` 和 `backdrop` 都通过 Direction resource resolver 解析语义资源；角色外观使用
+`<character-id>/<appearance>`，背景直接使用 backdrop resource id。自定义 Actor factory、
+特殊资源前缀或默认位置仍通过显式配置提供。
 
 Yarn command 的内容错误默认记录后跳过，未知 command 也会继续执行下一条指令。需要严格
 会话时可设置 `configuration.Dialogue!.AbortOnCommandError = true`。资源缺失默认使用
@@ -144,14 +143,14 @@ tags: intro
 ---
 <<declare $score = 10>>
 
-<<await>>
-<<back backdrop appearance:courtroom duration:0.5 operation:bg-fade>>
-<<char hero appearance:calm position:left duration:0.5 operation:hero-move>>
-<<endAwait>>
+<<beat begin>>
+<<backdrop courtroom via:dissolve duration:0.5>>
+<<character hero appearance:calm at:left via:fade duration:0.5>>
+<<beat end wait:true>>
 
 Narrator: 两个动画已并发汇合并到达确定终态。 #line:intro-line-1
 
-<<char hero appearance:determined position:center duration:0.3 wait:true operation:hero-focus>>
+<<character hero appearance:determined at:center via:move duration:0.3 wait:true>>
 Narrator: 等待型动画执行完毕。 #line:intro-line-2
 ===
 ```
