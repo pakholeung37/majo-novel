@@ -3,7 +3,7 @@ using System;
 using Godot;
 using Yarn;
 
-public class Option 
+public class Option
 {
     public int ID { get; private set; }
     public string Text { get; private set; }

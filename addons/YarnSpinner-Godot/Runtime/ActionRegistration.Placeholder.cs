@@ -14,6 +14,6 @@ public partial class ActionRegistration
         // Just a way to reference this class, so that the generated version of the ActionRegistration class 
         // will have its static constructor called. It's hacky, but there is no [RuntimeInitializeOnLoadMethod] 
         // attribute in Godot like there is in Unity, so we have to have it called somehow. 
-        
+
     }
 }

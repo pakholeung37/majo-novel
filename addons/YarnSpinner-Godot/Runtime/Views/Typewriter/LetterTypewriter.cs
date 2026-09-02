@@ -48,7 +48,7 @@ public class LetterTypewriter : IAsyncTypewriter
     {
         if (TextElement == null)
         {
-           GD.PushWarning($"Can't show text as typewriter, because {nameof(TextElement)} was not provided");
+            GD.PushWarning($"Can't show text as typewriter, because {nameof(TextElement)} was not provided");
         }
         else
         {
@@ -66,7 +66,7 @@ public class LetterTypewriter : IAsyncTypewriter
             {
                 secondsPerCharacter = 1.0 / CharactersPerSecond;
             }
-            
+
             // Get the count of visible characters from the RichTextLabel to exclude markup characters
             var visibleCharacterCount = TextElement.GetParsedText().Length;
 

@@ -13,7 +13,7 @@ using System.Collections.Generic;
 using System.Threading;
 using Godot;
 using Yarn.Markup;
- 
+
 
 /// <summary>
 /// An implementation of <see cref="IAsyncTypewriter"/> that delivers
@@ -41,7 +41,7 @@ public class InstantTypewriter : IAsyncTypewriter
     {
         if (TextElement == null)
         {
-           GD.PushWarning($"Can't show text as typewriter, because {nameof(TextElement)} was not provided");
+            GD.PushWarning($"Can't show text as typewriter, because {nameof(TextElement)} was not provided");
             return;
         }
 

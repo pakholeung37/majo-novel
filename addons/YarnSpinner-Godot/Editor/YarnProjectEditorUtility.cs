@@ -722,7 +722,7 @@ public static class YarnProjectEditorUtility
 
         return compilationResult;
     }
-    
+
     private static void CreateYarnInternalLocalizationAssets(YarnProject project,
         CompilationResult compilationResult)
     {

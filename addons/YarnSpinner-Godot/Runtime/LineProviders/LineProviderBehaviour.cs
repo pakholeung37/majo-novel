@@ -120,7 +120,7 @@ public abstract partial class LineProviderBehaviour : Godot.Node, ILineProvider
 
     /// <inheritdoc/>
     public abstract string LocaleCode { get; set; }
-    
+
     /// <inheritdoc/>
     public abstract void RegisterMarkerProcessor(string attributeName, IAttributeMarkerProcessor markerProcessor);
 

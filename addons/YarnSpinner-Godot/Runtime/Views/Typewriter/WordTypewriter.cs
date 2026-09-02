@@ -77,7 +77,7 @@ public partial class WordTypewriter : IAsyncTypewriter
             var lastChar = ' ';
             for (int i = 0; i < parsedText.Length; i++)
             {
-               
+
                 if (!char.IsWhiteSpace(lastChar) && char.IsWhiteSpace(parsedText[i]))
                 {
                     wordBoundaries.Add(i);

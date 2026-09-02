@@ -38,7 +38,7 @@ public partial class SaliencySetter : Node
             return;
         }
 
-        
+
         dialogueRunner!.Ready += () =>
         {
             IContentSaliencyStrategy chosenStrategy = SaliencyStrategy switch

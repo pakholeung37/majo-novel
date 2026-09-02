@@ -473,7 +473,7 @@ public partial class YarnProjectInspectorPlugin : EditorInspectorPlugin
                 scriptPatternsGrid.AddChild(new Label()); // spacer
                 scriptPatternsGrid.AddChild(new Label { Text = pattern });
                 var patternDeleteButton = new SourcePatternDeleteButton
-                    { Text = "x", Project = _project, Pattern = pattern };
+                { Text = "x", Project = _project, Pattern = pattern };
 
                 scriptPatternsGrid.AddChild(patternDeleteButton);
             }
@@ -493,7 +493,8 @@ public partial class YarnProjectInspectorPlugin : EditorInspectorPlugin
             scriptPatternsGrid.AddChild(scriptPatternInput);
             var addPatternButton = new SourcePatternAddButton
             {
-                Text = "Add", ScriptPatternInput = scriptPatternInput,
+                Text = "Add",
+                ScriptPatternInput = scriptPatternInput,
                 Project = _project
             };
             scriptPatternsGrid.AddChild(addPatternButton);
@@ -536,7 +537,7 @@ public partial class YarnProjectInspectorPlugin : EditorInspectorPlugin
             AddCustomControl(_sourceScriptsListLabel);
 
             var localeGrid = new GridContainer
-                { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+            { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
             localeGrid.Columns = 3;
 
             var label = new Label { Text = "Localization CSVs" };
@@ -589,7 +590,7 @@ public partial class YarnProjectInspectorPlugin : EditorInspectorPlugin
                 picker.AddChild(pickerButton);
                 localeGrid.AddChild(picker);
                 var deleteButton = new LocaleDeleteButton
-                    { Text = "X", LocaleCode = locale.Key, Plugin = this };
+                { Text = "X", LocaleCode = locale.Key, Plugin = this };
                 deleteButton.Connect(BaseButton.SignalName.Pressed,
                     new Callable(deleteButton,
                         nameof(LocaleDeleteButton.OnPressed)));

@@ -10,7 +10,7 @@ namespace YarnSpinnerGodot;
 [Tool]
 public partial class YarnProjectError : Resource
 {
-    [Export]public string FileName;
+    [Export] public string FileName;
     [Export(PropertyHint.MultilineText)] public string Message;
     [Export(PropertyHint.MultilineText)] public string Context;
 }

@@ -8,7 +8,7 @@ namespace YarnSpinnerGodot;
 
 [Serializable]
 [Tool]
-public class LineMetadata 
+public class LineMetadata
 {
 
     public Dictionary<string, LineMetadataTableEntry> lineMetadata =
@@ -69,7 +69,7 @@ public class LineMetadata
     {
         if (lineMetadata.ContainsKey(lineID))
         {
-            return ((LineMetadataTableEntry) lineMetadata[lineID]).Metadata;
+            return ((LineMetadataTableEntry)lineMetadata[lineID]).Metadata;
         }
 
         return null;
@@ -80,7 +80,7 @@ public class LineMetadata
         var metadataList = new List<LineMetadataTableEntry>();
         foreach (var key in lineMetadata.Keys)
         {
-            var meta = (LineMetadataTableEntry) lineMetadata[key];
+            var meta = (LineMetadataTableEntry)lineMetadata[key];
             metadataList.Add(meta);
         }
 

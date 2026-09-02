@@ -33,7 +33,7 @@ public partial class YarnCompileErrorsPropertyEditor : EditorProperty
     {
         // Read the current value from the property.
         var newVariantValue = GetEditedObject().Get(GetEditedProperty());
-        var newValue = (Array) newVariantValue;
+        var newValue = (Array)newVariantValue;
         if (newValue == _currentValue)
         {
             return;

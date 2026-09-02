@@ -6,7 +6,7 @@ using Yarn.Markup;
 
 namespace YarnSpinnerGodot;
 
-public partial class DialogueRunner 
+public partial class DialogueRunner
 {
     /// <summary>
     /// Convert a LocalizedLine to a Godot Dictionary that is more accessible from GDScript.

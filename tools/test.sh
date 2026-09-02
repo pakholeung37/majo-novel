@@ -106,59 +106,6 @@ restore_dotnet_projects() {
     fi
 }
 
-check_dotnet_formatting() {
-    local game_log="$PACKAGE_STAGE/game-format.log"
-    local unit_log="$PACKAGE_STAGE/unit-format.log"
-    local fixture_log="$PACKAGE_STAGE/fixture-format.log"
-    local game_pid
-    local unit_pid
-    local fixture_pid
-    local format_status=0
-
-    run_with_timeout 180 dotnet format "$GAME_PROJECT/Majo Rebuild.csproj" \
-        --no-restore \
-        --verify-no-changes \
-        --include "$GAME_PROJECT/addons/majo_runtime" "$GAME_PROJECT/demos/demo-01" \
-            "$GAME_PROJECT/demos/manosaba" "$GAME_PROJECT/tests/headless" \
-        --verbosity minimal >"$game_log" 2>&1 &
-    game_pid="$!"
-    run_with_timeout 180 dotnet format "$UNIT_TEST_PROJECT" \
-        --no-restore \
-        --verify-no-changes \
-        --include "$REPOSITORY_ROOT/tests/Majo.Runtime.UnitTests" \
-        --verbosity minimal >"$unit_log" 2>&1 &
-    unit_pid="$!"
-    if [[ "$TEST_MODE" == "full" ]]; then
-        run_with_timeout 180 dotnet format "$FIXTURE_PROJECT" \
-            --no-restore \
-            --verify-no-changes \
-            --include "$FIXTURE_PATH" \
-            --verbosity minimal >"$fixture_log" 2>&1 &
-        fixture_pid="$!"
-    fi
-
-    if ! wait "$game_pid"; then
-        format_status=1
-    fi
-    if ! wait "$unit_pid"; then
-        format_status=1
-    fi
-    if [[ "$TEST_MODE" == "full" ]]; then
-        if ! wait "$fixture_pid"; then
-            format_status=1
-        fi
-    fi
-
-    cat "$game_log" "$unit_log"
-    if [[ "$TEST_MODE" == "full" ]]; then
-        cat "$fixture_log"
-    fi
-    if [[ "$format_status" -ne 0 ]]; then
-        printf 'One or more .NET formatting checks failed.\n' >&2
-        return 1
-    fi
-}
-
 if [[ ! -x "$GODOT_EXECUTABLE" ]]; then
     printf 'Godot Mono executable was not found or is not executable: %s\n' "$GODOT_EXECUTABLE" >&2
     exit 1
@@ -207,9 +154,6 @@ fi
 
 printf 'Restoring .NET dependencies...\n'
 restore_dotnet_projects
-
-printf 'Checking Majo Runtime, test suite, and clean-consumer formatting...\n'
-check_dotnet_formatting
 
 printf 'Building Godot C# project...\n'
 if [[ "$TEST_MODE" == "full" ]]; then

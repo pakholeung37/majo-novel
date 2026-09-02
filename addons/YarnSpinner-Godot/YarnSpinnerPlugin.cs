@@ -141,8 +141,8 @@ public partial class YarnSpinnerPlugin : EditorPlugin
 
         AddCustomType(nameof(DialogueRunner), "Node", dialogueRunnerScript,
             miniYarnSpinnerIcon);
-        AddCustomType(nameof(BasicMarker), "Resource", basicMarkerScript,  miniYarnSpinnerIcon);
-        AddCustomType(nameof(CustomMarker), "Resource", customMarkerScript,  miniYarnSpinnerIcon);
+        AddCustomType(nameof(BasicMarker), "Resource", basicMarkerScript, miniYarnSpinnerIcon);
+        AddCustomType(nameof(CustomMarker), "Resource", customMarkerScript, miniYarnSpinnerIcon);
         AddCustomType(nameof(YarnProject), "Resource", yarnProjectScript,
             miniYarnProjectIcon);
     }

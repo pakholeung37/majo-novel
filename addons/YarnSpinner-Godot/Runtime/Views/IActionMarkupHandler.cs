@@ -1,10 +1,10 @@
-﻿/*
+/*
 Yarn Spinner is licensed to you under the terms found in the file LICENSE.md.
 */
 
 using Yarn.Markup;
 using System.Threading;
-using Godot; 
+using Godot;
 
 namespace YarnSpinnerGodot;
 

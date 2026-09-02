@@ -58,7 +58,7 @@ public partial class YarnImporter : EditorImportPlugin
             GD.PrintErr($"Error saving yarn file import: {saveErr}");
         }
 
-        return (int) Error.Ok;
+        return (int)Error.Ok;
     }
 
     /// <summary>

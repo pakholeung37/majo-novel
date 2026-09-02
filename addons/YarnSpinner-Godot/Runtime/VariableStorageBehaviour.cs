@@ -33,7 +33,7 @@ namespace YarnSpinnerGodot;
 /// A <see cref="Godot.Node"/> that a <see cref="DialogueRunner"/>
 /// uses to store and retrieve variables.
 /// </summary>
-public abstract partial  class VariableStorageBehaviour : Godot.Node, IVariableStorage
+public abstract partial class VariableStorageBehaviour : Godot.Node, IVariableStorage
 {
     public Program Program { get; set; }
 
@@ -72,14 +72,14 @@ public abstract partial  class VariableStorageBehaviour : Godot.Node, IVariableS
     /// <param name="clear">Should the load also wipe the storage.
     /// Defaults to true so all existing variables will be cleared.
     /// </param>
-    public abstract void SetAllVariables(System.Collections.Generic.Dictionary<string,float> floats, System.Collections.Generic.Dictionary<string,string> strings, System.Collections.Generic.Dictionary<string,bool> bools, bool clear = true);
+    public abstract void SetAllVariables(System.Collections.Generic.Dictionary<string, float> floats, System.Collections.Generic.Dictionary<string, string> strings, System.Collections.Generic.Dictionary<string, bool> bools, bool clear = true);
 
     /// <summary>
     /// Provides a unified interface for exporting all variables.
     /// Intended to be a point for custom saving, editors, etc.
     /// </summary>
-    public abstract (System.Collections.Generic.Dictionary<string,float>,System.Collections.Generic.Dictionary<string,string>,System.Collections.Generic.Dictionary<string,bool>) GetAllVariables();
-    
+    public abstract (System.Collections.Generic.Dictionary<string, float>, System.Collections.Generic.Dictionary<string, string>, System.Collections.Generic.Dictionary<string, bool>) GetAllVariables();
+
     public VariableKind GetVariableKind(string name)
     {
         if (this.Contains(name))

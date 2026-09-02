@@ -158,11 +158,11 @@ public partial class LinePresenter : Node, DialoguePresenterBase
     /// The number of characters per second that should appear during a
     /// typewriter effect.
     /// </summary>
-    [ExportGroup("Typewriter")] [Export] public int lettersPerSecond;
+    [ExportGroup("Typewriter")][Export] public int lettersPerSecond;
 
-    [ExportGroup("Typewriter")] [Export] public int wordsPerSecond;
-    [ExportGroup("Typewriter")] [Export] public TypewriterType typewriterStyle;
-    [ExportGroup("Typewriter")] [Export] public Node? customTypewriter;
+    [ExportGroup("Typewriter")][Export] public int wordsPerSecond;
+    [ExportGroup("Typewriter")][Export] public TypewriterType typewriterStyle;
+    [ExportGroup("Typewriter")][Export] public Node? customTypewriter;
 
     /// <summary>
     /// If enabled, matched pairs of the characters '<' and `>`  will be replaced by
@@ -216,7 +216,7 @@ public partial class LinePresenter : Node, DialoguePresenterBase
         }
         // we add all the Godot Node-derived handlers into the shared list
         ActionMarkupHandlers.AddRange(eventHandlers);
-        
+
         if (IsInstanceValid(lineText))
         {
             lineText.BbcodeEnabled = true;
@@ -227,7 +227,8 @@ public partial class LinePresenter : Node, DialoguePresenterBase
                     Typewriter = new InstantTypewriter()
                     {
                         ActionMarkupHandlers = ActionMarkupHandlers,
-                        TextElement = this.lineText, ConvertHTMLToBBCode = ConvertHTMLToBBCode
+                        TextElement = this.lineText,
+                        ConvertHTMLToBBCode = ConvertHTMLToBBCode
                     };
                     break;
 
@@ -246,7 +247,8 @@ public partial class LinePresenter : Node, DialoguePresenterBase
                     {
                         ActionMarkupHandlers = ActionMarkupHandlers,
                         TextElement = this.lineText,
-                        WordsPerSecond = this.wordsPerSecond, ConvertHTMLToBBCode = ConvertHTMLToBBCode
+                        WordsPerSecond = this.wordsPerSecond,
+                        ConvertHTMLToBBCode = ConvertHTMLToBBCode
                     };
                     break;
 
@@ -287,7 +289,7 @@ public partial class LinePresenter : Node, DialoguePresenterBase
         }
 
         MarkupParseResult text;
-        
+
         if (!IsInstanceValid(characterNameText))
         {
             if (showCharacterNameInLineView)

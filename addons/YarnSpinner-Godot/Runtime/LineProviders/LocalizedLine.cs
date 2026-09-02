@@ -1,4 +1,4 @@
-﻿#nullable enable
+#nullable enable
 using Godot;
 using Yarn.Markup;
 
@@ -57,7 +57,7 @@ public class LocalizedLine
     /// The asset associated with this line, if any.
     /// </summary>
     public PackedScene? Asset;
-    
+
     /// <summary>
     /// The object that created this line.
     /// Most of the time will be the <see cref="DialogueRunner"/> that passed the presenter the line.
@@ -68,7 +68,7 @@ public class LocalizedLine
     /// Allowing the presenter to be reused across multiple runners.
     /// </remarks>
     public object? Source;
-    
+
     /// <summary>
     /// The underlying <see cref="Yarn.Markup.MarkupParseResult"/> for this
     /// line.

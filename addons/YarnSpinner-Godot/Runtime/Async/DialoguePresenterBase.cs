@@ -176,8 +176,8 @@ public interface DialoguePresenterBase
     public List<IActionMarkupHandler> ActionMarkupHandlers { get; }
 
     // these return void instead of YarnTask because currently the VM doesn't wait on node enter/exit so we can't either
-    public  void OnNodeEnter(string nodeName) { }
-    public  void OnNodeExit(string nodeName) { }
+    public void OnNodeEnter(string nodeName) { }
+    public void OnNodeExit(string nodeName) { }
 
-    
+
 }

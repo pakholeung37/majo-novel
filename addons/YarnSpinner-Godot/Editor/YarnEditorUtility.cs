@@ -13,7 +13,7 @@ namespace YarnSpinnerGodot;
 public static class YarnEditorUtility
 {
 
-    
+
     const string TemplateFilePath = "res://addons/YarnSpinner-Godot/Editor/YarnScriptTemplate.txt";
 
     /// <summary>
@@ -52,7 +52,7 @@ public static class YarnEditorUtility
             GD.Print($"Failed to save markup palette to {palettePath}");
         }
     }
-    
+
     /// <summary>
     /// Menu Item "Yarn Spinner/Create Yarn Script"
     /// 
@@ -60,11 +60,11 @@ public static class YarnEditorUtility
     /// <param name="localizationPath"></param>
     public static void CreateYarnLocalization(string localizationPath)
     {
-        var newLocalization =  new Localization();
+        var newLocalization = new Localization();
         var absPath = ProjectSettings.GlobalizePath(localizationPath);
         newLocalization.ResourceName = Path.GetFileNameWithoutExtension(absPath);
         newLocalization.ResourcePath = localizationPath;
-        ResourceSaver.Save( newLocalization , localizationPath);
+        ResourceSaver.Save(newLocalization, localizationPath);
         GD.Print($"Saved new yarn localization to {localizationPath}");
     }
 
@@ -107,6 +107,6 @@ public static class YarnEditorUtility
         GD.Print($"Wrote new file {pathName}");
         YarnSpinnerPlugin.editorInterface.GetResourceFilesystem().ScanSources();
     }
-    
+
 }
 #endif

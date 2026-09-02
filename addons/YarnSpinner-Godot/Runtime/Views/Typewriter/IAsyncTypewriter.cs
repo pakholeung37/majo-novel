@@ -1,4 +1,4 @@
-﻿/*
+/*
 Yarn Spinner is licensed to you under the terms found in the file LICENSE.md.
 */
 
@@ -61,7 +61,7 @@ public interface IAsyncTypewriter
     /// <summary>
     /// The list of action markup handlers that this typewriter should call out to while typewriting.
     /// </summary>
-    public List<IActionMarkupHandler> ActionMarkupHandlers { get; set;  }
+    public List<IActionMarkupHandler> ActionMarkupHandlers { get; set; }
 
     /// <summary>
     /// The main text element that the presenter intends the typewriter to work with
