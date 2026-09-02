@@ -31,9 +31,9 @@ public interface IResourceProvider
         Type resourceType,
         CancellationToken cancellationToken);
 
-    Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    Task InitializeAsync(CancellationToken cancellationToken);
 
-    Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    Task ResetAsync(CancellationToken cancellationToken);
 
-    Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    Task ShutdownAsync(CancellationToken cancellationToken);
 }

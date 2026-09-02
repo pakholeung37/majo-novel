@@ -402,13 +402,13 @@ public partial class DefaultDebugOverlay : CanvasLayer, IDisposable
     private static StyleBoxFlat CreatePaddingStyle(
         float horizontalPadding,
         float verticalPadding) => new()
-    {
-        BgColor = Colors.Transparent,
-        ContentMarginLeft = horizontalPadding,
-        ContentMarginRight = horizontalPadding,
-        ContentMarginTop = verticalPadding,
-        ContentMarginBottom = verticalPadding,
-    };
+        {
+            BgColor = Colors.Transparent,
+            ContentMarginLeft = horizontalPadding,
+            ContentMarginRight = horizontalPadding,
+            ContentMarginTop = verticalPadding,
+            ContentMarginBottom = verticalPadding,
+        };
 
     private static string ShortenIdentifier(string identifier) =>
         identifier.Length <= 12 ? identifier : $"{identifier[..12]}…";

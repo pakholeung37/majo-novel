@@ -189,13 +189,13 @@ public sealed class SaveSlotManager : ISaveSlotManager
             .ToArray();
     }
 
-    public async Task<SaveSlotMetadata> ReadMetadataAsync(
+    public Task<SaveSlotMetadata> ReadMetadataAsync(
         SaveSlotId slot,
         CancellationToken cancellationToken = default)
     {
         EnsureInitialized();
         ThrowIfInvalid(slot);
-        return await ReadMetadataCoreAsync(slot, cancellationToken);
+        return ReadMetadataCoreAsync(slot, cancellationToken);
     }
 
     public Task<SaveSlotMetadata> SaveAsync(

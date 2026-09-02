@@ -1,6 +1,5 @@
 #nullable enable
 
-using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -15,12 +14,11 @@ public interface IYarnCommandAdapter : IRuntimeService
 
     RuntimeCommandException? LastFailure { get; }
 
-    bool AbortOnRecoverableFailure => false;
+    bool AbortOnRecoverableFailure { get; }
 
     bool HasActiveCommands { get; }
 
-    IReadOnlyList<RuntimeCommandActivity> ActiveCommands =>
-        Array.Empty<RuntimeCommandActivity>();
+    IReadOnlyList<RuntimeCommandActivity> ActiveCommands { get; }
 
     void CancelDialogue();
 

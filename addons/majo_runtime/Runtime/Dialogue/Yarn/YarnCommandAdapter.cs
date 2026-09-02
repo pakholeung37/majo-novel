@@ -14,7 +14,6 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
     private readonly IYarnCommandRegistry registry;
     private readonly RuntimeCommandCatalog catalog;
     private readonly RuntimeCommandDispatcher dispatcher;
-    private readonly bool abortOnRecoverableFailure;
     private readonly List<string> registeredCommands = new();
     private readonly List<CatalogCommandHandler> commandHandlers = new();
     private bool isInitialized;
@@ -22,32 +21,18 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
     public YarnCommandAdapter(
         IYarnCommandRegistry registry,
         RuntimeCommandCatalog catalog,
-        RuntimeCommandDispatcher dispatcher) : this(
-            registry,
-            catalog,
-            dispatcher,
-            dispatcher?.AbortOnRecoverableFailure ?? false)
-    {
-    }
-
-    public YarnCommandAdapter(
-        IYarnCommandRegistry registry,
-        RuntimeCommandCatalog catalog,
-        RuntimeCommandDispatcher dispatcher,
-        bool abortOnRecoverableFailure)
+        RuntimeCommandDispatcher dispatcher)
     {
         this.registry = registry ?? throw new ArgumentNullException(nameof(registry));
         this.catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         this.dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
-        dispatcher.ConfigureFailurePolicy(abortOnRecoverableFailure);
-        this.abortOnRecoverableFailure = dispatcher.AbortOnRecoverableFailure;
     }
 
     public event Action<RuntimeCommandException>? CommandFailed;
 
     public RuntimeCommandException? LastFailure => dispatcher.LastFailure;
 
-    public bool AbortOnRecoverableFailure => abortOnRecoverableFailure;
+    public bool AbortOnRecoverableFailure => dispatcher.AbortOnRecoverableFailure;
 
     public bool HasActiveCommands => dispatcher.HasActiveCommands;
 
@@ -81,7 +66,7 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
                     group.ToArray(),
                     dispatcher,
                     registry,
-                    abortOnRecoverableFailure);
+                    dispatcher.AbortOnRecoverableFailure);
                 commandHandlers.Add(handler);
                 Register(group.Key, (Func<string[], Task>)handler.ExecuteAsync);
             }
@@ -141,7 +126,7 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
         {
             // Unexpected runtime faults remain fatal to the current dialogue. Recoverable
             // content errors are skipped unless strict authoring behaviour was requested.
-            if (abortOnRecoverableFailure || !failure.IsRecoverable)
+            if (dispatcher.AbortOnRecoverableFailure || !failure.IsRecoverable)
             {
                 registry.AbortDialogue();
             }

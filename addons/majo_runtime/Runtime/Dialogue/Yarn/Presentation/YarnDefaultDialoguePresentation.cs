@@ -344,7 +344,7 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, I
         var scale = fontCatalog?.FontScale ?? 1.0;
         var lineSpacing = fontCatalog?.LineSpacing ?? 0;
         var currentLocale = localeManager?.DialogueLocale ?? "en";
-        var fallbackChain = localeManager?.GetFallbackChain(currentLocale) ?? [currentLocale];
+        var fallbackChain = localeManager?.GetDialogueFallbackChain(currentLocale) ?? [currentLocale];
         var font = fontCatalog?.ResolveFont(currentLocale, fallbackChain) ?? configuration.Font;
 
         foreach (var label in Descendants(root).OfType<RichTextLabel>())

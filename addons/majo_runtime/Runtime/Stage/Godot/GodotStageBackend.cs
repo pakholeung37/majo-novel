@@ -282,12 +282,12 @@ internal sealed class GodotStageBackend : IStageBackend
                     offset = new Vector2(t, t);
                     break;
                 default:
-                {
-                    var angle = initialAngle + index * MathF.PI + (float)((random.NextDouble() * 0.6) - 0.3);
-                    var radius = noise * shake.Strength * decay;
-                    offset = new Vector2(MathF.Cos(angle) * radius, MathF.Sin(angle) * radius);
-                    break;
-                }
+                    {
+                        var angle = initialAngle + index * MathF.PI + (float)((random.NextDouble() * 0.6) - 0.3);
+                        var radius = noise * shake.Strength * decay;
+                        offset = new Vector2(MathF.Cos(angle) * radius, MathF.Sin(angle) * radius);
+                        break;
+                    }
             }
 
             shakeTween.TweenProperty(actors.Root, "offset", offset, sampleDuration);
@@ -544,22 +544,22 @@ internal sealed class GodotStageBackend : IStageBackend
 
     private static (Tween.TransitionType Transition, Tween.EaseType Ease) ResolveCurve(
         MotionCurve curve) => curve switch
-    {
-        MotionCurve.Linear => (Tween.TransitionType.Linear, Tween.EaseType.InOut),
-        MotionCurve.SineIn => (Tween.TransitionType.Sine, Tween.EaseType.In),
-        MotionCurve.SineOut => (Tween.TransitionType.Sine, Tween.EaseType.Out),
-        MotionCurve.SineInOut => (Tween.TransitionType.Sine, Tween.EaseType.InOut),
-        MotionCurve.CubicIn => (Tween.TransitionType.Cubic, Tween.EaseType.In),
-        MotionCurve.CubicOut => (Tween.TransitionType.Cubic, Tween.EaseType.Out),
-        MotionCurve.CubicInOut => (Tween.TransitionType.Cubic, Tween.EaseType.InOut),
-        MotionCurve.QuintIn => (Tween.TransitionType.Quint, Tween.EaseType.In),
-        MotionCurve.QuintOut => (Tween.TransitionType.Quint, Tween.EaseType.Out),
-        MotionCurve.QuintInOut => (Tween.TransitionType.Quint, Tween.EaseType.InOut),
-        MotionCurve.BackIn => (Tween.TransitionType.Back, Tween.EaseType.In),
-        MotionCurve.BackOut => (Tween.TransitionType.Back, Tween.EaseType.Out),
-        MotionCurve.BackInOut => (Tween.TransitionType.Back, Tween.EaseType.InOut),
-        _ => throw new ArgumentOutOfRangeException(nameof(curve)),
-    };
+        {
+            MotionCurve.Linear => (Tween.TransitionType.Linear, Tween.EaseType.InOut),
+            MotionCurve.SineIn => (Tween.TransitionType.Sine, Tween.EaseType.In),
+            MotionCurve.SineOut => (Tween.TransitionType.Sine, Tween.EaseType.Out),
+            MotionCurve.SineInOut => (Tween.TransitionType.Sine, Tween.EaseType.InOut),
+            MotionCurve.CubicIn => (Tween.TransitionType.Cubic, Tween.EaseType.In),
+            MotionCurve.CubicOut => (Tween.TransitionType.Cubic, Tween.EaseType.Out),
+            MotionCurve.CubicInOut => (Tween.TransitionType.Cubic, Tween.EaseType.InOut),
+            MotionCurve.QuintIn => (Tween.TransitionType.Quint, Tween.EaseType.In),
+            MotionCurve.QuintOut => (Tween.TransitionType.Quint, Tween.EaseType.Out),
+            MotionCurve.QuintInOut => (Tween.TransitionType.Quint, Tween.EaseType.InOut),
+            MotionCurve.BackIn => (Tween.TransitionType.Back, Tween.EaseType.In),
+            MotionCurve.BackOut => (Tween.TransitionType.Back, Tween.EaseType.Out),
+            MotionCurve.BackInOut => (Tween.TransitionType.Back, Tween.EaseType.InOut),
+            _ => throw new ArgumentOutOfRangeException(nameof(curve)),
+        };
 
     private static ColorRect CreateFullRect(string name)
     {

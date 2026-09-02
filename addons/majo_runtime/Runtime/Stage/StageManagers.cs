@@ -301,13 +301,13 @@ public sealed class CameraManager : ICameraManager
         CameraState current,
         CameraState source,
         IReadOnlyCollection<string> properties) => current with
-    {
-        Center = properties.Contains("center") ? source.Center : current.Center,
-        Zoom = properties.Contains("zoom") ? source.Zoom : current.Zoom,
-        RotationDegrees = properties.Contains("rotation")
+        {
+            Center = properties.Contains("center") ? source.Center : current.Center,
+            Zoom = properties.Contains("zoom") ? source.Zoom : current.Zoom,
+            RotationDegrees = properties.Contains("rotation")
             ? source.RotationDegrees
             : current.RotationDegrees,
-    };
+        };
 
     private static CameraPoseUpdate CreatePoseUpdate(
         CameraState state,

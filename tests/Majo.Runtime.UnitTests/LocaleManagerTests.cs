@@ -18,23 +18,23 @@ namespace Majo.Runtime.UnitTests;
 public sealed class LocaleManagerTests
 {
     [Fact]
-    public void GetFallbackChain_GeneratesExpectedHierarchy()
+    public void GetDialogueFallbackChain_GeneratesExpectedHierarchy()
     {
         var manager = new LocaleManager("en", ["en", "zh-CN", "zh-Hans", "zh", "ja"]);
 
-        var chainZhCn = manager.GetFallbackChain("zh-CN");
+        var chainZhCn = manager.GetDialogueFallbackChain("zh-CN");
         Assert.Equal(["zh-CN", "zh", "en"], chainZhCn);
 
-        var chainZhHansCn = manager.GetFallbackChain("zh-Hans-CN");
+        var chainZhHansCn = manager.GetDialogueFallbackChain("zh-Hans-CN");
         Assert.Equal(["zh-Hans-CN", "zh-Hans", "zh", "en"], chainZhHansCn);
 
-        var chainJaJp = manager.GetFallbackChain("ja-JP");
+        var chainJaJp = manager.GetDialogueFallbackChain("ja-JP");
         Assert.Equal(["ja-JP", "ja", "en"], chainJaJp);
 
-        var chainEn = manager.GetFallbackChain("en");
+        var chainEn = manager.GetDialogueFallbackChain("en");
         Assert.Equal(["en"], chainEn);
 
-        var chainEnUs = manager.GetFallbackChain("en-US");
+        var chainEnUs = manager.GetDialogueFallbackChain("en-US");
         Assert.Equal(["en-US", "en"], chainEnUs);
     }
 
@@ -62,7 +62,7 @@ public sealed class LocaleManagerTests
     {
         var resolver = new LocalizedResourceResolver(new ResolverOnlyResourceManager());
         var manager = new LocaleManager("en", ["en", "zh-Hans", "zh"]);
-        var chain = manager.GetFallbackChain("zh-Hans-CN");
+        var chain = manager.GetDialogueFallbackChain("zh-Hans-CN");
 
         var parent = resolver.ResolvePath(
             "line-1", "zh-Hans-CN", chain,
@@ -90,7 +90,7 @@ public sealed class LocaleManagerTests
     }
 
     [Fact]
-    public async Task ChangeLocaleAsync_TransactionalSuccessAndFailureRollback()
+    public async Task ChangeDialogueLocaleAsync_TransactionalSuccessAndFailureRollback()
     {
         var manager = new LocaleManager("en", ["en", "zh-CN"]);
         LocaleChangedEvent? changedEvent = null;
@@ -100,23 +100,23 @@ public sealed class LocaleManagerTests
         manager.SwitchFailed += e => failedEvent = e;
 
         // Successful change
-        var result = await manager.ChangeLocaleAsync("zh-CN");
+        var result = await manager.ChangeDialogueLocaleAsync("zh-CN");
         Assert.True(result.Success);
         Assert.Equal("en", result.PreviousLocale);
         Assert.Equal("zh-CN", result.AppliedLocale);
-        Assert.Equal("zh-CN", manager.CurrentLocale);
+        Assert.Equal("zh-CN", manager.DialogueLocale);
         Assert.NotNull(changedEvent);
         Assert.Equal("zh-CN", changedEvent!.CurrentLocale);
 
         // Attempt unsupported locale with no fallback to available
-        var failResult = await manager.ChangeLocaleAsync("fr-FR");
+        var failResult = await manager.ChangeDialogueLocaleAsync("fr-FR");
         // fr-FR -> fr -> en (en is available, so it falls back)
         Assert.True(failResult.Success);
-        Assert.Equal("fr-FR", manager.CurrentLocale);
+        Assert.Equal("fr-FR", manager.DialogueLocale);
     }
 
     [Fact]
-    public async Task ChangeLocaleAsync_WaitsForSafeBoundaryBeforeApplying()
+    public async Task ChangeDialogueLocaleAsync_WaitsForSafeBoundaryBeforeApplying()
     {
         var boundary = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var isBusy = true;
@@ -132,11 +132,11 @@ public sealed class LocaleManagerTests
             },
             waitForSafeBoundary: token => boundary.Task.WaitAsync(token));
 
-        var change = manager.ChangeLocaleAsync("zh-CN");
+        var change = manager.ChangeDialogueLocaleAsync("zh-CN");
         await Task.Yield();
 
         Assert.False(change.IsCompleted);
-        Assert.Equal("en", manager.CurrentLocale);
+        Assert.Equal("en", manager.DialogueLocale);
         Assert.Equal(LocaleSwitchState.PendingPresentationBoundary, manager.SwitchState);
         Assert.Empty(applied);
 
@@ -145,12 +145,12 @@ public sealed class LocaleManagerTests
         var result = await change;
 
         Assert.True(result.Success);
-        Assert.Equal("zh-CN", manager.CurrentLocale);
+        Assert.Equal("zh-CN", manager.DialogueLocale);
         Assert.Equal(["zh-CN"], applied);
     }
 
     [Fact]
-    public async Task ChangeLocaleAsync_ApplyFailureRestoresEnginePresentationAndIdentity()
+    public async Task ChangeDialogueLocaleAsync_ApplyFailureRestoresEnginePresentationAndIdentity()
     {
         var engineLocales = new List<string>();
         var presentationLocales = new List<string>();
@@ -172,10 +172,10 @@ public sealed class LocaleManagerTests
         manager.DialogueLocaleChanged += value => changed = value;
         manager.SwitchFailed += value => failed = value;
 
-        var result = await manager.ChangeLocaleAsync("zh-CN");
+        var result = await manager.ChangeDialogueLocaleAsync("zh-CN");
 
         Assert.False(result.Success);
-        Assert.Equal("en", manager.CurrentLocale);
+        Assert.Equal("en", manager.DialogueLocale);
         Assert.Null(changed);
         Assert.NotNull(failed);
         Assert.Equal(["zh-CN", "en"], engineLocales);
@@ -184,7 +184,7 @@ public sealed class LocaleManagerTests
     }
 
     [Fact]
-    public async Task ChangeLocaleAsync_ApplyCancellationRollsBackBeforePropagating()
+    public async Task ChangeDialogueLocaleAsync_ApplyCancellationRollsBackBeforePropagating()
     {
         var engineLocales = new List<string>();
         var presentationLocales = new List<string>();
@@ -204,16 +204,16 @@ public sealed class LocaleManagerTests
             applyEngineLocale: engineLocales.Add);
 
         await Assert.ThrowsAsync<OperationCanceledException>(
-            () => manager.ChangeLocaleAsync("zh-CN"));
+            () => manager.ChangeDialogueLocaleAsync("zh-CN"));
 
-        Assert.Equal("en", manager.CurrentLocale);
+        Assert.Equal("en", manager.DialogueLocale);
         Assert.Equal(["zh-CN", "en"], engineLocales);
         Assert.Equal(["zh-CN", "en"], presentationLocales);
         Assert.Equal(LocaleSwitchState.Idle, manager.SwitchState);
     }
 
     [Fact]
-    public async Task ChangeLocaleAsync_PreflightFailureDoesNotMutateLocale()
+    public async Task ChangeDialogueLocaleAsync_PreflightFailureDoesNotMutateLocale()
     {
         var applyCount = 0;
         var manager = new LocaleManager(
@@ -226,10 +226,10 @@ public sealed class LocaleManagerTests
             },
             preflightLocale: (locale, _) => throw new InvalidOperationException($"Missing font for {locale}"));
 
-        var result = await manager.ChangeLocaleAsync("zh-CN");
+        var result = await manager.ChangeDialogueLocaleAsync("zh-CN");
 
         Assert.False(result.Success);
-        Assert.Equal("en", manager.CurrentLocale);
+        Assert.Equal("en", manager.DialogueLocale);
         Assert.Equal(0, applyCount);
     }
 
@@ -243,12 +243,12 @@ public sealed class LocaleManagerTests
             waitForSafeBoundary: token => Task.Delay(Timeout.InfiniteTimeSpan, token));
         await manager.InitializeAsync(default);
 
-        var change = manager.ChangeLocaleAsync("zh-CN");
+        var change = manager.ChangeDialogueLocaleAsync("zh-CN");
         await Task.Yield();
         await manager.ResetAsync(default);
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => change);
-        Assert.Equal("en", manager.CurrentLocale);
+        Assert.Equal("en", manager.DialogueLocale);
         Assert.Equal(LocaleSwitchState.Idle, manager.SwitchState);
     }
 

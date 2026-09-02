@@ -484,7 +484,7 @@ public partial class MajoRuntimeBootstrap : Node
                                 yarnDialogueBackend is not null &&
                                 dialoguePresentation is not null)
                             {
-                                var fallbackChain = manager!.GetFallbackChain(locale);
+                                var fallbackChain = manager!.GetDialogueFallbackChain(locale);
                                 if (dialoguePlayer.IsPresentingOptions)
                                 {
                                     var reResolvedOpts = yarnDialogueBackend.ReResolveCurrentOptions(locale, fallbackChain);

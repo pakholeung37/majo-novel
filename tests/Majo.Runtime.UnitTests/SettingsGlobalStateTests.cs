@@ -179,7 +179,7 @@ public sealed class SettingsGlobalStateTests
         await locales.InitializeAsync(default);
         await manager.InitializeAsync(default);
 
-        var result = await locales.ChangeLocaleAsync("zh-CN");
+        var result = await locales.ChangeDialogueLocaleAsync("zh-CN");
 
         Assert.True(result.Success);
         Assert.Equal("zh-CN", manager.Current.DialogueLocale);

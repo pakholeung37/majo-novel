@@ -27,13 +27,13 @@ public interface IInputManager : IRuntimeService
 {
     event Action<InputActivation>? Dispatched;
 
-    event Action? HandlesChanged { add { } remove { } }
+    event Action? HandlesChanged;
 
     bool Enabled { get; set; }
 
     int ActiveHandleCount { get; }
 
-    IReadOnlyList<InputHandleSnapshot> ActiveHandles => Array.Empty<InputHandleSnapshot>();
+    IReadOnlyList<InputHandleSnapshot> ActiveHandles { get; }
 
     IInputHandle AcquireScope(object owner, InputScopeOptions? options = null);
 

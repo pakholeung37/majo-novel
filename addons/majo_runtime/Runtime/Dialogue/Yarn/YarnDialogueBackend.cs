@@ -825,7 +825,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
     private string ResolvePresentedLocale(LocalizedLine line)
     {
         var requested = localeManager?.DialogueLocale ?? runner?.LineProvider.LocaleCode ?? "en";
-        var chain = localeManager?.GetFallbackChain(requested) ?? [requested];
+        var chain = localeManager?.GetDialogueFallbackChain(requested) ?? [requested];
         foreach (var candidate in chain)
         {
             var translated = ResolveExactGodotTranslation(line.TextID, candidate);

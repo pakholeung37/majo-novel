@@ -19,7 +19,7 @@ public sealed class RuntimeCommandDispatcher : IDisposable
     private readonly IOperationScheduler? operations;
     private readonly IServiceResolver? services;
     private readonly IRuntimeLogger logger;
-    private bool abortOnRecoverableFailure;
+    private readonly bool abortOnRecoverableFailure;
     private readonly AwaitScopeCoordinator awaitScopes = new();
     private readonly HashSet<IOperationHandle> dialogueOperations =
         new(ReferenceEqualityComparer.Instance);
@@ -49,9 +49,6 @@ public sealed class RuntimeCommandDispatcher : IDisposable
     public RuntimeCommandException? LastFailure { get; private set; }
 
     public bool AbortOnRecoverableFailure => abortOnRecoverableFailure;
-
-    internal void ConfigureFailurePolicy(bool abortOnRecoverableFailure) =>
-        this.abortOnRecoverableFailure = abortOnRecoverableFailure;
 
     public bool HasActiveCommands
     {

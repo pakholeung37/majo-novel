@@ -142,6 +142,7 @@ public sealed class StateEligibilityTests
     private sealed class EligibilityInput : IInputManager
     {
         public event Action<InputActivation>? Dispatched { add { } remove { } }
+        public event Action? HandlesChanged { add { } remove { } }
         public bool Enabled { get; set; } = true;
         public IReadOnlyList<InputHandleSnapshot> Handles { get; set; } = [];
         public int ActiveHandleCount => Handles.Count;

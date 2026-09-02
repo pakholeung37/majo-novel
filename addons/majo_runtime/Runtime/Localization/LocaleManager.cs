@@ -74,7 +74,6 @@ public sealed class LocaleManager : ILocaleManager
 
     public string DialogueLocale { get; private set; }
     public string VoiceLocale { get; private set; }
-    public string CurrentLocale => DialogueLocale;
     public string DefaultLocale { get; }
     public string DefaultVoiceLocale { get; }
     public IReadOnlyList<string> AvailableLocales
@@ -125,9 +124,6 @@ public sealed class LocaleManager : ILocaleManager
         return Task.CompletedTask;
     }
 
-    public IReadOnlyList<string> GetFallbackChain(string locale) =>
-        BuildFallbackChain(locale, DefaultLocale);
-
     public IReadOnlyList<string> GetDialogueFallbackChain(string locale) =>
         BuildFallbackChain(locale, DefaultLocale);
 
@@ -171,14 +167,6 @@ public sealed class LocaleManager : ILocaleManager
             }
         }
     }
-
-    public void RequestLocaleChange(string targetLocale) =>
-        _ = ChangeDialogueLocaleAsync(targetLocale);
-
-    public Task<LocaleSwitchResult> ChangeLocaleAsync(
-        string targetLocale,
-        CancellationToken cancellationToken = default) =>
-        ChangeDialogueLocaleAsync(targetLocale, cancellationToken);
 
     public async Task<LocaleSwitchResult> ChangeDialogueLocaleAsync(
         string targetLocale,

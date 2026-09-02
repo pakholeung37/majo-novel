@@ -547,6 +547,7 @@ public sealed class AutoHistoryTests
         public IReadOnlyCollection<IAudioPlayback> BgmTracks => [];
         public IReadOnlyCollection<IAudioPlayback> SfxInstances => [];
         public IAudioPlayback? CurrentVoice => voice;
+        public bool IsFading(string instanceId) => false;
         public string? LastPlayedVoiceId { get; private set; }
         public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public Task ResetAsync(CancellationToken cancellationToken)

@@ -178,8 +178,8 @@ public partial class HeadlessTestRunner
         configuration.Audio!.MasterVolume = 2;
         configuration.Audio.DefaultFadeDurationSeconds = double.NaN;
         configuration.Audio.VoiceLocale = string.Empty;
-		configuration.Audio.BgmPath = "..";
-		configuration.Resources!.FailOnMissingAssets = true;
+        configuration.Audio.BgmPath = "..";
+        configuration.Resources!.FailOnMissingAssets = true;
         configuration.Auto!.ExtraDelaySeconds = double.NaN;
         configuration.History!.Capacity = 0;
 

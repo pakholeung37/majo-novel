@@ -492,9 +492,11 @@ public sealed class StateManagerTests
         }
 
         public event Action<InputActivation>? Dispatched { add { } remove { } }
+        public event Action? HandlesChanged { add { } remove { } }
 
         public bool Enabled { get; set; } = true;
         public int ActiveHandleCount => 0;
+        public IReadOnlyList<InputHandleSnapshot> ActiveHandles => [];
 
         public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
