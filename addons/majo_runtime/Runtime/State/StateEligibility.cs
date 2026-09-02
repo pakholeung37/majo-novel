@@ -130,7 +130,7 @@ public sealed class StateEligibility : IStateEligibility
         }
 
         var reasons = new List<StateEligibilityReason>();
-        var isDestructiveRestore = operation == StateOperationKind.Restore;
+        var isDestructiveRestore = operation is StateOperationKind.Restore or StateOperationKind.Rollback;
         var safeScriptPhase = operation == StateOperationKind.Save
             ? script.Phase == ScriptPlaybackPhase.AwaitingAdvance
             : script.Phase is ScriptPlaybackPhase.AwaitingAdvance or ScriptPlaybackPhase.Idle;
