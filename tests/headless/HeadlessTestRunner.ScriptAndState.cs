@@ -470,6 +470,21 @@ public partial class HeadlessTestRunner
                 slotMetadata.All(item => item.Compatibility == SaveSlotCompatibility.Compatible),
             "M13 did not list the three committed Manual slots deterministically.");
 
+        // Regression: Rapidly loading a save while a background operation is running must not deadlock in StopAsync
+        var longFadeCurtain = curtain.SetCurtain(
+            Colors.Black,
+            0.5f,
+            new StageOperationSpec(10.0, "long-curtain-fade", Skippable: false));
+        Assert(operations.ActiveOperations.Count > 0,
+            "Failed to start active background operation for rapid load regression test.");
+        var loadTask = slots.LoadAsync(new SaveSlotId(SaveSlotKind.Manual, 1));
+        var completedLoad = await Task.WhenAny(
+            loadTask,
+            Task.Delay(TimeSpan.FromSeconds(3)));
+        Assert(ReferenceEquals(completedLoad, loadTask),
+            "Loading a save while background operations are active deadlocked in StopAsync.");
+        await loadTask;
+
         await dialogue.StopAsync();
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);

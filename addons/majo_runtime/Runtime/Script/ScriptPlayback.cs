@@ -223,16 +223,14 @@ public sealed class ScriptPlayback : IScriptPlayback
 
     private void HandleDialogueStateChanged(DialogueStateChanged _) => ProjectDialogueState();
 
-    private void HandleLinePresented(DialogueLine _) =>
-        SetPhase(ScriptPlaybackPhase.PresentingLine);
+    private void HandleLinePresented(DialogueLine _) => ProjectDialogueState();
 
     private void HandleOptionsPresented(System.Collections.Generic.IReadOnlyList<DialogueOption> _) =>
-        SetPhase(ScriptPlaybackPhase.PresentingOptions);
+        ProjectDialogueState();
 
-    private void HandleLineDisplayCompleted() =>
-        SetPhase(ScriptPlaybackPhase.AwaitingAdvance);
+    private void HandleLineDisplayCompleted() => ProjectDialogueState();
 
-    private void HandleLineDismissed() => SetPhase(ScriptPlaybackPhase.Executing);
+    private void HandleLineDismissed() => ProjectDialogueState();
 
     private void ProjectDialogueState()
     {

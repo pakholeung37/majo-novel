@@ -297,7 +297,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
 
         if (Runner.IsDialogueRunning)
         {
-            var waitForBoundary = commandAdapter?.HasActiveCommands == true;
+            var waitForBoundary = commandAdapter?.ActiveCommands.Count > 0;
             var stopBoundary = presenterAdapter!.PrepareToStop();
             commandAdapter?.CancelDialogue();
             if (commandAdapter is not null)

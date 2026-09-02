@@ -105,6 +105,37 @@ public sealed class ScriptRuntimeTests
         }
     }
 
+    [Fact]
+    public async Task ScriptPlayback_PresentationEventsDoNotOverrideStoppingOrIdlePhases()
+    {
+        var dialogue = new FakeDialoguePlayer([]);
+        var presentation = new FakeDialoguePresentation();
+        var checkpointBackend = new FakeCheckpointBackend([]);
+        var playback = new ScriptPlayback(
+            dialogue,
+            presentation,
+            checkpointBackend);
+        await playback.InitializeAsync(CancellationToken.None);
+
+        Assert.Equal(ScriptPlaybackPhase.Idle, playback.Phase);
+        presentation.FireDisplayCompleted();
+        Assert.Equal(ScriptPlaybackPhase.Idle, playback.Phase);
+        presentation.FireLineDismissed();
+        Assert.Equal(ScriptPlaybackPhase.Idle, playback.Phase);
+
+        dialogue.SetState(DialogueSessionState.Stopping);
+        Assert.Equal(ScriptPlaybackPhase.Stopping, playback.Phase);
+        presentation.FireDisplayCompleted();
+        Assert.Equal(ScriptPlaybackPhase.Stopping, playback.Phase);
+        presentation.FireLineDismissed();
+        Assert.Equal(ScriptPlaybackPhase.Stopping, playback.Phase);
+
+        dialogue.SetState(DialogueSessionState.Running);
+        presentation.IsLineDisplayComplete = true;
+        presentation.FireDisplayCompleted();
+        Assert.Equal(ScriptPlaybackPhase.AwaitingAdvance, playback.Phase);
+    }
+
     private static IEnumerable<Type> PublicMemberTypes(Type type)
     {
         const BindingFlags flags = BindingFlags.Public |
@@ -201,14 +232,14 @@ public sealed class ScriptRuntimeTests
             this.order = order;
         }
 
-        public event Action<DialogueStateChanged>? StateChanged { add { } remove { } }
+        public event Action<DialogueStateChanged>? StateChanged;
         public event Action<DialogueStartRequest>? Started { add { } remove { } }
         public event Action<DialogueLine>? LinePresented { add { } remove { } }
         public event Action<IReadOnlyList<DialogueOption>>? OptionsPresented { add { } remove { } }
         public event Action<DialogueCompletion>? Completed { add { } remove { } }
         public event Action<DialogueCompletion>? Stopped { add { } remove { } }
         public event Action<Exception>? Failed { add { } remove { } }
-        public DialogueSessionState State => DialogueSessionState.Idle;
+        public DialogueSessionState State { get; private set; } = DialogueSessionState.Idle;
         public string? CurrentProjectId => null;
         public string? CurrentNode => null;
         public string? CurrentLineId => null;
@@ -216,6 +247,13 @@ public sealed class ScriptRuntimeTests
         public IReadOnlyList<DialogueOption> CurrentOptions => Array.Empty<DialogueOption>();
         public Task<DialogueCompletion> Completion => Task.FromResult(
             new DialogueCompletion(DialogueCompletionKind.Completed, "project", "Start"));
+
+        public void SetState(DialogueSessionState state)
+        {
+            var previous = State;
+            State = state;
+            StateChanged?.Invoke(new DialogueStateChanged(previous, state));
+        }
 
         public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
@@ -246,11 +284,13 @@ public sealed class ScriptRuntimeTests
 
     private sealed class FakeDialoguePresentation : IDialoguePresentation
     {
-        public event Action? LineDisplayCompleted { add { } remove { } }
-        public event Action? LineDismissed { add { } remove { } }
-        public bool IsLineActive => false;
-        public bool IsLineDisplayComplete => false;
-        public bool IsPresentingOptions => false;
+        public event Action? LineDisplayCompleted;
+        public event Action? LineDismissed;
+        public bool IsLineActive { get; set; }
+        public bool IsLineDisplayComplete { get; set; }
+        public bool IsPresentingOptions { get; set; }
+        public void FireDisplayCompleted() => LineDisplayCompleted?.Invoke();
+        public void FireLineDismissed() => LineDismissed?.Invoke();
         public void ReRenderLine(DialogueLine line) { }
         public void ReRenderOptions(IReadOnlyList<DialogueOption> options) { }
         public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
