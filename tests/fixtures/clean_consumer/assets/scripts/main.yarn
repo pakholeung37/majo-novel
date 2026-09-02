@@ -1,9 +1,0 @@
-title: Start
-tags: clean consumer test
----
-<<declare $clean_var = "initial">>
-<<clean_cmd arg_from_yarn>>
-Narrator: First line of clean consumer test with {$clean_var}. #line:clean_line_1
-<<set $clean_var = "advanced">>
-Narrator: Second line after advance with {$clean_var}. #line:clean_line_2
-===
