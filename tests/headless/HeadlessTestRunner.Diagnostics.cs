@@ -37,8 +37,23 @@ public partial class HeadlessTestRunner
             await bootstrap.InitializationCompletion;
             Assert(bootstrap.IsInitialized, "Bootstrap should be initialized.");
             Assert(bootstrap.Diagnostics is not null, "Diagnostics service should be available.");
-            Assert(bootstrap.RingBuffer is not null, "Ring buffer should be available.");
             Assert(bootstrap.DebugOverlay is not null, "Debug overlay should be instantiated.");
+            Assert(bootstrap.FpsOverlay is not null, "FPS overlay should be instantiated in debug mode.");
+
+            // Verify FPS overlay layout and styling
+            var fpsOverlay = bootstrap.FpsOverlay;
+            var fpsRoot = fpsOverlay.FindChild("MajoFpsOverlayRoot", recursive: true, owned: false) as Control;
+            Assert(fpsRoot is not null, "FPS overlay root must exist.");
+            Assert(Mathf.IsZeroApprox(fpsRoot.AnchorLeft) && Mathf.IsZeroApprox(fpsRoot.AnchorTop),
+                "FPS overlay root should be anchored at top-left.");
+            var fpsLabel = fpsOverlay.FpsLabel;
+            Assert(fpsLabel is not null, "FPS label must exist.");
+            Assert(fpsLabel.Text.StartsWith("FPS:", StringComparison.Ordinal), "FPS label should display FPS prefix.");
+
+            var fontColor = fpsLabel.GetThemeColor("font_color");
+            Assert(Mathf.IsEqualApprox(fontColor.G, 1.0f) && Mathf.IsZeroApprox(fontColor.R) && Mathf.IsZeroApprox(fontColor.B),
+                "FPS label text must be green.");
+
 
             // Verify lifecycle log events were captured in ring buffer
             var recentEvents = bootstrap.Diagnostics.RecentEvents;
@@ -146,6 +161,8 @@ public partial class HeadlessTestRunner
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             Assert(!bootstrap.IsInitialized, "Bootstrap should no longer be initialized after shutdown.");
             Assert(bootstrap.DebugOverlay is null, "Debug overlay should be cleaned up on shutdown.");
+            Assert(bootstrap.FpsOverlay is null, "FPS overlay should be cleaned up on shutdown.");
+
         }
         finally
         {

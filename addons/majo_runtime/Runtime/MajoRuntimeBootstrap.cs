@@ -123,6 +123,8 @@ public partial class MajoRuntimeBootstrap : Node
 
     public DefaultDebugOverlay? DebugOverlay { get; private set; }
 
+    public DefaultFpsOverlay? FpsOverlay { get; private set; }
+
     public RuntimeHost? Host { get; private set; }
 
     public IRuntimeDiagnostics? Diagnostics =>
@@ -253,6 +255,13 @@ public partial class MajoRuntimeBootstrap : Node
                 DebugOverlay = new DefaultDebugOverlay(
                     this, diagnostics!, inputManager!, Configuration.Diagnostics);
             }
+
+            var showFps = Configuration.Diagnostics?.ShowFpsOverlay ?? true;
+            if (showFps && OS.IsDebugBuild())
+            {
+                FpsOverlay = new DefaultFpsOverlay(this, Configuration.Diagnostics);
+            }
+
 
             if (isExitingTree)
             {
@@ -1220,6 +1229,8 @@ public partial class MajoRuntimeBootstrap : Node
                 }
             }
 
+            FpsOverlay?.Dispose();
+            FpsOverlay = null;
             DebugOverlay?.Dispose();
             DebugOverlay = null;
             Logger?.Dispose();
