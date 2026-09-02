@@ -72,8 +72,8 @@ public sealed class CompositeDirectionPreparationBackend : IDirectionPreparation
     }
 
     private static async Task AddPreparedBatchAsync(
-        IReadOnlyList<Task<IPreparedDirectionComponent>> preparations,
-        ICollection<IPreparedDirectionComponent> prepared)
+        List<Task<IPreparedDirectionComponent>> preparations,
+        List<IPreparedDirectionComponent> prepared)
     {
         if (preparations.Count == 0) return;
         try

@@ -91,7 +91,7 @@ public partial class HeadlessTestRunner
             "Unknown Yarn command did not allow the dialogue to complete.");
         Assert(adapter.LastFailure?.CommandName == "majo_unknown",
             "Unknown Yarn command was not exposed through Runtime diagnostics.");
-        Assert(presenter.Lines.LastOrDefault() == "after unknown command",
+        Assert(presenter.Lines.Count > 0 && presenter.Lines[^1] == "after unknown command",
             "Yarn did not advance after an unknown command.");
 
         await dialogue.StartAsync(new DialogueStartRequest(StartNode: "CustomCommand"));

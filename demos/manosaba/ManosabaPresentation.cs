@@ -130,17 +130,17 @@ public partial class ManosabaPresentation : Control
         menuPanel.Visible = false;
     }
 
-    public override void _Input(InputEvent inputEvent)
+    public override void _Input(InputEvent @event)
     {
-        if (inputEvent is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true } ||
-            inputEvent.IsActionPressed("ui_cancel"))
+        if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true } ||
+            @event.IsActionPressed("ui_cancel"))
         {
             ToggleMenu();
             GetViewport().SetInputAsHandled();
             return;
         }
 
-        if (inputEvent is not InputEventMouseButton
+        if (@event is not InputEventMouseButton
             {
                 ButtonIndex: MouseButton.Left,
                 Pressed: true,

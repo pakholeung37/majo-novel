@@ -25,7 +25,7 @@ public sealed class CancelCommandHandler : IRuntimeCommandHandler<CancelCommandA
         CancelCommandArguments arguments,
         RuntimeCommandContext context)
     {
-        var operations = context.Require(context.Operations, "OperationScheduler");
+        var operations = RuntimeCommandContext.Require(context.Operations, "OperationScheduler");
         var target = arguments.Group is not null
             ? OperationTarget.ForGroup(arguments.Group)
             : OperationTarget.ForId(arguments.Operation!);

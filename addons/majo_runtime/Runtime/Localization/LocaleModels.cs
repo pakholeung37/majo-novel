@@ -21,17 +21,20 @@ public sealed record LocaleResolutionResult<T>(
     string Key)
 {
     public bool IsResolved => FallbackSource != LocaleFallbackSource.Missing && Value is not null;
+}
 
-    public static LocaleResolutionResult<T> Exact(string locale, string key, T value) =>
+public static class LocaleResolutionResult
+{
+    public static LocaleResolutionResult<T> Exact<T>(string locale, string key, T value) =>
         new(locale, locale, LocaleFallbackSource.Exact, value, key);
 
-    public static LocaleResolutionResult<T> Parent(string requested, string resolved, string key, T value) =>
+    public static LocaleResolutionResult<T> Parent<T>(string requested, string resolved, string key, T value) =>
         new(requested, resolved, LocaleFallbackSource.Parent, value, key);
 
-    public static LocaleResolutionResult<T> Default(string requested, string resolved, string key, T value) =>
+    public static LocaleResolutionResult<T> Default<T>(string requested, string resolved, string key, T value) =>
         new(requested, resolved, LocaleFallbackSource.Default, value, key);
 
-    public static LocaleResolutionResult<T> Missing(string requested, string key) =>
+    public static LocaleResolutionResult<T> Missing<T>(string requested, string key) =>
         new(requested, null, LocaleFallbackSource.Missing, default, key);
 }
 

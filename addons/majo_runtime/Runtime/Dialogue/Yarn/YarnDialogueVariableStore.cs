@@ -87,7 +87,7 @@ public partial class YarnDialogueVariableStore : InMemoryVariableStorage,
         }
     }
 
-    void IDialogueVariableStore.Set(string name, DialogueValue value)
+    void IDialogueVariableStore.SetValue(string name, DialogueValue value)
     {
         var yarnName = ToYarnName(name);
         switch (value.Kind)
@@ -101,7 +101,7 @@ public partial class YarnDialogueVariableStore : InMemoryVariableStorage,
 
                 SetValue(yarnName, (float)value.NumberValue);
                 break;
-            case DialogueValueKind.String:
+            case DialogueValueKind.Text:
                 SetValue(yarnName, value.StringValue!);
                 break;
             case DialogueValueKind.Boolean:
@@ -144,7 +144,7 @@ public partial class YarnDialogueVariableStore : InMemoryVariableStorage,
         Clear();
         foreach (var pair in values)
         {
-            ((IDialogueVariableStore)this).Set(pair.Key, pair.Value);
+            ((IDialogueVariableStore)this).SetValue(pair.Key, pair.Value);
         }
     }
 

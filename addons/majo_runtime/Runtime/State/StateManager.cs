@@ -12,7 +12,7 @@ using Majo.Runtime.Operations;
 
 namespace Majo.Runtime.State;
 
-public sealed class StateManager : IStateManager, IStateRestoreTransaction
+public sealed class StateManager : IStateManager, IStateRestoreTransaction, IDisposable
 {
     private readonly SemaphoreSlim transactions = new(1, 1);
     private readonly IReadOnlyList<IStateContributor> contributors;
@@ -482,7 +482,7 @@ public sealed class StateManager : IStateManager, IStateRestoreTransaction
         }
     }
 
-    private IReadOnlyList<IStateContributor> PersistentContributors(StateScope scope) =>
+    private IStateContributor[] PersistentContributors(StateScope scope) =>
         contributors.Where(value =>
             value.Scope == scope && value.Capability.SupportsPersistence).ToArray();
 
@@ -603,5 +603,11 @@ public sealed class StateManager : IStateManager, IStateRestoreTransaction
             StateOperationMask operations = StateOperationMask.All,
             string? diagnostic = null,
             string? playerMessage = null) => throw new NotSupportedException();
+    }
+
+    public void Dispose()
+    {
+        ReleaseFaultMuter();
+        transactions.Dispose();
     }
 }

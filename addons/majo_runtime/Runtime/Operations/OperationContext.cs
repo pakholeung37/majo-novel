@@ -8,14 +8,14 @@ public sealed class OperationContext
 {
     internal OperationContext(
         IFrameClock frameClock,
-        CancellationToken cancellationToken,
         string? id,
-        string? groupId)
+        string? groupId,
+        CancellationToken cancellationToken)
     {
         FrameClock = frameClock;
-        CancellationToken = cancellationToken;
         Id = id;
         GroupId = groupId;
+        CancellationToken = cancellationToken;
     }
 
     public IFrameClock FrameClock { get; }

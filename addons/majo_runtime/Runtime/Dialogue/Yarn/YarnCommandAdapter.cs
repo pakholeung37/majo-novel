@@ -216,7 +216,7 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
         }
 
         private RuntimeCommandRegistration? Resolve(
-            IReadOnlyList<string> arguments,
+            string[] arguments,
             out int consumedSegments)
         {
             RuntimeCommandRegistration? result = null;
@@ -224,7 +224,7 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
             foreach (var candidate in commands)
             {
                 var childSegments = candidate.Descriptor.Path.Skip(1).ToArray();
-                if (childSegments.Length > arguments.Count ||
+                if (childSegments.Length > arguments.Length ||
                     !childSegments.Select((segment, index) => segment.Equals(
                         arguments[index], StringComparison.OrdinalIgnoreCase)).All(value => value))
                 {

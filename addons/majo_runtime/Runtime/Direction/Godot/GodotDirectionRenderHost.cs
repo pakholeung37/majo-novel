@@ -39,7 +39,7 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
     {
         this.owner = owner ?? throw new ArgumentNullException(nameof(owner));
         configuredResolution = referenceResolution;
-        if (maxStages <= 0) throw new ArgumentOutOfRangeException(nameof(maxStages));
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxStages);
         this.maxStages = maxStages;
 
         StageViewport = CreateViewport("MajoDirectionStageViewport");
@@ -754,7 +754,7 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
         return new Rect2(Vector2.Zero, size);
     }
 
-    private void ResizeStage(GodotDirectionStageSurface surface, Vector2I resolution)
+    private static void ResizeStage(GodotDirectionStageSurface surface, Vector2I resolution)
     {
         surface.Viewport.Size = resolution;
         SetFullRect(surface.Canvas, resolution);

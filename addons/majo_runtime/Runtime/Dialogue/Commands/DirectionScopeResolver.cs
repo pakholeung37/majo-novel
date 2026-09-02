@@ -18,15 +18,15 @@ public interface IDirectionScopeResolver : IRuntimeService
 
     ViewId ResolveView(string nodeId, string symbol);
 
-    void ImportStage(string nodeId, string alias, string sourceNodeId, string sourceSymbol);
+    void ImportStage(string nodeId, string aliasName, string sourceNodeId, string sourceSymbol);
 
-    void ImportView(string nodeId, string alias, string sourceNodeId, string sourceSymbol);
+    void ImportView(string nodeId, string aliasName, string sourceNodeId, string sourceSymbol);
 
-    void DefineShot(string nodeId, string alias, ViewPatch patch);
+    void DefineShot(string nodeId, string shotAlias, ViewPatch patch);
 
-    ViewPatch ResolveShot(string nodeId, string alias);
+    ViewPatch ResolveShot(string nodeId, string shotAlias);
 
-    void ApplyModule(NodeDirectionModule module);
+    void ApplyModule(NodeDirectionModule directionModule);
     void EnterNode(string nodeId);
     void ExitNode(string nodeId);
     void DefineMark(string nodeId, string name, DirectionPoint position);
@@ -71,11 +71,11 @@ public sealed class DirectionScopeResolver : IDirectionScopeResolver
 
     public void ImportStage(
         string nodeId,
-        string alias,
+        string aliasName,
         string sourceNodeId,
         string sourceSymbol)
     {
-        var (node, localAlias) = Validate(nodeId, alias);
+        var (node, localAlias) = Validate(nodeId, aliasName);
         var source = ResolveLocalStage(sourceNodeId, sourceSymbol);
         if (stageImports.TryGetValue((node, localAlias), out var existing))
         {
@@ -87,11 +87,11 @@ public sealed class DirectionScopeResolver : IDirectionScopeResolver
 
     public void ImportView(
         string nodeId,
-        string alias,
+        string aliasName,
         string sourceNodeId,
         string sourceSymbol)
     {
-        var (node, localAlias) = Validate(nodeId, alias);
+        var (node, localAlias) = Validate(nodeId, aliasName);
         var source = ResolveLocalView(sourceNodeId, sourceSymbol);
         if (viewImports.TryGetValue((node, localAlias), out var existing))
         {
@@ -101,16 +101,16 @@ public sealed class DirectionScopeResolver : IDirectionScopeResolver
         AddImport(viewImports, (node, localAlias), source, "View");
     }
 
-    public void DefineShot(string nodeId, string alias, ViewPatch patch)
+    public void DefineShot(string nodeId, string shotAlias, ViewPatch patch)
     {
         ArgumentNullException.ThrowIfNull(patch);
-        var (node, localAlias) = Validate(nodeId, alias);
+        var (node, localAlias) = Validate(nodeId, shotAlias);
         AddImport(shotAliases, (node, localAlias), patch, "Shot");
     }
 
-    public ViewPatch ResolveShot(string nodeId, string alias)
+    public ViewPatch ResolveShot(string nodeId, string shotAlias)
     {
-        var (node, localAlias) = Validate(nodeId, alias);
+        var (node, localAlias) = Validate(nodeId, shotAlias);
         if (!shotAliases.TryGetValue((node, localAlias), out var patch))
             throw new DirectionReferenceException(
                 $"Shot alias '{localAlias}' is not defined in Node '{node}'.");
@@ -137,28 +137,28 @@ public sealed class DirectionScopeResolver : IDirectionScopeResolver
         return position;
     }
 
-    public void ApplyModule(NodeDirectionModule module)
+    public void ApplyModule(NodeDirectionModule directionModule)
     {
-        ArgumentNullException.ThrowIfNull(module);
-        var error = module.Diagnostics.FirstOrDefault(diagnostic =>
+        ArgumentNullException.ThrowIfNull(directionModule);
+        var error = directionModule.Diagnostics.FirstOrDefault(diagnostic =>
             diagnostic.Severity.Equals("error", StringComparison.OrdinalIgnoreCase));
         if (error is not null)
             throw new DirectionReferenceException(
-                $"Direction authoring error in Node '{module.NodeId}' at " +
+                $"Direction authoring error in Node '{directionModule.NodeId}' at " +
                 $"{error.File}:{error.StartLine}:{error.StartColumn}: {error.Message}");
-        if (string.Equals(activeNode, module.NodeId, StringComparison.Ordinal))
-            ExitNode(module.NodeId);
-        EnterNode(module.NodeId);
-        foreach (var import in module.Imports)
+        if (string.Equals(activeNode, directionModule.NodeId, StringComparison.Ordinal))
+            ExitNode(directionModule.NodeId);
+        EnterNode(directionModule.NodeId);
+        foreach (var import in directionModule.Imports)
         {
             if (import.Kind.Equals("stage", StringComparison.OrdinalIgnoreCase))
-                ImportStage(module.NodeId, import.Alias, import.SourceNode, import.SourceSymbol);
+                ImportStage(directionModule.NodeId, import.Alias, import.SourceNode, import.SourceSymbol);
             else if (import.Kind.Equals("view", StringComparison.OrdinalIgnoreCase))
-                ImportView(module.NodeId, import.Alias, import.SourceNode, import.SourceSymbol);
+                ImportView(directionModule.NodeId, import.Alias, import.SourceNode, import.SourceSymbol);
         }
-        foreach (var mark in module.MarkDefinitions)
-            DefineMark(module.NodeId, mark.Name, mark.Position);
-        activeModule = module;
+        foreach (var mark in directionModule.MarkDefinitions)
+            DefineMark(directionModule.NodeId, mark.Name, mark.Position);
+        activeModule = directionModule;
     }
 
     public void EnterNode(string nodeId)

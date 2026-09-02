@@ -22,7 +22,8 @@ namespace Majo.Runtime.Dialogue.Yarn;
 
 public sealed class YarnDialogueBackend : IYarnDialogueBackend,
     IScriptCatalogBackend,
-    IScriptCheckpointBackend
+    IScriptCheckpointBackend,
+    IDisposable
 {
     private readonly Node owner;
     private readonly IYarnProjectVersionStore projectVersions;
@@ -993,5 +994,17 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
             string.Empty,
             string.Empty));
         return source;
+    }
+
+    public void Dispose()
+    {
+        presenterAdapter?.Dispose();
+        if (GodotObject.IsInstanceValid(runner))
+        {
+            runner.QueueFree();
+            runner.Dispose();
+        }
+
+        variableStore.Dispose();
     }
 }

@@ -56,10 +56,10 @@ public sealed class StageTransitionCommandArguments
 }
 public sealed class StageTransitionCommandHandler : IRuntimeCommandHandler<StageTransitionCommandArguments>
 {
-    public Task ExecuteAsync(StageTransitionCommandArguments a, RuntimeCommandContext c) =>
+    public Task ExecuteAsync(StageTransitionCommandArguments arguments, RuntimeCommandContext context) =>
         StageCommandExecution.TrackAndWaitAsync(
-            StageCommandExecution.Require<IStageTransitionManager>(c).Run(new StageTransitionRequest(
-                a.Kind, Colors.Black, StageCommandExecution.Operation(a.Duration, a.Operation, a.Group), a.Appearance)), a.Wait, c);
+            StageCommandExecution.Require<IStageTransitionManager>(context).Run(new StageTransitionRequest(
+                arguments.Kind, Colors.Black, StageCommandExecution.Operation(arguments.Duration, arguments.Operation, arguments.Group), arguments.Appearance)), arguments.Wait, context);
 }
 
 [RuntimeCommand("overlay", Category = "Stage", Usage = "overlay <opacity> [duration:<seconds>] [wait:<bool>] [group:<id>] [operation:<id>]")]
@@ -73,10 +73,10 @@ public sealed class StageOverlayCommandArguments
 }
 public sealed class StageOverlayCommandHandler : IRuntimeCommandHandler<StageOverlayCommandArguments>
 {
-    public Task ExecuteAsync(StageOverlayCommandArguments a, RuntimeCommandContext c) =>
+    public Task ExecuteAsync(StageOverlayCommandArguments arguments, RuntimeCommandContext context) =>
         StageCommandExecution.TrackAndWaitAsync(
-            StageCommandExecution.Require<IScreenEffectManager>(c).SetOverlay(
-                Colors.Black, (float)a.Opacity, StageCommandExecution.Operation(a.Duration, a.Operation, a.Group)), a.Wait, c);
+            StageCommandExecution.Require<IScreenEffectManager>(context).SetOverlay(
+                Colors.Black, (float)arguments.Opacity, StageCommandExecution.Operation(arguments.Duration, arguments.Operation, arguments.Group)), arguments.Wait, context);
 }
 
 [RuntimeCommand("letterbox", Category = "Stage", Usage = "letterbox <ratio> [duration:<seconds>] [wait:<bool>] [group:<id>] [operation:<id>]")]
@@ -90,7 +90,7 @@ public sealed class StageLetterboxCommandArguments
 }
 public sealed class StageLetterboxCommandHandler : IRuntimeCommandHandler<StageLetterboxCommandArguments>
 {
-    public Task ExecuteAsync(StageLetterboxCommandArguments a, RuntimeCommandContext c) =>
+    public Task ExecuteAsync(StageLetterboxCommandArguments arguments, RuntimeCommandContext context) =>
         StageCommandExecution.TrackAndWaitAsync(
-            StageCommandExecution.Require<IScreenEffectManager>(c).SetLetterbox((float)a.Ratio, StageCommandExecution.Operation(a.Duration, a.Operation, a.Group)), a.Wait, c);
+            StageCommandExecution.Require<IScreenEffectManager>(context).SetLetterbox((float)arguments.Ratio, StageCommandExecution.Operation(arguments.Duration, arguments.Operation, arguments.Group)), arguments.Wait, context);
 }

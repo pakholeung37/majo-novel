@@ -18,7 +18,7 @@ namespace YarnSpinnerGodot
     // Majo runtime types at the resource layer.
     public partial class YarnProject
     {
-        [Export] public string CompiledDirectionModulesJson = string.Empty;
+        [Export] public string CompiledDirectionModulesJson { get; set; } = string.Empty;
     }
 
 }

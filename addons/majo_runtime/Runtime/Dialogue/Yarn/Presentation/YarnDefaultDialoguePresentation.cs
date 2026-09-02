@@ -15,7 +15,7 @@ using YarnSpinnerGodot;
 
 namespace Majo.Runtime.Dialogue.Yarn.Presentation;
 
-internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, IDialoguePresentationSettings
+internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, IDialoguePresentationSettings, IDisposable
 {
     private readonly IYarnDialogueBackend backend;
     private readonly IInputManager input;
@@ -67,7 +67,7 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, I
         get => configuration.LettersPerSecond;
         set
         {
-            if (value <= 0) throw new ArgumentOutOfRangeException(nameof(value));
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value);
             configuration.LettersPerSecond = value;
             if (linePresenter is not null) linePresenter.lettersPerSecond = value;
         }
@@ -409,5 +409,27 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, I
                 yield return descendant;
             }
         }
+    }
+
+    public void Dispose()
+    {
+        markupBridge?.Dispose();
+        inputPresenter?.Dispose();
+        if (GodotObject.IsInstanceValid(speakerNamePresenter))
+        {
+            speakerNamePresenter.QueueFree();
+            speakerNamePresenter.Dispose();
+        }
+
+        if (GodotObject.IsInstanceValid(presentationLayer))
+        {
+            presentationLayer.QueueFree();
+            presentationLayer.Dispose();
+        }
+
+        markupBridge = null;
+        inputPresenter = null;
+        speakerNamePresenter = null;
+        presentationLayer = null;
     }
 }

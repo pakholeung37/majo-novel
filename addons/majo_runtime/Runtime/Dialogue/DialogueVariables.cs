@@ -13,7 +13,7 @@ namespace Majo.Runtime.Dialogue;
 public enum DialogueValueKind
 {
     Number,
-    String,
+    Text,
     Boolean,
 }
 
@@ -50,7 +50,7 @@ public readonly record struct DialogueValue
     }
 
     public static DialogueValue FromString(string value) => new(
-        DialogueValueKind.String,
+        DialogueValueKind.Text,
         default,
         value ?? throw new ArgumentNullException(nameof(value)),
         default);
@@ -72,7 +72,7 @@ public interface IDialogueVariableStore
 
     bool TryGet(string name, out DialogueValue value);
 
-    void Set(string name, DialogueValue value);
+    void SetValue(string name, DialogueValue value);
 
     void Clear();
 
@@ -91,9 +91,9 @@ public interface IDialogueVariables : IRuntimeService
 
     bool TryGet(string name, out DialogueValue value);
 
-    DialogueValue Get(string name);
+    DialogueValue GetValue(string name);
 
-    void Set(string name, DialogueValue value);
+    void SetValue(string name, DialogueValue value);
 
     void SetNumber(string name, double value);
 
@@ -155,7 +155,7 @@ public sealed class DialogueVariables : IDialogueVariables
     public bool TryGet(string name, out DialogueValue value) =>
         store.TryGet(NormalizeName(name), out value);
 
-    public DialogueValue Get(string name)
+    public DialogueValue GetValue(string name)
     {
         var normalized = NormalizeName(name);
         if (!store.TryGet(normalized, out var value))
@@ -167,17 +167,17 @@ public sealed class DialogueVariables : IDialogueVariables
         return value;
     }
 
-    public void Set(string name, DialogueValue value) =>
-        store.Set(NormalizeName(name), value);
+    public void SetValue(string name, DialogueValue value) =>
+        store.SetValue(NormalizeName(name), value);
 
     public void SetNumber(string name, double value) =>
-        Set(name, DialogueValue.FromNumber(value));
+        SetValue(name, DialogueValue.FromNumber(value));
 
     public void SetString(string name, string value) =>
-        Set(name, DialogueValue.FromString(value));
+        SetValue(name, DialogueValue.FromString(value));
 
     public void SetBoolean(string name, bool value) =>
-        Set(name, DialogueValue.FromBoolean(value));
+        SetValue(name, DialogueValue.FromBoolean(value));
 
     public IReadOnlyDictionary<string, DialogueValue> Capture()
     {

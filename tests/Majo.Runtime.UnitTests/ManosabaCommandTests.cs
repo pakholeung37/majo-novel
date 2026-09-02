@@ -84,7 +84,7 @@ internal sealed class ServiceResolverBuilder
             this.services = services;
         }
 
-        public TService Get<TService>() where TService : class
+        public TService Resolve<TService>() where TService : class
         {
             if (TryGet<TService>(out var service) && service is not null)
             {
@@ -94,7 +94,7 @@ internal sealed class ServiceResolverBuilder
             throw new InvalidOperationException($"Service '{typeof(TService).FullName}' not found.");
         }
 
-        public object Get(Type serviceType)
+        public object Resolve(Type serviceType)
         {
             if (services.TryGetValue(serviceType, out var obj))
             {

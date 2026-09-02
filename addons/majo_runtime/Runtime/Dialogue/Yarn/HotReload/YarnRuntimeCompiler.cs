@@ -80,7 +80,7 @@ public sealed class YarnRuntimeCompiler
                 diagnostic.Range.End.Character,
                 diagnostic.Message);
         }).ToArray();
-        var directionModules = new NodeDirectionCompiler().Compile(snapshot, directionVersion);
+        var directionModules = NodeDirectionCompiler.Compile(snapshot, directionVersion);
         var directionDiagnostics = directionModules
             .SelectMany(module => module.Diagnostics)
             .ToArray();

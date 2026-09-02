@@ -13,6 +13,9 @@ public sealed class ManosabaCharacterNameCatalog
     private readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> names;
     private readonly string fallbackLocale;
 
+    private static readonly JsonSerializerOptions SerializerOptions =
+        new() { PropertyNameCaseInsensitive = true };
+
     private ManosabaCharacterNameCatalog(
         IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> names,
         string fallbackLocale)
@@ -41,7 +44,7 @@ public sealed class ManosabaCharacterNameCatalog
         ArgumentException.ThrowIfNullOrWhiteSpace(json);
         var document = JsonSerializer.Deserialize<CatalogDocument>(
             json,
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ??
+            SerializerOptions) ??
             throw new InvalidOperationException(
                 $"Character name catalog '{sourceName}' is invalid.");
         var names = document.Names.ToDictionary(

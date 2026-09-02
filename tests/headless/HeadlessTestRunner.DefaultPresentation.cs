@@ -16,6 +16,12 @@ namespace Majo.Runtime.HeadlessTests;
 
 public partial class HeadlessTestRunner
 {
+    private static readonly string[] ExpectedMarkupHandlerOrder =
+    [
+        "first:prepared",
+        "second:prepared",
+    ];
+
     private async Task ValidateDefaultPresentationAsync()
     {
         var customScene = new PackedScene();
@@ -103,7 +109,7 @@ public partial class HeadlessTestRunner
             "M8 did not reuse Yarn's native letter Typewriter or allow panel clicks " +
             "to reach Runtime input.");
         Assert(backend.Runner.dialoguePresenters is not null &&
-                backend.Runner.dialoguePresenters.OfType<LineAdvancer>().Count() == 0,
+                !backend.Runner.dialoguePresenters.OfType<LineAdvancer>().Any(),
             "M8 registered Yarn LineAdvancer and bypassed M7 input ownership.");
 
         await dialogue.StartAsync();
@@ -201,11 +207,7 @@ public partial class HeadlessTestRunner
             "M8 retained active Presentation state after dialogue completion.");
         Assert(input.ActiveHandleCount == 3,
             "M8 retained line or modal option input ownership after completion.");
-        Assert(handlerOrder.Take(2).SequenceEqual(new[]
-            {
-                "first:prepared",
-                "second:prepared",
-            }),
+        Assert(handlerOrder.Take(2).SequenceEqual(ExpectedMarkupHandlerOrder),
             "M8 markup handlers did not run in registration order.");
         Assert(firstHandler.PreparedTexts.Count >= 2,
             "M8 did not project Yarn markup for every displayed line.");

@@ -165,7 +165,7 @@ public partial class HeadlessTestRunner
             {
                 new ViewPatch(
                     ViewId.Main,
-                    DirectionValue<ViewSource>.From(new CgViewSource(cgKey)),
+                    DirectionValue.From<ViewSource>(new CgViewSource(cgKey)),
                     default,
                     default,
                     default,
@@ -173,14 +173,14 @@ public partial class HeadlessTestRunner
                 new ViewPatch(
                     ViewId.Main,
                     default,
-                    DirectionValue<DirectionPoint>.From(cutPose.Center),
-                    DirectionValue<float>.From(cutPose.Zoom),
-                    DirectionValue<float>.From(cutPose.RotationDegrees),
+                    DirectionValue.From(cutPose.Center),
+                    DirectionValue.From(cutPose.Zoom),
+                    DirectionValue.From(cutPose.RotationDegrees),
                     DirectionTransitionSpec.Cut),
                 new ViewPatch(
                     ViewId.Main,
                     default,
-                    DirectionValue<DirectionPoint>.From(movePose.Center),
+                    DirectionValue.From(movePose.Center),
                     default,
                     default,
                     new DirectionTransitionSpec(
@@ -458,10 +458,10 @@ public partial class HeadlessTestRunner
         DirectionTransitionSpec transition,
         ViewId? viewId = null) => new(
             viewId ?? ViewId.Main,
-            DirectionValue<ViewSource>.From(source),
-            DirectionValue<DirectionPoint>.From(pose.Center),
-            DirectionValue<float>.From(pose.Zoom),
-            DirectionValue<float>.From(pose.RotationDegrees),
+            DirectionValue.From(source),
+            DirectionValue.From(pose.Center),
+            DirectionValue.From(pose.Zoom),
+            DirectionValue.From(pose.RotationDegrees),
             transition);
 
     private static ActorPatch ActorPatchFor(
@@ -474,10 +474,10 @@ public partial class HeadlessTestRunner
         StageId? stageId = null) => new(
             stageId ?? StageId.Main,
             new ActorId(actorId),
-            DirectionValue<DirectionPoint>.From(position),
-            DirectionValue<string?>.From(appearance),
-            DirectionValue<float>.From(scale),
-            DirectionValue<int>.From(z),
+            DirectionValue.From(position),
+            DirectionValue.From<string?>(appearance),
+            DirectionValue.From(scale),
+            DirectionValue.From(z),
             transition ?? DirectionTransitionSpec.Cut);
 
     private static Node2D GetVisibleActorRoot(GodotDirectionRenderHost host) =>

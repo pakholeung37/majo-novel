@@ -236,7 +236,7 @@ public sealed class SettingsManager : ScopedStatePersistence, ISettingsManager
         }
     }
 
-    private static IReadOnlyList<IStateContributor> WithBuiltInContributor(
+    private static List<IStateContributor> WithBuiltInContributor(
         IReadOnlyList<IStateContributor> contributors,
         out RuntimeSettingsStateContributor builtIn,
         RuntimeSettings defaults)

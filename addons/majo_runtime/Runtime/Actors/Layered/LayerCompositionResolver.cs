@@ -9,7 +9,7 @@ namespace Majo.Runtime.Actors.Layered;
 public sealed class LayerCompositionResolver
 {
     private const int MaximumAliasDepth = 64;
-    private readonly IReadOnlyDictionary<string, string> aliases;
+    private readonly Dictionary<string, string> aliases;
     private readonly HashSet<string> layerPaths;
     private readonly HashSet<string> groupPaths;
     private readonly string[] orderedLayerPaths;

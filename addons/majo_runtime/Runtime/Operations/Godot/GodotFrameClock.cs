@@ -7,7 +7,7 @@ using Godot;
 
 namespace Majo.Runtime.Operations.Godot;
 
-public sealed class GodotFrameClock : IFrameClock
+public sealed class GodotFrameClock : IFrameClock, IDisposable
 {
     private readonly SceneTree sceneTree;
     private readonly CancellationTokenSource serviceCancellation = new();
@@ -128,4 +128,6 @@ public sealed class GodotFrameClock : IFrameClock
             throw new InvalidOperationException("GodotFrameClock is not initialized.");
         }
     }
+
+    public void Dispose() => serviceCancellation.Dispose();
 }

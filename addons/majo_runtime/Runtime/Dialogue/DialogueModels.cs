@@ -37,9 +37,9 @@ public sealed record DialogueStateChanged(
 
 public enum DialogueMarkupValueKind
 {
-    Integer,
+    WholeNumber,
     Number,
-    String,
+    Text,
     Boolean,
 }
 
@@ -70,7 +70,7 @@ public readonly record struct DialogueMarkupValue
     public bool BooleanValue { get; }
 
     public static DialogueMarkupValue FromInteger(int value) => new(
-        DialogueMarkupValueKind.Integer,
+        DialogueMarkupValueKind.WholeNumber,
         value,
         default,
         default,
@@ -84,7 +84,7 @@ public readonly record struct DialogueMarkupValue
         default);
 
     public static DialogueMarkupValue FromString(string value) => new(
-        DialogueMarkupValueKind.String,
+        DialogueMarkupValueKind.Text,
         default,
         default,
         value ?? throw new ArgumentNullException(nameof(value)),
@@ -98,7 +98,7 @@ public readonly record struct DialogueMarkupValue
         value);
 }
 
-public sealed record DialogueMarkupAttribute(
+public sealed record DialogueMarkupSpan(
     string Name,
     int Position,
     int Length,
@@ -106,7 +106,7 @@ public sealed record DialogueMarkupAttribute(
 
 public sealed record DialogueText(
     string Text,
-    IReadOnlyList<DialogueMarkupAttribute> Attributes);
+    IReadOnlyList<DialogueMarkupSpan> Attributes);
 
 public enum DialoguePresentationOrigin
 {

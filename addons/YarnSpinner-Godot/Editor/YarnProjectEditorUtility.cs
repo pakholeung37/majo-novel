@@ -653,7 +653,7 @@ public static class YarnProjectEditorUtility
                     Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
                         string.Join("\n", directionFiles.Select(file => file.ContentHash)))))
                         .ToLowerInvariant());
-                var directionModules = new NodeDirectionCompiler().Compile(directionSnapshot);
+                var directionModules = NodeDirectionCompiler.Compile(directionSnapshot);
                 project.CompiledDirectionModulesJson = YarnProjectDirectionMetadata.Serialize(directionModules);
                 foreach (var diagnostic in directionModules.SelectMany(module => module.Diagnostics)
                     .Where(diagnostic => diagnostic.Severity.Equals("error", StringComparison.OrdinalIgnoreCase)))

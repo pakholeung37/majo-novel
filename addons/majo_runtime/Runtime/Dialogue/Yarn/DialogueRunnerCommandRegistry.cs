@@ -7,7 +7,7 @@ using YarnSpinnerGodot;
 
 namespace Majo.Runtime.Dialogue.Yarn;
 
-public sealed class DialogueRunnerCommandRegistry : IYarnCommandRegistry
+public sealed class DialogueRunnerCommandRegistry : IYarnCommandRegistry, IDisposable
 {
     private readonly DialogueRunner dialogueRunner;
     private readonly Callable dialogueStarted;

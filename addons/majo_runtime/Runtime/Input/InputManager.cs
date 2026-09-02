@@ -395,10 +395,7 @@ public sealed class InputManager : IInputManager
             {
                 lock (manager.sync)
                 {
-                    if (isDisposed)
-                    {
-                        throw new ObjectDisposedException(nameof(IInputHandle));
-                    }
+                    ObjectDisposedException.ThrowIf(isDisposed, this);
 
                     enabled = value;
                 }

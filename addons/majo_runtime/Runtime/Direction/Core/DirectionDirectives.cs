@@ -10,7 +10,7 @@ public readonly struct DirectionValue<T>
 {
     private readonly T value;
 
-    private DirectionValue(T value)
+    public DirectionValue(T value)
     {
         this.value = value;
         HasValue = true;
@@ -22,7 +22,12 @@ public readonly struct DirectionValue<T>
         ? value
         : throw new InvalidOperationException("The direction value was not specified.");
 
-    public static DirectionValue<T> From(T value) => new(value);
+    public static implicit operator DirectionValue<T>(T value) => new(value);
+}
+
+public static class DirectionValue
+{
+    public static DirectionValue<T> From<T>(T value) => new(value);
 }
 
 public sealed record DirectionSourceLocation(string Node, int Line, int CommandIndex)

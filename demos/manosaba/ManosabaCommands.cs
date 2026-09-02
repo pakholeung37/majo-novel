@@ -2,6 +2,7 @@
 
 using System;
 using System.Threading.Tasks;
+using Majo.Runtime;
 using Majo.Runtime.Dialogue.Commands;
 
 namespace Majo.Demos.Manosaba;
@@ -32,7 +33,7 @@ public static class ManosabaCommands
         ManosabaStreamFrameCommandArguments arguments,
         RuntimeCommandContext context)
     {
-        var services = context.Require(context.Services, "ServiceResolver");
+        var services = RuntimeCommandContext.Require(context.Services, "ServiceResolver");
         var ui = services.Get<IManosabaUiService>();
         var mode = arguments.Enabled ? ManosabaFrameMode.Stream : ManosabaFrameMode.Default;
         ui.SetFrameMode(mode, arguments.Duration);

@@ -18,7 +18,7 @@ public enum DirectionTransactionStatus
     Faulted,
 }
 
-public sealed class CommittedDirectionTransaction
+public sealed class CommittedDirectionTransaction : IDisposable
 {
     private readonly object owner;
     private readonly IPreparedDirectionTransaction prepared;
@@ -154,6 +154,11 @@ public sealed class CommittedDirectionTransaction
         if (disposeException is not null)
             throw disposeException;
     }
+
+    public void Dispose()
+    {
+        lifecycleGate.Dispose();
+    }
 }
 
 public interface IDirectionTransactionCoordinator : IRuntimeService
@@ -180,8 +185,13 @@ public interface IDirectionTransactionCoordinator : IRuntimeService
     Task FinishSkippableAsync(CancellationToken cancellationToken = default);
 }
 
-public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoordinator
+public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoordinator, IDisposable
 {
+    private static readonly string[] WildcardSelector = ["*"];
+    private static readonly DirectionTransition[] FallbackCutTransitions =
+    [
+        new(WildcardSelector, DirectionTransitionSpec.Cut),
+    ];
     private readonly IDirectionPlanner planner;
     private readonly IDirectionPreparationBackend backend;
     private readonly SemaphoreSlim commitGate = new(1, 1);
@@ -312,12 +322,7 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
                 DirectionTransactionId.New(),
                 current,
                 restored,
-                new[]
-                {
-                    new DirectionTransition(
-                        new[] { "*" },
-                        DirectionTransitionSpec.Cut),
-                },
+                FallbackCutTransitions,
                 Array.Empty<ITransientDirectionCue>(),
                 Array.Empty<DirectionResourceClaim>(),
                 DirectionCompletionBarrier.Settle);
@@ -368,7 +373,7 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
                 DirectionTransactionId.New(),
                 current,
                 target with { Revision = checked(current.Revision + 1) },
-                new[] { new DirectionTransition(new[] { "*" }, DirectionTransitionSpec.Cut) },
+                FallbackCutTransitions,
                 Array.Empty<ITransientDirectionCue>(),
                 Array.Empty<DirectionResourceClaim>(),
                 DirectionCompletionBarrier.Settle);
@@ -506,5 +511,10 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
                     new[] { exception }.Concat(cleanupFailures));
             throw;
         }
+    }
+
+    public void Dispose()
+    {
+        commitGate.Dispose();
     }
 }

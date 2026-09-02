@@ -133,19 +133,19 @@ public sealed class StateMigrationRegistry
             while (!expected.TryGetValue(current.Key, out var target) ||
                    current.SchemaVersion != target.SchemaVersion)
             {
-                if (expected.ContainsKey(current.Key) &&
-                    current.SchemaVersion > expected[current.Key].SchemaVersion)
+                if (target is not null &&
+                    current.SchemaVersion > target.SchemaVersion)
                 {
                     throw new StateCompatibilityException(
                         $"Record '{current.Key}' schema v{current.SchemaVersion} is newer than " +
-                        $"runtime schema v{expected[current.Key].SchemaVersion}.");
+                        $"runtime schema v{target.SchemaVersion}.");
                 }
 
                 var identity = (current.Key, current.SchemaVersion);
                 if (!visited.Add(identity) ||
                     !contributorMigrations.TryGetValue(identity, out var migration))
                 {
-                    if (!expected.ContainsKey(current.Key))
+                    if (target is null)
                     {
                         var disposition = removedContributors.Contains(current.Key)
                             ? "removed"

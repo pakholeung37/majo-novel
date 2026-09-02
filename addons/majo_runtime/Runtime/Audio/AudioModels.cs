@@ -79,7 +79,7 @@ internal sealed class SkippedAudioPlayback : IAudioPlayback
 
     public string InstanceId { get; }
 
-    public bool Loop => false;
+    public bool IsLooping => false;
 
     public float Volume => 0;
 
@@ -117,7 +117,7 @@ public interface IAudioPlayback
 
     string InstanceId { get; }
 
-    bool Loop { get; }
+    bool IsLooping { get; }
 
     float Volume { get; }
 

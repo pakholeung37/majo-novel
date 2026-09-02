@@ -12,7 +12,7 @@ using Majo.Runtime.Operations.Godot;
 
 namespace Majo.Runtime.Actors.Godot;
 
-public sealed class LayeredCharacterActor : ActorBase, ICharacterActor
+public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IDisposable
 {
     private const string AppearanceProperty = "layered-appearance";
     private const string GroupOpacityParameter = "group_opacity";
@@ -500,7 +500,7 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor
         layerViews.Add(layer.Path, layerView);
     }
 
-    private void ApplyLayerVisibility(IReadOnlySet<string> visibleLayers)
+    private void ApplyLayerVisibility(HashSet<string> visibleLayers)
     {
         foreach (var layer in layerViews)
         {
@@ -591,4 +591,5 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor
         }
     }
 
+    public void Dispose() => layerComposite.Dispose();
 }

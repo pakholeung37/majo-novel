@@ -106,10 +106,10 @@ internal sealed partial class YarnDialoguePresenterAdapter : Node, DialoguePrese
         {
             linePresented(converted, Array.AsReadOnly(line.Substitutions.ToArray()));
             var context = new DialoguePresentationContext(
-                token.HurryUpToken,
-                token.NextLineToken,
                 requestHurryUp,
-                requestNextLine);
+                requestNextLine,
+                token.HurryUpToken,
+                token.NextLineToken);
             var presentation = Task.WhenAll(presenters.Select(
                 presenter => presenter.PresentLineAsync(converted, context)));
             try

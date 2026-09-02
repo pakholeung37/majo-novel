@@ -167,7 +167,7 @@ internal sealed class RuntimeCommandRegistration<TArguments> : RuntimeCommandReg
 
 public sealed class RuntimeCommandCatalog
 {
-    private readonly IReadOnlyDictionary<string, RuntimeCommandRegistration> commandsByName;
+    private readonly ReadOnlyDictionary<string, RuntimeCommandRegistration> commandsByName;
 
     internal RuntimeCommandCatalog(IReadOnlyList<RuntimeCommandRegistration> commands)
     {

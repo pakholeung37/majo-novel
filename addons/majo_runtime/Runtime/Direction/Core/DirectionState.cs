@@ -126,7 +126,7 @@ public sealed record ScreenState(
     IReadOnlyDictionary<LayoutSlotId, ViewId> Bindings)
 {
     public static ScreenState Default { get; } = new(
-        LayoutId.Single,
+        LayoutId.SingleLayout,
         DirectionCollections.Freeze(new Dictionary<LayoutSlotId, ViewId>
         {
             [LayoutSlotId.Main] = ViewId.Main,

@@ -25,9 +25,8 @@ public sealed class YarnHotReloadTests
         directory.Write("a.yarn", Yarn("A", "line:a", "First"));
         directory.Write("ignored/c.yarn", Yarn("C", "line:c", "Ignored"));
 
-        var reader = new YarnSourceSnapshotReader();
-        var first = await reader.ReadAsync("main", directory.PathOf("main.yarnproject"));
-        var second = await reader.ReadAsync("main", directory.PathOf("main.yarnproject"));
+        var first = await YarnSourceSnapshotReader.ReadAsync("main", directory.PathOf("main.yarnproject"));
+        var second = await YarnSourceSnapshotReader.ReadAsync("main", directory.PathOf("main.yarnproject"));
 
         Assert.Equal(new[] { "a.yarn", "chapter/b.yarn" },
             first.Files.Select(file => file.LogicalPath));
@@ -39,11 +38,10 @@ public sealed class YarnHotReloadTests
     public async Task SnapshotFingerprintChangesWhenSourceChanges()
     {
         using var directory = CreateProject(Yarn("Start", "line:start", "Version one"));
-        var reader = new YarnSourceSnapshotReader();
-        var first = await reader.ReadAsync("main", directory.PathOf("main.yarnproject"));
+        var first = await YarnSourceSnapshotReader.ReadAsync("main", directory.PathOf("main.yarnproject"));
 
         directory.Write("main.yarn", Yarn("Start", "line:start", "Version two"));
-        var second = await reader.ReadAsync("main", directory.PathOf("main.yarnproject"));
+        var second = await YarnSourceSnapshotReader.ReadAsync("main", directory.PathOf("main.yarnproject"));
 
         Assert.NotEqual(first.SourceFingerprint, second.SourceFingerprint);
     }
@@ -52,7 +50,7 @@ public sealed class YarnHotReloadTests
     public async Task CompilerRejectsInvalidSourceWithoutProgram()
     {
         using var directory = CreateProject("title: Start\n---\n<<if true>>\nBroken\n===\n");
-        var snapshot = await new YarnSourceSnapshotReader().ReadAsync(
+        var snapshot = await YarnSourceSnapshotReader.ReadAsync(
             "main", directory.PathOf("main.yarnproject"));
 
         var compilation = await new YarnRuntimeCompiler().CompileAsync(snapshot);
@@ -65,7 +63,7 @@ public sealed class YarnHotReloadTests
     public async Task CompilerUsesInMemorySnapshotAndProducesStableLineMetadata()
     {
         using var directory = CreateProject(Yarn("Start", "line:stable", "Hello"));
-        var snapshot = await new YarnSourceSnapshotReader().ReadAsync(
+        var snapshot = await YarnSourceSnapshotReader.ReadAsync(
             "main", directory.PathOf("main.yarnproject"));
 
         // Prove compilation consumes the captured content rather than reading this file again.
@@ -82,14 +80,14 @@ public sealed class YarnHotReloadTests
     public async Task CompilerProducesIdenticalProgramAndStringsWhenOnlyCommentsChange()
     {
         using var directory = CreateProject(Yarn("Start", "line:1", "Hello"));
-        var snapshot = await new YarnSourceSnapshotReader().ReadAsync(
+        var snapshot = await YarnSourceSnapshotReader.ReadAsync(
             "main", directory.PathOf("main.yarnproject"));
 
         var compilation1 = await new YarnRuntimeCompiler().CompileAsync(snapshot);
 
         // Add a comment line (source fingerprint changes, but compiled program and strings are identical)
         directory.Write("main.yarn", "// just a comment\n" + Yarn("Start", "line:1", "Hello"));
-        var snapshot2 = await new YarnSourceSnapshotReader().ReadAsync(
+        var snapshot2 = await YarnSourceSnapshotReader.ReadAsync(
             "main", directory.PathOf("main.yarnproject"));
         var compilation2 = await new YarnRuntimeCompiler().CompileAsync(snapshot2);
 

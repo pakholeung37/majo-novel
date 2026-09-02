@@ -21,10 +21,10 @@ public partial class HeadlessTestRunner : Node
         RunAndExitAsync();
     }
 
-    public override void _Input(InputEvent inputEvent)
+    public override void _Input(InputEvent @event)
     {
         if (!consumeNextLeftClick ||
-            inputEvent is not InputEventMouseButton
+            @event is not InputEventMouseButton
             {
                 ButtonIndex: MouseButton.Left,
                 Pressed: true,

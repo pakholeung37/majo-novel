@@ -169,7 +169,7 @@ public sealed class CommandDescriptor
     private static CommandParameterSetDescriptor CreateSet(
         string commandName,
         CommandParameterSetAttribute attribute,
-        IReadOnlySet<string> parameterNames)
+        HashSet<string> parameterNames)
     {
         var names = attribute.Parameters
             .Select(name =>

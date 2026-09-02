@@ -10,7 +10,7 @@ using Majo.Runtime.Core;
 
 namespace Majo.Runtime.Localization;
 
-public sealed class LocaleManager : ILocaleManager
+public sealed class LocaleManager : ILocaleManager, IDisposable
 {
     private readonly object sync = new();
     private readonly SemaphoreSlim switchGate = new(1, 1);
@@ -130,7 +130,7 @@ public sealed class LocaleManager : ILocaleManager
     public IReadOnlyList<string> GetVoiceFallbackChain(string locale) =>
         BuildFallbackChain(locale, DefaultVoiceLocale);
 
-    private static IReadOnlyList<string> BuildFallbackChain(string locale, string defaultLocale)
+    private static List<string> BuildFallbackChain(string locale, string defaultLocale)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(locale);
         var normalized = NormalizeLocale(locale);
@@ -489,5 +489,12 @@ public sealed class LocaleManager : ILocaleManager
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(locale);
         return locale.Trim().Replace('_', '-');
+    }
+
+    public void Dispose()
+    {
+        switchGate.Dispose();
+        voiceSwitchGate.Dispose();
+        switchLifetime.Dispose();
     }
 }

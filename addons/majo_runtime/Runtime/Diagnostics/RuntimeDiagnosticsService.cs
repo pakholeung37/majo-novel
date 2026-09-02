@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -205,7 +206,7 @@ public sealed class RuntimeDiagnosticsService : IRuntimeDiagnostics
                 t.ClipId,
                 t.State == AudioPlaybackState.Playing,
                 t.Volume,
-                t.Loop,
+                t.IsLooping,
                 audio.IsFading(t.InstanceId))).ToArray();
 
             VoicePlaybackInfo? voiceInfo = null;
@@ -452,31 +453,31 @@ public sealed class RuntimeDiagnosticsService : IRuntimeDiagnostics
         var builder = new StringBuilder();
         builder.AppendLine("# Majo Runtime Diagnostic Report");
         builder.AppendLine();
-        builder.AppendLine($"- **Timestamp**: {snapshot.Timestamp:O}");
-        builder.AppendLine($"- **Runtime ID**: `{snapshot.RuntimeId}`");
-        builder.AppendLine($"- **Runtime Version**: `{snapshot.RuntimeVersion}`");
-        builder.AppendLine($"- **Host State**: `{snapshot.State}`");
-        builder.AppendLine($"- **Initialized Services**: {string.Join(", ", snapshot.InitializedServices)}");
+        builder.AppendLine(CultureInfo.InvariantCulture, $"- **Timestamp**: {snapshot.Timestamp:O}");
+        builder.AppendLine(CultureInfo.InvariantCulture, $"- **Runtime ID**: `{snapshot.RuntimeId}`");
+        builder.AppendLine(CultureInfo.InvariantCulture, $"- **Runtime Version**: `{snapshot.RuntimeVersion}`");
+        builder.AppendLine(CultureInfo.InvariantCulture, $"- **Host State**: `{snapshot.State}`");
+        builder.AppendLine(CultureInfo.InvariantCulture, $"- **Initialized Services**: {string.Join(", ", snapshot.InitializedServices)}");
         builder.AppendLine();
 
         if (snapshot.Dialogue is not null)
         {
             builder.AppendLine("## Dialogue");
-            builder.AppendLine($"- State: `{snapshot.Dialogue.State}`");
-            builder.AppendLine($"- Project ID: `{snapshot.Dialogue.ProjectId ?? "<none>"}`");
-            builder.AppendLine($"- Node: `{snapshot.Dialogue.Node ?? "<none>"}`");
-            builder.AppendLine($"- Current Line ID: `{snapshot.Dialogue.LineId ?? "<none>"}`");
-            builder.AppendLine($"- Is Presenting Options: `{snapshot.Dialogue.IsPresentingOptions}` (Count: {snapshot.Dialogue.OptionCount})");
+            builder.AppendLine(CultureInfo.InvariantCulture, $"- State: `{snapshot.Dialogue.State}`");
+            builder.AppendLine(CultureInfo.InvariantCulture, $"- Project ID: `{snapshot.Dialogue.ProjectId ?? "<none>"}`");
+            builder.AppendLine(CultureInfo.InvariantCulture, $"- Node: `{snapshot.Dialogue.Node ?? "<none>"}`");
+            builder.AppendLine(CultureInfo.InvariantCulture, $"- Current Line ID: `{snapshot.Dialogue.LineId ?? "<none>"}`");
+            builder.AppendLine(CultureInfo.InvariantCulture, $"- Is Presenting Options: `{snapshot.Dialogue.IsPresentingOptions}` (Count: {snapshot.Dialogue.OptionCount})");
             builder.AppendLine();
         }
 
         if (snapshot.Command is not null)
         {
             builder.AppendLine("## Commands");
-            builder.AppendLine($"- Active Commands: {snapshot.Command.ActiveCount}");
+            builder.AppendLine(CultureInfo.InvariantCulture, $"- Active Commands: {snapshot.Command.ActiveCount}");
             if (!string.IsNullOrEmpty(snapshot.Command.LastFailureMessage))
             {
-                builder.AppendLine($"- Last Failure: `{snapshot.Command.LastFailureMessage}`");
+                builder.AppendLine(CultureInfo.InvariantCulture, $"- Last Failure: `{snapshot.Command.LastFailureMessage}`");
             }
             builder.AppendLine();
         }
@@ -484,10 +485,10 @@ public sealed class RuntimeDiagnosticsService : IRuntimeDiagnostics
         if (snapshot.Operation is not null)
         {
             builder.AppendLine("## Operations");
-            builder.AppendLine($"- Active Operations: {snapshot.Operation.ActiveCount}");
+            builder.AppendLine(CultureInfo.InvariantCulture, $"- Active Operations: {snapshot.Operation.ActiveCount}");
             foreach (var op in snapshot.Operation.ActiveOperations)
             {
-                builder.AppendLine($"  - ID: `{op.Id ?? "<anon>"}` (Group: `{op.GroupId ?? "<none>"}`), State: `{op.State}`");
+                builder.AppendLine(CultureInfo.InvariantCulture, $"  - ID: `{op.Id ?? "<anon>"}` (Group: `{op.GroupId ?? "<none>"}`), State: `{op.State}`");
             }
             builder.AppendLine();
         }
@@ -495,19 +496,19 @@ public sealed class RuntimeDiagnosticsService : IRuntimeDiagnostics
         if (snapshot.Input is not null)
         {
             builder.AppendLine("## Input");
-            builder.AppendLine($"- Enabled: `{snapshot.Input.Enabled}`");
-            builder.AppendLine($"- Active Handles: {snapshot.Input.ActiveHandleCount}");
+            builder.AppendLine(CultureInfo.InvariantCulture, $"- Enabled: `{snapshot.Input.Enabled}`");
+            builder.AppendLine(CultureInfo.InvariantCulture, $"- Active Handles: {snapshot.Input.ActiveHandleCount}");
             builder.AppendLine();
         }
 
         if (snapshot.Actor is not null)
         {
             builder.AppendLine("## Actors");
-            builder.AppendLine($"- Total Registered: {snapshot.Actor.Actors.Count}");
+            builder.AppendLine(CultureInfo.InvariantCulture, $"- Total Registered: {snapshot.Actor.Actors.Count}");
             foreach (var actor in snapshot.Actor.Actors)
             {
                 var slot = actor.Slot is null ? string.Empty : $", slot: {actor.Slot}";
-                builder.AppendLine($"  - `{actor.Id}` ({actor.FactoryId}, layer: {actor.Layer}{slot}, appearance: `{actor.Appearance ?? "none"}`), Visible: `{actor.IsVisible}`, Pos: ({actor.PositionX}, {actor.PositionY}), Alpha: {actor.Alpha:0.##}");
+                builder.AppendLine(CultureInfo.InvariantCulture, $"  - `{actor.Id}` ({actor.FactoryId}, layer: {actor.Layer}{slot}, appearance: `{actor.Appearance ?? "none"}`), Visible: `{actor.IsVisible}`, Pos: ({actor.PositionX}, {actor.PositionY}), Alpha: {actor.Alpha:0.##}");
             }
             builder.AppendLine();
         }
@@ -515,16 +516,16 @@ public sealed class RuntimeDiagnosticsService : IRuntimeDiagnostics
         if (snapshot.Audio is not null)
         {
             builder.AppendLine("## Audio");
-            builder.AppendLine($"- Volumes: Master={snapshot.Audio.MasterVolume:P0} (Muted: {snapshot.Audio.MasterMuted}), BGM={snapshot.Audio.BgmVolume:P0} (Muted: {snapshot.Audio.BgmMuted}), SFX={snapshot.Audio.SfxVolume:P0} (Muted: {snapshot.Audio.SfxMuted}), Voice={snapshot.Audio.VoiceVolume:P0} (Muted: {snapshot.Audio.VoiceMuted})");
-            builder.AppendLine($"- Voice Locale: `{snapshot.Audio.VoiceLocale}`");
-            builder.AppendLine($"- Active BGM Tracks: {snapshot.Audio.BgmTracks.Count}");
+            builder.AppendLine(CultureInfo.InvariantCulture, $"- Volumes: Master={snapshot.Audio.MasterVolume:P0} (Muted: {snapshot.Audio.MasterMuted}), BGM={snapshot.Audio.BgmVolume:P0} (Muted: {snapshot.Audio.BgmMuted}), SFX={snapshot.Audio.SfxVolume:P0} (Muted: {snapshot.Audio.SfxMuted}), Voice={snapshot.Audio.VoiceVolume:P0} (Muted: {snapshot.Audio.VoiceMuted})");
+            builder.AppendLine(CultureInfo.InvariantCulture, $"- Voice Locale: `{snapshot.Audio.VoiceLocale}`");
+            builder.AppendLine(CultureInfo.InvariantCulture, $"- Active BGM Tracks: {snapshot.Audio.BgmTracks.Count}");
             foreach (var bgm in snapshot.Audio.BgmTracks)
             {
-                builder.AppendLine($"  - `{bgm.TrackId}` -> `{bgm.ClipId}`, Playing: `{bgm.IsPlaying}`, Vol: {bgm.Volume:P0}");
+                builder.AppendLine(CultureInfo.InvariantCulture, $"  - `{bgm.TrackId}` -> `{bgm.ClipId}`, Playing: `{bgm.IsPlaying}`, Vol: {bgm.Volume:P0}");
             }
             if (snapshot.Audio.CurrentVoice is not null)
             {
-                builder.AppendLine($"- Current Voice: `{snapshot.Audio.CurrentVoice.ClipId}`, Playing: `{snapshot.Audio.CurrentVoice.IsPlaying}`");
+                builder.AppendLine(CultureInfo.InvariantCulture, $"- Current Voice: `{snapshot.Audio.CurrentVoice.ClipId}`, Playing: `{snapshot.Audio.CurrentVoice.IsPlaying}`");
             }
             builder.AppendLine();
         }
@@ -532,21 +533,21 @@ public sealed class RuntimeDiagnosticsService : IRuntimeDiagnostics
         if (snapshot.StateDiagnostics is not null)
         {
             builder.AppendLine("## State");
-            builder.AppendLine($"- Status: `{snapshot.StateDiagnostics.Status}`");
-            builder.AppendLine($"- Format Version: {snapshot.StateDiagnostics.FormatVersion}");
-            builder.AppendLine($"- Has Current Snapshot: `{snapshot.StateDiagnostics.HasCurrentSnapshot}`");
-            builder.AppendLine($"- Contributors: {string.Join(", ", snapshot.StateDiagnostics.RegisteredContributors)}");
+            builder.AppendLine(CultureInfo.InvariantCulture, $"- Status: `{snapshot.StateDiagnostics.Status}`");
+            builder.AppendLine(CultureInfo.InvariantCulture, $"- Format Version: {snapshot.StateDiagnostics.FormatVersion}");
+            builder.AppendLine(CultureInfo.InvariantCulture, $"- Has Current Snapshot: `{snapshot.StateDiagnostics.HasCurrentSnapshot}`");
+            builder.AppendLine(CultureInfo.InvariantCulture, $"- Contributors: {string.Join(", ", snapshot.StateDiagnostics.RegisteredContributors)}");
             if (snapshot.StateDiagnostics.LastMigrationChain is { Count: > 0 } migrations)
             {
-                builder.AppendLine($"- Migration Chain: {string.Join(" -> ", migrations)}");
+                builder.AppendLine(CultureInfo.InvariantCulture, $"- Migration Chain: {string.Join(" -> ", migrations)}");
             }
             if (snapshot.StateDiagnostics.LastEligibilityReasons is { Count: > 0 } reasons)
             {
-                builder.AppendLine($"- Last Eligibility Rejection: {string.Join(", ", reasons)}");
+                builder.AppendLine(CultureInfo.InvariantCulture, $"- Last Eligibility Rejection: {string.Join(", ", reasons)}");
             }
             if (snapshot.StateDiagnostics.StorageCommitStage is not null)
             {
-                builder.AppendLine($"- Storage Commit: `{snapshot.StateDiagnostics.StorageCommitStage}` (`{snapshot.StateDiagnostics.StorageKey}`)");
+                builder.AppendLine(CultureInfo.InvariantCulture, $"- Storage Commit: `{snapshot.StateDiagnostics.StorageCommitStage}` (`{snapshot.StateDiagnostics.StorageKey}`)");
             }
             builder.AppendLine();
         }
@@ -554,25 +555,27 @@ public sealed class RuntimeDiagnosticsService : IRuntimeDiagnostics
         if (snapshot.Playback is not null)
         {
             builder.AppendLine("## Playback");
-            builder.AppendLine($"- Mode: `{snapshot.Playback.Mode}` (Paused: `{snapshot.Playback.IsPaused}`)");
-            builder.AppendLine($"- History: Open=`{snapshot.Playback.HistoryIsOpen}`, Entries={snapshot.Playback.HistoryItemCount}/{snapshot.Playback.HistoryCapacity}");
+            builder.AppendLine(CultureInfo.InvariantCulture, $"- Mode: `{snapshot.Playback.Mode}` (Paused: `{snapshot.Playback.IsPaused}`)");
+            builder.AppendLine(CultureInfo.InvariantCulture, $"- History: Open=`{snapshot.Playback.HistoryIsOpen}`, Entries={snapshot.Playback.HistoryItemCount}/{snapshot.Playback.HistoryCapacity}");
             builder.AppendLine();
         }
 
         if (snapshot.SaveSlots is not null)
         {
             builder.AppendLine("## Save Slots");
-            builder.AppendLine($"- Status: `{snapshot.SaveSlots.Status}`");
-            builder.AppendLine($"- Current Slot: `{snapshot.SaveSlots.CurrentSlot ?? "<none>"}`");
+            builder.AppendLine(CultureInfo.InvariantCulture, $"- Status: `{snapshot.SaveSlots.Status}`");
+            builder.AppendLine(CultureInfo.InvariantCulture, $"- Current Slot: `{snapshot.SaveSlots.CurrentSlot ?? "<none>"}`");
             if (snapshot.SaveSlots.TransactionId is not null)
             {
                 builder.AppendLine(
+                    CultureInfo.InvariantCulture,
                     $"- Transaction: `{snapshot.SaveSlots.TransactionId}` " +
                     $"slot=`{snapshot.SaveSlots.Slot}`, phase=`{snapshot.SaveSlots.Phase}`");
             }
             if (snapshot.SaveSlots.LastFailureMessage is not null)
             {
                 builder.AppendLine(
+                    CultureInfo.InvariantCulture,
                     $"- Last Failure: phase=`{snapshot.SaveSlots.LastFailurePhase}`, " +
                     $"message=`{snapshot.SaveSlots.LastFailureMessage}`");
             }
@@ -582,25 +585,26 @@ public sealed class RuntimeDiagnosticsService : IRuntimeDiagnostics
         if (snapshot.Locale is not null)
         {
             builder.AppendLine("## Localization");
-            builder.AppendLine($"- Dialogue Locale: `{snapshot.Locale.DialogueLocale}`");
-            builder.AppendLine($"- Voice Locale: `{snapshot.Locale.VoiceLocale}`");
-            builder.AppendLine($"- Default Dialogue Locale: `{snapshot.Locale.DefaultLocale}`");
-            builder.AppendLine($"- Default Voice Locale: `{snapshot.Locale.DefaultVoiceLocale}`");
-            builder.AppendLine($"- Available Locales: {string.Join(", ", snapshot.Locale.AvailableLocales)}");
-            builder.AppendLine($"- Dialogue Fallback: {string.Join(" -> ", snapshot.Locale.DialogueFallbackChain)}");
-            builder.AppendLine($"- Voice Fallback: {string.Join(" -> ", snapshot.Locale.VoiceFallbackChain)}");
-            builder.AppendLine($"- Switch State: `{snapshot.Locale.SwitchState}`");
-            builder.AppendLine($"- Missing Keys: {snapshot.Locale.MissingKeyCount}");
+            builder.AppendLine(CultureInfo.InvariantCulture, $"- Dialogue Locale: `{snapshot.Locale.DialogueLocale}`");
+            builder.AppendLine(CultureInfo.InvariantCulture, $"- Voice Locale: `{snapshot.Locale.VoiceLocale}`");
+            builder.AppendLine(CultureInfo.InvariantCulture, $"- Default Dialogue Locale: `{snapshot.Locale.DefaultLocale}`");
+            builder.AppendLine(CultureInfo.InvariantCulture, $"- Default Voice Locale: `{snapshot.Locale.DefaultVoiceLocale}`");
+            builder.AppendLine(CultureInfo.InvariantCulture, $"- Available Locales: {string.Join(", ", snapshot.Locale.AvailableLocales)}");
+            builder.AppendLine(CultureInfo.InvariantCulture, $"- Dialogue Fallback: {string.Join(" -> ", snapshot.Locale.DialogueFallbackChain)}");
+            builder.AppendLine(CultureInfo.InvariantCulture, $"- Voice Fallback: {string.Join(" -> ", snapshot.Locale.VoiceFallbackChain)}");
+            builder.AppendLine(CultureInfo.InvariantCulture, $"- Switch State: `{snapshot.Locale.SwitchState}`");
+            builder.AppendLine(CultureInfo.InvariantCulture, $"- Missing Keys: {snapshot.Locale.MissingKeyCount}");
             builder.AppendLine();
         }
 
         if (snapshot.MissingResources is { UniqueCount: > 0 } missingResources)
         {
             builder.AppendLine("## Missing Resources");
-            builder.AppendLine($"- Unique: {missingResources.UniqueCount}, Total Uses: {missingResources.TotalCount}");
+            builder.AppendLine(CultureInfo.InvariantCulture, $"- Unique: {missingResources.UniqueCount}, Total Uses: {missingResources.TotalCount}");
             foreach (var resource in missingResources.Resources)
             {
                 builder.AppendLine(
+                    CultureInfo.InvariantCulture,
                     $"  - `{resource.ResourceType}` `{resource.ResourceId}` x{resource.Count}; " +
                     $"fallback: `{resource.Fallback}`; path: `{resource.RequestedPath ?? "<none>"}`");
             }
@@ -612,10 +616,10 @@ public sealed class RuntimeDiagnosticsService : IRuntimeDiagnostics
             builder.AppendLine("## Custom Contributor Sections");
             foreach (var (key, section) in snapshot.CustomSections)
             {
-                builder.AppendLine($"### {section.Title} (`{key}`)");
+                builder.AppendLine(CultureInfo.InvariantCulture, $"### {section.Title} (`{key}`)");
                 foreach (var (entryKey, entryVal) in section.Entries)
                 {
-                    builder.AppendLine($"- {entryKey}: `{entryVal}`");
+                    builder.AppendLine(CultureInfo.InvariantCulture, $"- {entryKey}: `{entryVal}`");
                 }
                 builder.AppendLine();
             }

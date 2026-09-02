@@ -53,13 +53,13 @@ public static class YarnLineConverter
             Array.AsReadOnly(option.Line.Substitutions.ToArray()));
     }
 
-    private static DialogueMarkupAttribute Convert(MarkupAttribute attribute)
+    private static DialogueMarkupSpan Convert(MarkupAttribute attribute)
     {
         var properties = attribute.Properties.ToDictionary(
             property => property.Key,
             property => Convert(property.Value),
             StringComparer.Ordinal);
-        return new DialogueMarkupAttribute(
+        return new DialogueMarkupSpan(
             attribute.Name,
             attribute.Position,
             attribute.Length,

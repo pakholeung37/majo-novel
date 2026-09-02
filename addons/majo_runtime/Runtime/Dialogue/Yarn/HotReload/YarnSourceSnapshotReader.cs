@@ -18,7 +18,7 @@ public sealed class YarnSourceSnapshotReader
 {
     private const int MaximumAttempts = 3;
 
-    public async Task<YarnSourceSnapshot> ReadAsync(
+    public static async Task<YarnSourceSnapshot> ReadAsync(
         string projectId,
         string manifestPath,
         CancellationToken cancellationToken = default)

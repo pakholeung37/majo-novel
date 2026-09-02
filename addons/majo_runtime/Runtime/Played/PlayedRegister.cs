@@ -201,7 +201,7 @@ public sealed class PlayedRegister : IPlayedRegister, IStateContributor, IStateD
 
     private void HandleDialogueEnded(DialogueCompletion _) => CurrentPresentation = null;
 
-    private IReadOnlyList<PlayedEntry> Decode(StateRecord record)
+    private PlayedEntry[] Decode(StateRecord record)
     {
         Payload payload;
         try

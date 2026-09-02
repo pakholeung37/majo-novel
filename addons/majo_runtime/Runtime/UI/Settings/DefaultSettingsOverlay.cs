@@ -21,7 +21,7 @@ public interface ISettingsOverlay : IRuntimeService
     void Toggle();
 }
 
-public sealed class DefaultSettingsOverlay : ISettingsOverlay
+public sealed class DefaultSettingsOverlay : ISettingsOverlay, IDisposable
 {
     private readonly Node owner;
     private readonly ISettingsManager settings;
@@ -148,7 +148,7 @@ public sealed class DefaultSettingsOverlay : ISettingsOverlay
         if (IsOpen) Close(); else Open();
     }
 
-    private Control BuildGeneratedView()
+    private PanelContainer BuildGeneratedView()
     {
         var panel = new PanelContainer { MouseFilter = Control.MouseFilterEnum.Stop };
         panel.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
@@ -298,7 +298,7 @@ public sealed class DefaultSettingsOverlay : ISettingsOverlay
         parent.AddChild(check);
     }
 
-    private HBoxContainer NewRow(VBoxContainer parent, string key, string defaultLabel)
+    private static HBoxContainer NewRow(VBoxContainer parent, string key, string defaultLabel)
     {
         var row = new HBoxContainer();
         var label = new Label
@@ -388,7 +388,7 @@ public sealed class DefaultSettingsOverlay : ISettingsOverlay
         finally { refreshing = false; }
     }
 
-    private void RefreshDynamicLabels(Node parent)
+    private static void RefreshDynamicLabels(Node parent)
     {
         foreach (var child in parent.GetChildren())
         {
@@ -431,5 +431,30 @@ public sealed class DefaultSettingsOverlay : ISettingsOverlay
     private void HandlePersistenceFailed(Exception exception)
     {
         if (status is not null) status.Text = $"Could not save settings: {exception.Message}";
+    }
+
+    public void Dispose()
+    {
+        toggleInput?.Dispose();
+        modalInput?.Dispose();
+        if (layer is not null && GodotObject.IsInstanceValid(layer))
+        {
+            layer.Free();
+            layer.Dispose();
+        }
+        else if (root is not null && GodotObject.IsInstanceValid(root))
+        {
+            root.Free();
+            root.Dispose();
+        }
+
+        layer = null;
+        root = null;
+        titleLabel = null;
+        resetButton = null;
+        closeButton = null;
+        status = null;
+        languageOption = null;
+        voiceLanguageOption = null;
     }
 }

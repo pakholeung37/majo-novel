@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -11,7 +12,7 @@ using System.Threading.Tasks;
 
 namespace Majo.Runtime.State;
 
-public partial class FileStateStorage : IStateStorage, IStateStorageDiagnostics, IRecoverableStateStorage
+public partial class FileStateStorage : IStateStorage, IStateStorageDiagnostics, IRecoverableStateStorage, IDisposable
 {
     private const string Extension = ".state";
     private readonly string rootPath;
@@ -236,7 +237,7 @@ public partial class FileStateStorage : IStateStorage, IStateStorageDiagnostics,
                 throw new StateStorageNotFoundException(key);
             }
 
-            var suffix = DateTimeOffset.UtcNow.ToString("yyyyMMddHHmmssfff");
+            var suffix = DateTimeOffset.UtcNow.ToString("yyyyMMddHHmmssfff", CultureInfo.InvariantCulture);
             var quarantinePath = path + $".corrupt-{suffix}";
             File.Move(path, quarantinePath);
             var quarantineKey = key + $".corrupt-{suffix}";
@@ -366,4 +367,23 @@ public partial class FileStateStorage : IStateStorage, IStateStorageDiagnostics,
 
     [GeneratedRegex("^[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$", RegexOptions.CultureInvariant)]
     private static partial Regex LogicalPathRegex();
+
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            cleanupGate.Dispose();
+            foreach (var semaphore in keyLocks.Values)
+            {
+                semaphore.Dispose();
+            }
+            keyLocks.Clear();
+        }
+    }
 }

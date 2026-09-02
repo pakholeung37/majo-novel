@@ -9,7 +9,7 @@ using Godot;
 
 namespace Majo.Runtime.Audio.Godot;
 
-public sealed class GodotAudioBackend : IAudioBackend
+public sealed class GodotAudioBackend : IAudioBackend, IDisposable
 {
     private readonly Node owner;
     private readonly HashSet<GodotAudioBackendPlayer> players = new();
@@ -93,6 +93,18 @@ public sealed class GodotAudioBackend : IAudioBackend
     }
 
     private void RemovePlayer(GodotAudioBackendPlayer player) => players.Remove(player);
+
+    public void Dispose()
+    {
+        StopAll();
+        if (GodotObject.IsInstanceValid(host))
+        {
+            host!.QueueFree();
+            host.Dispose();
+        }
+
+        host = null;
+    }
 }
 
 internal sealed class GodotAudioBackendPlayer : IAudioBackendPlayer
@@ -127,7 +139,7 @@ internal sealed class GodotAudioBackendPlayer : IAudioBackendPlayer
 
     public string InstanceId { get; }
 
-    public bool Loop
+    public bool IsLooping
     {
         get => loop;
         set => loop = value;
@@ -156,7 +168,7 @@ internal sealed class GodotAudioBackendPlayer : IAudioBackendPlayer
         player.Play();
     }
 
-    public void Stop()
+    public void StopPlayback()
     {
         if (isDisposed)
         {
@@ -217,7 +229,7 @@ internal sealed class GodotAudioBackendPlayer : IAudioBackendPlayer
         }
     }
 
-    public void Dispose() => Stop();
+    public void Dispose() => StopPlayback();
 
     private void HandleFinished()
     {
@@ -264,10 +276,7 @@ internal sealed class GodotAudioBackendPlayer : IAudioBackendPlayer
 
     private void ThrowIfDisposed()
     {
-        if (isDisposed)
-        {
-            throw new ObjectDisposedException(nameof(GodotAudioBackendPlayer));
-        }
+        ObjectDisposedException.ThrowIf(isDisposed, this);
     }
 
     private static string SanitizeNodeName(string value) => value

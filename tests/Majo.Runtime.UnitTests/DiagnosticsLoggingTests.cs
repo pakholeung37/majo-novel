@@ -380,10 +380,10 @@ public sealed class DiagnosticsLoggingTests
 
     private sealed class TestServiceResolver : IServiceResolver
     {
-        public TService Get<TService>() where TService : class =>
+        public TService Resolve<TService>() where TService : class =>
             throw new InvalidOperationException($"Service '{typeof(TService).FullName}' not registered.");
 
-        public object Get(Type serviceType) =>
+        public object Resolve(Type serviceType) =>
             throw new InvalidOperationException($"Service '{serviceType.FullName}' not registered.");
 
         public bool TryGet<TService>(out TService? service) where TService : class

@@ -160,7 +160,7 @@ public sealed class DirectionPatchTests
             new IDirectionDirective[]
             {
                 new ScreenPatch(
-                    LayoutId.Single,
+                    LayoutId.SingleLayout,
                     new Dictionary<LayoutSlotId, ViewId>
                     {
                         [LayoutSlotId.Main] = new ViewId("missing"),
@@ -197,10 +197,10 @@ public sealed class DirectionPatchTests
             stageId,
             actorId,
             position is { } point
-                ? DirectionValue<DirectionPoint>.From(point)
+                ? DirectionValue.From(point)
                 : default,
             appearance is not null
-                ? DirectionValue<string?>.From(appearance)
+                ? DirectionValue.From<string?>(appearance)
                 : default,
             default,
             default,
@@ -215,14 +215,14 @@ public sealed class DirectionPatchTests
         DirectionSourceLocation? location = null) => new(
             viewId,
             source is not null
-                ? DirectionValue<ViewSource>.From(source)
+                ? DirectionValue.From(source)
                 : default,
             default,
             zoom is { } zoomValue
-                ? DirectionValue<float>.From(zoomValue)
+                ? DirectionValue.From(zoomValue)
                 : default,
             rotation is { } rotationValue
-                ? DirectionValue<float>.From(rotationValue)
+                ? DirectionValue.From(rotationValue)
                 : default,
             transition ?? DirectionTransitionSpec.Cut,
             location);

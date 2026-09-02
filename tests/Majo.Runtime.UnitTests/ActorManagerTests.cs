@@ -33,7 +33,7 @@ public sealed class ActorManagerTests
 
         var actor = manager.Create("hero");
 
-        Assert.Same(actor, manager.Get<FakeActor>("hero"));
+        Assert.Same(actor, manager.GetActor<FakeActor>("hero"));
         Assert.True(manager.TryGet("hero", out var queried));
         Assert.Same(actor, queried);
         Assert.Single(manager.Actors);
@@ -238,7 +238,7 @@ public sealed class ActorManagerTests
             creationMode: ActorCreationMode.Dormant));
 
         Assert.False(actor.Visible);
-        Assert.Same(actor, manager.Get<IActor>("hero"));
+        Assert.Same(actor, manager.GetActor<IActor>("hero"));
         Assert.Equal(1, factory.CreateCount);
         await manager.ShutdownAsync(CancellationToken.None);
     }

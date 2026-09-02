@@ -17,7 +17,7 @@ using Majo.Runtime.Script;
 
 namespace Majo.Runtime.Auto;
 
-public sealed class PlaybackModeManager : IPlaybackModeManager
+public sealed class PlaybackModeManager : IPlaybackModeManager, IDisposable
 {
     private readonly object sync = new();
     private readonly IScriptPlayback script;
@@ -60,10 +60,7 @@ public sealed class PlaybackModeManager : IPlaybackModeManager
         this.played = played ?? throw new ArgumentNullException(nameof(played));
         this.operations = operations ?? throw new ArgumentNullException(nameof(operations));
         this.logger = logger ?? NullRuntimeLogger.Instance;
-        if (extraDelay < TimeSpan.Zero)
-        {
-            throw new ArgumentOutOfRangeException(nameof(extraDelay));
-        }
+        ArgumentOutOfRangeException.ThrowIfLessThan(extraDelay, TimeSpan.Zero);
 
         ExtraDelay = extraDelay;
         WaitForVoice = waitForVoice;
@@ -93,7 +90,7 @@ public sealed class PlaybackModeManager : IPlaybackModeManager
         get { lock (sync) { return extraDelay; } }
         set
         {
-            if (value < TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(value));
+            ArgumentOutOfRangeException.ThrowIfLessThan(value, TimeSpan.Zero);
             lock (sync) { extraDelay = value; }
             ReconcileDeadline();
         }
@@ -112,7 +109,7 @@ public sealed class PlaybackModeManager : IPlaybackModeManager
         get { lock (sync) { return skipDelay; } }
         private set
         {
-            if (value < TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(value));
+            ArgumentOutOfRangeException.ThrowIfLessThan(value, TimeSpan.Zero);
             lock (sync) { skipDelay = value; }
         }
     }
@@ -234,10 +231,7 @@ public sealed class PlaybackModeManager : IPlaybackModeManager
 
     public void ApplyAutoSettings(TimeSpan extraDelay, bool waitForVoice)
     {
-        if (extraDelay < TimeSpan.Zero)
-        {
-            throw new ArgumentOutOfRangeException(nameof(extraDelay));
-        }
+        ArgumentOutOfRangeException.ThrowIfLessThan(extraDelay, TimeSpan.Zero);
         lock (sync)
         {
             this.extraDelay = extraDelay;
@@ -248,7 +242,7 @@ public sealed class PlaybackModeManager : IPlaybackModeManager
 
     public void ApplySkipSettings(TimeSpan delay, PlaybackMode defaultMode)
     {
-        if (delay < TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(delay));
+        ArgumentOutOfRangeException.ThrowIfLessThan(delay, TimeSpan.Zero);
         ValidateSkipMode(defaultMode);
         lock (sync)
         {
@@ -575,4 +569,9 @@ public sealed class PlaybackModeManager : IPlaybackModeManager
         }
     }
 
+    public void Dispose()
+    {
+        lifetime?.Dispose();
+        deadline?.Dispose();
+    }
 }

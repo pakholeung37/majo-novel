@@ -255,9 +255,9 @@ public sealed class DialoguePlayerTests
         variables.SetString("$route", "evidence");
         variables.SetBoolean("pressed", true);
 
-        Assert.Equal(3.5, variables.Get("score").NumberValue);
-        Assert.Equal("evidence", variables.Get("route").StringValue);
-        Assert.True(variables.Get("$pressed").BooleanValue);
+        Assert.Equal(3.5, variables.GetValue("score").NumberValue);
+        Assert.Equal("evidence", variables.GetValue("route").StringValue);
+        Assert.True(variables.GetValue("$pressed").BooleanValue);
         Assert.Equal(new[] { "score", "route", "pressed" }, changes.Select(x => x.Name));
 
         await variables.ResetAsync(CancellationToken.None);
@@ -335,7 +335,7 @@ public sealed class DialoguePlayerTests
     private static DialogueLine CreateLine(string id) => new(
         id,
         "Narrator",
-        new DialogueText("Text", Array.Empty<DialogueMarkupAttribute>()),
+        new DialogueText("Text", Array.Empty<DialogueMarkupSpan>()),
         Array.Empty<string>());
 
     private sealed class FakeDialogueBackend : IDialogueBackend
@@ -437,7 +437,7 @@ public sealed class DialoguePlayerTests
         public bool TryGet(string name, out DialogueValue value) =>
             values.TryGetValue(name, out value);
 
-        public void Set(string name, DialogueValue value)
+        public void SetValue(string name, DialogueValue value)
         {
             values[name] = value;
             Changed?.Invoke(new DialogueVariableChanged(name, value));

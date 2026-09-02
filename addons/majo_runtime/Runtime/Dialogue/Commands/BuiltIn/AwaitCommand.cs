@@ -35,7 +35,7 @@ public sealed class AwaitCommandHandler : IRuntimeCommandHandler<AwaitCommandArg
             return Task.CompletedTask;
         }
 
-        var operations = context.Require(context.Operations, "OperationScheduler");
+        var operations = RuntimeCommandContext.Require(context.Operations, "OperationScheduler");
         return arguments.Complete
             ? operations.CompleteAsync(target.Value, context.CancellationToken)
             : operations.WaitAsync(target.Value, context.CancellationToken);

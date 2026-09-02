@@ -152,7 +152,7 @@ public sealed class GodotProjectResourceProvider : IResourceProvider
         return Task.CompletedTask;
     }
 
-    private static object RequireType(Resource resource, string path, Type expectedType)
+    private static Resource RequireType(Resource resource, string path, Type expectedType)
     {
         if (expectedType.IsInstanceOfType(resource))
         {

@@ -137,8 +137,8 @@ public sealed class OperationScheduler : IOperationScheduler
             handle = new OperationHandle(
                 definition,
                 frameClock,
-                lifetime.SessionCancellationToken,
-                RemoveFromActiveOperations);
+                RemoveFromActiveOperations,
+                lifetime.SessionCancellationToken);
             activeOperations.Add(handle);
 
             if (definition.Id is not null)

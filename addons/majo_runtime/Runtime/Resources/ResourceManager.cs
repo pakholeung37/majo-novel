@@ -15,7 +15,7 @@ public sealed class ResourceManager : IResourceManager
     private static readonly MethodInfo CreateEntryLeaseMethod = typeof(ResourceManager)
         .GetMethod(nameof(CreateEntryLeaseCore), BindingFlags.Instance | BindingFlags.NonPublic)!;
     private readonly object gate = new();
-    private readonly IReadOnlyList<IResourceProvider> providers;
+    private readonly IResourceProvider[] providers;
     private readonly IRuntimeLifetime lifetime;
     private readonly IRuntimeLogger logger;
     private readonly Dictionary<CacheKey, CacheEntry> loaded = new();
@@ -40,8 +40,8 @@ public sealed class ResourceManager : IResourceManager
         this.providers = providers.ToArray();
         this.lifetime = lifetime ?? throw new ArgumentNullException(nameof(lifetime));
         this.logger = logger ?? NullRuntimeLogger.Instance;
-        if (memoryBudgetBytes < 0) throw new ArgumentOutOfRangeException(nameof(memoryBudgetBytes));
-        if (defaultResourceEstimateBytes < 0) throw new ArgumentOutOfRangeException(nameof(defaultResourceEstimateBytes));
+        ArgumentOutOfRangeException.ThrowIfNegative(memoryBudgetBytes);
+        ArgumentOutOfRangeException.ThrowIfNegative(defaultResourceEstimateBytes);
         budgetBytes = memoryBudgetBytes;
         defaultEstimateBytes = defaultResourceEstimateBytes;
         ValidateProviders(this.providers);
@@ -97,7 +97,7 @@ public sealed class ResourceManager : IResourceManager
         await AwaitPendingAsync(cancellationToken);
         lock (gate) loaded.Clear();
         List<Exception>? exceptions = null;
-        for (var index = providers.Count - 1; index >= 0; index--)
+        for (var index = providers.Length - 1; index >= 0; index--)
         {
             try { await providers[index].ShutdownAsync(cancellationToken); }
             catch (Exception exception)
@@ -176,7 +176,7 @@ public sealed class ResourceManager : IResourceManager
         where TResource : class
     {
         EnsureInitialized();
-        if (estimatedBytes < 0) throw new ArgumentOutOfRangeException(nameof(estimatedBytes));
+        ArgumentOutOfRangeException.ThrowIfNegative(estimatedBytes);
         return StartLease<TResource>(key, overridePath, Estimate(estimatedBytes), pinned, cancellationToken);
     }
 
@@ -249,14 +249,14 @@ public sealed class ResourceManager : IResourceManager
         }
     }
 
-    private IResourceLease CreateEntryLeaseCore<TResource>(
+    private ResourceLease<TResource> CreateEntryLeaseCore<TResource>(
         ResourcePreloadEntry entry,
         bool pinned,
         CancellationToken cancellationToken)
         where TResource : class => StartLease<TResource>(
             entry.Key, entry.OverridePath, Estimate(entry.EstimatedBytes), pinned, cancellationToken);
 
-    private IResourceLease<TResource> StartLease<TResource>(
+    private ResourceLease<TResource> StartLease<TResource>(
         ResourceKey key,
         string? overridePath,
         long estimatedBytes,
@@ -265,9 +265,10 @@ public sealed class ResourceManager : IResourceManager
         where TResource : class
     {
         var lease = new ResourceLease<TResource>(
-            key, cancellationToken,
+            key,
             token => AcquireForLeaseAsync<TResource>(key, overridePath, estimatedBytes, pinned, token),
-            ReleaseLease, ForgetLease);
+            ReleaseLease, ForgetLease,
+            cancellationToken);
         lock (gate) activeLeases.Add(lease);
         lease.Start();
         return lease;
@@ -568,9 +569,9 @@ public sealed class ResourceManager : IResourceManager
     private void LogCacheMiss(ResourceKey key, string providerId) => logger.Debug(
         "resource", "resource.cache_miss", $"Loading resource '{key.Path}' with provider '{providerId}'.");
 
-    private static void ValidateProviders(IReadOnlyCollection<IResourceProvider> providers)
+    private static void ValidateProviders(IResourceProvider[] providers)
     {
-        if (providers.Count == 0) throw new MajoResourceException("At least one resource provider is required.");
+        if (providers.Length == 0) throw new MajoResourceException("At least one resource provider is required.");
         if (providers.Any(provider => provider is null))
             throw new ArgumentException("Resource providers cannot contain null.", nameof(providers));
         if (providers.FirstOrDefault(provider => string.IsNullOrWhiteSpace(provider.Id)) is not null)
@@ -615,10 +616,10 @@ public sealed class ResourceManager : IResourceManager
 
         public ResourceLease(
             ResourceKey logicalKey,
-            CancellationToken cancellationToken,
             Func<CancellationToken, Task<LeaseAcquisition<TResource>>> acquire,
             Action<CacheKey, bool> release,
-            Action<IResourceLease> forget)
+            Action<IResourceLease> forget,
+            CancellationToken cancellationToken)
         {
             LogicalKey = logicalKey;
             cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);

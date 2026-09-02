@@ -45,7 +45,7 @@ public sealed class FakeStageBackend : IStageBackend
         Camera = pose.Validate().Apply(Camera).Validate();
     public Task AnimateCameraAsync(
         CameraState from,
-        CameraState to,
+        CameraState target,
         CameraPoseUpdate properties,
         StageOperationSpec operation,
         CancellationToken cancellationToken)
@@ -58,7 +58,7 @@ public sealed class FakeStageBackend : IStageBackend
     }
     public Task DissolveCameraAsync(
         CameraState from,
-        CameraState to,
+        CameraState target,
         StageOperationSpec operation,
         CancellationToken cancellationToken)
     {
@@ -66,11 +66,11 @@ public sealed class FakeStageBackend : IStageBackend
         LastCameraOperation = operation;
         LastCameraTransition = CameraViewTransitionKind.Dissolve;
         LastDissolveSource = from.Validate();
-        LastDissolveTarget = to.Validate();
+        LastDissolveTarget = target.Validate();
         CameraTransitionCalls.Add("CaptureSource");
         ActiveCameraCaptureCount++;
         CameraTransitionCalls.Add("ApplyTargetPose");
-        ApplyCamera(to);
+        ApplyCamera(target);
         CameraTransitionCalls.Add("ShowSourceOverlay");
         CameraTransitionCalls.Add("AnimateSourceAlpha");
         ClearCameraViewTransition();
@@ -102,25 +102,25 @@ public sealed class FakeStageBackend : IStageBackend
     public void ApplyCurtain(StageCurtainState state) => Curtain = state.Validate();
     public Task AnimateCurtainAsync(
         StageCurtainState from,
-        StageCurtainState to,
+        StageCurtainState target,
         double duration,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        Curtain = to.Validate();
+        Curtain = target.Validate();
         return Task.CompletedTask;
     }
     public void ApplyScreenEffect(ScreenEffectState state) => ScreenEffect = state.Validate();
-    public Task AnimateOverlayAsync(ScreenEffectState from, ScreenEffectState to, double duration, CancellationToken cancellationToken)
+    public Task AnimateOverlayAsync(ScreenEffectState from, ScreenEffectState target, double duration, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        ScreenEffect = ScreenEffect with { OverlayColor = to.OverlayColor, OverlayOpacity = to.OverlayOpacity };
+        ScreenEffect = ScreenEffect with { OverlayColor = target.OverlayColor, OverlayOpacity = target.OverlayOpacity };
         return Task.CompletedTask;
     }
-    public Task AnimateLetterboxAsync(float from, float to, double duration, CancellationToken cancellationToken)
+    public Task AnimateLetterboxAsync(float from, float target, double duration, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        ScreenEffect = ScreenEffect with { LetterboxRatio = to };
+        ScreenEffect = ScreenEffect with { LetterboxRatio = target };
         return Task.CompletedTask;
     }
     public Task FlashAsync(Color color, float intensity, double duration, CancellationToken cancellationToken)

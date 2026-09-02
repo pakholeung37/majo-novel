@@ -131,10 +131,10 @@ public sealed class DirectionPlanner : IDirectionPlanner
 
     private static void ApplyBackdrop(
         BackdropPatch patch,
-        IDictionary<StageId, StageState> stages,
-        IDictionary<string, DirectionSourceLocation?> writes,
-        ICollection<DirectionTransition> transitions,
-        ISet<DirectionResourceClaim> claims)
+        Dictionary<StageId, StageState> stages,
+        Dictionary<string, DirectionSourceLocation?> writes,
+        List<DirectionTransition> transitions,
+        HashSet<DirectionResourceClaim> claims)
     {
         ArgumentNullException.ThrowIfNull(patch.Backdrop);
         patch.Backdrop.Validate();
@@ -150,11 +150,11 @@ public sealed class DirectionPlanner : IDirectionPlanner
 
     private static void ApplyActor(
         ActorPatch patch,
-        IDictionary<StageId, StageState> stages,
-        IDictionary<string, DirectionSourceLocation?> writes,
-        ISet<string> leavePaths,
-        ICollection<DirectionTransition> transitions,
-        ISet<DirectionResourceClaim> claims)
+        Dictionary<StageId, StageState> stages,
+        Dictionary<string, DirectionSourceLocation?> writes,
+        HashSet<string> leavePaths,
+        List<DirectionTransition> transitions,
+        HashSet<DirectionResourceClaim> claims)
     {
         var stage = GetOrCreateStage(stages, patch.StageId);
         var actors = stage.Actors.ToDictionary(pair => pair.Key, pair => pair.Value);
@@ -216,10 +216,10 @@ public sealed class DirectionPlanner : IDirectionPlanner
 
     private static void ApplyLeave(
         ActorLeavePatch patch,
-        IDictionary<StageId, StageState> stages,
-        IDictionary<string, DirectionSourceLocation?> writes,
-        ISet<string> leavePaths,
-        ICollection<DirectionTransition> transitions)
+        Dictionary<StageId, StageState> stages,
+        Dictionary<string, DirectionSourceLocation?> writes,
+        HashSet<string> leavePaths,
+        List<DirectionTransition> transitions)
     {
         if (!stages.TryGetValue(patch.StageId, out var stage))
             throw new DirectionReferenceException($"Stage '{patch.StageId}' does not exist.");
@@ -255,12 +255,12 @@ public sealed class DirectionPlanner : IDirectionPlanner
 
     private static void ApplyView(
         ViewPatch patch,
-        IDictionary<ViewId, ViewState> views,
-        IDictionary<string, DirectionSourceLocation?> writes,
-        ICollection<DirectionTransition> transitions,
-        ISet<DirectionResourceClaim> claims,
+        Dictionary<ViewId, ViewState> views,
+        Dictionary<string, DirectionSourceLocation?> writes,
+        List<DirectionTransition> transitions,
+        HashSet<DirectionResourceClaim> claims,
         bool allowSequencedPose,
-        ISet<ViewId> sequencedViews)
+        HashSet<ViewId> sequencedViews)
     {
         var viewExists = views.TryGetValue(patch.ViewId, out var view);
         if (!viewExists && !patch.Source.HasValue)
@@ -337,9 +337,9 @@ public sealed class DirectionPlanner : IDirectionPlanner
 
     private static ScreenState ApplyScreen(
         ScreenPatch patch,
-        IDictionary<string, DirectionSourceLocation?> writes,
-        ICollection<DirectionTransition> transitions,
-        ISet<DirectionResourceClaim> claims)
+        Dictionary<string, DirectionSourceLocation?> writes,
+        List<DirectionTransition> transitions,
+        HashSet<DirectionResourceClaim> claims)
     {
         ArgumentNullException.ThrowIfNull(patch.Bindings);
         if (patch.Bindings.Count == 0)
@@ -376,8 +376,8 @@ public sealed class DirectionPlanner : IDirectionPlanner
     }
 
     private static void ValidateReferences(
-        IReadOnlyDictionary<StageId, StageState> stages,
-        IReadOnlyDictionary<ViewId, ViewState> views,
+        Dictionary<StageId, StageState> stages,
+        Dictionary<ViewId, ViewState> views,
         ScreenState screen)
     {
         foreach (var view in views.Values)
@@ -459,7 +459,7 @@ public sealed class DirectionPlanner : IDirectionPlanner
     }
 
     private static StageState GetOrCreateStage(
-        IDictionary<StageId, StageState> stages,
+        Dictionary<StageId, StageState> stages,
         StageId stageId)
     {
         if (stages.TryGetValue(stageId, out var stage)) return stage;
@@ -470,8 +470,8 @@ public sealed class DirectionPlanner : IDirectionPlanner
 
     private static void AddTransition(
         DirectionTransitionSpec transition,
-        IReadOnlyList<string> paths,
-        ICollection<DirectionTransition> transitions,
+        List<string> paths,
+        List<DirectionTransition> transitions,
         DirectionSourceLocation? sourceLocation)
     {
         ArgumentNullException.ThrowIfNull(transition);
@@ -483,8 +483,8 @@ public sealed class DirectionPlanner : IDirectionPlanner
     private static void RegisterWrite(
         string path,
         DirectionSourceLocation? location,
-        IDictionary<string, DirectionSourceLocation?> writes,
-        ICollection<string> directivePaths)
+        Dictionary<string, DirectionSourceLocation?> writes,
+        List<string> directivePaths)
     {
         if (writes.TryGetValue(path, out var previous))
             throw new DirectionConflictException(path, previous, location);
@@ -495,10 +495,10 @@ public sealed class DirectionPlanner : IDirectionPlanner
     private static void RegisterViewPoseWrite(
         string path,
         DirectionSourceLocation? location,
-        IDictionary<string, DirectionSourceLocation?> writes,
-        ICollection<string> directivePaths,
+        Dictionary<string, DirectionSourceLocation?> writes,
+        List<string> directivePaths,
         bool allowSequencedPose,
-        ISet<ViewId> sequencedViews,
+        HashSet<ViewId> sequencedViews,
         ViewId viewId)
     {
         if (writes.ContainsKey(path))

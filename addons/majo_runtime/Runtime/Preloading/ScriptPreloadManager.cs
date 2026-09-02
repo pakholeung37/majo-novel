@@ -10,7 +10,7 @@ using Majo.Runtime.Resources;
 
 namespace Majo.Runtime.Preloading;
 
-public sealed class ScriptPreloadManager : IScriptPreloadManager
+public sealed class ScriptPreloadManager : IScriptPreloadManager, IDisposable
 {
     private readonly IResourceManager resources;
     private readonly IActorManager actors;
@@ -157,4 +157,6 @@ public sealed class ScriptPreloadManager : IScriptPreloadManager
                 "ScriptPreloadManager is not initialized.");
         }
     }
+
+    public void Dispose() => gate.Dispose();
 }

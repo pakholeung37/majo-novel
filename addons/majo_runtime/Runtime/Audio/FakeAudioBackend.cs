@@ -109,7 +109,7 @@ public sealed class FakeAudioBackend : IAudioBackend
     {
         foreach (var player in players)
         {
-            player.Stop();
+            player.StopPlayback();
         }
     }
 }
@@ -140,7 +140,7 @@ public sealed class FakeAudioBackendPlayer : IAudioBackendPlayer
 
     public string InstanceId { get; }
 
-    public bool Loop { get; set; }
+    public bool IsLooping { get; set; }
 
     public float Volume { get; set; } = 1;
 
@@ -150,15 +150,12 @@ public sealed class FakeAudioBackendPlayer : IAudioBackendPlayer
 
     public void Play()
     {
-        if (isDisposed)
-        {
-            throw new ObjectDisposedException(nameof(FakeAudioBackendPlayer));
-        }
+        ObjectDisposedException.ThrowIf(isDisposed, this);
 
         IsPlaying = true;
     }
 
-    public void Stop()
+    public void StopPlayback()
     {
         if (isDisposed)
         {
@@ -197,7 +194,7 @@ public sealed class FakeAudioBackendPlayer : IAudioBackendPlayer
 
     public void CompletePlayback()
     {
-        if (!Loop)
+        if (!IsLooping)
         {
             CompleteFades();
             IsPlaying = false;
@@ -217,7 +214,7 @@ public sealed class FakeAudioBackendPlayer : IAudioBackendPlayer
         }
     }
 
-    public void Dispose() => Stop();
+    public void Dispose() => StopPlayback();
 
     private void CancelFades()
     {

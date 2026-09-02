@@ -42,7 +42,7 @@ public sealed class RuntimeCommandContext
 
     public CommandBindingContext? Binding { get; }
 
-    public TService Require<TService>(TService? service, string serviceName)
+    public static TService Require<TService>(TService? service, string serviceName)
         where TService : class => service ?? throw new RuntimeCommandException(
             "extension", $"Runtime command context does not provide {serviceName}.");
 

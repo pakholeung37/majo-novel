@@ -47,11 +47,11 @@ public partial class RuntimeDialogueProbe : Node, IDialoguePresenter
     }
 
     public async Task<DialogueOption?> PresentOptionsAsync(
-        IReadOnlyList<DialogueOption> dialogueOptions,
+        IReadOnlyList<DialogueOption> options,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var available = dialogueOptions.Where(option => option.IsAvailable).ToArray();
+        var available = options.Where(option => option.IsAvailable).ToArray();
         if (available.Length == 0)
         {
             Record("options", "none");

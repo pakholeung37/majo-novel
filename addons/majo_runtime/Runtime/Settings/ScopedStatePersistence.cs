@@ -10,7 +10,7 @@ using Majo.Runtime.State;
 
 namespace Majo.Runtime.Settings;
 
-public abstract class ScopedStatePersistence : IRuntimeService
+public abstract class ScopedStatePersistence : IRuntimeService, IDisposable
 {
     private readonly SemaphoreSlim transaction = new(1, 1);
     private readonly IStateSerializer serializer;
@@ -40,10 +40,7 @@ public abstract class ScopedStatePersistence : IRuntimeService
         {
             throw new ArgumentOutOfRangeException(nameof(scope));
         }
-        if (debounce < TimeSpan.Zero)
-        {
-            throw new ArgumentOutOfRangeException(nameof(debounce));
-        }
+        ArgumentOutOfRangeException.ThrowIfLessThan(debounce, TimeSpan.Zero);
 
         Scope = scope;
         Contributors = contributors.Where(value =>
@@ -322,5 +319,20 @@ public abstract class ScopedStatePersistence : IRuntimeService
         debounceCancellation?.Cancel();
         debounceCancellation?.Dispose();
         debounceCancellation = null;
+    }
+
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            CancelDebounce();
+            transaction.Dispose();
+        }
     }
 }

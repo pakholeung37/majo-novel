@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace Majo.Runtime.Operations;
 
-internal sealed class OperationHandle : IOperationHandle
+internal sealed class OperationHandle : IOperationHandle, IDisposable
 {
     private readonly object gate = new();
     private readonly OperationDefinition definition;
@@ -29,16 +29,16 @@ internal sealed class OperationHandle : IOperationHandle
     public OperationHandle(
         OperationDefinition definition,
         IFrameClock frameClock,
-        CancellationToken lifetimeCancellationToken,
-        Action<OperationHandle> onTerminated)
+        Action<OperationHandle> onTerminated,
+        CancellationToken lifetimeCancellationToken)
     {
         this.definition = definition;
         this.onTerminated = onTerminated;
         context = new OperationContext(
             frameClock,
-            executionCancellation.Token,
             definition.Id,
-            definition.GroupId);
+            definition.GroupId,
+            executionCancellation.Token);
         lifetimeCancellationRegistration = lifetimeCancellationToken.Register(
             static state => ((OperationHandle)state!).Cancel(), this);
     }
@@ -231,7 +231,7 @@ internal sealed class OperationHandle : IOperationHandle
         completion.TrySetCanceled();
     }
 
-    private void FinishFaulted(IReadOnlyCollection<Exception> exceptions)
+    private void FinishFaulted(List<Exception> exceptions)
     {
         lock (gate)
         {
@@ -253,5 +253,11 @@ internal sealed class OperationHandle : IOperationHandle
         None,
         Cancel,
         Complete,
+    }
+
+    public void Dispose()
+    {
+        lifetimeCancellationRegistration.Dispose();
+        executionCancellation.Dispose();
     }
 }

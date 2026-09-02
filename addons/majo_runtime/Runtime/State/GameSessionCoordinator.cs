@@ -39,7 +39,7 @@ public interface IGameSessionCoordinator : IRuntimeService
         CancellationToken cancellationToken = default);
 }
 
-public sealed class GameSessionCoordinator : IGameSessionCoordinator
+public sealed class GameSessionCoordinator : IGameSessionCoordinator, IDisposable
 {
     private readonly SemaphoreSlim transitions = new(1, 1);
     private readonly IRuntimeSessionController sessions;
@@ -213,4 +213,6 @@ public sealed class GameSessionCoordinator : IGameSessionCoordinator
             throw new StateRuntimeException("Game session coordinator is not initialized.");
         }
     }
+
+    public void Dispose() => transitions.Dispose();
 }

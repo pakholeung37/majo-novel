@@ -13,8 +13,8 @@ namespace Majo.Runtime.Dialogue.Yarn.Presentation;
 
 internal sealed class MajoBbCodeMarkupHandler : IActionMarkupHandler
 {
-    private static readonly IReadOnlyDictionary<string, (string Open, string Close)> Styles =
-        new Dictionary<string, (string Open, string Close)>(StringComparer.Ordinal)
+    private static readonly Dictionary<string, (string Open, string Close)> Styles =
+        new(StringComparer.Ordinal)
         {
             ["b"] = ("[b]", "[/b]"),
             ["i"] = ("[i]", "[/i]"),

@@ -611,7 +611,7 @@ public sealed class AutoHistoryTests
         public AudioCategory Category => AudioCategory.Voice;
         public string ClipId => id;
         public string InstanceId => id;
-        public bool Loop => false;
+        public bool IsLooping => false;
         public float Volume => 1;
         public AudioPlaybackState State { get; private set; } = AudioPlaybackState.Playing;
         public Task Completion => completion.Task;

@@ -282,17 +282,22 @@ public sealed class LocaleManagerTests
         var line = new DialogueLine(
             "line_101",
             "Speaker",
-            new DialogueText("Hello", Array.Empty<DialogueMarkupAttribute>()),
+            new DialogueText("Hello", Array.Empty<DialogueMarkupSpan>()),
+            Array.Empty<string>());
+        var localized = new DialogueLine(
+            "test_key",
+            "Speaker",
+            new DialogueText("不对！", Array.Empty<DialogueMarkupSpan>()),
             ["voice:custom_voice"],
             ResolvedLocale: "zh-CN");
 
-        Assert.Equal("zh-CN", line.ResolvedLocale);
-        Assert.Equal("custom_voice", DialogueVoiceResolver.ResolveVoiceId(line));
+        Assert.Equal("zh-CN", localized.ResolvedLocale);
+        Assert.Equal("custom_voice", DialogueVoiceResolver.ResolveVoiceId(localized));
 
         var yarnLine = new DialogueLine(
             "line:0101Adv02_Ema001",
             "Ema",
-            new DialogueText("不对！", Array.Empty<DialogueMarkupAttribute>()),
+            new DialogueText("不对！", Array.Empty<DialogueMarkupSpan>()),
             []);
         Assert.Equal("0101Adv02_Ema001", DialogueVoiceResolver.ResolveVoiceId(yarnLine));
     }

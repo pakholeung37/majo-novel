@@ -13,7 +13,7 @@ using Majo.Runtime.State;
 
 namespace Majo.Runtime.Save;
 
-public sealed class SaveSlotManager : ISaveSlotManager
+public sealed class SaveSlotManager : ISaveSlotManager, IDisposable
 {
     private readonly SemaphoreSlim transaction = new(1, 1);
     private readonly IStateManager state;
@@ -27,7 +27,7 @@ public sealed class SaveSlotManager : ISaveSlotManager
     private readonly string gameBuildId;
     private readonly string storageNamespace;
     private readonly IRuntimeLogger logger;
-    private readonly IReadOnlyDictionary<SaveSlotKind, int> capacities;
+    private readonly ReadOnlyDictionary<SaveSlotKind, int> capacities;
     private bool isInitialized;
 
     public SaveSlotManager(
@@ -602,7 +602,7 @@ public sealed class SaveSlotManager : ISaveSlotManager
         {
             display[SaveSlotMetadataKeys.PlayerName] = playerName;
         }
-        if (history.Entries.LastOrDefault() is { } entry)
+        if (history.Entries.Count > 0 && history.Entries[^1] is { } entry)
         {
             if (!string.IsNullOrWhiteSpace(entry.Speaker))
             {
@@ -757,7 +757,7 @@ public sealed class SaveSlotManager : ISaveSlotManager
     }
 
     private static void AddEligibilityReasons(
-        ICollection<SaveSlotUnavailableReason> target,
+        List<SaveSlotUnavailableReason> target,
         StateEligibilityResult result)
     {
         foreach (var reason in result.Reasons)
@@ -873,4 +873,6 @@ public sealed class SaveSlotManager : ISaveSlotManager
             }
         }
     }
+
+    public void Dispose() => transaction.Dispose();
 }

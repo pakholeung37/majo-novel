@@ -114,7 +114,7 @@ public sealed class TransientDirectionCueExecutor : ITransientDirectionCueExecut
 
     private static Color ToColor(DirectionColor color) => new(color.R, color.G, color.B, color.A);
 
-    private void ExecuteGeneric(DirectionCue cue, ICollection<IOperationHandle> operations)
+    private void ExecuteGeneric(DirectionCue cue, List<IOperationHandle> operations)
     {
         ValidateGeneric(cue);
         if (cue.Name.Equals("shake", StringComparison.OrdinalIgnoreCase))

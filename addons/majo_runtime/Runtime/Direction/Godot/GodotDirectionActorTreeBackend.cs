@@ -132,7 +132,7 @@ internal sealed class GodotDirectionActorTreeBackend
         character.SetVisible(true);
     }
 
-    private static IReadOnlyDictionary<ActorId, DirectionTransitionSpec> ResolveTransitions(
+    private static Dictionary<ActorId, DirectionTransitionSpec> ResolveTransitions(
         DirectionPlan plan,
         StageState? before,
         StageState? target)

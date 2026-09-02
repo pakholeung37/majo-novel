@@ -296,10 +296,10 @@ public partial class HeadlessTestRunner
                 travel.Entries[0].Spot.LineId == "line:m95-state-current",
             2);
 
-        var restoredHero = actors.Get<IActor>("state-hero");
-        var restoredRoom = actors.Get<IActor>("state-room");
-        Assert(variables.Get("name").StringValue == "Maya" &&
-                Mathf.IsEqualApprox((float)variables.Get("score").NumberValue, 7) &&
+        var restoredHero = actors.GetActor<IActor>("state-hero");
+        var restoredRoom = actors.GetActor<IActor>("state-room");
+        Assert(variables.GetValue("name").StringValue == "Maya" &&
+                Mathf.IsEqualApprox((float)variables.GetValue("score").NumberValue, 7) &&
                 !variables.Contains("extra"),
             "M9.6 dialogue variables did not replace the mutated store exactly.");
         Assert(restoredHero.Appearance == "red" &&
@@ -382,7 +382,7 @@ public partial class HeadlessTestRunner
                 2);
 
             variables.SetNumber("round", round);
-            var roundHero = actors.Get<IActor>("state-hero");
+            var roundHero = actors.GetActor<IActor>("state-hero");
             roundHero.SetAppearance("red");
             await audio.PlayBgmAsync("calm", "music", volume: 0.7f);
             var savedLineId = script.CurrentSpot?.LineId;
@@ -455,9 +455,9 @@ public partial class HeadlessTestRunner
                     "M13 Save/Load UI advanced past the line restored by its Load button.");
             }
             Assert(Mathf.IsEqualApprox(
-                        (float)variables.Get("round").NumberValue,
+                        (float)variables.GetValue("round").NumberValue,
                         round) &&
-                    actors.Get<IActor>("state-hero").Appearance == "red" &&
+                    actors.GetActor<IActor>("state-hero").Appearance == "red" &&
                     audio.BgmTracks.Single().ClipId == "calm" &&
                     audio.SfxInstances.Count == 0 &&
                     audio.CurrentVoice is null &&

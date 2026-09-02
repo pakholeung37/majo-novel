@@ -116,7 +116,7 @@ public partial class MajoProjectConfiguration : Resource
         return new ConfigurationValidationResult(issues);
     }
 
-    private void ValidateLocalization(ICollection<ConfigurationIssue> issues)
+    private void ValidateLocalization(List<ConfigurationIssue> issues)
     {
         if (Localization is null)
         {
@@ -146,7 +146,7 @@ public partial class MajoProjectConfiguration : Resource
         }
     }
 
-    private void ValidateStage(ICollection<ConfigurationIssue> issues)
+    private void ValidateStage(List<ConfigurationIssue> issues)
     {
         if (Stage is null)
         {
@@ -175,7 +175,7 @@ public partial class MajoProjectConfiguration : Resource
         }
     }
 
-    private void ValidateSettings(ICollection<ConfigurationIssue> issues)
+    private void ValidateSettings(List<ConfigurationIssue> issues)
     {
         if (Settings is null)
         {
@@ -221,7 +221,7 @@ public partial class MajoProjectConfiguration : Resource
         }
     }
 
-    private void ValidateGlobalState(ICollection<ConfigurationIssue> issues)
+    private void ValidateGlobalState(List<ConfigurationIssue> issues)
     {
         if (GlobalState is null)
         {
@@ -237,7 +237,7 @@ public partial class MajoProjectConfiguration : Resource
         }
     }
 
-    private void ValidateScript(ICollection<ConfigurationIssue> issues)
+    private void ValidateScript(List<ConfigurationIssue> issues)
     {
         if (Script is null)
         {
@@ -245,7 +245,7 @@ public partial class MajoProjectConfiguration : Resource
         }
     }
 
-    private void ValidateState(ICollection<ConfigurationIssue> issues)
+    private void ValidateState(List<ConfigurationIssue> issues)
     {
         if (State is null)
         {
@@ -283,7 +283,7 @@ public partial class MajoProjectConfiguration : Resource
         }
     }
 
-    private void ValidateAuto(ICollection<ConfigurationIssue> issues)
+    private void ValidateAuto(List<ConfigurationIssue> issues)
     {
         if (Auto is null)
         {
@@ -299,7 +299,7 @@ public partial class MajoProjectConfiguration : Resource
         }
     }
 
-    private void ValidateSave(ICollection<ConfigurationIssue> issues)
+    private void ValidateSave(List<ConfigurationIssue> issues)
     {
         if (Save is null)
         {
@@ -322,7 +322,7 @@ public partial class MajoProjectConfiguration : Resource
         static void ValidatePositive(
             int value,
             string property,
-            ICollection<ConfigurationIssue> target)
+            List<ConfigurationIssue> target)
         {
             if (value <= 0)
             {
@@ -333,7 +333,7 @@ public partial class MajoProjectConfiguration : Resource
         }
     }
 
-    private void ValidateHistory(ICollection<ConfigurationIssue> issues)
+    private void ValidateHistory(List<ConfigurationIssue> issues)
     {
         if (History is null)
         {
@@ -349,7 +349,7 @@ public partial class MajoProjectConfiguration : Resource
         }
     }
 
-    private void ValidateResources(ICollection<ConfigurationIssue> issues)
+    private void ValidateResources(List<ConfigurationIssue> issues)
     {
         if (Resources is null)
         {
@@ -385,7 +385,7 @@ public partial class MajoProjectConfiguration : Resource
     private static void ValidateResourceKeyPrefix(
         string value,
         string property,
-        ICollection<ConfigurationIssue> issues)
+        List<ConfigurationIssue> issues)
     {
         try
         {
@@ -398,7 +398,7 @@ public partial class MajoProjectConfiguration : Resource
         }
     }
 
-    private void ValidateRuntime(ICollection<ConfigurationIssue> issues)
+    private void ValidateRuntime(List<ConfigurationIssue> issues)
     {
         if (Runtime is null)
         {
@@ -415,7 +415,7 @@ public partial class MajoProjectConfiguration : Resource
         }
     }
 
-    private void ValidateOperations(ICollection<ConfigurationIssue> issues)
+    private void ValidateOperations(List<ConfigurationIssue> issues)
     {
         if (Operations is null)
         {
@@ -441,7 +441,7 @@ public partial class MajoProjectConfiguration : Resource
     }
 
     private void ValidateActors(
-        ICollection<ConfigurationIssue> issues,
+        List<ConfigurationIssue> issues,
         Func<string, bool> resourceExists)
     {
         if (Actors is null)
@@ -595,7 +595,7 @@ public partial class MajoProjectConfiguration : Resource
     private static void ValidatePosition(
         Vector2 position,
         string property,
-        ICollection<ConfigurationIssue> issues)
+        List<ConfigurationIssue> issues)
     {
         if (!float.IsFinite(position.X) || !float.IsFinite(position.Y))
         {
@@ -605,7 +605,7 @@ public partial class MajoProjectConfiguration : Resource
         }
     }
 
-    private void ValidateDialogue(ICollection<ConfigurationIssue> issues)
+    private void ValidateDialogue(List<ConfigurationIssue> issues)
     {
         if (Dialogue is null)
         {
@@ -665,7 +665,7 @@ public partial class MajoProjectConfiguration : Resource
         }
     }
 
-    private void ValidateInput(ICollection<ConfigurationIssue> issues)
+    private void ValidateInput(List<ConfigurationIssue> issues)
     {
         if (Input is null)
         {
@@ -673,7 +673,7 @@ public partial class MajoProjectConfiguration : Resource
         }
     }
 
-    private void ValidatePresentation(ICollection<ConfigurationIssue> issues)
+    private void ValidatePresentation(List<ConfigurationIssue> issues)
     {
         if (Presentation is null)
         {
@@ -703,7 +703,7 @@ public partial class MajoProjectConfiguration : Resource
     private static void ValidateNonNegativeDuration(
         double value,
         string property,
-        ICollection<ConfigurationIssue> issues)
+        List<ConfigurationIssue> issues)
     {
         if (!double.IsFinite(value) || value < 0)
         {
@@ -713,7 +713,7 @@ public partial class MajoProjectConfiguration : Resource
         }
     }
 
-    private void ValidateAudio(ICollection<ConfigurationIssue> issues)
+    private void ValidateAudio(List<ConfigurationIssue> issues)
     {
         if (Audio is null)
         {
@@ -748,7 +748,7 @@ public partial class MajoProjectConfiguration : Resource
     private static void ValidateVolume(
         float value,
         string property,
-        ICollection<ConfigurationIssue> issues)
+        List<ConfigurationIssue> issues)
     {
         if (!float.IsFinite(value) || value is < 0 or > 1)
         {
@@ -761,7 +761,7 @@ public partial class MajoProjectConfiguration : Resource
     private static void ValidateAudioPath(
         string value,
         string property,
-        ICollection<ConfigurationIssue> issues)
+        List<ConfigurationIssue> issues)
     {
         try
         {
@@ -774,7 +774,7 @@ public partial class MajoProjectConfiguration : Resource
         }
     }
 
-    private void ValidateDiagnostics(ICollection<ConfigurationIssue> issues)
+    private void ValidateDiagnostics(List<ConfigurationIssue> issues)
     {
         if (Diagnostics is null)
         {

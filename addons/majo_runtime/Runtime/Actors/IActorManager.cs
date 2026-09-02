@@ -40,7 +40,7 @@ public interface IActorManager : IRuntimeService
         return Task.FromResult(GetOrCreate(request));
     }
 
-    TActor Get<TActor>(string actorId) where TActor : class, IActor;
+    TActor GetActor<TActor>(string actorId) where TActor : class, IActor;
 
     bool TryGet(string actorId, out IActor? actor);
 

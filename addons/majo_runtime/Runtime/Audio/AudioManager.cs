@@ -12,7 +12,7 @@ using Majo.Runtime.Resources;
 
 namespace Majo.Runtime.Audio;
 
-public sealed class AudioManager : IAudioManager
+public sealed class AudioManager : IAudioManager, IDisposable
 {
     private readonly object gate = new();
     private readonly SemaphoreSlim mutations = new(1, 1);
@@ -230,7 +230,7 @@ public sealed class AudioManager : IAudioManager
     public async Task<AudioPlaybackResult> PlayBgmAsync(
         string clipId,
         string? trackId = null,
-        bool loop = true,
+        bool looping = true,
         float volume = 1,
         AudioFade fade = default,
         CancellationToken cancellationToken = default)
@@ -256,10 +256,10 @@ public sealed class AudioManager : IAudioManager
             if (previous is not null && previous.ClipId == clipId)
             {
                 var previousVolume = previous.BaseVolume;
-                var previousLoop = previous.Backend.Loop;
+                var previousLoop = previous.Backend.IsLooping;
                 previous.BaseVolume = volume;
-                previous.Backend.Loop = loop;
-                previous.Loop = loop;
+                previous.Backend.IsLooping = looping;
+                previous.IsLooping = looping;
                 var modifyOperation = StartFade(
                     [new FadeTarget(previous, EffectiveVolume(previous))],
                     fade,
@@ -267,8 +267,8 @@ public sealed class AudioManager : IAudioManager
                     cancel: () =>
                     {
                         previous.BaseVolume = previousVolume;
-                        previous.Backend.Loop = previousLoop;
-                        previous.Loop = previousLoop;
+                        previous.Backend.IsLooping = previousLoop;
+                        previous.IsLooping = previousLoop;
                         ApplyVolume(previous);
                     });
                 TrackTransition(bgmTransitions, trackId, modifyOperation);
@@ -276,7 +276,7 @@ public sealed class AudioManager : IAudioManager
             }
 
             var current = CreatePlayback(
-                AudioCategory.Bgm, clipId, trackId, clip, loop, volume,
+                AudioCategory.Bgm, clipId, trackId, clip, looping, volume,
                 fade.DurationSeconds > 0 ? 0 : EffectiveVolume(AudioCategory.Bgm, volume));
             lock (gate)
             {
@@ -365,7 +365,7 @@ public sealed class AudioManager : IAudioManager
     public async Task<AudioPlaybackResult> PlaySfxAsync(
         string clipId,
         string? instanceId = null,
-        bool loop = false,
+        bool looping = false,
         float volume = 1,
         AudioFade fade = default,
         CancellationToken cancellationToken = default)
@@ -396,7 +396,7 @@ public sealed class AudioManager : IAudioManager
             }
 
             var playback = CreatePlayback(
-                AudioCategory.Sfx, clipId, instanceId, clip, loop, volume,
+                AudioCategory.Sfx, clipId, instanceId, clip, looping, volume,
                 fade.DurationSeconds > 0 ? 0 : EffectiveVolume(AudioCategory.Sfx, volume));
             lock (gate) { sfx.Add(instanceId, playback); }
             var operation = StartFade(
@@ -454,7 +454,7 @@ public sealed class AudioManager : IAudioManager
 
     public async Task<AudioPlaybackResult> PlayVoiceAsync(
         string clipId,
-        bool loop = false,
+        bool looping = false,
         float volume = 1,
         AudioFade fade = default,
         string? overridePath = null,
@@ -498,7 +498,7 @@ public sealed class AudioManager : IAudioManager
             }
 
             var playback = CreatePlayback(
-                AudioCategory.Voice, localizedId, "voice", clip, loop, volume,
+                AudioCategory.Voice, localizedId, "voice", clip, looping, volume,
                 fade.DurationSeconds > 0 ? 0 : EffectiveVolume(AudioCategory.Voice, volume));
             lock (gate) { voice = playback; }
             var operation = StartFade(
@@ -628,15 +628,15 @@ public sealed class AudioManager : IAudioManager
         string clipId,
         string instanceId,
         IAudioClip clip,
-        bool loop,
+        bool looping,
         float baseVolume,
         float initialVolume)
     {
         var backendPlayer = backend.CreatePlayer(category, clip, instanceId);
-        backendPlayer.Loop = loop;
+        backendPlayer.IsLooping = looping;
         backendPlayer.Volume = initialVolume;
         var playback = new AudioPlayback(
-            category, clipId, instanceId, loop, baseVolume, backendPlayer);
+            category, clipId, instanceId, looping, baseVolume, backendPlayer);
         backendPlayer.Play();
         logger.Debug(
             "audio",
@@ -721,7 +721,7 @@ public sealed class AudioManager : IAudioManager
             }
         }
 
-        playback.Backend.Stop();
+        playback.Backend.StopPlayback();
         playback.Backend.Dispose();
         playback.Complete();
         logger.Debug(
@@ -1074,14 +1074,14 @@ public sealed class AudioManager : IAudioManager
             AudioCategory category,
             string clipId,
             string instanceId,
-            bool loop,
+            bool looping,
             float baseVolume,
             IAudioBackendPlayer backend)
         {
             Category = category;
             ClipId = clipId;
             InstanceId = instanceId;
-            Loop = loop;
+            IsLooping = looping;
             BaseVolume = baseVolume;
             Backend = backend;
         }
@@ -1092,7 +1092,7 @@ public sealed class AudioManager : IAudioManager
 
         public string InstanceId { get; }
 
-        public bool Loop { get; set; }
+        public bool IsLooping { get; set; }
 
         public float Volume => Backend.Volume;
 
@@ -1110,4 +1110,6 @@ public sealed class AudioManager : IAudioManager
     }
 
     private sealed record FadeTarget(AudioPlayback Playback, float Volume);
+
+    public void Dispose() => mutations.Dispose();
 }

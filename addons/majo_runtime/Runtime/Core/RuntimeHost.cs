@@ -366,7 +366,7 @@ public sealed class RuntimeHost : IRuntimeLifetime, IRuntimeSessionController, I
         return exceptions;
     }
 
-    private void CancelLifetimes(ICollection<Exception> exceptions)
+    private void CancelLifetimes(List<Exception> exceptions)
     {
         TryCancel(sessionCancellation, "session", exceptions);
         TryCancel(runtimeCancellation, "runtime", exceptions);
@@ -442,7 +442,7 @@ public sealed class RuntimeHost : IRuntimeLifetime, IRuntimeSessionController, I
         await FinishDirectionSkipAsync(direction, cancellationToken);
     }
 
-    private void ThrowIfShutdownFailed(IReadOnlyCollection<Exception> exceptions)
+    private void ThrowIfShutdownFailed(List<Exception> exceptions)
     {
         if (exceptions.Count == 0)
         {
@@ -459,7 +459,7 @@ public sealed class RuntimeHost : IRuntimeLifetime, IRuntimeSessionController, I
     private static void TryCancel(
         CancellationTokenSource cancellation,
         string lifetimeName,
-        ICollection<Exception> exceptions)
+        List<Exception> exceptions)
     {
         if (cancellation.IsCancellationRequested)
         {
@@ -488,7 +488,7 @@ public sealed class RuntimeHost : IRuntimeLifetime, IRuntimeSessionController, I
 
     private static RuntimeLifecycleException CreateInitializationException(
         Exception initializationException,
-        IReadOnlyCollection<Exception> cleanupExceptions)
+        List<Exception> cleanupExceptions)
     {
         if (cleanupExceptions.Count == 0)
         {
@@ -516,10 +516,10 @@ public sealed class RuntimeHost : IRuntimeLifetime, IRuntimeSessionController, I
             }
         }
 
-        public TService Get<TService>() where TService : class =>
-            (TService)Get(typeof(TService));
+        public TService Resolve<TService>() where TService : class =>
+            (TService)Resolve(typeof(TService));
 
-        public object Get(Type serviceType)
+        public object Resolve(Type serviceType)
         {
             ArgumentNullException.ThrowIfNull(serviceType);
             if (instances.TryGetValue(serviceType, out var service))
@@ -571,7 +571,7 @@ public sealed class RuntimeHost : IRuntimeLifetime, IRuntimeSessionController, I
         }
 
         public IRuntimeService GetRuntimeService(Type serviceType) =>
-            (IRuntimeService)Get(serviceType);
+            (IRuntimeService)Resolve(serviceType);
 
         private sealed class FactoryResolver : IServiceResolver
         {
@@ -586,10 +586,10 @@ public sealed class RuntimeHost : IRuntimeLifetime, IRuntimeSessionController, I
                 this.requester = requester;
             }
 
-            public TService Get<TService>() where TService : class =>
-                (TService)Get(typeof(TService));
+            public TService Resolve<TService>() where TService : class =>
+                (TService)Resolve(typeof(TService));
 
-            public object Get(Type serviceType)
+            public object Resolve(Type serviceType)
             {
                 ArgumentNullException.ThrowIfNull(serviceType);
                 if (!requester.Dependencies.Contains(serviceType))
@@ -600,7 +600,7 @@ public sealed class RuntimeHost : IRuntimeLifetime, IRuntimeSessionController, I
                         $"{requester.ServiceType.FullName} -> {serviceType.FullName}.");
                 }
 
-                return resolver.Get(serviceType);
+                return resolver.Resolve(serviceType);
             }
 
             public bool TryGet<TService>(out TService? service) where TService : class

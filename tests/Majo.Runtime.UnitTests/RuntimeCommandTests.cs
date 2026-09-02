@@ -673,7 +673,7 @@ public sealed class RuntimeCommandTests
             return actor;
         }
 
-        public TActor Get<TActor>(string actorId) where TActor : class, IActor =>
+        public TActor GetActor<TActor>(string actorId) where TActor : class, IActor =>
             actors.TryGetValue(actorId, out var actor) && actor is TActor typed
                 ? typed
                 : throw new ActorException($"Actor '{actorId}' has the wrong type.");

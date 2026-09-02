@@ -214,7 +214,7 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
                     }), 0.0f, 1.0f, transition.DurationSeconds);
                     break;
                 default:
-                    throw new ArgumentOutOfRangeException(nameof(transition));
+                    throw new InvalidOperationException($"Unsupported transition kind: {transition.Kind}.");
             }
             tween.Finished += OnFinished;
         }

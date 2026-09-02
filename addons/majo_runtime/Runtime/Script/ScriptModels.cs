@@ -133,10 +133,7 @@ public sealed record ScriptCheckpoint
         ScriptPlaybackSpot spot,
         IEnumerable<string>? resolvedSubstitutions = null)
     {
-        if (formatVersion <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(formatVersion));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(formatVersion);
 
         ArgumentException.ThrowIfNullOrWhiteSpace(programFingerprint);
         FormatVersion = formatVersion;

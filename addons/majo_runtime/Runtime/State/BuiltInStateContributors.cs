@@ -249,7 +249,7 @@ public sealed class DialogueVariablesStateContributor : IStateContributor
     private StateRecord CreateRecord(VariablesPayload payload) =>
         new(Key, Scope, SchemaVersion, StateJson.Serialize(payload));
 
-    private IReadOnlyDictionary<string, DialogueValue> Decode(StateRecord record)
+    private Dictionary<string, DialogueValue> Decode(StateRecord record)
     {
         var payload = StateJson.Deserialize<VariablesPayload>(record);
         var values = new Dictionary<string, DialogueValue>(StringComparer.Ordinal);
@@ -285,7 +285,7 @@ public sealed class DialogueVariablesStateContributor : IStateContributor
         public DialogueValue ToValue() => Kind switch
         {
             DialogueValueKind.Number => DialogueValue.FromNumber(NumberValue),
-            DialogueValueKind.String => DialogueValue.FromString(
+            DialogueValueKind.Text => DialogueValue.FromString(
                 StringValue ?? throw new StateSnapshotException(
                     $"String variable '{Name}' has no value.")),
             DialogueValueKind.Boolean => DialogueValue.FromBoolean(BooleanValue),
@@ -380,7 +380,7 @@ public sealed class ActorStateContributor : IStateContributor
     public async ValueTask ResetAsync(CancellationToken cancellationToken) =>
         await actors.ResetAsync(cancellationToken);
 
-    private IReadOnlyList<ActorEntry> Decode(StateRecord record)
+    private ActorEntry[] Decode(StateRecord record)
     {
         var payload = StateJson.Deserialize<ActorsPayload>(record);
         var entries = payload.Entries ?? Array.Empty<ActorEntry>();
@@ -477,7 +477,7 @@ public sealed class AudioStateContributor : IStateContributor
             .Select(track => new BgmEntry(
                 track.ClipId,
                 track.InstanceId,
-                track.Loop,
+                track.IsLooping,
                 track.BaseVolume))
             .ToArray();
         return ValueTask.FromResult(new StateRecord(
@@ -501,8 +501,8 @@ public sealed class AudioStateContributor : IStateContributor
             var result = await audio.PlayBgmAsync(
                 track.ClipId,
                 track.TrackId,
-                track.Loop,
-                track.Volume,
+                looping: track.Loop,
+                volume: track.Volume,
                 cancellationToken: cancellationToken);
             await result.FadeOperation.Completion.WaitAsync(cancellationToken);
         }
@@ -511,7 +511,7 @@ public sealed class AudioStateContributor : IStateContributor
     public async ValueTask ResetAsync(CancellationToken cancellationToken) =>
         await audio.ResetAsync(cancellationToken);
 
-    private IReadOnlyList<BgmEntry> Decode(StateRecord record)
+    private BgmEntry[] Decode(StateRecord record)
     {
         var payload = StateJson.Deserialize<AudioPayload>(record);
         var tracks = payload.Tracks ?? Array.Empty<BgmEntry>();

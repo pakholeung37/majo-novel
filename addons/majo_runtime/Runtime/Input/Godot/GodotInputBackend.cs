@@ -9,7 +9,7 @@ using Majo.Runtime.Configuration;
 
 namespace Majo.Runtime.Input.Godot;
 
-public sealed class GodotInputBackend : IInputBackend
+public sealed class GodotInputBackend : IInputBackend, IDisposable
 {
     private readonly Node owner;
     private readonly InputConfiguration configuration;
@@ -93,9 +93,18 @@ public sealed class GodotInputBackend : IInputBackend
                 "Godot Input Backend is not initialized.");
         }
     }
+
+    public void Dispose()
+    {
+        if (GodotObject.IsInstanceValid(receiver))
+        {
+            receiver.QueueFree();
+            receiver.Dispose();
+        }
+    }
 }
 
-internal partial class GodotInputReceiver : Node
+internal sealed partial class GodotInputReceiver : Node
 {
     public event Action<InputActivation>? Activated;
 

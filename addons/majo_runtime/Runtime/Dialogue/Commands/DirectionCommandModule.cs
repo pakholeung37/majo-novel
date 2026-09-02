@@ -87,14 +87,14 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
                 new ActorId(a.Actor),
                 a.At is null
                     ? default
-                    : DirectionValue<DirectionPoint>.From(ResolvePosition(a.At)),
+                    : DirectionValue.From(ResolvePosition(a.At)),
                 a.Appearance is null
                     ? default
-                    : DirectionValue<string?>.From(a.Appearance),
+                    : DirectionValue.From<string?>(a.Appearance),
                 a.Scale is null
                     ? default
-                    : DirectionValue<float>.From((float)a.Scale.Value),
-                a.Z is null ? default : DirectionValue<int>.From(a.Z.Value),
+                    : DirectionValue.From((float)a.Scale.Value),
+                a.Z is null ? default : DirectionValue.From(a.Z.Value),
                 Transition(
                     a,
                     c,
@@ -150,9 +150,9 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
         var patch = new ViewPatch(
             View(a.View),
             default,
-            DirectionValue<DirectionPoint>.From(new DirectionPoint(50, 50)),
-            DirectionValue<float>.From(1),
-            DirectionValue<float>.From(0),
+            DirectionValue.From(new DirectionPoint(50, 50)),
+            DirectionValue.From(1f),
+            DirectionValue.From(0f),
             CameraPoseTransition(a, a.Via, c));
         await beats.SubmitAsync(patch, Barrier(a.Wait), c.CancellationToken);
     });
@@ -190,18 +190,18 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
         await beats.SubmitAsync(
             new ViewPatch(
                 View(a.View),
-                DirectionValue<ViewSource>.From(
+                DirectionValue.From<ViewSource>(
                     new CgViewSource(resources.ResolveCg(a.Resource))),
                 a.Center is null
                     ? default
-                    : DirectionValue<DirectionPoint>.From(
+                    : DirectionValue.From(
                         new DirectionPoint(a.Center.Value.X, a.Center.Value.Y)),
                 a.Zoom is null
                     ? default
-                    : DirectionValue<float>.From((float)a.Zoom.Value),
+                    : DirectionValue.From((float)a.Zoom.Value),
                 a.Rotation is null
                     ? default
-                    : DirectionValue<float>.From((float)a.Rotation.Value),
+                    : DirectionValue.From((float)a.Rotation.Value),
                 Transition(a, c, Enum.GetValues<DirectionTransitionKind>())),
             Barrier(a.Wait),
             c.CancellationToken);
@@ -389,17 +389,17 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
         View(a.View),
         stage is null
             ? default
-            : DirectionValue<ViewSource>.From(new StageViewSource(Stage(stage))),
+            : DirectionValue.From<ViewSource>(new StageViewSource(Stage(stage))),
         a.Center is null
             ? default
-            : DirectionValue<DirectionPoint>.From(
+            : DirectionValue.From(
                 new DirectionPoint(a.Center.Value.X, a.Center.Value.Y)),
         a.Zoom is null
             ? default
-            : DirectionValue<float>.From((float)a.Zoom.Value),
+            : DirectionValue.From((float)a.Zoom.Value),
         a.Rotation is null
             ? default
-            : DirectionValue<float>.From((float)a.Rotation.Value),
+            : DirectionValue.From((float)a.Rotation.Value),
         transition);
     }
 

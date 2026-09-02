@@ -16,7 +16,7 @@ using YarnSpinnerGodot;
 
 namespace Majo.Runtime.Dialogue.Yarn.HotReload;
 
-public sealed class YarnHotReloadService : IYarnHotReloadService
+public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
 {
     private const string LogCategory = "script.hot_reload";
     private readonly IYarnProjectVersionStore versions;
@@ -320,7 +320,7 @@ public sealed class YarnHotReloadService : IYarnHotReloadService
                 Status.ProgramFingerprint,
                 Array.Empty<YarnCompilationDiagnostic>(),
                 null));
-            var snapshot = await snapshotReader.ReadAsync(
+            var snapshot = await YarnSourceSnapshotReader.ReadAsync(
                 projectId,
                 ResolveManifestPath(projectId),
                 cancellationToken);
@@ -379,7 +379,7 @@ public sealed class YarnHotReloadService : IYarnHotReloadService
             }
 
             var version = await RunOnMainThreadAsync(
-                () => materializer.Materialize(generation, compilation),
+                () => YarnProjectMaterializer.Materialize(generation, compilation),
                 cancellationToken);
             lock (sync)
             {
@@ -857,7 +857,7 @@ public sealed class YarnHotReloadService : IYarnHotReloadService
             message,
             elapsed));
 
-    private static IReadOnlyDictionary<string, object?> Properties(
+    private static Dictionary<string, object?> Properties(
         string projectId,
         long generation,
         string? sourceFingerprint,
@@ -966,5 +966,16 @@ public sealed class YarnHotReloadService : IYarnHotReloadService
         }
 
         return true;
+    }
+
+    public void Dispose()
+    {
+        compileGate.Dispose();
+        applyGate.Dispose();
+        lifetime?.Dispose();
+        pendingReload?.Dispose();
+        watcher?.Dispose();
+        consistencyTimer?.Dispose();
+        resetCancellation?.Dispose();
     }
 }

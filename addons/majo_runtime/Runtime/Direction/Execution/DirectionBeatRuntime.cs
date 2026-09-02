@@ -43,7 +43,7 @@ public interface IDirectionBeatRuntime : IRuntimeService
     void ValidateNodeBoundary(string nodeId);
 }
 
-public sealed class DirectionBeatRuntime : IDirectionBeatRuntime
+public sealed class DirectionBeatRuntime : IDirectionBeatRuntime, IDisposable
 {
     private readonly IDirectionTransactionCoordinator transactions;
     private readonly ITransientDirectionCueExecutor? cues;
@@ -268,7 +268,7 @@ public sealed class DirectionBeatRuntime : IDirectionBeatRuntime
         return transaction;
     }
 
-    private IReadOnlyList<IDirectionDirective> PrepareDirectives(
+    private IDirectionDirective[] PrepareDirectives(
         IEnumerable<IDirectionDirective> directives)
     {
         var captured = directives.ToArray();
@@ -281,6 +281,8 @@ public sealed class DirectionBeatRuntime : IDirectionBeatRuntime
         ArgumentException.ThrowIfNullOrWhiteSpace(value, parameterName);
         return value.Trim();
     }
+
+    public void Dispose() => operationGate.Dispose();
 
     private sealed record OpenBeat(
         string Id,

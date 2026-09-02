@@ -55,10 +55,7 @@ public sealed record StateRecord
     public StateRecord(string key, StateScope scope, int schemaVersion, JsonElement payload)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
-        if (schemaVersion <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(schemaVersion));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(schemaVersion);
 
         Key = key.Trim();
         Scope = scope;
@@ -84,10 +81,7 @@ public sealed record StateSnapshot
         DateTimeOffset capturedAt,
         IEnumerable<StateRecord> records)
     {
-        if (formatVersion <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(formatVersion));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(formatVersion);
 
         ArgumentNullException.ThrowIfNull(records);
         var map = new Dictionary<string, StateRecord>(StringComparer.Ordinal);
@@ -141,10 +135,7 @@ public sealed record StateEnvelope
         IReadOnlyDictionary<string, string>? displayMetadata = null,
         IEnumerable<string>? migrationChain = null)
     {
-        if (formatVersion <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(formatVersion));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(formatVersion);
 
         ArgumentException.ThrowIfNullOrWhiteSpace(runtimeVersion);
         ArgumentException.ThrowIfNullOrWhiteSpace(gameBuildId);

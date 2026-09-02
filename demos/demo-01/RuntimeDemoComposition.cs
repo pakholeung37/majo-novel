@@ -254,7 +254,7 @@ public static class RuntimeDemoComposition
                 "demo_route", $"Unknown route '{arguments.Route}'.");
         }
 
-        var services = context.Require(context.Services, "ServiceResolver");
+        var services = RuntimeCommandContext.Require(context.Services, "ServiceResolver");
         services.Get<DemoSessionService>().SelectRoute(arguments.Route);
         return Task.CompletedTask;
     }
@@ -262,14 +262,14 @@ public static class RuntimeDemoComposition
     private static Task SwitchVoiceLocaleAsync(
         DemoVoiceLocaleCommandArguments arguments,
         RuntimeCommandContext context) =>
-        context.Require(context.Services, "ServiceResolver")
+        RuntimeCommandContext.Require(context.Services, "ServiceResolver")
             .Get<DemoSessionService>()
             .SwitchVoiceLocaleAsync(arguments.Locale, context.CancellationToken);
 
     private static Task PreloadAsync(
         DemoPreloadCommandArguments arguments,
         RuntimeCommandContext context) =>
-        context.Require(context.Services, "ServiceResolver")
+        RuntimeCommandContext.Require(context.Services, "ServiceResolver")
             .Get<DemoSessionService>()
             .PreloadDemoAssetsAsync(arguments.Group, context.CancellationToken);
 
@@ -278,7 +278,7 @@ public static class RuntimeDemoComposition
         RuntimeCommandContext context)
     {
         _ = arguments;
-        context.Require(context.Services, "ServiceResolver")
+        RuntimeCommandContext.Require(context.Services, "ServiceResolver")
             .Get<DemoSessionService>()
             .ReleasePreload();
         return Task.CompletedTask;

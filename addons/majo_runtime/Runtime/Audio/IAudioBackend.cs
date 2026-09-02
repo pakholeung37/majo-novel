@@ -30,7 +30,7 @@ public interface IAudioBackendPlayer : IDisposable
 {
     string InstanceId { get; }
 
-    bool Loop { get; set; }
+    bool IsLooping { get; set; }
 
     float Volume { get; set; }
 
@@ -40,7 +40,7 @@ public interface IAudioBackendPlayer : IDisposable
 
     void Play();
 
-    void Stop();
+    void StopPlayback();
 
     Task FadeVolumeAsync(
         float targetVolume,

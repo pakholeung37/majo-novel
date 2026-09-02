@@ -11,7 +11,6 @@ namespace Majo.Demos.Manosaba;
 public enum ManosabaFrameMode
 {
     Default = 0,
-    Normal = 0,
     Stream = 1,
 }
 

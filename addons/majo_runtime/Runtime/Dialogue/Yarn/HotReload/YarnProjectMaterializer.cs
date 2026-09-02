@@ -15,7 +15,7 @@ namespace Majo.Runtime.Dialogue.Yarn.HotReload;
 
 public sealed class YarnProjectMaterializer
 {
-    public YarnProjectVersion Materialize(
+    public static YarnProjectVersion Materialize(
         long generation,
         YarnRuntimeCompilation compilation)
     {

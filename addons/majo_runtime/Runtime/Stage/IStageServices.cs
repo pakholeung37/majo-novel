@@ -82,13 +82,13 @@ public interface IStageBackend : IRuntimeService
     void ApplyCameraPose(CameraPoseUpdate pose);
     Task AnimateCameraAsync(
         CameraState from,
-        CameraState to,
+        CameraState target,
         CameraPoseUpdate properties,
         StageOperationSpec operation,
         CancellationToken cancellationToken);
     Task DissolveCameraAsync(
         CameraState from,
-        CameraState to,
+        CameraState target,
         StageOperationSpec operation,
         CancellationToken cancellationToken);
     void ClearCameraViewTransition();
@@ -99,16 +99,16 @@ public interface IStageBackend : IRuntimeService
     void ApplyCurtain(StageCurtainState state);
     Task AnimateCurtainAsync(
         StageCurtainState from,
-        StageCurtainState to,
+        StageCurtainState target,
         double duration,
         CancellationToken cancellationToken);
     void ApplyScreenEffect(ScreenEffectState state);
     Task AnimateOverlayAsync(
         ScreenEffectState from,
-        ScreenEffectState to,
+        ScreenEffectState target,
         double duration,
         CancellationToken cancellationToken);
-    Task AnimateLetterboxAsync(float from, float to, double duration, CancellationToken cancellationToken);
+    Task AnimateLetterboxAsync(float from, float target, double duration, CancellationToken cancellationToken);
     Task FlashAsync(Color color, float intensity, double duration, CancellationToken cancellationToken);
     void ClearFlash();
 }

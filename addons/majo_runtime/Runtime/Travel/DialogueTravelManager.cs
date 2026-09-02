@@ -14,7 +14,7 @@ using Majo.Runtime.State;
 
 namespace Majo.Runtime.Travel;
 
-public sealed class DialogueTravelManager : IDialogueTravelManager
+public sealed class DialogueTravelManager : IDialogueTravelManager, IDisposable
 {
     private readonly object sync = new();
     private readonly SemaphoreSlim mutations = new(1, 1);
@@ -54,10 +54,7 @@ public sealed class DialogueTravelManager : IDialogueTravelManager
         this.playback = playback ?? throw new ArgumentNullException(nameof(playback));
         this.input = input;
         this.logger = logger ?? NullRuntimeLogger.Instance;
-        if (capacity < 2)
-        {
-            throw new ArgumentOutOfRangeException(nameof(capacity));
-        }
+        ArgumentOutOfRangeException.ThrowIfLessThan(capacity, 2);
 
         Capacity = capacity;
     }
@@ -570,4 +567,6 @@ public sealed class DialogueTravelManager : IDialogueTravelManager
             throw new InvalidOperationException("Dialogue travel manager is not initialized.");
         }
     }
+
+    public void Dispose() => mutations.Dispose();
 }

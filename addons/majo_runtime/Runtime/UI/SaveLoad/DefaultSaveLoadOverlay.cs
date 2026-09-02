@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -23,7 +24,7 @@ public interface ISaveLoadOverlay : IRuntimeService
     void Toggle();
 }
 
-public sealed class DefaultSaveLoadOverlay : ISaveLoadOverlay
+public sealed class DefaultSaveLoadOverlay : ISaveLoadOverlay, IDisposable
 {
     private readonly Node owner;
     private readonly ISaveSlotManager slots;
@@ -197,7 +198,7 @@ public sealed class DefaultSaveLoadOverlay : ISaveLoadOverlay
         return panel;
     }
 
-    private Control BuildGeneratedView()
+    private PanelContainer BuildGeneratedView()
     {
         var panel = new PanelContainer
         {
@@ -299,7 +300,7 @@ public sealed class DefaultSaveLoadOverlay : ISaveLoadOverlay
         }
     }
 
-    private Control BuildSlotRow(SaveSlotId id, SaveSlotMetadata? metadata)
+    private HBoxContainer BuildSlotRow(SaveSlotId id, SaveSlotMetadata? metadata)
     {
         var row = new HBoxContainer();
         var emptyText = TrText(UiStringKeys.SaveLoadSlotEmpty, "Empty");
@@ -373,7 +374,7 @@ public sealed class DefaultSaveLoadOverlay : ISaveLoadOverlay
         {
             pendingConfirmation = (slot, action);
             var confirmTemplate = TrText(UiStringKeys.SaveLoadConfirm, "Press {0} again to confirm {1}.");
-            SetStatus(string.Format(confirmTemplate, action, slot));
+            SetStatus(string.Format(CultureInfo.InvariantCulture, confirmTemplate, action, slot));
             return;
         }
         pendingConfirmation = null;
@@ -591,5 +592,28 @@ public sealed class DefaultSaveLoadOverlay : ISaveLoadOverlay
         {
             throw new SaveSlotException("Save/load overlay is not initialized.");
         }
+    }
+
+    public void Dispose()
+    {
+        lifetime.Cancel();
+        lifetime.Dispose();
+        toggleInput?.Dispose();
+        modalInput?.Dispose();
+        if (layer is not null && GodotObject.IsInstanceValid(layer))
+        {
+            layer.Free();
+            layer.Dispose();
+        }
+        else if (root is not null && GodotObject.IsInstanceValid(root))
+        {
+            root.Free();
+            root.Dispose();
+        }
+
+        layer = null;
+        root = null;
+        entries = null;
+        statusLabel = null;
     }
 }

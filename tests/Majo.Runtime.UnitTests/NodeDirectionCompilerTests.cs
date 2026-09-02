@@ -19,7 +19,6 @@ public sealed class NodeDirectionCompilerTests
     [Fact]
     public void NodeDirectionCompilerBuildsNodeLocalSymbolsAndTypedPreloadReferences()
     {
-        var compiler = new NodeDirectionCompiler();
         var snapshot = new YarnSourceSnapshot(
             "test",
             "test.yarnproject",
@@ -35,7 +34,7 @@ public sealed class NodeDirectionCompilerTests
             },
             "fingerprint");
 
-        var module = Assert.Single(compiler.Compile(snapshot));
+        var module = Assert.Single(NodeDirectionCompiler.Compile(snapshot));
         Assert.Equal("Opening", module.NodeId);
         Assert.Contains("cell", module.Symbols.Stages);
         Assert.Contains("reaction", module.Symbols.Views);
@@ -62,7 +61,7 @@ public sealed class NodeDirectionCompilerTests
             },
             "fingerprint");
 
-        var module = Assert.Single(new NodeDirectionCompiler().Compile(snapshot, 42));
+        var module = Assert.Single(NodeDirectionCompiler.Compile(snapshot, 42));
 
         Assert.Equal(42, module.Version);
         var mark = Assert.Single(module.MarkDefinitions);
@@ -85,7 +84,7 @@ public sealed class NodeDirectionCompilerTests
             },
             "fingerprint");
 
-        var module = Assert.Single(new NodeDirectionCompiler().Compile(snapshot));
+        var module = Assert.Single(NodeDirectionCompiler.Compile(snapshot));
 
         Assert.Contains("close", module.Symbols.ShotAliases);
         var diagnostic = Assert.Single(
@@ -97,7 +96,6 @@ public sealed class NodeDirectionCompilerTests
     [Fact]
     public void NodeDirectionCompilerCollectsExplicitImportsAndAuthoringDiagnostics()
     {
-        var compiler = new NodeDirectionCompiler();
         var snapshot = new YarnSourceSnapshot(
             "test", "test.yarnproject", 1, "en",
             new[]
@@ -109,7 +107,7 @@ public sealed class NodeDirectionCompilerTests
             },
             "fingerprint");
 
-        var module = Assert.Single(compiler.Compile(snapshot));
+        var module = Assert.Single(NodeDirectionCompiler.Compile(snapshot));
         var import = Assert.Single(module.Imports);
         Assert.Equal("stage", import.Kind);
         Assert.Equal("news", import.Alias);
@@ -177,7 +175,7 @@ public sealed class NodeDirectionCompilerTests
             ViewId.Main,
             default,
             default,
-            DirectionValue<float>.From(1.5f),
+            DirectionValue.From(1.5f),
             default,
             DirectionTransitionSpec.Cut);
         scopes.EnterNode("Opening");

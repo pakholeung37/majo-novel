@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
@@ -10,7 +11,7 @@ using Majo.Runtime.Localization;
 
 namespace Majo.Runtime.UI.History;
 
-public sealed class DefaultHistoryOverlay : IRuntimeService
+public sealed class DefaultHistoryOverlay : IRuntimeService, IDisposable
 {
     private readonly Node owner;
     private readonly IHistoryManager history;
@@ -94,7 +95,7 @@ public sealed class DefaultHistoryOverlay : IRuntimeService
         return Task.CompletedTask;
     }
 
-    private Control BuildView()
+    private PanelContainer BuildView()
     {
         var panel = new PanelContainer
         {
@@ -199,7 +200,7 @@ public sealed class DefaultHistoryOverlay : IRuntimeService
                 Disabled = entry.VoiceId is null,
                 TooltipText = entry.VoiceId is null
                     ? noVoiceText
-                    : string.Format(replayVoiceTemplate, entry.VoiceId),
+                    : string.Format(CultureInfo.InvariantCulture, replayVoiceTemplate, entry.VoiceId),
                 SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
                 AutowrapMode = TextServer.AutowrapMode.WordSmart,
             };
@@ -219,5 +220,26 @@ public sealed class DefaultHistoryOverlay : IRuntimeService
         {
             // HistoryManager owns diagnostic logging for replay failures.
         }
+    }
+
+    public void Dispose()
+    {
+        if (layer is not null && GodotObject.IsInstanceValid(layer))
+        {
+            layer.Free();
+            layer.Dispose();
+        }
+        else if (root is not null && GodotObject.IsInstanceValid(root))
+        {
+            root.Free();
+            root.Dispose();
+        }
+
+        layer = null;
+        root = null;
+        entries = null;
+        emptyLabel = null;
+        titleLabel = null;
+        closeButton = null;
     }
 }

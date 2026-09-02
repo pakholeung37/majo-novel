@@ -168,9 +168,9 @@ public sealed class AudioManagerTests
 
         Assert.Equal(0.5f, result.Playback.Volume, 3);
         var modified = await harness.Audio.PlayBgmAsync(
-            "calm", "music", loop: false, fade: new AudioFade());
+            "calm", "music", looping: false, fade: new AudioFade());
         await modified.FadeOperation.Completion;
-        Assert.False(modified.Playback.Loop);
+        Assert.False(modified.Playback.IsLooping);
         await harness.Host.ShutdownAsync();
     }
 
@@ -354,14 +354,14 @@ public sealed class AudioManagerTests
     private static DialogueLine Line(string id, params string[] metadata) => new(
         id,
         "Maya",
-        new DialogueText("Text", Array.Empty<DialogueMarkupAttribute>()),
+        new DialogueText("Text", Array.Empty<DialogueMarkupSpan>()),
         metadata);
 
     private static DialoguePresentationContext PresentationContext() => new(
-        CancellationToken.None,
-        CancellationToken.None,
         () => { },
-        () => { });
+        () => { },
+        CancellationToken.None,
+        CancellationToken.None);
 
     private sealed class AudioHarness
     {

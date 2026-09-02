@@ -73,9 +73,9 @@ public partial class MajoRuntimeBootstrap : Node
     private readonly CancellationTokenSource bootstrapLifetime = new();
     private Task? shutdownTask;
     private IYarnCommandAdapter? yarnCommandAdapter;
-    private IYarnDialogueBackend? yarnDialogueBackend;
-    private IDialoguePlayer? dialoguePlayer;
-    private IDialoguePresentation? dialoguePresentation;
+    private YarnDialogueBackend? yarnDialogueBackend;
+    private DialoguePlayer? dialoguePlayer;
+    private YarnDefaultDialoguePresentation? dialoguePresentation;
     private bool isExitingTree;
     private bool isBootstrapLifetimeDisposed;
     private bool isRuntimeShutdownSignalEmitted;
@@ -159,8 +159,8 @@ public partial class MajoRuntimeBootstrap : Node
 
         await ExecuteWithLifecycleTimeoutAsync(
             token => Host.ResetAsync(token),
-            cancellationToken,
-            "reset");
+            "reset",
+            cancellationToken);
         Logger?.SetRootCorrelation(new RuntimeLogCorrelation(
             Host.RuntimeId,
             Host.SessionId));
@@ -237,8 +237,8 @@ public partial class MajoRuntimeBootstrap : Node
                 Host.SessionId));
             await ExecuteWithLifecycleTimeoutAsync(
                 token => Host.InitializeAsync(token),
-                bootstrapLifetime.Token,
-                "initialization");
+                "initialization",
+                bootstrapLifetime.Token);
 
             if (Host.Services.TryGet<IYarnCommandAdapter>(out var adapter))
             {
@@ -1011,7 +1011,7 @@ public partial class MajoRuntimeBootstrap : Node
             settings.ReduceMotion);
     }
 
-    private IYarnCommandAdapter CreateYarnCommandAdapter(
+    private YarnCommandAdapter CreateYarnCommandAdapter(
         IYarnDialogueBackend backend,
         IActorManager actors,
         IOperationScheduler operations,
@@ -1133,7 +1133,7 @@ public partial class MajoRuntimeBootstrap : Node
                 Configuration.Resources.BackgroundsPath));
     }
 
-    private IResourceManager CreateResourceManager(
+    private ResourceManager CreateResourceManager(
         IFrameClock frameClock,
         IRuntimeLifetime lifetime)
     {
@@ -1154,7 +1154,7 @@ public partial class MajoRuntimeBootstrap : Node
                 (long)resourceConfiguration.DefaultResourceEstimateKiB * 1024);
     }
 
-    private IAudioManager CreateAudioManager(
+    private AudioManager CreateAudioManager(
         IResourceManager resources,
         IOperationScheduler operations,
         IMissingResourceReporter missingResources,
@@ -1214,8 +1214,8 @@ public partial class MajoRuntimeBootstrap : Node
                 {
                     await ExecuteWithLifecycleTimeoutAsync(
                         token => Host.ShutdownAsync(token),
-                        cancellationToken,
-                        "shutdown");
+                        "shutdown",
+                        cancellationToken);
                 }
             }
 
@@ -1272,8 +1272,8 @@ public partial class MajoRuntimeBootstrap : Node
 
     private async Task ExecuteWithLifecycleTimeoutAsync(
         Func<CancellationToken, Task> operation,
-        CancellationToken cancellationToken,
-        string operationName)
+        string operationName,
+        CancellationToken cancellationToken)
     {
         var timeoutSeconds = Configuration?.Runtime?.LifecycleTimeoutSeconds ?? 10;
         var timeout = TimeSpan.FromSeconds(timeoutSeconds);
@@ -1321,10 +1321,7 @@ public partial class MajoRuntimeBootstrap : Node
         deadlineCancellation.Cancel();
         _ = ObserveTimedOutOperationAsync(operationTask, operationCancellation);
 
-        if (cancellationToken.IsCancellationRequested)
-        {
-            throw new OperationCanceledException(cancellationToken);
-        }
+        cancellationToken.ThrowIfCancellationRequested();
 
         var message =
             $"Majo Runtime {operationName} exceeded {timeoutSeconds:0.###} seconds.";

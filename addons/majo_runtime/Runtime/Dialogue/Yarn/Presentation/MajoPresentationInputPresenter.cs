@@ -122,28 +122,28 @@ internal sealed partial class MajoPresentationInputPresenter : Node, DialoguePre
     private void MoveSelection(int offset)
     {
         var options = GetAvailableOptions();
-        if (options.Count == 0)
+        if (options.Length == 0)
         {
             return;
         }
 
-        selectedOptionIndex = (selectedOptionIndex + offset + options.Count) % options.Count;
+        selectedOptionIndex = (selectedOptionIndex + offset + options.Length) % options.Length;
         options[selectedOptionIndex].FocusButton();
     }
 
     private void SelectCurrentOption()
     {
         var options = GetAvailableOptions();
-        if (options.Count == 0)
+        if (options.Length == 0)
         {
             return;
         }
 
-        selectedOptionIndex = Math.Clamp(selectedOptionIndex, 0, options.Count - 1);
+        selectedOptionIndex = Math.Clamp(selectedOptionIndex, 0, options.Length - 1);
         options[selectedOptionIndex].InvokeOptionSelected();
     }
 
-    private IReadOnlyList<OptionItem> GetAvailableOptions() => optionParent
+    private OptionItem[] GetAvailableOptions() => optionParent
         .GetChildren()
         .OfType<OptionItem>()
         .Where(option =>

@@ -49,7 +49,7 @@ public interface IAudioManager : IRuntimeService
     Task<AudioPlaybackResult> PlayBgmAsync(
         string clipId,
         string? trackId = null,
-        bool loop = true,
+        bool looping = true,
         float volume = 1,
         AudioFade fade = default,
         CancellationToken cancellationToken = default);
@@ -62,7 +62,7 @@ public interface IAudioManager : IRuntimeService
     Task<AudioPlaybackResult> PlaySfxAsync(
         string clipId,
         string? instanceId = null,
-        bool loop = false,
+        bool looping = false,
         float volume = 1,
         AudioFade fade = default,
         CancellationToken cancellationToken = default);
@@ -74,7 +74,7 @@ public interface IAudioManager : IRuntimeService
 
     Task<AudioPlaybackResult> PlayVoiceAsync(
         string clipId,
-        bool loop = false,
+        bool looping = false,
         float volume = 1,
         AudioFade fade = default,
         string? overridePath = null,

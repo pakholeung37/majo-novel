@@ -22,6 +22,36 @@ namespace Majo.Runtime.HeadlessTests;
 
 public partial class HeadlessTestRunner
 {
+    private static readonly string[] StartedAndCompletedEvents = ["started", "completed"];
+    private static readonly string[] StoppedSessionEvents = ["started", "completed", "started", "stopped"];
+    private static readonly string[] ExpectedPlayableDemoLines =
+    [
+        "line:demo-welcome",
+        "line:demo-parallel-ready",
+        "line:demo-m17-intro",
+        "line:demo-m17-voice",
+        "line:demo-m18-preload",
+        "line:demo-m19-stage",
+        "line:demo-m17-m19-complete",
+        "line:demo-audio-ready",
+        "line:demo-operation-wait",
+        "line:demo-operation-complete",
+        "line:demo-dialogue-facade",
+        "line:demo-input-guide",
+        "line:demo-markup",
+        "line:demo-auto-history-guide",
+        "line:demo-diagnostics-guide",
+        "line:demo-state-checkpoint",
+        "line:demo-state-mutated",
+        "line:demo-save-guide",
+        "line:demo-settings-global-guide",
+        "line:demo-played-skip-guide",
+        "line:demo-option-guide",
+        "line:demo-branch-evidence",
+        "line:demo-resource-summary",
+        "line:demo-finished",
+    ];
+
     private async Task ValidatePlayableDemoAsync()
     {
         var presenter = new RuntimeDialogueProbe
@@ -98,7 +128,7 @@ public partial class HeadlessTestRunner
         };
 
         variables.SetString("headlessProbe", "ready");
-        Assert(variables.Get("$headlessProbe").StringValue == "ready",
+        Assert(variables.GetValue("$headlessProbe").StringValue == "ready",
             "Yarn-free dialogue variables did not preserve a string value.");
         Assert(ownedRunner.VariableStorage.TryGetValue<string>(
                 "$headlessProbe",
@@ -114,39 +144,13 @@ public partial class HeadlessTestRunner
 
         Assert(dialogue.State == DialogueSessionState.Idle,
             "Naturally completed M6 dialogue did not return to Idle.");
-        Assert(sessionEvents.SequenceEqual(new[] { "started", "completed" }),
+        Assert(sessionEvents.SequenceEqual(StartedAndCompletedEvents),
             "M6 natural dialogue session events were out of order.");
         Assert(joinedAtFinalState,
             "Runtime Demo parallel animation join did not expose both final Actor states.");
         Assert(waitedAtFinalState,
             "Runtime Demo wait:true animation did not finish before the next line.");
-        Assert(presenter.Lines.Select(line => line.Id).SequenceEqual(new[]
-            {
-                "line:demo-welcome",
-                "line:demo-parallel-ready",
-                "line:demo-m17-intro",
-                "line:demo-m17-voice",
-                "line:demo-m18-preload",
-                "line:demo-m19-stage",
-                "line:demo-m17-m19-complete",
-                "line:demo-audio-ready",
-                "line:demo-operation-wait",
-                "line:demo-operation-complete",
-                "line:demo-dialogue-facade",
-                "line:demo-input-guide",
-                "line:demo-markup",
-                "line:demo-auto-history-guide",
-                "line:demo-diagnostics-guide",
-                "line:demo-state-checkpoint",
-                "line:demo-state-mutated",
-                "line:demo-save-guide",
-                "line:demo-settings-global-guide",
-                "line:demo-played-skip-guide",
-                "line:demo-option-guide",
-                "line:demo-branch-evidence",
-                "line:demo-resource-summary",
-                "line:demo-finished",
-            }),
+        Assert(presenter.Lines.Select(line => line.Id).SequenceEqual(ExpectedPlayableDemoLines),
             "Runtime Demo automatic option selection or long-form flow was incorrect: " +
             string.Join(", ", presenter.Lines.Select(line => line.Id)));
         Assert(presenter.Lines[0].Speaker == "Narrator" &&
@@ -163,7 +167,7 @@ public partial class HeadlessTestRunner
         Assert(presenter.Events
                 .Where(entry => entry.Kind == "dialogue")
                 .Select(entry => entry.Value)
-                .SequenceEqual(new[] { "started", "completed" }),
+                .SequenceEqual(StartedAndCompletedEvents),
             "Demo Presenter probe did not observe the complete dialogue lifecycle.");
         Assert(presenter.Events.Any(entry => entry.Kind == "option"),
             "Demo Presenter probe did not observe an option selection.");
@@ -228,13 +232,7 @@ public partial class HeadlessTestRunner
             "M6 active stop did not produce a Stopped completion.");
         Assert(dialogue.State == DialogueSessionState.Idle,
             "M6 active stop did not return to Idle.");
-        Assert(sessionEvents.SequenceEqual(new[]
-            {
-                "started",
-                "completed",
-                "started",
-                "stopped",
-            }),
+        Assert(sessionEvents.SequenceEqual(StoppedSessionEvents),
             "M6 stopped dialogue session events were out of order.");
         Assert(presenter.Lines.Count == lineCountBeforeStop + 1,
             "M6 stop allowed a line after the expected welcome boundary to escape.");

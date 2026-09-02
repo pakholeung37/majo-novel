@@ -49,10 +49,7 @@ public sealed class HistoryManager : IHistoryManager
         this.logger = logger ?? NullRuntimeLogger.Instance;
         this.locales = locales;
         this.localizedResources = localizedResources;
-        if (capacity <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(capacity));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(capacity);
 
         Capacity = capacity;
     }

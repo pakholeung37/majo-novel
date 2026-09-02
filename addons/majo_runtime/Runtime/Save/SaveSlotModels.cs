@@ -21,10 +21,7 @@ public sealed record SaveSlotId
         {
             throw new ArgumentOutOfRangeException(nameof(kind));
         }
-        if (index <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(index));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(index);
 
         Kind = kind;
         Index = index;

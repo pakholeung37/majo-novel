@@ -316,7 +316,7 @@ public sealed class DirectionRuntimeTests
             {
                 new ViewPatch(
                     ViewId.Main,
-                    DirectionValue<ViewSource>.From(cg),
+                    DirectionValue.From<ViewSource>(cg),
                     default,
                     default,
                     default,
@@ -324,14 +324,14 @@ public sealed class DirectionRuntimeTests
                 new ViewPatch(
                     ViewId.Main,
                     default,
-                    DirectionValue<DirectionPoint>.From(cutPose.Center),
-                    DirectionValue<float>.From(cutPose.Zoom),
-                    DirectionValue<float>.From(cutPose.RotationDegrees),
+                    DirectionValue.From(cutPose.Center),
+                    DirectionValue.From(cutPose.Zoom),
+                    DirectionValue.From(cutPose.RotationDegrees),
                     DirectionTransitionSpec.Cut),
                 new ViewPatch(
                     ViewId.Main,
                     default,
-                    DirectionValue<DirectionPoint>.From(movePose.Center),
+                    DirectionValue.From(movePose.Center),
                     default,
                     default,
                     new DirectionTransitionSpec(
@@ -567,14 +567,14 @@ public sealed class DirectionRuntimeTests
         DirectionSourceLocation? location = null) => new(
             viewId,
             source is not null
-                ? DirectionValue<ViewSource>.From(source)
+                ? DirectionValue.From(source)
                 : default,
             default,
             zoom is { } zoomValue
-                ? DirectionValue<float>.From(zoomValue)
+                ? DirectionValue.From(zoomValue)
                 : default,
             rotation is { } rotationValue
-                ? DirectionValue<float>.From(rotationValue)
+                ? DirectionValue.From(rotationValue)
                 : default,
             transition ?? DirectionTransitionSpec.Cut,
             location);

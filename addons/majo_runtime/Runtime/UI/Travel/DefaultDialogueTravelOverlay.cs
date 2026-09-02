@@ -11,7 +11,7 @@ using Majo.Runtime.Travel;
 
 namespace Majo.Runtime.UI.Travel;
 
-public sealed class DefaultDialogueTravelOverlay : IRuntimeService
+public sealed class DefaultDialogueTravelOverlay : IRuntimeService, IDisposable
 {
     private readonly Node owner;
     private readonly IDialogueTravelManager travel;
@@ -164,7 +164,7 @@ public sealed class DefaultDialogueTravelOverlay : IRuntimeService
         }
     }
 
-    private Control BuildView()
+    private PanelContainer BuildView()
     {
         var panel = new PanelContainer
         {
@@ -345,5 +345,23 @@ public sealed class DefaultDialogueTravelOverlay : IRuntimeService
         {
             Close();
         }
+    }
+
+    public void Dispose()
+    {
+        Close();
+        DisposeToggleInput();
+        if (GodotObject.IsInstanceValid(layer))
+        {
+            layer.QueueFree();
+            layer.Dispose();
+        }
+
+        layer = null;
+        root = null;
+        entries = null;
+        statusLabel = null;
+        backButton = null;
+        forwardButton = null;
     }
 }

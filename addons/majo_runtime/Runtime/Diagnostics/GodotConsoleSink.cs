@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.Globalization;
 using System.Text;
 using Godot;
 using Majo.Runtime.Core;
@@ -43,7 +44,7 @@ public sealed class GodotConsoleSink : IRuntimeLogSink
     {
         var builder = new StringBuilder();
         builder.Append('[')
-            .Append(logEvent.Timestamp.ToString("HH:mm:ss.fff"))
+            .Append(logEvent.Timestamp.ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture))
             .Append("] [")
             .Append(logEvent.Level)
             .Append("] [")

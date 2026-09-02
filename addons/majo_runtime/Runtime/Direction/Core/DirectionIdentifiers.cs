@@ -46,7 +46,7 @@ public readonly record struct LayoutId
 
     public string Value { get; }
 
-    public static LayoutId Single { get; } = new("single");
+    public static LayoutId SingleLayout { get; } = new("single");
 
     public override string ToString() => Value;
 }

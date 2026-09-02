@@ -10,7 +10,7 @@ using Majo.Runtime.Localization;
 
 namespace Majo.Runtime.Actors;
 
-public sealed class ActorManager : IActorManager
+public sealed class ActorManager : IActorManager, IDisposable
 {
     private readonly object gate = new();
     private readonly Dictionary<string, ActorDefinition> definitions =
@@ -305,7 +305,7 @@ public sealed class ActorManager : IActorManager
         return creation.WaitAsync(cancellationToken);
     }
 
-    public TActor Get<TActor>(string actorId) where TActor : class, IActor
+    public TActor GetActor<TActor>(string actorId) where TActor : class, IActor
     {
         EnsureInitialized();
         IActor actor;
@@ -644,4 +644,6 @@ public sealed class ActorManager : IActorManager
             throw new ActorException("ActorManager is not initialized.");
         }
     }
+
+    public void Dispose() => actorLifetime.Dispose();
 }

@@ -67,7 +67,7 @@ public sealed record NodeDirectionModule(
 
 public sealed class NodeDirectionCompiler
 {
-    private static readonly IReadOnlySet<string> DirectionCommands = new HashSet<string>(
+    private static readonly HashSet<string> DirectionCommands = new(
         new[] { "backdrop", "cg", "character", "leave", "camera", "shot", "layout",
             "import", "mark", "flash", "curtain", "beat" },
         StringComparer.OrdinalIgnoreCase);
@@ -83,8 +83,9 @@ public sealed class NodeDirectionCompiler
     private static readonly Regex Import = new(
         "^import\\s+(?<kind>stage|view)\\s+(?<alias>[\\w.-]+)\\s+from\\s+(?<node>[^:\\s]+):(?<symbol>[\\w.-]+)$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly char[] WhitespaceDelimiters = [' ', '\t'];
 
-    public IReadOnlyList<NodeDirectionModule> Compile(
+    public static IReadOnlyList<NodeDirectionModule> Compile(
         YarnSourceSnapshot snapshot,
         long version = 1)
     {
@@ -101,7 +102,7 @@ public sealed class NodeDirectionCompiler
         {
             foreach (var item in group)
             {
-                var location = item.module.SourceMaps.FirstOrDefault();
+                var location = item.module.SourceMaps.Count > 0 ? item.module.SourceMaps[0] : null;
                 var diagnostic = new YarnCompilationDiagnostic(
                     "error", "DIR006",
                     location?.File ?? snapshot.ManifestPath,
@@ -158,7 +159,7 @@ public sealed class NodeDirectionCompiler
     private static void CompileFile(
         YarnSourceFileSnapshot file,
         long version,
-        ICollection<NodeDirectionModule> modules)
+        List<NodeDirectionModule> modules)
     {
         string? node = null;
         var stages = new HashSet<string>(StringComparer.Ordinal);
@@ -387,7 +388,7 @@ public sealed class NodeDirectionCompiler
             : value;
 
     private static bool TryOption(
-        IReadOnlyDictionary<string, string> options,
+        Dictionary<string, string> options,
         string raw,
         string name,
         out string value)
@@ -401,7 +402,7 @@ public sealed class NodeDirectionCompiler
             return false;
         }
         var start = index + marker.Length;
-        var end = raw.IndexOfAny(new[] { ' ', '\t' }, start);
+        var end = raw.IndexOfAny(WhitespaceDelimiters, start);
         value = Unquote((end < 0 ? raw[start..] : raw[start..end]).TrimEnd('>'));
         return !string.IsNullOrWhiteSpace(value);
     }

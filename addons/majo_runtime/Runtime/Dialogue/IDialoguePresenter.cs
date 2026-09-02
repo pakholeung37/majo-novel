@@ -13,10 +13,10 @@ public sealed class DialoguePresentationContext
     private readonly Action requestNextLine;
 
     public DialoguePresentationContext(
-        CancellationToken hurryUpToken,
-        CancellationToken nextLineToken,
         Action requestHurryUp,
-        Action requestNextLine)
+        Action requestNextLine,
+        CancellationToken hurryUpToken = default,
+        CancellationToken nextLineToken = default)
     {
         HurryUpToken = hurryUpToken;
         NextLineToken = nextLineToken;

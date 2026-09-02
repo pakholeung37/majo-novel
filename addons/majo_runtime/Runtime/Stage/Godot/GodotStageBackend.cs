@@ -10,7 +10,7 @@ using Majo.Runtime.Actors.Godot;
 
 namespace Majo.Runtime.Stage.Godot;
 
-internal sealed class GodotStageBackend : IStageBackend
+internal sealed class GodotStageBackend : IStageBackend, IDisposable
 {
     private readonly Node owner;
     private readonly GodotActorHost actors;
@@ -126,22 +126,22 @@ internal sealed class GodotStageBackend : IStageBackend
 
     public async Task AnimateCameraAsync(
         CameraState from,
-        CameraState to,
+        CameraState target,
         CameraPoseUpdate properties,
         StageOperationSpec operation,
         CancellationToken cancellationToken)
     {
         void Apply(float progress) => ApplyCamera(new CameraState(
                 properties.Center is not null
-                    ? from.Center.Lerp(to.Center, progress)
+                    ? from.Center.Lerp(target.Center, progress)
                     : camera.Center,
                 properties.Zoom is not null
-                    ? Mathf.Lerp(from.Zoom, to.Zoom, progress)
+                    ? Mathf.Lerp(from.Zoom, target.Zoom, progress)
                     : camera.Zoom,
                 properties.RotationDegrees is not null
                     ? Mathf.LerpAngle(
                         Mathf.DegToRad(from.RotationDegrees),
-                        Mathf.DegToRad(to.RotationDegrees),
+                        Mathf.DegToRad(target.RotationDegrees),
                         progress) * 180 / Mathf.Pi
                     : camera.RotationDegrees));
 
@@ -170,18 +170,18 @@ internal sealed class GodotStageBackend : IStageBackend
 
     public async Task DissolveCameraAsync(
         CameraState from,
-        CameraState to,
+        CameraState target,
         StageOperationSpec operation,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         from.Validate();
-        to.Validate();
+        target.Validate();
         operation.Validate();
         ClearCameraViewTransition();
         if (operation.DurationSeconds <= 0)
         {
-            ApplyCamera(to);
+            ApplyCamera(target);
             return;
         }
 
@@ -193,7 +193,7 @@ internal sealed class GodotStageBackend : IStageBackend
         actors.TransitionSource.Texture = cameraViewTransitionTexture;
         actors.TransitionSource.Modulate = Colors.White;
         actors.TransitionSource.Visible = true;
-        ApplyCamera(to);
+        ApplyCamera(target);
 
         cameraViewTransitionTween = owner.CreateTween();
         var (transition, ease) = ResolveCurve(operation.Curve);
@@ -371,15 +371,15 @@ internal sealed class GodotStageBackend : IStageBackend
 
     public Task AnimateCurtainAsync(
         StageCurtainState from,
-        StageCurtainState to,
+        StageCurtainState target,
         double duration,
         CancellationToken cancellationToken) => AnimateAsync(
             curtainTween,
             value => curtainTween = value,
             duration,
             progress => ApplyCurtain(new StageCurtainState(
-                from.Color.Lerp(to.Color, progress),
-                Mathf.Lerp(from.Opacity, to.Opacity, progress))),
+                from.Color.Lerp(target.Color, progress),
+                Mathf.Lerp(from.Opacity, target.Opacity, progress))),
             cancellationToken);
 
     public void ApplyScreenEffect(ScreenEffectState state)
@@ -395,7 +395,7 @@ internal sealed class GodotStageBackend : IStageBackend
 
     public Task AnimateOverlayAsync(
         ScreenEffectState from,
-        ScreenEffectState to,
+        ScreenEffectState target,
         double duration,
         CancellationToken cancellationToken) => AnimateAsync(
             overlayTween,
@@ -403,14 +403,14 @@ internal sealed class GodotStageBackend : IStageBackend
             duration,
             progress => ApplyScreenEffect(screen with
             {
-                OverlayColor = from.OverlayColor.Lerp(to.OverlayColor, progress),
-                OverlayOpacity = Mathf.Lerp(from.OverlayOpacity, to.OverlayOpacity, progress),
+                OverlayColor = from.OverlayColor.Lerp(target.OverlayColor, progress),
+                OverlayOpacity = Mathf.Lerp(from.OverlayOpacity, target.OverlayOpacity, progress),
             }),
             cancellationToken);
 
     public Task AnimateLetterboxAsync(
         float from,
-        float to,
+        float target,
         double duration,
         CancellationToken cancellationToken) => AnimateAsync(
             letterboxTween,
@@ -418,7 +418,7 @@ internal sealed class GodotStageBackend : IStageBackend
             duration,
             progress => ApplyScreenEffect(screen with
             {
-                LetterboxRatio = Mathf.Lerp(from, to, progress),
+                LetterboxRatio = Mathf.Lerp(from, target, progress),
             }),
             cancellationToken);
 
@@ -584,5 +584,21 @@ internal sealed class GodotStageBackend : IStageBackend
             AnchorBottom = top ? 0 : 1,
         };
         return result;
+    }
+
+    public void Dispose()
+    {
+        ClearCameraViewTransition();
+        if (GodotObject.IsInstanceValid(curtainLayer))
+        {
+            curtainLayer.QueueFree();
+            curtainLayer.Dispose();
+        }
+
+        if (GodotObject.IsInstanceValid(effectLayer))
+        {
+            effectLayer.QueueFree();
+            effectLayer.Dispose();
+        }
     }
 }
