@@ -1,0 +1,61 @@
+#nullable enable
+
+using Godot;
+using Majo.Runtime.Audio;
+using Majo.Runtime.Audio.Godot;
+using Majo.Runtime.Core;
+using Majo.Runtime.Localization;
+using Majo.Runtime.Operations;
+using Majo.Runtime.Resources;
+
+namespace Majo.Runtime;
+
+public partial class MajoRuntimeBootstrap : Node
+{
+    private void RegisterAudioServices(RuntimeServiceRegistry services)
+    {
+        services.AddSingleton<IAudioManager>(
+            resolver => CreateAudioManager(
+                resolver.Get<IResourceManager>(),
+                resolver.Get<IOperationScheduler>(),
+                resolver.Get<IMissingResourceReporter>(),
+                resolver.Get<ILocaleManager>(),
+                resolver.Get<ILocalizedResourceResolver>()),
+            typeof(IResourceManager),
+            typeof(IOperationScheduler),
+            typeof(IMissingResourceReporter),
+            typeof(ILocaleManager),
+            typeof(ILocalizedResourceResolver));
+    }
+
+    private AudioManager CreateAudioManager(
+        IResourceManager resources,
+        IOperationScheduler operations,
+        IMissingResourceReporter missingResources,
+        ILocaleManager locales,
+        ILocalizedResourceResolver localizedResources)
+    {
+        var configuration = Configuration!.Audio!;
+        return new AudioManager(
+            AudioBackendFactory?.Invoke(this) ?? new GodotAudioBackend(this),
+            operations,
+            new GodotAudioClipLoader(resources, configuration.BgmPath),
+            new GodotAudioClipLoader(resources, configuration.SfxPath),
+            new GodotAudioClipLoader(resources, configuration.VoicePath),
+            new AudioSettings(
+                configuration.MasterVolume,
+                configuration.BgmVolume,
+                configuration.SfxVolume,
+                configuration.VoiceVolume,
+                configuration.MasterMuted,
+                configuration.BgmMuted,
+                configuration.SfxMuted,
+                configuration.VoiceMuted,
+                configuration.VoiceLocale,
+                configuration.FailOnMissingClips),
+            Logger,
+            missingResources,
+            locales,
+            localizedResources);
+    }
+}
