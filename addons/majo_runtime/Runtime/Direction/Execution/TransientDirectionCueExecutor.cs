@@ -7,6 +7,7 @@ using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
+using Majo.Runtime.Core;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Stage;
@@ -31,16 +32,21 @@ public interface ITransientDirectionCueExecutor
         ExecuteAsync(cues, completion, cancellationToken);
 }
 
+public interface IDirectionShakeManager : IRuntimeService
+{
+    IOperationHandle Shake(ShakeCue cue);
+}
+
 public sealed class TransientDirectionCueExecutor : ITransientDirectionCueExecutor
 {
-    private readonly ICameraManager camera;
+    private readonly IDirectionShakeManager shake;
     private readonly IScreenEffectManager effects;
     private readonly IStageCurtainManager curtain;
 
-    public TransientDirectionCueExecutor(ICameraManager camera, IScreenEffectManager effects,
+    public TransientDirectionCueExecutor(IDirectionShakeManager shake, IScreenEffectManager effects,
         IStageCurtainManager curtain)
     {
-        this.camera = camera ?? throw new ArgumentNullException(nameof(camera));
+        this.shake = shake ?? throw new ArgumentNullException(nameof(shake));
         this.effects = effects ?? throw new ArgumentNullException(nameof(effects));
         this.curtain = curtain ?? throw new ArgumentNullException(nameof(curtain));
     }
@@ -80,8 +86,7 @@ public sealed class TransientDirectionCueExecutor : ITransientDirectionCueExecut
                 {
                     case ShakeCue shake:
                         ValidateShake(shake);
-                        operations.Add(camera.Shake(new CameraShakeSpec(shake.Strength, shake.Axis,
-                            shake.Frequency, new StageOperationSpec(shake.DurationSeconds))));
+                        operations.Add(this.shake.Shake(shake));
                         break;
                     case FlashCue flash:
                         ValidateFlash(flash);
@@ -129,8 +134,13 @@ public sealed class TransientDirectionCueExecutor : ITransientDirectionCueExecut
                 frequency is <= 0 or > int.MaxValue)
                 throw new DirectionException("Shake cue has invalid strength or frequency.");
             ValidateDuration(duration);
-            operations.Add(camera.Shake(new CameraShakeSpec((float)strength, axis, (int)frequency,
-                new StageOperationSpec(duration))));
+            operations.Add(shake.Shake(new ShakeCue(
+                ViewId.Main,
+                (float)strength,
+                axis,
+                (int)frequency,
+                duration,
+                cue.SourceLocation)));
             return;
         }
         if (cue.Name.Equals("curtain", StringComparison.OrdinalIgnoreCase))

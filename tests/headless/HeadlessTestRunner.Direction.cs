@@ -17,6 +17,7 @@ using Majo.Runtime.Direction.Rendering;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Operations.Godot;
 using Majo.Runtime.Resources;
+using Majo.Runtime.Stage;
 
 namespace Majo.Runtime.HeadlessTests;
 
@@ -51,6 +52,11 @@ public partial class HeadlessTestRunner
         await actorFrameClock.InitializeAsync(CancellationToken.None);
         var actorScheduler = new OperationScheduler(actorFrameClock, actorLifetime);
         await actorScheduler.InitializeAsync(CancellationToken.None);
+        var shakeManager = new GodotDirectionShakeManager(
+            host,
+            actorScheduler,
+            new StageAccessibility());
+        await shakeManager.InitializeAsync(CancellationToken.None);
         IActorManager CreateActorManager(Node2D actorRoot) => new ActorManager(
             actorDefinitions,
             new IActorFactory[]
@@ -132,6 +138,9 @@ public partial class HeadlessTestRunner
 
         Assert(coordinator.State.Screen.Bindings[LayoutSlotId.Main] == illustrationView,
             "Illustration Stage did not become the Screen's active View at Commit.");
+        Assert(host.ScreenTransitionSource.Visible &&
+                host.ScreenTransitionSource.Texture is ImageTexture,
+            "Direction Screen dissolve did not retain a capture of the previous Screen frame.");
         Assert(Equals(coordinator.State.Views[illustrationView].Pose, illustrationPose),
             "Illustration View Pose was not committed atomically.");
         Assert(ReferenceEquals(stageBackdropTexture, host.Backdrop.Texture),
@@ -142,6 +151,29 @@ public partial class HeadlessTestRunner
         await coordinator.FinishAsync(illustrationTransaction);
         Assert(host.PublishedScreen.Bindings[LayoutSlotId.Main] == illustrationView,
             "Finishing the illustration transition did not retain its Screen binding.");
+        Assert(!host.ScreenTransitionSource.Visible &&
+                host.ScreenTransitionSource.Texture is null,
+            "Finishing the Screen dissolve retained its previous-frame overlay.");
+
+        var illustrationSurface = host.RequireView(illustrationView);
+        var stableIllustrationTransform = illustrationSurface.Transform.Transform;
+        var shake = shakeManager.Shake(new ShakeCue(
+            illustrationView,
+            20,
+            CameraShakeAxis.X,
+            20,
+            1));
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Assert(Mathf.Abs(illustrationSurface.ShakeOffset.X) > 0.01f &&
+                Mathf.IsZeroApprox(illustrationSurface.ShakeOffset.Y) &&
+                !illustrationSurface.Transform.Transform.IsEqualApprox(stableIllustrationTransform),
+            "Direction camera shake did not offset the targeted non-main View.");
+        shake.Complete();
+        await shake.Completion;
+        Assert(illustrationSurface.ShakeOffset.IsZeroApprox() &&
+                illustrationSurface.Transform.Transform.IsEqualApprox(stableIllustrationTransform),
+            "Direction camera shake did not restore the targeted View's stable pose.");
 
         await coordinator.ExecuteAsync(
             new IDirectionDirective[]
@@ -442,6 +474,7 @@ public partial class HeadlessTestRunner
             "Direction render Reset retained an Actor tree.");
 
         await stageBackend.ShutdownAsync(CancellationToken.None);
+        await shakeManager.ShutdownAsync(CancellationToken.None);
         await actorScheduler.ShutdownAsync(CancellationToken.None);
         await actorFrameClock.ShutdownAsync(CancellationToken.None);
         actorLifetime.Dispose();
@@ -452,6 +485,7 @@ public partial class HeadlessTestRunner
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         Assert(!IsInstanceValid(host.StageViewport) &&
                 !IsInstanceValid(host.ViewViewport) &&
+                !IsInstanceValid(host.ScreenViewport) &&
                 !IsInstanceValid(host.OutputLayer),
             "Direction render host leaked viewport or output nodes after Shutdown.");
     }

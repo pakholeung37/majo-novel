@@ -402,15 +402,23 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(GodotDirectionRenderHost),
                 typeof(GodotDirectionStageBackend),
                 typeof(IResourceManager))
+            .AddSingleton<IDirectionShakeManager>(
+                resolver => new GodotDirectionShakeManager(
+                    resolver.Get<GodotDirectionRenderHost>(),
+                    resolver.Get<IOperationScheduler>(),
+                    resolver.Get<IStageAccessibility>()),
+                typeof(GodotDirectionRenderHost),
+                typeof(IOperationScheduler),
+                typeof(IStageAccessibility))
             .AddSingleton<IDirectionBeatRuntime>(
                 resolver => new DirectionBeatRuntime(
                     resolver.Get<IDirectionTransactionCoordinator>(),
                     new TransientDirectionCueExecutor(
-                        resolver.Get<ICameraManager>(),
+                        resolver.Get<IDirectionShakeManager>(),
                         resolver.Get<IScreenEffectManager>(),
                         resolver.Get<IStageCurtainManager>())),
                 typeof(IDirectionTransactionCoordinator),
-                typeof(ICameraManager),
+                typeof(IDirectionShakeManager),
                 typeof(IScreenEffectManager),
                 typeof(IStageCurtainManager))
             .AddSingleton<IDirectionScopeResolver>(_ => new DirectionScopeResolver())

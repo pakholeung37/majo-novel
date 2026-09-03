@@ -218,6 +218,7 @@ public sealed record DirectionCue(
     DirectionSourceLocation? SourceLocation = null) : ITransientDirectionCue;
 
 public sealed record ShakeCue(
+    ViewId ViewId,
     float Strength, CameraShakeAxis Axis, int Frequency, double DurationSeconds,
     DirectionSourceLocation? SourceLocation = null) : ITransientDirectionCue;
 

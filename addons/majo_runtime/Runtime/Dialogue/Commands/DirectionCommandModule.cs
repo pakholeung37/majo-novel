@@ -252,6 +252,7 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
     {
         await beats.SubmitAsync(
             new ShakeCue(
+                CameraTarget(a.Stage, a.View),
                 (float)a.Strength,
                 a.Axis,
                 a.Frequency,
@@ -553,14 +554,17 @@ public sealed class DirectionMarkCommandArguments
     [CommandParameter("at", 1, Required = true)] public string At { get; set; } = string.Empty;
 }
 
-[RuntimeCommand("camera", "shake", Category = "Direction", Usage = "camera shake [strength:<number>] [axis:<all|x|y|diagonal>] [frequency:<number>] [duration:<seconds>] [wait:<bool>]")]
+[RuntimeCommand("camera", "shake", Category = "Direction", Usage = "camera shake [stage:<id>|view:<id>] [strength:<number>] [axis:<all|x|y|diagonal>] [frequency:<number>] [duration:<seconds>] [wait:<bool>]")]
+[CommandParameterSet(CommandParameterSetRule.AtMostOne, "stage", "view")]
 public sealed class CameraShakeDirectionCommandArguments
 {
-    [CommandParameter("strength", 0, DefaultValue = "8", Minimum = 0)] public double Strength { get; set; }
-    [CommandParameter("axis", 1, DefaultValue = "all")] public CameraShakeAxis Axis { get; set; }
-    [CommandParameter("frequency", 2, DefaultValue = "20", Minimum = 0.001)] public int Frequency { get; set; }
-    [CommandParameter("duration", 3, DefaultValue = "0.4", Minimum = 0)] public double Duration { get; set; }
-    [CommandParameter("wait", 4, DefaultValue = "false")] public bool Wait { get; set; }
+    [CommandParameter("stage", 0)] public string? Stage { get; set; }
+    [CommandParameter("view", 1)] public string? View { get; set; }
+    [CommandParameter("strength", 2, DefaultValue = "8", Minimum = 0)] public double Strength { get; set; }
+    [CommandParameter("axis", 3, DefaultValue = "all")] public CameraShakeAxis Axis { get; set; }
+    [CommandParameter("frequency", 4, DefaultValue = "20", Minimum = 0.001)] public int Frequency { get; set; }
+    [CommandParameter("duration", 5, DefaultValue = "0.4", Minimum = 0)] public double Duration { get; set; }
+    [CommandParameter("wait", 6, DefaultValue = "false")] public bool Wait { get; set; }
 }
 
 [RuntimeCommand("flash", Category = "Direction", Usage = "flash [intensity:<0..1>] [duration:<seconds>] [r:<0..1>] [g:<0..1>] [b:<0..1>] [wait:<bool>]")]

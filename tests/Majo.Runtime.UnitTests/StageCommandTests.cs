@@ -82,6 +82,21 @@ public sealed class StageCommandTests
         Assert.Equal(20, defaultShake.Frequency);
         Assert.Equal(0.4, defaultShake.Duration);
         Assert.False(defaultShake.Wait);
+        Assert.Null(defaultShake.Stage);
+        Assert.Null(defaultShake.View);
+
+        var stageShake = binder.Bind<CameraShakeDirectionCommandArguments>(
+            shake.Descriptor, new[] { "stage:illustration", "axis:x" });
+        Assert.Equal("illustration", stageShake.Stage);
+        Assert.Null(stageShake.View);
+        Assert.Equal(CameraShakeAxis.X, stageShake.Axis);
+
+        var ambiguousShake = Assert.Throws<RuntimeCommandException>(() =>
+            binder.Bind<CameraShakeDirectionCommandArguments>(
+                shake.Descriptor,
+                new[] { "stage:main", "view:main" }));
+        Assert.Contains("stage", ambiguousShake.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("view", ambiguousShake.Message, StringComparison.OrdinalIgnoreCase);
 
         var allShake = binder.Bind<CameraShakeDirectionCommandArguments>(
             shake.Descriptor, new[] { "axis:all" });

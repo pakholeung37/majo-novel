@@ -45,7 +45,7 @@ Ema: 咦，怎么回事，这里是……？ #line:0101Adv02_Ema002
 
 室内光线昏暗，空气也并不畅通。[br /]并且——有一道铁栅栏限制了自由。 #line:0101Adv02_Narrative006
 
-<<camera shake axis:x duration:0.6>>
+<<camera shake stage:illustration axis:x duration:0.6>>
 
 Ema: 牢、牢房……！？为什么！？ #line:0101Adv02_Ema003
 
@@ -83,9 +83,9 @@ Ema: （这是噩梦的后续……？） #line:0101Adv02_Ema007
 
 <<beat begin>>
 // Main stage and its dedicated camera stay alive while the broadcast stage is shown later.
-<<backdrop Background_001_001>>
+<<backdrop Background_001_001 via:cut>>
 <<character Ema at:center appearance:Surprised1 via:cut>>
-<<stage show main via:dissolve>>
+<<stage show main via:dissolve duration:1>>
 <<stage release illustration>>
 <<beat end wait:false>>
 
