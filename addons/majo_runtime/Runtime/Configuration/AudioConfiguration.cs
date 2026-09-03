@@ -35,9 +35,6 @@ public partial class AudioConfiguration : Resource
     [Export]
     public bool VoiceMuted { get; set; }
 
-    [Export(PropertyHint.Range, "0,10,0.01,or_greater")]
-    public double DefaultFadeDurationSeconds { get; set; } = RuntimeDefaults.AnimationDurationSeconds;
-
     [Export]
     public string VoiceLocale { get; set; } = "en";
 

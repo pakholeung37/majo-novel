@@ -167,7 +167,7 @@ public static class RuntimeDemoComposition
         configuration.Presentation!.Enabled = true;
         configuration.Presentation.LettersPerSecond = 36;
         configuration.Auto!.ExtraDelaySeconds = 1;
-        configuration.Operations!.DefaultAnimationDurationSeconds = 0.2;
+        configuration.Animation!.DefaultAnimationDurationSeconds = 0.2;
         configuration.Diagnostics!.EnableOverlay = true;
         configuration.Diagnostics.EnableFileLogging = true;
         configuration.State!.StorageNamespace = "majo/runtime-demo";

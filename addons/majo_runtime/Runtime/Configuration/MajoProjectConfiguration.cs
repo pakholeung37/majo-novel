@@ -21,6 +21,9 @@ public partial class MajoProjectConfiguration : Resource
     public OperationConfiguration? Operations { get; set; }
 
     [Export]
+    public AnimationConfiguration? Animation { get; set; }
+
+    [Export]
     public ResourceConfiguration? Resources { get; set; }
 
     [Export]
@@ -72,6 +75,7 @@ public partial class MajoProjectConfiguration : Resource
     {
         Runtime = new RuntimeConfiguration(),
         Operations = new OperationConfiguration(),
+        Animation = new AnimationConfiguration(),
         Resources = new ResourceConfiguration(),
         Actors = new ActorConfiguration(),
         Dialogue = new DialogueConfiguration(),
@@ -97,6 +101,7 @@ public partial class MajoProjectConfiguration : Resource
 
         ValidateRuntime(issues);
         ValidateOperations(issues);
+        ValidateAnimation(issues);
         ValidateResources(issues);
         ValidateActors(issues, resourceExists);
         ValidateDialogue(issues);
@@ -153,20 +158,6 @@ public partial class MajoProjectConfiguration : Resource
         {
             issues.Add(new ConfigurationIssue(nameof(Stage), "Configuration is required."));
             return;
-        }
-        if (!double.IsFinite(Stage.DefaultTransitionDurationSeconds) ||
-            Stage.DefaultTransitionDurationSeconds < 0)
-        {
-            issues.Add(new ConfigurationIssue(
-                $"{nameof(Stage)}.{nameof(Stage.DefaultTransitionDurationSeconds)}",
-                "Default transition duration must be finite and non-negative."));
-        }
-        if (!double.IsFinite(Stage.DefaultEffectDurationSeconds) ||
-            Stage.DefaultEffectDurationSeconds < 0)
-        {
-            issues.Add(new ConfigurationIssue(
-                $"{nameof(Stage)}.{nameof(Stage.DefaultEffectDurationSeconds)}",
-                "Default effect duration must be finite and non-negative."));
         }
         if (Stage.MaxDirectionStages <= 0)
         {
@@ -424,29 +415,43 @@ public partial class MajoProjectConfiguration : Resource
             return;
         }
 
-        if (!double.IsFinite(Operations.DefaultAnimationDurationSeconds) ||
-            Operations.DefaultAnimationDurationSeconds <= 0)
-        {
-            issues.Add(new ConfigurationIssue(
-                $"{nameof(Operations)}.{nameof(Operations.DefaultAnimationDurationSeconds)}",
-                "Value must be finite and greater than zero."));
-        }
+    }
 
-        if (!double.IsFinite(Operations.DefaultCharacterAnimationDurationSeconds) ||
-            Operations.DefaultCharacterAnimationDurationSeconds <= 0)
+    private void ValidateAnimation(List<ConfigurationIssue> issues)
+    {
+        if (Animation is null)
         {
-            issues.Add(new ConfigurationIssue(
-                $"{nameof(Operations)}.{nameof(Operations.DefaultCharacterAnimationDurationSeconds)}",
-                "Value must be finite and greater than zero."));
+            issues.Add(new ConfigurationIssue(nameof(Animation), "Configuration is required."));
+            return;
         }
-
-        if (!Enum.IsDefined(Operations.DefaultCharacterAnimationKind) ||
-            Operations.DefaultCharacterAnimationKind == DirectionTransitionKind.Move)
+        var durations = new (string Name, double Value)[]
         {
-            issues.Add(new ConfigurationIssue(
-                $"{nameof(Operations)}.{nameof(Operations.DefaultCharacterAnimationKind)}",
-                "Default character animation kind must be cut, fade, or dissolve."));
-        }
+            (nameof(Animation.DefaultAnimationDurationSeconds), Animation.DefaultAnimationDurationSeconds),
+            (nameof(Animation.DefaultCharacterAnimationDurationSeconds), Animation.DefaultCharacterAnimationDurationSeconds),
+            (nameof(Animation.DefaultStageTransitionDurationSeconds), Animation.DefaultStageTransitionDurationSeconds),
+            (nameof(Animation.DefaultStageEffectDurationSeconds), Animation.DefaultStageEffectDurationSeconds),
+            (nameof(Animation.DefaultCameraShakeDurationSeconds), Animation.DefaultCameraShakeDurationSeconds),
+            (nameof(Animation.DefaultFlashDurationSeconds), Animation.DefaultFlashDurationSeconds),
+            (nameof(Animation.DefaultCurtainDurationSeconds), Animation.DefaultCurtainDurationSeconds),
+            (nameof(Animation.DefaultAudioFadeDurationSeconds), Animation.DefaultAudioFadeDurationSeconds),
+            (nameof(Animation.DefaultVoiceFadeDurationSeconds), Animation.DefaultVoiceFadeDurationSeconds),
+        };
+        foreach (var duration in durations)
+            ValidateNonNegativeDuration(duration.Value, $"{nameof(Animation)}.{duration.Name}", issues);
+        var kinds = new[]
+        {
+            Animation.DefaultCharacterAnimationKind, Animation.DefaultLeaveAnimationKind,
+            Animation.DefaultStageShowAnimationKind, Animation.DefaultStageClearAnimationKind,
+            Animation.DefaultBackdropAnimationKind, Animation.DefaultCameraPoseAnimationKind,
+            Animation.DefaultCameraResetAnimationKind, Animation.DefaultShotAnimationKind,
+            Animation.DefaultLayoutAnimationKind,
+        };
+        foreach (var kind in kinds)
+            if (!Enum.IsDefined(kind) || kind == DirectionTransitionKind.Move)
+                issues.Add(new ConfigurationIssue(nameof(Animation), "Default animation kind is invalid."));
+        if (!Enum.IsDefined(Animation.DefaultDirectionAnimationEase) ||
+            !Enum.IsDefined(Animation.DefaultStageAnimationCurve))
+            issues.Add(new ConfigurationIssue(nameof(Animation), "Default animation curve is invalid."));
     }
 
     private void ValidateActors(
@@ -734,13 +739,6 @@ public partial class MajoProjectConfiguration : Resource
         ValidateVolume(Audio.BgmVolume, nameof(Audio.BgmVolume), issues);
         ValidateVolume(Audio.SfxVolume, nameof(Audio.SfxVolume), issues);
         ValidateVolume(Audio.VoiceVolume, nameof(Audio.VoiceVolume), issues);
-        if (!double.IsFinite(Audio.DefaultFadeDurationSeconds) ||
-            Audio.DefaultFadeDurationSeconds < 0)
-        {
-            issues.Add(new ConfigurationIssue(
-                $"{nameof(Audio)}.{nameof(Audio.DefaultFadeDurationSeconds)}",
-                "Value must be finite and non-negative."));
-        }
 
         if (string.IsNullOrWhiteSpace(Audio.VoiceLocale))
         {

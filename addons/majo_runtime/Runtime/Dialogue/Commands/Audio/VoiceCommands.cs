@@ -19,7 +19,7 @@ public sealed class PlayVoiceCommandArguments
     [CommandParameter("volume", 1, DefaultValue = "1", Minimum = 0)]
     public double Volume { get; set; }
 
-    [CommandParameter("duration", 2, DefaultValue = RuntimeDefaults.ImmediateDurationSecondsText, Minimum = 0)]
+    [CommandParameter("duration", 2, DefaultSource = CommandDefaultSource.VoiceFadeDuration, Minimum = 0)]
     public double Duration { get; set; }
 
     [CommandParameter("wait", 3)]

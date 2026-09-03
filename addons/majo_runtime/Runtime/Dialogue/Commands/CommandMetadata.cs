@@ -82,6 +82,12 @@ public enum CommandDefaultSource
     AnimationDuration,
     CharacterAnimationDuration,
     AudioFadeDuration,
+    StageTransitionDuration,
+    StageEffectDuration,
+    CameraShakeDuration,
+    FlashDuration,
+    CurtainDuration,
+    VoiceFadeDuration,
 }
 
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]

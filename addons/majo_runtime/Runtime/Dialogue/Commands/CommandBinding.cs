@@ -17,6 +17,43 @@ public sealed record CommandBindingContext(
     double DefaultCharacterAnimationDurationSeconds = RuntimeDefaults.CommandBindingCharacterAnimationDurationSeconds,
     DirectionTransitionKind DefaultCharacterAnimationKind = DirectionTransitionKind.Fade)
 {
+    public CommandBindingContext(AnimationConfiguration animation)
+        : this(
+            animation?.DefaultAnimationDurationSeconds ?? throw new ArgumentNullException(nameof(animation)),
+            animation.DefaultAudioFadeDurationSeconds,
+            animation.DefaultCharacterAnimationDurationSeconds,
+            animation.DefaultCharacterAnimationKind)
+    {
+        Animation = animation;
+    }
+
+    public AnimationConfiguration? Animation { get; init; }
+    public double ResolveDuration(CommandDefaultSource source) => source switch
+    {
+        CommandDefaultSource.AnimationDuration => Animation?.DefaultAnimationDurationSeconds ?? DefaultAnimationDurationSeconds,
+        CommandDefaultSource.CharacterAnimationDuration => Animation?.DefaultCharacterAnimationDurationSeconds ?? DefaultCharacterAnimationDurationSeconds,
+        CommandDefaultSource.AudioFadeDuration => Animation?.DefaultAudioFadeDurationSeconds ?? DefaultAudioFadeDurationSeconds,
+        CommandDefaultSource.StageTransitionDuration => Animation?.DefaultStageTransitionDurationSeconds ?? RuntimeDefaults.TransitionDurationSeconds,
+        CommandDefaultSource.StageEffectDuration => Animation?.DefaultStageEffectDurationSeconds ?? RuntimeDefaults.AnimationDurationSeconds,
+        CommandDefaultSource.CameraShakeDuration => Animation?.DefaultCameraShakeDurationSeconds ?? RuntimeDefaults.CameraShakeDurationSeconds,
+        CommandDefaultSource.FlashDuration => Animation?.DefaultFlashDurationSeconds ?? RuntimeDefaults.FlashDurationSeconds,
+        CommandDefaultSource.CurtainDuration => Animation?.DefaultCurtainDurationSeconds ?? RuntimeDefaults.CurtainDurationSeconds,
+        CommandDefaultSource.VoiceFadeDuration => Animation?.DefaultVoiceFadeDurationSeconds ?? RuntimeDefaults.ImmediateDurationSeconds,
+        _ => throw new ArgumentOutOfRangeException(nameof(source), source, null),
+    };
+    public DirectionTransitionKind ResolveAnimation(string name) => Animation is null ?
+        DefaultCharacterAnimationKind : name switch
+        {
+            "leave" => Animation.DefaultLeaveAnimationKind,
+            "stage show" => Animation.DefaultStageShowAnimationKind,
+            "stage clear" => Animation.DefaultStageClearAnimationKind,
+            "backdrop" => Animation.DefaultBackdropAnimationKind,
+            "camera pose" => Animation.DefaultCameraPoseAnimationKind,
+            "camera reset" => Animation.DefaultCameraResetAnimationKind,
+            "shot use" => Animation.DefaultShotAnimationKind,
+            "layout" => Animation.DefaultLayoutAnimationKind,
+            _ => Animation.DefaultCharacterAnimationKind,
+        };
     public CommandBindingContext Validate()
     {
         if (!double.IsFinite(DefaultAnimationDurationSeconds) ||
@@ -192,22 +229,9 @@ public sealed class CommandBinder
         {
             if (!TryGetRawValue(parameter, raw, out var value))
             {
-                if (parameter.DefaultSource == CommandDefaultSource.AnimationDuration)
+                if (parameter.DefaultSource != CommandDefaultSource.None)
                 {
-                    value = context.DefaultAnimationDurationSeconds.ToString(
-                        "R",
-                        CultureInfo.InvariantCulture);
-                }
-                else if (parameter.DefaultSource ==
-                    CommandDefaultSource.CharacterAnimationDuration)
-                {
-                    value = context.DefaultCharacterAnimationDurationSeconds.ToString(
-                        "R",
-                        CultureInfo.InvariantCulture);
-                }
-                else if (parameter.DefaultSource == CommandDefaultSource.AudioFadeDuration)
-                {
-                    value = context.DefaultAudioFadeDurationSeconds.ToString(
+                    value = context.ResolveDuration(parameter.DefaultSource).ToString(
                         "R",
                         CultureInfo.InvariantCulture);
                 }
@@ -294,9 +318,7 @@ public sealed class CommandBinder
                 }
             }
 
-            if (parameter.DefaultSource is CommandDefaultSource.AnimationDuration or
-                    CommandDefaultSource.CharacterAnimationDuration or
-                    CommandDefaultSource.AudioFadeDuration &&
+            if (parameter.DefaultSource != CommandDefaultSource.None &&
                 parameter.ValueType != typeof(double))
             {
                 throw new RuntimeCommandException(

@@ -1052,12 +1052,9 @@ public partial class MajoRuntimeBootstrap : Node
         var catalog = commands.BuildCatalog();
         var converters = new CommandValueConverterRegistry();
         ConfigureCommandConverters?.Invoke(converters);
+        var animation = Configuration!.Animation ?? new AnimationConfiguration();
         var binder = new CommandBinder(
-            new CommandBindingContext(
-                Configuration!.Operations!.DefaultAnimationDurationSeconds,
-                Configuration.Audio!.DefaultFadeDurationSeconds,
-                Configuration.Operations.DefaultCharacterAnimationDurationSeconds,
-                Configuration.Operations.DefaultCharacterAnimationKind),
+            new CommandBindingContext(animation),
             converters);
         var dispatcher = new RuntimeCommandDispatcher(
             binder,

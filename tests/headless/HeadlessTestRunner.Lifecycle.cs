@@ -176,7 +176,7 @@ public partial class HeadlessTestRunner
         configuration.Presentation.FadeUpDurationSeconds = double.NaN;
         configuration.Presentation.FadeDownDurationSeconds = double.NaN;
         configuration.Audio!.MasterVolume = 2;
-        configuration.Audio.DefaultFadeDurationSeconds = double.NaN;
+        configuration.Animation!.DefaultAudioFadeDurationSeconds = double.NaN;
         configuration.Audio.VoiceLocale = string.Empty;
         configuration.Audio.BgmPath = "..";
         configuration.Resources!.FailOnMissingAssets = true;
