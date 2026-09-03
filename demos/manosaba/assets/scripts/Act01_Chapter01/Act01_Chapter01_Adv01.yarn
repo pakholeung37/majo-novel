@@ -16,7 +16,7 @@ title: Act01_Chapter01_Adv01
 // ●シーン1‐0-1
 // ========================================
 <<curtain closed duration:0>>
-<<cg Still_140_001 via:cut>>
+<<backdrop Still_140_001>>
 <<curtain open duration:1.2>>
 <<wait 1.8>>
 
@@ -74,7 +74,7 @@ title: Act01_Chapter01_Adv01
 
 啊，对了—— #line:0101Adv01_Narrative023
 
-<<cg Still_140_002 via:cut>>
+<<backdrop Still_140_002>>
 <<curtain open duration:1.2>>
 <<wait 1.8>>
 

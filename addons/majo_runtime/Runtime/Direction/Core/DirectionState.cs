@@ -98,12 +98,6 @@ public sealed record StageState(
         new(id, null, DirectionCollections.Empty<ActorId, ActorState>(), StageEffectState.Default);
 }
 
-public abstract record ViewSource;
-
-public sealed record StageViewSource(StageId StageId) : ViewSource;
-
-public sealed record CgViewSource(ResourceKey Resource) : ViewSource;
-
 public sealed record ViewPose(DirectionPoint Center, float Zoom, float RotationDegrees)
 {
     public static ViewPose Default { get; } = new(new DirectionPoint(50, 50), 1, 0);
@@ -119,7 +113,10 @@ public sealed record ViewPose(DirectionPoint Center, float Zoom, float RotationD
     }
 }
 
-public sealed record ViewState(ViewId Id, ViewSource Source, ViewPose Pose);
+public sealed record ViewState(
+    ViewId Id,
+    StageId StageId,
+    ViewPose Pose);
 
 public sealed record ScreenState(
     LayoutId Layout,
@@ -188,7 +185,7 @@ public sealed record DirectionState(
         {
             [ViewId.Main] = new(
                 ViewId.Main,
-                new StageViewSource(StageId.Main),
+                StageId.Main,
                 ViewPose.Default),
         }),
         ScreenState.Default,
@@ -222,13 +219,13 @@ public sealed record DirectionState(
         foreach (var pair in Views)
         {
             if (string.IsNullOrWhiteSpace(pair.Key.Value) || pair.Value is null ||
-                pair.Value.Id != pair.Key || pair.Value.Source is null)
+                pair.Value.Id != pair.Key)
                 throw new DirectionException($"Direction state has an invalid View '{pair.Key}'.");
             pair.Value.Pose.Validate();
-            if (pair.Value.Source is StageViewSource stage &&
-                (string.IsNullOrWhiteSpace(stage.StageId.Value) || !Stages.ContainsKey(stage.StageId)))
+            if (string.IsNullOrWhiteSpace(pair.Value.StageId.Value) ||
+                !Stages.ContainsKey(pair.Value.StageId))
                 throw new DirectionReferenceException(
-                    $"View '{pair.Key}' references unknown Stage '{stage.StageId}'.");
+                    $"View '{pair.Key}' references unknown Stage '{pair.Value.StageId}'.");
         }
 
         if (string.IsNullOrWhiteSpace(Screen.Layout.Value) || Screen.Bindings is null)

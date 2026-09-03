@@ -103,10 +103,13 @@ public partial class HeadlessTestRunner
 
         var direction = bootstrap.Host.Services.Get<IDirectionTransactionCoordinator>();
         var directionHost = bootstrap.Host.Services.Get<GodotDirectionRenderHost>();
+        var scopes = bootstrap.Host.Services.Get<IDirectionScopeResolver>();
+        var illustrationStage = scopes.ResolveStage("DirectionCommands", "illustration");
+        var illustrationView = new ViewId(illustrationStage.Value);
         var directionBeatCommitted = false;
         var directionActorMoved = false;
-        var directionCgShown = false;
-        var directionCgReset = false;
+        var directionIllustrationShown = false;
+        var directionIllustrationReset = false;
         var directionStageRestored = false;
         var directionActorLeft = false;
         presenter.LinePresented += line =>
@@ -123,11 +126,11 @@ public partial class HeadlessTestRunner
                                 "headless/fixtures/background_dark") &&
                         mainStage.Actors.TryGetValue(new ActorId("hero"), out var placed) &&
                         placed.Appearance == "red" && placed.Z == 5 &&
-                        state.Views[ViewId.Main].Source is CgViewSource &&
-                        state.Views[ViewId.Main].Pose == new ViewPose(
+                        state.Views[illustrationView].StageId == illustrationStage &&
+                        state.Views[illustrationView].Pose == new ViewPose(
                             new DirectionPoint(44.438f, 71.950f), 3, 10) &&
-                        directionHost.PublishedView?.Pose == new ViewPose(
-                            new DirectionPoint(44.438f, 71.950f), 3, 10) &&
+                        state.Screen.Bindings[LayoutSlotId.Main] == illustrationView &&
+                        directionHost.PublishedScreen.Bindings[LayoutSlotId.Main] == illustrationView &&
                         directionHost.PublishedBackdrop is not null;
                     break;
                 case "line:m4-direction-move":
@@ -139,25 +142,27 @@ public partial class HeadlessTestRunner
                                 300f / configuration.Actors.ReferenceResolution.X * 100f,
                                 (1f - 200f / configuration.Actors.ReferenceResolution.Y) * 100f);
                     break;
-                case "line:m4-direction-cg":
-                    directionCgShown =
+                case "line:m4-direction-illustration":
+                    directionIllustrationShown =
                         state.Revision == 3 &&
-                        state.Views[ViewId.Main].Source is CgViewSource &&
+                        state.Screen.Bindings[LayoutSlotId.Main] == illustrationView &&
+                        state.Views[illustrationView].Pose == new ViewPose(
+                            new DirectionPoint(40, 60), 1.5f, 10) &&
                         mainStage?.Actors.ContainsKey(new ActorId("hero")) == true;
                     break;
                 case "line:m4-direction-stage":
                     directionStageRestored =
                         state.Revision == 5 &&
-                        state.Views[ViewId.Main].Source is StageViewSource stageSource &&
-                        stageSource.StageId == StageId.Main;
+                        state.Screen.Bindings[LayoutSlotId.Main] == ViewId.Main &&
+                        state.Views[ViewId.Main].StageId == StageId.Main &&
+                        state.Views[ViewId.Main].Pose == ViewPose.Default;
                     break;
                 case "line:m4-direction-reset":
-                    directionCgReset =
+                    directionIllustrationReset =
                         state.Revision == 4 &&
-                        state.Views[ViewId.Main].Source is CgViewSource &&
-                        state.Views[ViewId.Main].Pose == ViewPose.Default &&
-                        directionHost.PublishedView?.Source is CgViewSource &&
-                        directionHost.PublishedView.Pose == ViewPose.Default;
+                        state.Screen.Bindings[LayoutSlotId.Main] == illustrationView &&
+                        state.Views[illustrationView].Pose == ViewPose.Default &&
+                        directionHost.PublishedScreen.Bindings[LayoutSlotId.Main] == illustrationView;
                     break;
                 case "line:m4-direction-leave":
                     directionActorLeft =
@@ -172,17 +177,17 @@ public partial class HeadlessTestRunner
             "Explicit Yarn Direction Beat did not atomically publish its directives.");
         Assert(directionActorMoved,
             "Yarn character did not resolve a configured mark or settle its move.");
-        Assert(directionCgShown,
-            "Yarn cg did not replace only the View source.");
-        Assert(directionCgReset,
-            "Yarn camera reset changed the current CG View source instead of only resetting its Pose.");
+        Assert(directionIllustrationShown,
+            "Yarn illustration Stage did not remain independently composed and visible.");
+        Assert(directionIllustrationReset,
+            "Yarn camera reset changed the Screen binding instead of only resetting the illustration View Pose.");
         Assert(directionStageRestored,
-            "Yarn camera pose did not restore the persistent Stage View.");
+            "Yarn stage show main did not restore the main Stage View.");
         Assert(directionActorLeft,
             "Yarn leave did not settle the target Actor state.");
 
-        var scopes = bootstrap.Host.Services.Get<IDirectionScopeResolver>();
         var broadcastStage = scopes.ResolveStage("DirectionMultiStage", "broadcast");
+        var broadcastView = new ViewId(broadcastStage.Value);
         var directionBroadcastShown = false;
         var directionMainReturned = false;
         var directionSplitShown = false;
@@ -196,15 +201,14 @@ public partial class HeadlessTestRunner
                         state.Revision == 7 &&
                         state.Stages[StageId.Main].Actors[new ActorId("hero")].Appearance == "red" &&
                         state.Stages[broadcastStage].Actors[new ActorId("hero")].Appearance == "blue" &&
-                        state.Views[ViewId.Main].Source is StageViewSource source &&
-                        source.StageId == broadcastStage &&
+                        state.Views[broadcastView].StageId == broadcastStage &&
+                        state.Screen.Bindings[LayoutSlotId.Main] == broadcastView &&
                         directionHost.StageIds.Contains(broadcastStage);
                     break;
                 case "line:m4-direction-main-return":
                     directionMainReturned =
                         state.Revision == 8 &&
-                        state.Views[ViewId.Main].Source is StageViewSource mainReturnSource &&
-                        mainReturnSource.StageId == StageId.Main &&
+                        state.Screen.Bindings[LayoutSlotId.Main] == ViewId.Main &&
                         state.Stages[broadcastStage].Actors[new ActorId("hero")].Appearance == "blue";
                     break;
                 case "line:m4-direction-split":

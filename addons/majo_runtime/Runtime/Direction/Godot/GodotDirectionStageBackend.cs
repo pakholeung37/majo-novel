@@ -76,6 +76,13 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(plan);
+        if (target is null)
+        {
+            if (before is null)
+                throw new DirectionReferenceException(
+                    $"Direction Stage '{stageId}' has neither source nor target state.");
+            return new PreparedStageDeletion(this, stageId);
+        }
         var createdSurface = !host.HasStage(stageId);
         var surface = host.GetOrCreateStage(stageId);
 
@@ -220,6 +227,50 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
                 : new AggregateException(failure, exception);
         }
         if (failure is not null) throw failure;
+    }
+
+    private sealed class PreparedStageDeletion : IPreparedDirectionComponent
+    {
+        private readonly GodotDirectionStageBackend backend;
+        private readonly StageId stageId;
+        private readonly TaskCompletionSource settlement = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        private bool committed;
+        private bool disposed;
+
+        public PreparedStageDeletion(GodotDirectionStageBackend backend, StageId stageId)
+        {
+            this.backend = backend;
+            this.stageId = stageId;
+        }
+
+        public Task Settlement => settlement.Task;
+
+        public void Commit(DirectionCommitToken token)
+        {
+            if (committed || disposed)
+                throw new InvalidOperationException("Stage deletion is no longer preparable.");
+            committed = true;
+            settlement.TrySetResult();
+        }
+
+        public void Rollback(DirectionCommitToken token) => committed = false;
+
+        public ValueTask FinishAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!committed || disposed)
+                throw new InvalidOperationException("Stage deletion cannot finish in its current state.");
+            return ValueTask.CompletedTask;
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            if (disposed) return;
+            disposed = true;
+            if (!settlement.Task.IsCompleted) settlement.TrySetCanceled();
+            if (committed) await backend.ReleasePreparedStageAsync(stageId);
+        }
     }
 
     private sealed class PreparedStageLifecycle : IPreparedDirectionComponent

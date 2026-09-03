@@ -13,20 +13,22 @@ Narrator: custom command completed #line:m45-custom-command
 title: DirectionCommands
 ---
 <<beat begin duration:0.08 ease:cubic-out>>
+<<stage define illustration>>
 <<backdrop background_dark>>
 <<character hero at:left appearance:red scale:1 z:5>>
-<<cg background_light via:cut>>
-<<camera pose center:37.384,74.816 zoom:3 rotation:10 via:cut>>
-<<camera pose center:44.438,71.950 duration:0.4 ease:back-out>>
+<<backdrop background_light stage:illustration via:cut>>
+<<camera pose stage:illustration center:37.384,74.816 zoom:3 rotation:10 via:cut>>
+<<camera pose stage:illustration center:44.438,71.950 duration:0.4 ease:back-out>>
+<<stage show illustration via:cut>>
 <<beat end wait:true>>
 Narrator: direction beat committed #line:m4-direction-beat
 <<character hero at:right appearance:blue via:move duration:0.08 wait:true>>
 Narrator: direction actor moved #line:m4-direction-move
-<<cg background_light center:40,60 zoom:1.5 via:cut wait:true>>
-Narrator: direction cg shown #line:m4-direction-cg
-<<camera reset via:dissolve duration:0.08 wait:true>>
-Narrator: direction cg pose reset #line:m4-direction-reset
-<<camera pose stage:main center:50,50 zoom:1 rotation:0 via:cut wait:true>>
+<<camera pose stage:illustration center:40,60 zoom:1.5 via:cut wait:true>>
+Narrator: direction illustration shown #line:m4-direction-illustration
+<<camera reset stage:illustration via:dissolve duration:0.08 wait:true>>
+Narrator: direction illustration pose reset #line:m4-direction-reset
+<<stage show main via:cut wait:true>>
 Narrator: direction stage restored #line:m4-direction-stage
 <<leave hero via:fade duration:0.08 wait:true>>
 Narrator: direction actor left #line:m4-direction-leave
@@ -35,16 +37,19 @@ Narrator: direction actor left #line:m4-direction-leave
 title: DirectionMultiStage
 ---
 <<beat begin id:direction-multi-stage>>
+<<stage define broadcast>>
+<<view define reaction stage:main>>
 <<backdrop background_dark stage:main>>
 <<character hero stage:main at:left appearance:red>>
 <<backdrop background_light stage:broadcast>>
 <<character hero stage:broadcast at:right appearance:blue>>
 <<camera pose stage:broadcast center:50,50 zoom:1>>
+<<stage show broadcast via:cut>>
 <<beat end wait:true>>
 Narrator: broadcast stage shown #line:m4-direction-broadcast
-<<camera pose stage:main via:cut wait:true>>
+<<stage show main via:cut wait:true>>
 Narrator: main stage restored #line:m4-direction-main-return
-<<camera pose view:reaction stage:main center:65,50 zoom:1.8 via:cut>>
+<<camera pose view:reaction center:65,50 zoom:1.8 via:cut>>
 <<layout split main:main inset:reaction via:cut wait:true>>
 Narrator: split layout shown #line:m4-direction-split
 ===

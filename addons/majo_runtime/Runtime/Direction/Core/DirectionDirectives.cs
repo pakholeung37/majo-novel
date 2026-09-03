@@ -140,6 +140,22 @@ public sealed record BackdropPatch(
     DirectionTransitionSpec Transition,
     DirectionSourceLocation? SourceLocation = null) : IDurableDirectionPatch;
 
+public sealed record StageCreatePatch(
+    StageId StageId,
+    ViewId DefaultViewId,
+    DirectionTransitionSpec Transition,
+    DirectionSourceLocation? SourceLocation = null) : IDurableDirectionPatch;
+
+public sealed record StageClearPatch(
+    StageId StageId,
+    DirectionTransitionSpec Transition,
+    DirectionSourceLocation? SourceLocation = null) : IDurableDirectionPatch;
+
+public sealed record StageReleasePatch(
+    StageId StageId,
+    DirectionTransitionSpec Transition,
+    DirectionSourceLocation? SourceLocation = null) : IDurableDirectionPatch;
+
 public sealed record ActorPatch(
     StageId StageId,
     ActorId ActorId,
@@ -171,12 +187,22 @@ public sealed record ActorLeavePatch(
     DirectionTransitionSpec Transition,
     DirectionSourceLocation? SourceLocation = null) : IDurableDirectionPatch;
 
-public sealed record ViewPatch(
+public sealed record ViewCreatePatch(
     ViewId ViewId,
-    DirectionValue<ViewSource> Source,
+    StageId StageId,
+    DirectionTransitionSpec Transition,
+    DirectionSourceLocation? SourceLocation = null) : IDurableDirectionPatch;
+
+public sealed record ViewPosePatch(
+    ViewId ViewId,
     DirectionValue<DirectionPoint> Center,
     DirectionValue<float> Zoom,
     DirectionValue<float> RotationDegrees,
+    DirectionTransitionSpec Transition,
+    DirectionSourceLocation? SourceLocation = null) : IDurableDirectionPatch;
+
+public sealed record ViewReleasePatch(
+    ViewId ViewId,
     DirectionTransitionSpec Transition,
     DirectionSourceLocation? SourceLocation = null) : IDurableDirectionPatch;
 

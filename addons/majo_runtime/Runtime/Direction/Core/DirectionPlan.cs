@@ -8,7 +8,6 @@ public enum DirectionResourceKind
 {
     Backdrop,
     ActorAppearance,
-    Cg,
     Layout,
 }
 

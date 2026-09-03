@@ -38,10 +38,15 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
     {
         ArgumentNullException.ThrowIfNull(commands);
         commands
+            .Register<StageDefineDirectionCommandArguments>(StageDefineAsync)
+            .Register<StageShowDirectionCommandArguments>(StageShowAsync)
+            .Register<StageClearDirectionCommandArguments>(StageClearAsync)
+            .Register<StageReleaseDirectionCommandArguments>(StageReleaseAsync)
             .Register<BackdropDirectionCommandArguments>(BackdropAsync)
             .Register<CharacterDirectionCommandArguments>(CharacterAsync)
             .Register<LeaveDirectionCommandArguments>(LeaveAsync)
-            .Register<CgDirectionCommandArguments>(CgAsync)
+            .Register<ViewDefineDirectionCommandArguments>(ViewDefineAsync)
+            .Register<ViewReleaseDirectionCommandArguments>(ViewReleaseAsync)
             .Register<CameraPoseDirectionCommandArguments>(CameraPoseAsync)
             .Register<CameraMoveDirectionCommandArguments>(CameraMoveAsync)
             .Register<CameraResetDirectionCommandArguments>(CameraResetAsync)
@@ -58,6 +63,64 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
             .Register<BeatFinishDirectionCommandArguments>(BeatFinishAsync)
             .Register<BeatAbortDirectionCommandArguments>(BeatAbortAsync);
     }
+
+    private Task StageDefineAsync(
+        StageDefineDirectionCommandArguments a,
+        RuntimeCommandContext c) => ExecuteAsync("stage define", async () =>
+    {
+        await beats.SubmitAsync(
+            new StageCreatePatch(
+                Stage(a.Stage),
+                DefaultView(a.Stage),
+                DirectionTransitionSpec.Cut),
+            DirectionCompletionBarrier.Commit,
+            c.CancellationToken);
+    });
+
+    private Task StageShowAsync(
+        StageShowDirectionCommandArguments a,
+        RuntimeCommandContext c) => ExecuteAsync("stage show", async () =>
+    {
+        await beats.SubmitAsync(
+            new ScreenPatch(
+                LayoutId.SingleLayout,
+                new Dictionary<LayoutSlotId, ViewId>
+                {
+                    [LayoutSlotId.Main] = DefaultView(a.Stage),
+                },
+                Transition(a, c, DirectionTransitionKind.Cut, DirectionTransitionKind.Dissolve)),
+            Barrier(a.Wait),
+            c.CancellationToken);
+    });
+
+    private Task StageClearAsync(
+        StageClearDirectionCommandArguments a,
+        RuntimeCommandContext c) => ExecuteAsync("stage clear", async () =>
+    {
+        await beats.SubmitAsync(
+            new StageClearPatch(
+                Stage(a.Stage),
+                Transition(
+                    a,
+                    c,
+                    DirectionTransitionKind.Cut,
+                    DirectionTransitionKind.Fade,
+                    DirectionTransitionKind.Dissolve)),
+            Barrier(a.Wait),
+            c.CancellationToken);
+    });
+
+    private Task StageReleaseAsync(
+        StageReleaseDirectionCommandArguments a,
+        RuntimeCommandContext c) => ExecuteAsync("stage release", async () =>
+    {
+        await beats.SubmitAsync(
+            new StageReleasePatch(
+                Stage(a.Stage),
+                DirectionTransitionSpec.Cut),
+            DirectionCompletionBarrier.Commit,
+            c.CancellationToken);
+    });
 
     private Task BackdropAsync(
         BackdropDirectionCommandArguments a,
@@ -124,6 +187,31 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
             c.CancellationToken);
     });
 
+    private Task ViewDefineAsync(
+        ViewDefineDirectionCommandArguments a,
+        RuntimeCommandContext c) => ExecuteAsync("view define", async () =>
+    {
+        await beats.SubmitAsync(
+            new ViewCreatePatch(
+                View(a.View),
+                Stage(a.Stage),
+                DirectionTransitionSpec.Cut),
+            DirectionCompletionBarrier.Commit,
+            c.CancellationToken);
+    });
+
+    private Task ViewReleaseAsync(
+        ViewReleaseDirectionCommandArguments a,
+        RuntimeCommandContext c) => ExecuteAsync("view release", async () =>
+    {
+        await beats.SubmitAsync(
+            new ViewReleasePatch(
+                View(a.View),
+                DirectionTransitionSpec.Cut),
+            DirectionCompletionBarrier.Commit,
+            c.CancellationToken);
+    });
+
     private Task CameraPoseAsync(
         CameraPoseDirectionCommandArguments a,
         RuntimeCommandContext c) => ExecuteAsync("camera pose", async () =>
@@ -149,9 +237,8 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
         CameraResetDirectionCommandArguments a,
         RuntimeCommandContext c) => ExecuteAsync("camera reset", async () =>
     {
-        var patch = new ViewPatch(
-            View(a.View),
-            default,
+        var patch = new ViewPosePatch(
+            CameraTarget(a.Stage, a.View),
             DirectionValue.From(new DirectionPoint(50, 50)),
             DirectionValue.From(1f),
             DirectionValue.From(0f),
@@ -179,34 +266,10 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
         RuntimeCommandContext c) => ExecuteAsync("shot use", async () =>
     {
         var patch = scopes.ResolveShot(RequireNode(), a.Alias);
-        if (a.View is not null)
-            patch = patch with { ViewId = View(a.View) };
+        if (a.Stage is not null || a.View is not null)
+            patch = patch with { ViewId = CameraTarget(a.Stage, a.View) };
         patch = patch with { Transition = Transition(a, c, Enum.GetValues<DirectionTransitionKind>()) };
         await beats.SubmitAsync(patch, Barrier(a.Wait), c.CancellationToken);
-    });
-
-    private Task CgAsync(
-        CgDirectionCommandArguments a,
-        RuntimeCommandContext c) => ExecuteAsync("cg", async () =>
-    {
-        await beats.SubmitAsync(
-            new ViewPatch(
-                View(a.View),
-                DirectionValue.From<ViewSource>(
-                    new CgViewSource(resources.ResolveCg(a.Resource))),
-                a.Center is null
-                    ? default
-                    : DirectionValue.From(
-                        new DirectionPoint(a.Center.Value.X, a.Center.Value.Y)),
-                a.Zoom is null
-                    ? default
-                    : DirectionValue.From((float)a.Zoom.Value),
-                a.Rotation is null
-                    ? default
-                    : DirectionValue.From((float)a.Rotation.Value),
-                Transition(a, c, Enum.GetValues<DirectionTransitionKind>())),
-            Barrier(a.Wait),
-            c.CancellationToken);
     });
 
     private Task LayoutAsync(
@@ -388,27 +451,23 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
         return new DirectionTransitionSpec(kind, duration, ease).Validate();
     }
 
-    private ViewPatch CameraPatch(
+    private ViewPosePatch CameraPatch(
         CameraPatchDirectionCommandArguments a,
         DirectionTransitionSpec transition)
     {
-        var stage = (a as CameraPoseDirectionCommandArguments)?.Stage;
-        return new ViewPatch(
-        View(a.View),
-        stage is null
-            ? default
-            : DirectionValue.From<ViewSource>(new StageViewSource(Stage(stage))),
-        a.Center is null
-            ? default
-            : DirectionValue.From(
-                new DirectionPoint(a.Center.Value.X, a.Center.Value.Y)),
-        a.Zoom is null
-            ? default
-            : DirectionValue.From((float)a.Zoom.Value),
-        a.Rotation is null
-            ? default
-            : DirectionValue.From((float)a.Rotation.Value),
-        transition);
+        return new ViewPosePatch(
+            CameraTarget(a.Stage, a.View),
+            a.Center is null
+                ? default
+                : DirectionValue.From(
+                    new DirectionPoint(a.Center.Value.X, a.Center.Value.Y)),
+            a.Zoom is null
+                ? default
+                : DirectionValue.From((float)a.Zoom.Value),
+            a.Rotation is null
+                ? default
+                : DirectionValue.From((float)a.Rotation.Value),
+            transition);
     }
 
     private static DirectionEase? ParseEase(string? value)
@@ -438,6 +497,13 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
     private StageId Stage(string value) => scopes.ResolveStage(RequireNode(), value);
 
     private ViewId View(string value) => scopes.ResolveView(RequireNode(), value);
+
+    private ViewId DefaultView(string stage) =>
+        scopes.ResolveDefaultView(RequireNode(), stage);
+
+    private ViewId CameraTarget(string? stage, string? view) => stage is not null
+        ? DefaultView(stage)
+        : View(view ?? "main");
 
     private string RequireNode()
     {
@@ -532,6 +598,34 @@ public abstract class DirectionTransitionCommandArguments : DirectionTimingComma
     [CommandParameter("via", 20)] public DirectionTransitionKind? Via { get; set; }
 }
 
+[RuntimeCommand("stage", "define", Category = "Direction", Usage = "stage define <id>")]
+public sealed class StageDefineDirectionCommandArguments
+{
+    [CommandParameter("stage", 0, Primary = true, Required = true)]
+    public string Stage { get; set; } = string.Empty;
+}
+
+[RuntimeCommand("stage", "show", Category = "Direction", Usage = "stage show <id> [via:<cut|dissolve>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]
+public sealed class StageShowDirectionCommandArguments : DirectionTransitionCommandArguments
+{
+    [CommandParameter("stage", 0, Primary = true, Required = true)]
+    public string Stage { get; set; } = string.Empty;
+}
+
+[RuntimeCommand("stage", "clear", Category = "Direction", Usage = "stage clear <id> [via:<cut|fade|dissolve>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]
+public sealed class StageClearDirectionCommandArguments : DirectionTransitionCommandArguments
+{
+    [CommandParameter("stage", 0, Primary = true, Required = true)]
+    public string Stage { get; set; } = string.Empty;
+}
+
+[RuntimeCommand("stage", "release", Category = "Direction", Usage = "stage release <id>")]
+public sealed class StageReleaseDirectionCommandArguments
+{
+    [CommandParameter("stage", 0, Primary = true, Required = true)]
+    public string Stage { get; set; } = string.Empty;
+}
+
 [RuntimeCommand("backdrop", Category = "Direction", Usage = "backdrop <resource> [stage:<id>] [via:<kind>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]
 public sealed class BackdropDirectionCommandArguments : DirectionTransitionCommandArguments
 {
@@ -564,52 +658,61 @@ public sealed class LeaveDirectionCommandArguments : DirectionTransitionCommandA
     public string Stage { get; set; } = "main";
 }
 
+[RuntimeCommand("view", "define", Category = "Direction", Usage = "view define <id> stage:<id>")]
+public sealed class ViewDefineDirectionCommandArguments
+{
+    [CommandParameter("view", 0, Primary = true, Required = true)]
+    public string View { get; set; } = string.Empty;
+    [CommandParameter("stage", 1, Required = true)]
+    public string Stage { get; set; } = string.Empty;
+}
+
+[RuntimeCommand("view", "release", Category = "Direction", Usage = "view release <id>")]
+public sealed class ViewReleaseDirectionCommandArguments
+{
+    [CommandParameter("view", 0, Primary = true, Required = true)]
+    public string View { get; set; } = string.Empty;
+}
+
 public abstract class CameraPatchDirectionCommandArguments : DirectionTimingCommandArguments
 {
-    [CommandParameter("view", 0, DefaultValue = "main")]
-    public string View { get; set; } = "main";
-    [CommandParameter("center", 1)] public Vector2? Center { get; set; }
-    [CommandParameter("zoom", 2, Minimum = 0.001)] public double? Zoom { get; set; }
-    [CommandParameter("rotation", 3)] public double? Rotation { get; set; }
-}
-
-[RuntimeCommand("camera", "pose", Category = "Direction", Usage = "camera pose [stage:<id>] [view:<id>] [center:<x,y>] [zoom:<number>] [rotation:<degrees>] [as:<shot>] [via:<kind>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]
-[CommandParameterSet(CommandParameterSetRule.AtLeastOne, "stage", "center", "zoom", "rotation", "as")]
-public sealed class CameraPoseDirectionCommandArguments : CameraPatchDirectionCommandArguments
-{
-    [CommandParameter("stage", 4)] public string? Stage { get; set; }
-    [CommandParameter("as", 5)] public string? As { get; set; }
-    [CommandParameter("via", 20)] public DirectionTransitionKind? Via { get; set; }
-}
-
-[RuntimeCommand("camera", "move", Category = "Direction", Usage = "camera move [view:<id>] [center:<x,y>] [zoom:<number>] [rotation:<degrees>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]
-[CommandParameterSet(CommandParameterSetRule.AtLeastOne, "center", "zoom", "rotation")]
-public sealed class CameraMoveDirectionCommandArguments : CameraPatchDirectionCommandArguments;
-
-[RuntimeCommand("camera", "reset", Category = "Direction", Usage = "camera reset [view:<id>] [via:<kind>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]
-public sealed class CameraResetDirectionCommandArguments : DirectionTransitionCommandArguments
-{
-    [CommandParameter("view", 0, DefaultValue = "main")] public string View { get; set; } = "main";
-}
-
-[RuntimeCommand("cg", Category = "Direction", Usage = "cg <resource> [view:<id>] [center:<x,y>] [zoom:<number>] [rotation:<degrees>] [via:<kind>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]
-public sealed class CgDirectionCommandArguments : DirectionTransitionCommandArguments
-{
-    [CommandParameter("resource", 0, Primary = true, Required = true)]
-    public string Resource { get; set; } = string.Empty;
-    [CommandParameter("view", 1, DefaultValue = "main")]
-    public string View { get; set; } = "main";
+    [CommandParameter("stage", 0)] public string? Stage { get; set; }
+    [CommandParameter("view", 1)] public string? View { get; set; }
     [CommandParameter("center", 2)] public Vector2? Center { get; set; }
     [CommandParameter("zoom", 3, Minimum = 0.001)] public double? Zoom { get; set; }
     [CommandParameter("rotation", 4)] public double? Rotation { get; set; }
 }
 
-[RuntimeCommand("shot", "use", Category = "Direction", Usage = "shot use <alias> [view:<id>] [via:<kind>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]
+[RuntimeCommand("camera", "pose", Category = "Direction", Usage = "camera pose [stage:<id>|view:<id>] [center:<x,y>] [zoom:<number>] [rotation:<degrees>] [as:<shot>] [via:<kind>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]
+[CommandParameterSet(CommandParameterSetRule.AtMostOne, "stage", "view")]
+[CommandParameterSet(CommandParameterSetRule.AtLeastOne, "center", "zoom", "rotation", "as")]
+public sealed class CameraPoseDirectionCommandArguments : CameraPatchDirectionCommandArguments
+{
+    [CommandParameter("as", 5)] public string? As { get; set; }
+    [CommandParameter("via", 20)] public DirectionTransitionKind? Via { get; set; }
+}
+
+[RuntimeCommand("camera", "move", Category = "Direction", Usage = "camera move [stage:<id>|view:<id>] [center:<x,y>] [zoom:<number>] [rotation:<degrees>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]
+[CommandParameterSet(CommandParameterSetRule.AtMostOne, "stage", "view")]
+[CommandParameterSet(CommandParameterSetRule.AtLeastOne, "center", "zoom", "rotation")]
+public sealed class CameraMoveDirectionCommandArguments : CameraPatchDirectionCommandArguments;
+
+[RuntimeCommand("camera", "reset", Category = "Direction", Usage = "camera reset [stage:<id>|view:<id>] [via:<kind>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]
+[CommandParameterSet(CommandParameterSetRule.AtMostOne, "stage", "view")]
+public sealed class CameraResetDirectionCommandArguments : DirectionTransitionCommandArguments
+{
+    [CommandParameter("stage", 0)] public string? Stage { get; set; }
+    [CommandParameter("view", 1)] public string? View { get; set; }
+}
+
+[RuntimeCommand("shot", "use", Category = "Direction", Usage = "shot use <alias> [stage:<id>|view:<id>] [via:<kind>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]
+[CommandParameterSet(CommandParameterSetRule.AtMostOne, "stage", "view")]
 public sealed class ShotUseDirectionCommandArguments : DirectionTransitionCommandArguments
 {
     [CommandParameter("alias", 0, Primary = true, Required = true)]
     public string Alias { get; set; } = string.Empty;
-    [CommandParameter("view", 1)] public string? View { get; set; }
+    [CommandParameter("stage", 1)] public string? Stage { get; set; }
+    [CommandParameter("view", 2)] public string? View { get; set; }
 }
 
 [RuntimeCommand("layout", Category = "Direction", Usage = "layout <single|split|pip> <slot:view> ... [via:<kind>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]

@@ -69,8 +69,7 @@ public sealed class DirectionPatchTests
         var state = DirectionState.CreateDefault();
 
         Assert.Contains(StageId.Main, state.Stages.Keys);
-        var view = Assert.IsType<StageViewSource>(state.Views[ViewId.Main].Source);
-        Assert.Equal(StageId.Main, view.StageId);
+        Assert.Equal(StageId.Main, state.Views[ViewId.Main].StageId);
         Assert.Equal(ViewId.Main, state.Screen.Bindings[LayoutSlotId.Main]);
         Assert.Equal(0, state.Revision);
     }
@@ -87,7 +86,9 @@ public sealed class DirectionPatchTests
             DirectionState.CreateDefault(),
             new IDirectionDirective[]
             {
-                View(reaction, source: new StageViewSource(cell), zoom: 1.8f),
+                new StageCreatePatch(cell, new ViewId(cell.Value), DirectionTransitionSpec.Cut),
+                new ViewCreatePatch(reaction, cell, DirectionTransitionSpec.Cut),
+                View(reaction, zoom: 1.8f),
                 Actor(ema, cell, position: new DirectionPoint(70, 0)),
                 Actor(ema, cell, appearance: "Fearful1,ArmR1"),
                 new BackdropPatch(
@@ -108,8 +109,7 @@ public sealed class DirectionPatchTests
         Assert.Equal("Background_025_001", stage.Backdrop?.Resource.ToString());
         Assert.Equal(new DirectionPoint(70, 0), stage.Actors[ema].Position);
         Assert.Equal("Fearful1,ArmR1", stage.Actors[ema].Appearance);
-        Assert.Equal(cell, Assert.IsType<StageViewSource>(
-            plan.TargetState.Views[reaction].Source).StageId);
+        Assert.Equal(cell, plan.TargetState.Views[reaction].StageId);
         Assert.Equal(1.8f, plan.TargetState.Views[reaction].Pose.Zoom);
         Assert.Equal(reaction, plan.TargetState.Screen.Bindings[new LayoutSlotId("inset")]);
         Assert.Equal(1, plan.TargetState.Revision);
@@ -150,9 +150,12 @@ public sealed class DirectionPatchTests
 
         Assert.Throws<DirectionReferenceException>(() => planner.Plan(
             DirectionState.CreateDefault(),
-            new[]
+            new IDirectionDirective[]
             {
-                View(ViewId.Main, source: new StageViewSource(new StageId("missing"))),
+                new ViewCreatePatch(
+                    new ViewId("missing-view"),
+                    new StageId("missing"),
+                    DirectionTransitionSpec.Cut),
             }));
 
         Assert.Throws<DirectionReferenceException>(() => planner.Plan(
@@ -170,23 +173,38 @@ public sealed class DirectionPatchTests
     }
 
     [Fact]
-    public void CgChangesViewSourceWithoutMutatingStage()
+    public void IllustrationStageSwitchesScreenWithoutMutatingMainStage()
     {
         var before = DirectionState.CreateDefault();
         var planner = new DirectionPlanner();
+        var illustration = new StageId("illustration");
+        var illustrationView = new ViewId("illustration");
 
-        var plan = planner.Plan(before, new[]
+        var plan = planner.Plan(before, new IDirectionDirective[]
         {
-            View(
-                ViewId.Main,
-                source: new CgViewSource(new ResourceKey("Still_490_001")),
-                zoom: 3),
+            new StageCreatePatch(
+                illustration,
+                illustrationView,
+                DirectionTransitionSpec.Cut),
+            new BackdropPatch(
+                illustration,
+                new BackdropState(new ResourceKey("Still_490_001")),
+                DirectionTransitionSpec.Cut),
+            View(illustrationView, zoom: 3),
+            new ScreenPatch(
+                LayoutId.SingleLayout,
+                new Dictionary<LayoutSlotId, ViewId>
+                {
+                    [LayoutSlotId.Main] = illustrationView,
+                },
+                DirectionTransitionSpec.Cut),
         });
 
         Assert.Same(before.Stages[StageId.Main], plan.TargetState.Stages[StageId.Main]);
-        var source = Assert.IsType<CgViewSource>(plan.TargetState.Views[ViewId.Main].Source);
-        Assert.Equal("Still_490_001", source.Resource.ToString());
-        Assert.Equal(3, plan.TargetState.Views[ViewId.Main].Pose.Zoom);
+        Assert.Equal("Still_490_001", plan.TargetState.Stages[illustration].Backdrop?.Resource.ToString());
+        Assert.Equal(illustration, plan.TargetState.Views[illustrationView].StageId);
+        Assert.Equal(3, plan.TargetState.Views[illustrationView].Pose.Zoom);
+        Assert.Equal(illustrationView, plan.TargetState.Screen.Bindings[LayoutSlotId.Main]);
     }
 
     private static ActorPatch Actor(
@@ -206,17 +224,13 @@ public sealed class DirectionPatchTests
             default,
             DirectionTransitionSpec.Cut);
 
-    private static ViewPatch View(
+    private static ViewPosePatch View(
         ViewId viewId,
-        ViewSource? source = null,
         float? zoom = null,
         float? rotation = null,
         DirectionTransitionSpec? transition = null,
         DirectionSourceLocation? location = null) => new(
             viewId,
-            source is not null
-                ? DirectionValue.From(source)
-                : default,
             default,
             zoom is { } zoomValue
                 ? DirectionValue.From(zoomValue)

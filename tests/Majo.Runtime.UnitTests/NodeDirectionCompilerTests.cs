@@ -29,7 +29,7 @@ public sealed class NodeDirectionCompilerTests
                 new YarnSourceFileSnapshot(
                     "main.yarn",
                     "main.yarn",
-                    "title: Opening\n---\n<<backdrop Background_001>>\n<<camera pose view:reaction stage:cell>>\n<<cg Still_001>>\n<<layout split main:main inset:reaction>>\n===\n",
+                    "title: Opening\n---\n<<stage define cell>>\n<<view define reaction stage:cell>>\n<<backdrop Background_001>>\n<<camera pose view:reaction zoom:2>>\n<<backdrop Still_001 stage:cell>>\n<<layout split main:main inset:reaction>>\n===\n",
                     "hash"),
             },
             "fingerprint");
@@ -42,9 +42,10 @@ public sealed class NodeDirectionCompilerTests
             resource.Kind == DirectionResourceKind.Backdrop &&
             resource.SemanticId == "Background_001");
         Assert.Contains(module.Resources, resource =>
-            resource.Kind == DirectionResourceKind.Cg &&
+            resource.Kind == DirectionResourceKind.Backdrop &&
             resource.SemanticId == "Still_001");
-        Assert.Equal(4, module.SourceMaps.Count);
+        Assert.Equal(6, module.SourceMaps.Count);
+        Assert.Equal(2, module.Resources.Count);
     }
 
     [Fact]
@@ -128,7 +129,7 @@ public sealed class NodeDirectionCompilerTests
             new[]
             {
                 new TypedDirectionResourceReference(
-                    DirectionResourceKind.Cg, "Still_001", "main.yarn", 4, 1),
+                    DirectionResourceKind.Backdrop, "Still_001", "main.yarn", 4, 1),
             },
             new[] { new DirectionSourceMap("shot", "main.yarn", 4, 1) },
             new[]
@@ -171,9 +172,8 @@ public sealed class NodeDirectionCompilerTests
     public void DirectionScopeKeepsShotAliasesNodeLocal()
     {
         var scopes = new DirectionScopeResolver();
-        var patch = new ViewPatch(
+        var patch = new ViewPosePatch(
             ViewId.Main,
-            default,
             default,
             DirectionValue.From(1.5f),
             default,

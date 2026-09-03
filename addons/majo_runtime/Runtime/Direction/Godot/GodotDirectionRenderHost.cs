@@ -150,7 +150,7 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
         isInitialized = true;
         PublishedView = new ViewState(
             ViewId.Main,
-            new StageViewSource(StageId.Main),
+            StageId.Main,
             ViewPose.Default);
         ApplyViewPose(ViewId.Main, ViewPose.Default);
         PublishEffects(StableEffectState.Default);
@@ -197,7 +197,7 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
         PublishedBackdrop = null;
         PublishedView = new ViewState(
             ViewId.Main,
-            new StageViewSource(StageId.Main),
+            StageId.Main,
             ViewPose.Default);
         ApplyViewPose(ViewId.Main, ViewPose.Default);
         PublishedScreen = ScreenState.Default;

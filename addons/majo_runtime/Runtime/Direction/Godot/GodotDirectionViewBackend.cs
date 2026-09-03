@@ -13,14 +13,10 @@ namespace Majo.Runtime.Direction.Godot;
 internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
 {
     private readonly GodotDirectionRenderHost host;
-    private readonly IDirectionTextureLoader textures;
 
-    public GodotDirectionViewBackend(
-        GodotDirectionRenderHost host,
-        IDirectionTextureLoader textures)
+    public GodotDirectionViewBackend(GodotDirectionRenderHost host)
     {
         this.host = host ?? throw new ArgumentNullException(nameof(host));
-        this.textures = textures ?? throw new ArgumentNullException(nameof(textures));
     }
 
     public async Task<IPreparedDirectionComponent> PrepareAsync(
@@ -33,41 +29,23 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
         ArgumentNullException.ThrowIfNull(plan);
         if (target is null)
         {
-            throw new DirectionReferenceException(
-                $"Direction View '{viewId}' has no target state.");
+            if (before is null)
+                throw new DirectionReferenceException(
+                    $"Direction View '{viewId}' has neither source nor target state.");
+            return new PreparedViewDeletion(host, viewId);
         }
         var createdView = !host.HasView(viewId);
         host.GetOrCreateView(viewId);
         try
         {
-            Texture2D? beforeTexture = null;
-            if (before is not null)
-            {
-                beforeTexture = before.Source switch
-                {
-                    StageViewSource { StageId: var stageId } => host.GetStageTexture(stageId),
-                    CgViewSource cg => await textures.LoadAsync(cg.Resource, cancellationToken),
-                    _ => throw new DirectionReferenceException(
-                        $"Unsupported View source '{before.Source.GetType().Name}'."),
-                };
-            }
-            Texture2D targetTexture = target.Source switch
-            {
-                StageViewSource { StageId: var stageId } => host.GetStageTexture(stageId),
-                CgViewSource cg => await textures.LoadAsync(cg.Resource, cancellationToken),
-                _ => throw new DirectionReferenceException(
-                    $"Unsupported View source '{target.Source.GetType().Name}'."),
-            };
+            Texture2D? beforeTexture = before is null
+                ? null
+                : host.GetStageTexture(before.StageId);
+            Texture2D targetTexture = host.GetStageTexture(target.StageId);
 
             await host.WaitForRenderFenceAsync(cancellationToken);
             var sequence = plan.ViewSequences?.FirstOrDefault(
                 candidate => candidate.ViewId == viewId);
-            if (sequence is not null && sequence.StartState.Source != target.Source)
-            {
-                throw new DirectionException(
-                    $"View '{viewId}' changes source during a sequential pose transition; " +
-                    "split the source change and pose transition into separate beats.");
-            }
             var transition = sequence?.Transition ?? GodotDirectionRendering.ResolveTransition(
                 plan,
                 path => path.StartsWith($"view/{viewId.Value}/", StringComparison.Ordinal));
@@ -101,6 +79,51 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
         {
             if (createdView) host.ReleasePreparedView(viewId);
             throw;
+        }
+    }
+
+    private sealed class PreparedViewDeletion : IPreparedDirectionComponent
+    {
+        private readonly GodotDirectionRenderHost host;
+        private readonly ViewId viewId;
+        private readonly TaskCompletionSource settlement = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        private bool committed;
+        private bool disposed;
+
+        public PreparedViewDeletion(GodotDirectionRenderHost host, ViewId viewId)
+        {
+            this.host = host;
+            this.viewId = viewId;
+        }
+
+        public Task Settlement => settlement.Task;
+
+        public void Commit(DirectionCommitToken token)
+        {
+            if (committed || disposed)
+                throw new InvalidOperationException("View deletion is no longer preparable.");
+            committed = true;
+            settlement.TrySetResult();
+        }
+
+        public void Rollback(DirectionCommitToken token) => committed = false;
+
+        public ValueTask FinishAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!committed || disposed)
+                throw new InvalidOperationException("View deletion cannot finish in its current state.");
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            if (disposed) return ValueTask.CompletedTask;
+            disposed = true;
+            if (!settlement.Task.IsCompleted) settlement.TrySetCanceled();
+            if (committed) host.ReleasePreparedView(viewId);
+            return ValueTask.CompletedTask;
         }
     }
 

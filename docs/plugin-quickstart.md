@@ -144,11 +144,18 @@ tags: intro
 <<declare $score = 10>>
 
 <<beat begin>>
+<<stage define evidence>>
 <<backdrop courtroom via:dissolve duration:0.5>>
 <<character hero appearance:calm at:left via:fade duration:0.5>>
 <<beat end wait:true>>
 
 Narrator: 两个动画已并发汇合并到达确定终态。 #line:intro-line-1
+
+<<backdrop evidence_closeup stage:evidence via:cut>>
+<<stage show evidence via:dissolve duration:0.4 wait:true>>
+Narrator: 插画与普通画面一样由独立 Stage 承载，Screen 只负责切换 View。 #line:intro-line-evidence
+<<stage show main via:dissolve duration:0.4 wait:true>>
+<<stage release evidence>>
 
 <<character hero appearance:determined at:center via:move duration:0.3 wait:true>>
 Narrator: 等待型动画执行完毕。 #line:intro-line-2

@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text.RegularExpressions;
 using Majo.Runtime.Direction.Core;
@@ -68,8 +69,8 @@ public sealed record NodeDirectionModule(
 public sealed class NodeDirectionCompiler
 {
     private static readonly HashSet<string> DirectionCommands = new(
-        new[] { "backdrop", "cg", "character", "leave", "camera", "shot", "layout",
-            "import", "mark", "flash", "curtain", "beat" },
+        new[] { "stage", "view", "backdrop", "character", "leave", "camera", "shot",
+            "layout", "import", "mark", "flash", "curtain", "beat" },
         StringComparer.OrdinalIgnoreCase);
     private static readonly Regex NodeHeader = new(
         "^title:\\s*(?<id>.+?)\\s*$",
@@ -95,6 +96,412 @@ public sealed class NodeDirectionCompiler
             CompileFile(file, version, modules);
 
         var compiled = modules.ToArray();
+        AddDuplicateNodeDiagnostics(snapshot, compiled);
+        ValidateImports(compiled);
+        return compiled;
+    }
+
+    private static void CompileFile(
+        YarnSourceFileSnapshot file,
+        long version,
+        List<NodeDirectionModule> modules)
+    {
+        string? node = null;
+        var commands = new List<ParsedCommand>();
+        var maps = new List<DirectionSourceMap>();
+        var parseDiagnostics = new List<YarnCompilationDiagnostic>();
+
+        void Flush()
+        {
+            if (node is null) return;
+            modules.Add(CompileNode(
+                node,
+                version,
+                commands,
+                maps,
+                parseDiagnostics));
+            commands.Clear();
+            maps.Clear();
+            parseDiagnostics.Clear();
+        }
+
+        var lines = file.Content.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        for (var index = 0; index < lines.Length; index++)
+        {
+            var line = lines[index];
+            var header = NodeHeader.Match(line);
+            if (header.Success)
+            {
+                Flush();
+                node = header.Groups["id"].Value.Trim();
+                continue;
+            }
+            if (node is null) continue;
+            foreach (Match match in Command.Matches(line))
+            {
+                var raw = match.Groups["command"].Value.Trim();
+                var tokens = raw.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (tokens.Length == 0 || !DirectionCommands.Contains(tokens[0])) continue;
+                var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (Match option in Option.Matches(raw))
+                {
+                    var name = option.Groups["name"].Value;
+                    if (!options.TryAdd(name, Unquote(option.Groups["value"].Value)))
+                    {
+                        parseDiagnostics.Add(Diagnostic(
+                            "DIR005",
+                            file.LogicalPath,
+                            index + 1,
+                            match.Index + 1,
+                            match.Length,
+                            $"Option '{name}' is specified more than once in Direction command."));
+                    }
+                }
+                var parsed = new ParsedCommand(
+                    raw,
+                    tokens,
+                    options,
+                    file.LogicalPath,
+                    index + 1,
+                    match.Index + 1,
+                    match.Length);
+                commands.Add(parsed);
+                maps.Add(new DirectionSourceMap(
+                    string.Join(' ', tokens.Take(2)),
+                    file.LogicalPath,
+                    index + 1,
+                    match.Index + 1));
+            }
+        }
+        Flush();
+    }
+
+    private static NodeDirectionModule CompileNode(
+        string node,
+        long version,
+        IReadOnlyList<ParsedCommand> commands,
+        IReadOnlyList<DirectionSourceMap> maps,
+        IReadOnlyList<YarnCompilationDiagnostic> parseDiagnostics)
+    {
+        var stages = new HashSet<string>(StringComparer.Ordinal);
+        var views = new HashSet<string>(StringComparer.Ordinal);
+        var aliases = new HashSet<string>(StringComparer.Ordinal);
+        var marks = new HashSet<string>(StringComparer.Ordinal);
+        var resources = new List<TypedDirectionResourceReference>();
+        var imports = new List<DirectionImport>();
+        var markDefinitions = new List<DirectionMark>();
+        var stageReferences = new List<SymbolReference>();
+        var viewReferences = new List<SymbolReference>();
+        var shotReferences = new List<SymbolReference>();
+        var diagnostics = new List<YarnCompilationDiagnostic>(parseDiagnostics);
+
+        foreach (var command in commands)
+        {
+            var import = Import.Match(command.Raw);
+            if (import.Success)
+            {
+                var directionImport = new DirectionImport(
+                    import.Groups["kind"].Value.ToLowerInvariant(),
+                    import.Groups["alias"].Value,
+                    import.Groups["node"].Value,
+                    import.Groups["symbol"].Value,
+                    command.File,
+                    command.Line,
+                    command.Column);
+                if (imports.Any(existing => existing.Alias.Equals(
+                        directionImport.Alias,
+                        StringComparison.Ordinal)))
+                {
+                    diagnostics.Add(command.Diagnostic(
+                        "DIR005",
+                        $"Import alias '{directionImport.Alias}' is already defined in Node '{node}'."));
+                }
+                else
+                {
+                    imports.Add(directionImport);
+                }
+                continue;
+            }
+
+            if (command.Is("stage", "define"))
+            {
+                var name = command.Positional(2);
+                if (!RequireName(command, name, "stage define requires an id.", diagnostics))
+                    continue;
+                if (name == StageId.Main.Value)
+                {
+                    diagnostics.Add(command.Diagnostic(
+                        "DIR005",
+                        "The built-in main Stage cannot be declared."));
+                }
+                else
+                {
+                    AddSymbol(stages, name, "Stage", command, diagnostics);
+                }
+            }
+            else if (command.Is("view", "define"))
+            {
+                var name = command.Positional(2);
+                if (!RequireName(command, name, "view define requires an id.", diagnostics))
+                    continue;
+                if (name == ViewId.Main.Value)
+                {
+                    diagnostics.Add(command.Diagnostic(
+                        "DIR005",
+                        "The built-in main View cannot be declared."));
+                }
+                else
+                {
+                    AddSymbol(views, name, "View", command, diagnostics);
+                }
+            }
+            else if (command.Is("mark") && command.Tokens.Length > 1)
+            {
+                CompileMark(command, marks, markDefinitions, diagnostics);
+            }
+            else if (command.Is("camera") &&
+                command.Options.TryGetValue("as", out var alias))
+            {
+                AddSymbol(aliases, alias, "Shot alias", command, diagnostics);
+            }
+        }
+
+        foreach (var collision in stages.Intersect(views, StringComparer.Ordinal))
+        {
+            var command = commands.First(value =>
+                (value.Is("stage", "define") || value.Is("view", "define")) &&
+                value.Positional(2) == collision);
+            diagnostics.Add(command.Diagnostic(
+                "DIR005",
+                $"'{collision}' cannot be both a Stage and an explicit View; the Stage already owns that default View name."));
+        }
+
+        foreach (var command in commands)
+        {
+            if (Import.IsMatch(command.Raw) || command.Is("mark")) continue;
+
+            if (command.Is("stage"))
+            {
+                if (command.Is("stage", "show") || command.Is("stage", "clear") ||
+                    command.Is("stage", "release"))
+                {
+                    AddReference(stageReferences, command.Positional(2), command);
+                }
+                continue;
+            }
+            if (command.Is("view"))
+            {
+                if (command.Is("view", "define"))
+                {
+                    if (command.Options.TryGetValue("stage", out var stage))
+                        AddReference(stageReferences, stage, command);
+                    else
+                        diagnostics.Add(command.Diagnostic("DIR003", "view define requires stage:<id>."));
+                }
+                else if (command.Is("view", "release"))
+                {
+                    AddReference(viewReferences, command.Positional(2), command);
+                }
+                continue;
+            }
+            if (command.Is("backdrop"))
+            {
+                var resource = command.Positional(1);
+                if (!RequireName(command, resource, "backdrop requires a semantic resource id.", diagnostics))
+                    continue;
+                resources.Add(new TypedDirectionResourceReference(
+                    DirectionResourceKind.Backdrop,
+                    Unquote(resource),
+                    command.File,
+                    command.Line,
+                    command.Column));
+                AddReference(stageReferences, command.OptionOr("stage", "main"), command);
+            }
+            else if (command.Is("character"))
+            {
+                AddReference(stageReferences, command.OptionOr("stage", "main"), command);
+                if (command.Options.TryGetValue("appearance", out var appearance) &&
+                    command.Tokens.Length > 1)
+                {
+                    resources.Add(new TypedDirectionResourceReference(
+                        DirectionResourceKind.ActorAppearance,
+                        $"{command.Tokens[1]}/{appearance}",
+                        command.File,
+                        command.Line,
+                        command.Column));
+                }
+            }
+            else if (command.Is("leave"))
+            {
+                AddReference(stageReferences, command.OptionOr("stage", "main"), command);
+            }
+            else if (command.Is("camera"))
+            {
+                AddCameraTargetReference(command, stageReferences, viewReferences, diagnostics);
+            }
+            else if (command.Is("shot", "use"))
+            {
+                AddReference(shotReferences, command.Positional(2), command);
+                AddCameraTargetReference(command, stageReferences, viewReferences, diagnostics);
+            }
+            else if (command.Is("layout"))
+            {
+                AddReference(viewReferences, command.OptionOr("main", "main"), command);
+                if (command.Options.TryGetValue("inset", out var inset))
+                    AddReference(viewReferences, inset, command);
+            }
+        }
+
+        foreach (var reference in stageReferences.Where(reference =>
+                     !KnownStage(reference.Symbol, stages, imports)))
+        {
+            diagnostics.Add(reference.Diagnostic(
+                "DIR007",
+                $"Stage symbol '{reference.Symbol}' is not declared in Node '{node}'."));
+        }
+        foreach (var reference in viewReferences.Where(reference =>
+                     !KnownView(reference.Symbol, stages, views, imports)))
+        {
+            diagnostics.Add(reference.Diagnostic(
+                "DIR007",
+                $"View symbol '{reference.Symbol}' is not declared in Node '{node}'."));
+        }
+        foreach (var reference in shotReferences.Where(reference =>
+                     !aliases.Contains(reference.Symbol)))
+        {
+            diagnostics.Add(reference.Diagnostic(
+                "DIR007",
+                $"Shot alias '{reference.Symbol}' is not defined in Node '{node}'."));
+        }
+
+        return new NodeDirectionModule(
+            node,
+            version,
+            new DirectionSymbolTable(stages, views, aliases, marks),
+            resources,
+            maps.ToArray(),
+            imports,
+            markDefinitions,
+            diagnostics);
+    }
+
+    private static void CompileMark(
+        ParsedCommand command,
+        HashSet<string> marks,
+        List<DirectionMark> definitions,
+        List<YarnCompilationDiagnostic> diagnostics)
+    {
+        var name = command.Positional(1);
+        if (!RequireName(command, name, "mark requires a name.", diagnostics)) return;
+        if (!marks.Add(name))
+        {
+            diagnostics.Add(command.Diagnostic("DIR005", $"Mark '{name}' is already defined."));
+            return;
+        }
+        if (!command.Options.TryGetValue("at", out var at))
+        {
+            diagnostics.Add(command.Diagnostic("DIR003", "mark requires an at:x,y position."));
+            return;
+        }
+        var parts = at.Split(',', StringSplitOptions.TrimEntries);
+        if (parts.Length != 2 ||
+            !float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var x) ||
+            !float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var y) ||
+            !float.IsFinite(x) || !float.IsFinite(y) ||
+            x is < 0 or > 100 || y is < 0 or > 100)
+        {
+            diagnostics.Add(command.Diagnostic(
+                "DIR004",
+                "mark position must be finite x,y percentages between 0 and 100."));
+            return;
+        }
+        definitions.Add(new DirectionMark(
+            name,
+            new DirectionPoint(x, y),
+            command.File,
+            command.Line,
+            command.Column));
+    }
+
+    private static void AddCameraTargetReference(
+        ParsedCommand command,
+        List<SymbolReference> stageReferences,
+        List<SymbolReference> viewReferences,
+        List<YarnCompilationDiagnostic> diagnostics)
+    {
+        var hasStage = command.Options.TryGetValue("stage", out var stage);
+        var hasView = command.Options.TryGetValue("view", out var view);
+        if (hasStage && hasView)
+        {
+            diagnostics.Add(command.Diagnostic(
+                "DIR005",
+                "stage and view targets are mutually exclusive."));
+            return;
+        }
+        if (hasStage) AddReference(stageReferences, stage!, command);
+        else AddReference(viewReferences, hasView ? view! : "main", command);
+    }
+
+    private static bool KnownStage(
+        string symbol,
+        HashSet<string> stages,
+        IReadOnlyList<DirectionImport> imports) =>
+        symbol == StageId.Main.Value ||
+        stages.Contains(symbol) ||
+        imports.Any(import => import.Kind == "stage" && import.Alias == symbol);
+
+    private static bool KnownView(
+        string symbol,
+        HashSet<string> stages,
+        HashSet<string> views,
+        IReadOnlyList<DirectionImport> imports) =>
+        symbol == ViewId.Main.Value ||
+        views.Contains(symbol) ||
+        stages.Contains(symbol) ||
+        imports.Any(import => import.Alias == symbol);
+
+    private static void AddReference(
+        List<SymbolReference> references,
+        string symbol,
+        ParsedCommand command)
+    {
+        if (string.IsNullOrWhiteSpace(symbol)) return;
+        references.Add(new SymbolReference(
+            Unquote(symbol),
+            command.File,
+            command.Line,
+            command.Column,
+            command.Length));
+    }
+
+    private static bool RequireName(
+        ParsedCommand command,
+        string value,
+        string message,
+        List<YarnCompilationDiagnostic> diagnostics)
+    {
+        if (!string.IsNullOrWhiteSpace(value)) return true;
+        diagnostics.Add(command.Diagnostic("DIR001", message));
+        return false;
+    }
+
+    private static void AddSymbol(
+        HashSet<string> symbols,
+        string symbol,
+        string kind,
+        ParsedCommand command,
+        List<YarnCompilationDiagnostic> diagnostics)
+    {
+        if (symbols.Add(symbol)) return;
+        diagnostics.Add(command.Diagnostic(
+            "DIR005",
+            $"{kind} '{symbol}' is already defined."));
+    }
+
+    private static void AddDuplicateNodeDiagnostics(
+        YarnSourceSnapshot snapshot,
+        NodeDirectionModule[] compiled)
+    {
         foreach (var group in compiled
             .Select((module, index) => (module, index))
             .GroupBy(item => item.module.NodeId, StringComparer.Ordinal)
@@ -117,7 +524,10 @@ public sealed class NodeDirectionCompiler
                 };
             }
         }
+    }
 
+    private static void ValidateImports(NodeDirectionModule[] compiled)
+    {
         var byNode = compiled
             .GroupBy(module => module.NodeId, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
@@ -134,276 +544,72 @@ public sealed class NodeDirectionCompiler
                         "error", "DIR007", import.File, import.Line, import.Column,
                         import.Line, import.Column,
                         $"{import.Kind} import '{import.SourceNode}:{import.SourceSymbol}' " +
-                        $"does not refer to a known symbol."));
+                        "does not refer to a known symbol."));
                 }
             }
-            compiled[index] = module with { Diagnostics = diagnostics.ToArray() };
+            compiled[index] = module with { Diagnostics = diagnostics };
         }
-
-        return compiled;
     }
 
     private static bool HasExportedSymbol(
         NodeDirectionModule module,
         string kind,
         string symbol) =>
-        string.Equals(symbol, "main", StringComparison.Ordinal) ||
-        (kind.Equals("stage", StringComparison.OrdinalIgnoreCase)
+        symbol == "main" ||
+        (kind == "stage"
             ? module.Symbols.Stages.Contains(symbol) || module.Imports.Any(import =>
-                import.Kind.Equals("stage", StringComparison.OrdinalIgnoreCase) &&
-                import.Alias.Equals(symbol, StringComparison.Ordinal))
+                import.Kind == "stage" && import.Alias == symbol)
             : module.Symbols.Views.Contains(symbol) || module.Imports.Any(import =>
-                import.Kind.Equals("view", StringComparison.OrdinalIgnoreCase) &&
-                import.Alias.Equals(symbol, StringComparison.Ordinal)));
+                import.Kind == "view" && import.Alias == symbol));
 
-    private static void CompileFile(
-        YarnSourceFileSnapshot file,
-        long version,
-        List<NodeDirectionModule> modules)
-    {
-        string? node = null;
-        var stages = new HashSet<string>(StringComparer.Ordinal);
-        var views = new HashSet<string>(StringComparer.Ordinal);
-        var aliases = new HashSet<string>(StringComparer.Ordinal);
-        var marks = new HashSet<string>(StringComparer.Ordinal);
-        var resources = new List<TypedDirectionResourceReference>();
-        var maps = new List<DirectionSourceMap>();
-        var imports = new List<DirectionImport>();
-        var markDefinitions = new List<DirectionMark>();
-        var shotReferences = new List<(string Alias, string File, int Line, int Column, int Length)>();
-        var diagnostics = new List<YarnCompilationDiagnostic>();
-
-        void Flush()
-        {
-            if (node is null) return;
-            foreach (var reference in shotReferences)
-            {
-                if (aliases.Contains(reference.Alias)) continue;
-                diagnostics.Add(new YarnCompilationDiagnostic(
-                    "error", "DIR007", reference.File, reference.Line, reference.Column,
-                    reference.Line, reference.Column + reference.Length,
-                    $"Shot alias '{reference.Alias}' is not defined in Node '{node}'."));
-            }
-            modules.Add(new NodeDirectionModule(
-                node,
-                version,
-                new DirectionSymbolTable(
-                    new HashSet<string>(stages, StringComparer.Ordinal),
-                    new HashSet<string>(views, StringComparer.Ordinal),
-                    new HashSet<string>(aliases, StringComparer.Ordinal),
-                    new HashSet<string>(marks, StringComparer.Ordinal)),
-                resources.ToArray(),
-                maps.ToArray(),
-                imports.ToArray(),
-                markDefinitions.ToArray(),
-                diagnostics.ToArray()));
-            stages.Clear();
-            views.Clear();
-            aliases.Clear();
-            marks.Clear();
-            resources.Clear();
-            maps.Clear();
-            imports.Clear();
-            markDefinitions.Clear();
-            shotReferences.Clear();
-            diagnostics.Clear();
-        }
-
-        var lines = file.Content.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
-        for (var index = 0; index < lines.Length; index++)
-        {
-            var line = lines[index];
-            var header = NodeHeader.Match(line);
-            if (header.Success)
-            {
-                Flush();
-                node = header.Groups["id"].Value.Trim();
-                continue;
-            }
-            if (node is null) continue;
-            foreach (Match match in Command.Matches(line))
-            {
-                var raw = match.Groups["command"].Value.Trim();
-                var tokens = raw.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                if (tokens.Length == 0) continue;
-                if (!DirectionCommands.Contains(tokens[0])) continue;
-                var command = string.Join(' ', tokens.Take(2));
-                maps.Add(new DirectionSourceMap(command, file.LogicalPath, index + 1, match.Index + 1));
-                var import = Import.Match(raw);
-                if (import.Success)
-                {
-                    var directionImport = new DirectionImport(
-                        import.Groups["kind"].Value.ToLowerInvariant(),
-                        import.Groups["alias"].Value,
-                        import.Groups["node"].Value,
-                        import.Groups["symbol"].Value,
-                        file.LogicalPath,
-                        index + 1,
-                        match.Index + 1);
-                    if (imports.Any(existing =>
-                        existing.Alias.Equals(directionImport.Alias, StringComparison.Ordinal)))
-                    {
-                        diagnostics.Add(new YarnCompilationDiagnostic(
-                            "error", "DIR005", file.LogicalPath, index + 1, match.Index + 1,
-                            index + 1, match.Index + 1 + match.Length,
-                            $"{directionImport.Kind} import alias '{directionImport.Alias}' is already defined in Node '{node}'."));
-                    }
-                    else
-                    {
-                        imports.Add(directionImport);
-                    }
-                    continue;
-                }
-                var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                foreach (Match option in Option.Matches(raw))
-                {
-                    var name = option.Groups["name"].Value;
-                    if (!options.TryAdd(name, Unquote(option.Groups["value"].Value)))
-                    {
-                        diagnostics.Add(new YarnCompilationDiagnostic(
-                            "error", "DIR005", file.LogicalPath, index + 1,
-                            match.Index + 1, index + 1, match.Index + 1 + match.Length,
-                            $"Option '{name}' is specified more than once in Direction command."));
-                    }
-                }
-                if (tokens[0].Equals("backdrop", StringComparison.OrdinalIgnoreCase))
-                {
-                    var resource = tokens.Length > 1 ? tokens[1] : string.Empty;
-                    if (string.IsNullOrWhiteSpace(resource))
-                    {
-                        diagnostics.Add(new YarnCompilationDiagnostic(
-                            "error", "DIR001", file.LogicalPath, index + 1, match.Index + 1,
-                            index + 1, match.Index + 1 + match.Length,
-                            "backdrop requires a semantic resource id."));
-                        continue;
-                    }
-                    resources.Add(new(DirectionResourceKind.Backdrop, Unquote(resource), file.LogicalPath, index + 1, match.Index + 1));
-                    if (TryOption(options, raw, "stage", out var stage)) stages.Add(stage);
-                }
-                else if (tokens[0].Equals("character", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (TryOption(options, raw, "stage", out var stage)) stages.Add(stage);
-                    if (TryOption(options, raw, "appearance", out var appearance) && tokens.Length > 1)
-                        resources.Add(new(DirectionResourceKind.ActorAppearance, $"{tokens[1]}/{appearance}", file.LogicalPath, index + 1, match.Index + 1));
-                }
-                else if (tokens[0].Equals("leave", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (TryOption(options, raw, "stage", out var stage)) stages.Add(stage);
-                }
-                else if (tokens[0].Equals("cg", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (TryOption(options, raw, "view", out var view)) views.Add(view);
-                    var resource = tokens.Length > 1 ? tokens[1] : string.Empty;
-                    if (string.IsNullOrWhiteSpace(resource))
-                    {
-                        diagnostics.Add(new YarnCompilationDiagnostic(
-                            "error", "DIR002", file.LogicalPath, index + 1, match.Index + 1,
-                            index + 1, match.Index + 1 + match.Length,
-                            "cg requires a semantic resource id."));
-                        continue;
-                    }
-                    resources.Add(new(DirectionResourceKind.Cg, Unquote(resource), file.LogicalPath, index + 1, match.Index + 1));
-                }
-                else if (tokens[0].Equals("camera", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (TryOption(options, raw, "view", out var view)) views.Add(view);
-                    if (TryOption(options, raw, "stage", out var stage)) stages.Add(stage);
-                    if (TryOption(options, raw, "as", out var alias))
-                        AddSymbol(aliases, alias, "shot alias", file.LogicalPath, index + 1, match.Index + 1, match.Length);
-                }
-                else if (tokens[0].Equals("shot", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (TryOption(options, raw, "view", out var view)) views.Add(view);
-                    if (tokens.Length > 2 && tokens[1].Equals("use", StringComparison.OrdinalIgnoreCase))
-                    {
-                        shotReferences.Add((
-                            Unquote(tokens[2]),
-                            file.LogicalPath,
-                            index + 1,
-                            match.Index + 1,
-                            match.Length));
-                    }
-                }
-                else if (tokens[0].Equals("mark", StringComparison.OrdinalIgnoreCase) && tokens.Length > 1)
-                {
-                    var markName = tokens[1];
-                    if (!marks.Add(markName))
-                    {
-                        diagnostics.Add(new YarnCompilationDiagnostic(
-                            "error", "DIR005", file.LogicalPath, index + 1, match.Index + 1,
-                            index + 1, match.Index + 1 + match.Length,
-                            $"mark '{markName}' is already defined in Node '{node}'."));
-                        continue;
-                    }
-                    if (TryOption(options, raw, "at", out var at))
-                    {
-                        var parts = at.Split(',', StringSplitOptions.TrimEntries);
-                        if (parts.Length == 2 &&
-                            float.TryParse(parts[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var x) &&
-                            float.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var y) &&
-                            float.IsFinite(x) && float.IsFinite(y) && x is >= 0 and <= 100 && y is >= 0 and <= 100)
-                        {
-                            markDefinitions.Add(new DirectionMark(tokens[1], new DirectionPoint(x, y), file.LogicalPath, index + 1, match.Index + 1));
-                        }
-                        else
-                        {
-                            diagnostics.Add(new YarnCompilationDiagnostic("error", "DIR004", file.LogicalPath, index + 1, match.Index + 1, index + 1, match.Index + 1 + match.Length, "mark position must be finite x,y percentages between 0 and 100."));
-                        }
-                    }
-                    else
-                    {
-                        diagnostics.Add(new YarnCompilationDiagnostic("error", "DIR003", file.LogicalPath, index + 1, match.Index + 1, index + 1, match.Index + 1 + match.Length, "mark requires an at:x,y position."));
-                    }
-                    if (TryOption(options, raw, "stage", out var stage)) stages.Add(stage);
-                }
-                else if (tokens[0].Equals("layout", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (TryOption(options, raw, "main", out var main)) views.Add(main);
-                    if (TryOption(options, raw, "inset", out var inset)) views.Add(inset);
-                }
-            }
-        }
-        Flush();
-
-        void AddSymbol(
-            HashSet<string> symbols,
-            string symbol,
-            string kind,
-            string logicalPath,
-            int lineNumber,
-            int column,
-            int length)
-        {
-            if (symbols.Add(symbol)) return;
-            diagnostics.Add(new YarnCompilationDiagnostic(
-                "error", "DIR005", logicalPath, lineNumber, column,
-                lineNumber, column + length,
-                $"{kind} '{symbol}' is already defined."));
-        }
-    }
+    private static YarnCompilationDiagnostic Diagnostic(
+        string code,
+        string file,
+        int line,
+        int column,
+        int length,
+        string message) => new(
+        "error", code, file, line, column, line, column + length, message);
 
     private static string Unquote(string value) =>
         value.Length >= 2 && value[0] == '"' && value[^1] == '"'
             ? value[1..^1]
             : value;
 
-    private static bool TryOption(
-        Dictionary<string, string> options,
-        string raw,
-        string name,
-        out string value)
+    private sealed record ParsedCommand(
+        string Raw,
+        string[] Tokens,
+        Dictionary<string, string> Options,
+        string File,
+        int Line,
+        int Column,
+        int Length)
     {
-        if (options.TryGetValue(name, out value!)) return true;
-        var marker = name + ":";
-        var index = raw.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
-        if (index < 0)
-        {
-            value = string.Empty;
-            return false;
-        }
-        var start = index + marker.Length;
-        var end = raw.IndexOfAny(WhitespaceDelimiters, start);
-        value = Unquote((end < 0 ? raw[start..] : raw[start..end]).TrimEnd('>'));
-        return !string.IsNullOrWhiteSpace(value);
+        public bool Is(string root) =>
+            Tokens.Length > 0 && Tokens[0].Equals(root, StringComparison.OrdinalIgnoreCase);
+
+        public bool Is(string root, string child) =>
+            Tokens.Length > 1 && Is(root) &&
+            Tokens[1].Equals(child, StringComparison.OrdinalIgnoreCase);
+
+        public string Positional(int index) =>
+            Tokens.Length > index ? Unquote(Tokens[index]) : string.Empty;
+
+        public string OptionOr(string name, string fallback) =>
+            Options.TryGetValue(name, out var value) ? value : fallback;
+
+        public YarnCompilationDiagnostic Diagnostic(string code, string message) =>
+            NodeDirectionCompiler.Diagnostic(code, File, Line, Column, Length, message);
+    }
+
+    private sealed record SymbolReference(
+        string Symbol,
+        string File,
+        int Line,
+        int Column,
+        int Length)
+    {
+        public YarnCompilationDiagnostic Diagnostic(string code, string message) =>
+            NodeDirectionCompiler.Diagnostic(code, File, Line, Column, Length, message);
     }
 }

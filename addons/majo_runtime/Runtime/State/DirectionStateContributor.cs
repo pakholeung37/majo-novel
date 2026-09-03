@@ -23,7 +23,7 @@ public sealed class DirectionStateContributor : IStateContributor
 
     public string Key => BuiltInStateKeys.Direction;
     public StateScope Scope => StateScope.Game;
-    public int SchemaVersion => 1;
+    public int SchemaVersion => 2;
     public StateContributorCapability Capability => StateContributorCapability.DurableRollback;
 
     public ValueTask<StateRecord> CaptureAsync(CancellationToken cancellationToken)
@@ -77,12 +77,7 @@ public sealed class DirectionStateContributor : IStateContributor
                 actor.Z)).ToArray())).ToArray(),
         state.Views.Values.Select(view => new ViewPayload(
             view.Id.Value,
-            view.Source switch
-            {
-                StageViewSource source => "stage:" + source.StageId.Value,
-                CgViewSource source => "cg:" + source.Resource,
-                _ => throw new StateSnapshotException("Unsupported Direction View source."),
-            },
+            view.StageId.Value,
             view.Pose.Center.X,
             view.Pose.Center.Y,
             view.Pose.Zoom,
@@ -100,7 +95,7 @@ public sealed class DirectionStateContributor : IStateContributor
         {
             if (record.Key != BuiltInStateKeys.Direction ||
                 record.Scope != StateScope.Game ||
-                record.SchemaVersion != 1)
+                record.SchemaVersion != 2)
             {
                 throw new StateSnapshotException(
                     $"State record '{BuiltInStateKeys.Direction}' has incompatible metadata.");
@@ -171,40 +166,21 @@ public sealed class DirectionStateContributor : IStateContributor
         foreach (var view in payload.Views)
         {
             ArgumentNullException.ThrowIfNull(view);
-            if (string.IsNullOrWhiteSpace(view.Id) || string.IsNullOrWhiteSpace(view.Source))
+            if (string.IsNullOrWhiteSpace(view.Id) || string.IsNullOrWhiteSpace(view.StageId))
                 throw new StateSnapshotException("Direction view payload is incomplete.");
             var id = new ViewId(view.Id);
             if (views.ContainsKey(id))
                 throw new StateSnapshotException($"Direction state contains duplicate view '{view.Id}'.");
-            ViewSource source;
-            if (view.Source.StartsWith("stage:", StringComparison.Ordinal))
-            {
-                var stageId = view.Source[6..];
-                if (string.IsNullOrWhiteSpace(stageId))
-                    throw new StateSnapshotException($"View '{view.Id}' has an empty Stage source.");
-                source = new StageViewSource(new StageId(stageId));
-            }
-            else if (view.Source.StartsWith("cg:", StringComparison.Ordinal))
-            {
-                var resource = view.Source[3..];
-                if (string.IsNullOrWhiteSpace(resource))
-                    throw new StateSnapshotException($"View '{view.Id}' has an empty CG source.");
-                source = new CgViewSource(new ResourceKey(resource));
-            }
-            else
-            {
-                throw new StateSnapshotException(
-                    $"View '{view.Id}' has an unsupported source '{view.Source}'.");
-            }
+            var stageId = new StageId(view.StageId);
             var pose = new ViewPose(
                 new DirectionPoint(view.CenterX, view.CenterY), view.Zoom, view.Rotation);
             pose.Validate();
-            if (source is StageViewSource stageSource && !stages.ContainsKey(stageSource.StageId))
+            if (!stages.ContainsKey(stageId))
                 throw new StateSnapshotException(
-                    $"View '{view.Id}' references missing Stage '{stageSource.StageId}'.");
+                    $"View '{view.Id}' references missing Stage '{stageId}'.");
             views[id] = new ViewState(
                 id,
-                source,
+                stageId,
                 pose);
         }
         if (!views.ContainsKey(ViewId.Main))
@@ -253,5 +229,11 @@ public sealed class DirectionStateContributor : IStateContributor
     private sealed record StableEffectsPayload(CurtainPayload Curtain);
     private sealed record CurtainPayload(DirectionColor Color, float Opacity);
     private sealed record ActorPayload(string Id, float X, float Y, string? Appearance, float Scale, int Z);
-    private sealed record ViewPayload(string Id, string Source, float CenterX, float CenterY, float Zoom, float Rotation);
+    private sealed record ViewPayload(
+        string Id,
+        string StageId,
+        float CenterX,
+        float CenterY,
+        float Zoom,
+        float Rotation);
 }

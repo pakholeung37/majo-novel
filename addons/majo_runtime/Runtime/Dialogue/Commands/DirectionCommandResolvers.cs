@@ -13,7 +13,6 @@ namespace Majo.Runtime.Dialogue.Commands;
 public interface IDirectionResourceKeyResolver
 {
     ResourceKey ResolveBackdrop(string semanticId);
-    ResourceKey ResolveCg(string semanticId);
 }
 
 public sealed class DirectionResourceKeyResolver : IDirectionResourceKeyResolver
@@ -27,8 +26,6 @@ public sealed class DirectionResourceKeyResolver : IDirectionResourceKeyResolver
     }
 
     public ResourceKey ResolveBackdrop(string semanticId) => Resolve(semanticId);
-
-    public ResourceKey ResolveCg(string semanticId) => Resolve(semanticId);
 
     private ResourceKey Resolve(string semanticId)
     {

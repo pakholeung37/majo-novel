@@ -51,6 +51,15 @@ public sealed class DirectionPlanner : IDirectionPlanner
         {
             switch (directive)
             {
+                case StageCreatePatch patch:
+                    ApplyStageCreate(patch, stages, views, writes);
+                    break;
+                case StageClearPatch patch:
+                    ApplyStageClear(patch, stages, writes, transitions);
+                    break;
+                case StageReleasePatch patch:
+                    ApplyStageRelease(patch, stages, views, screen, writes);
+                    break;
                 case BackdropPatch patch:
                     ApplyBackdrop(patch, stages, writes, transitions, claims);
                     break;
@@ -60,18 +69,19 @@ public sealed class DirectionPlanner : IDirectionPlanner
                 case ActorLeavePatch patch:
                     ApplyLeave(patch, stages, writes, leavePaths, transitions);
                     break;
-                case ViewPatch patch:
+                case ViewCreatePatch patch:
+                    ApplyViewCreate(patch, stages, views, writes);
+                    break;
+                case ViewPosePatch patch:
                     ViewState? cutBaseline = null;
                     var canSequencePose = patch.Transition.Kind == DirectionTransitionKind.Move &&
-                        !patch.Source.HasValue &&
                         !sequencedViews.Contains(patch.ViewId) &&
                         viewCutBaselines.TryGetValue(patch.ViewId, out cutBaseline);
-                    ApplyView(
+                    ApplyViewPose(
                         patch,
                         views,
                         writes,
                         transitions,
-                        claims,
                         canSequencePose,
                         sequencedViews);
                     if (canSequencePose)
@@ -94,8 +104,11 @@ public sealed class DirectionPlanner : IDirectionPlanner
                         viewCutBaselines[patch.ViewId] = cutState;
                     }
                     break;
+                case ViewReleasePatch patch:
+                    ApplyViewRelease(patch, views, screen, writes);
+                    break;
                 case ScreenPatch patch:
-                    screen = ApplyScreen(patch, writes, transitions, claims);
+                    screen = ApplyScreen(patch, views, writes, transitions, claims);
                     break;
                 case ITransientDirectionCue cue:
                     cues.Add(cue);
@@ -129,6 +142,103 @@ public sealed class DirectionPlanner : IDirectionPlanner
             viewSequences.Values.ToArray());
     }
 
+    private static void ApplyStageCreate(
+        StageCreatePatch patch,
+        Dictionary<StageId, StageState> stages,
+        Dictionary<ViewId, ViewState> views,
+        Dictionary<string, DirectionSourceLocation?> writes)
+    {
+        if (stages.TryGetValue(patch.StageId, out _))
+        {
+            if (!views.TryGetValue(patch.DefaultViewId, out var existingView) ||
+                existingView.StageId != patch.StageId)
+            {
+                throw new DirectionReferenceException(
+                    $"Stage '{patch.StageId}' exists without its default View '{patch.DefaultViewId}'.");
+            }
+            return;
+        }
+        if (views.ContainsKey(patch.DefaultViewId))
+        {
+            throw new DirectionReferenceException(
+                $"Default View '{patch.DefaultViewId}' already belongs to another Stage.");
+        }
+
+        var paths = new List<string>();
+        RegisterWrite(StagePath(patch.StageId, "existence"), patch.SourceLocation, writes, paths);
+        RegisterWrite(ViewPath(patch.DefaultViewId, "existence"), patch.SourceLocation, writes, paths);
+        stages.Add(patch.StageId, StageState.Create(patch.StageId));
+        views.Add(
+            patch.DefaultViewId,
+            new ViewState(patch.DefaultViewId, patch.StageId, ViewPose.Default));
+    }
+
+    private static void ApplyStageClear(
+        StageClearPatch patch,
+        Dictionary<StageId, StageState> stages,
+        Dictionary<string, DirectionSourceLocation?> writes,
+        List<DirectionTransition> transitions)
+    {
+        if (!stages.TryGetValue(patch.StageId, out var stage))
+            throw new DirectionReferenceException($"Stage '{patch.StageId}' does not exist.");
+        EnsureNoWritesWithPrefix(StagePath(patch.StageId, string.Empty), writes, patch.SourceLocation);
+        EnsureNoWritesWithPrefix(ActorStagePath(patch.StageId), writes, patch.SourceLocation);
+
+        var paths = new List<string>();
+        RegisterWrite(StagePath(patch.StageId, "backdrop"), patch.SourceLocation, writes, paths);
+        foreach (var actorId in stage.Actors.Keys)
+        {
+            RegisterWrite(
+                ActorPath(patch.StageId, actorId, "presence"),
+                patch.SourceLocation,
+                writes,
+                paths);
+        }
+        stages[patch.StageId] = stage with
+        {
+            Backdrop = null,
+            Actors = DirectionCollections.Empty<ActorId, ActorState>(),
+        };
+        AddTransition(patch.Transition, paths, transitions, patch.SourceLocation);
+    }
+
+    private static void ApplyStageRelease(
+        StageReleasePatch patch,
+        Dictionary<StageId, StageState> stages,
+        Dictionary<ViewId, ViewState> views,
+        ScreenState screen,
+        Dictionary<string, DirectionSourceLocation?> writes)
+    {
+        if (patch.StageId == StageId.Main)
+            throw new DirectionReferenceException("The main Stage cannot be released.");
+        if (!stages.ContainsKey(patch.StageId))
+            throw new DirectionReferenceException($"Stage '{patch.StageId}' does not exist.");
+
+        var boundViews = views.Values
+            .Where(view => view.StageId == patch.StageId)
+            .Select(view => view.Id)
+            .ToArray();
+        var displayed = screen.Bindings.FirstOrDefault(pair => boundViews.Contains(pair.Value));
+        if (!string.IsNullOrWhiteSpace(displayed.Key.Value))
+        {
+            throw new DirectionReferenceException(
+                $"Stage '{patch.StageId}' cannot be released while Screen slot '{displayed.Key}' displays it.");
+        }
+        EnsureNoWritesWithPrefix(StagePath(patch.StageId, string.Empty), writes, patch.SourceLocation);
+        EnsureNoWritesWithPrefix(ActorStagePath(patch.StageId), writes, patch.SourceLocation);
+        foreach (var viewId in boundViews)
+            EnsureNoWritesWithPrefix(ViewPath(viewId, string.Empty), writes, patch.SourceLocation);
+
+        var paths = new List<string>();
+        RegisterWrite(StagePath(patch.StageId, "existence"), patch.SourceLocation, writes, paths);
+        foreach (var viewId in boundViews)
+        {
+            RegisterWrite(ViewPath(viewId, "existence"), patch.SourceLocation, writes, paths);
+            views.Remove(viewId);
+        }
+        stages.Remove(patch.StageId);
+    }
+
     private static void ApplyBackdrop(
         BackdropPatch patch,
         Dictionary<StageId, StageState> stages,
@@ -138,9 +248,10 @@ public sealed class DirectionPlanner : IDirectionPlanner
     {
         ArgumentNullException.ThrowIfNull(patch.Backdrop);
         patch.Backdrop.Validate();
+        if (!stages.TryGetValue(patch.StageId, out var stage))
+            throw new DirectionReferenceException($"Stage '{patch.StageId}' is not defined.");
         var paths = new List<string>();
         RegisterWrite(StagePath(patch.StageId, "backdrop"), patch.SourceLocation, writes, paths);
-        var stage = GetOrCreateStage(stages, patch.StageId);
         stages[patch.StageId] = stage with { Backdrop = patch.Backdrop };
         claims.Add(new DirectionResourceClaim(
             DirectionResourceKind.Backdrop,
@@ -156,7 +267,8 @@ public sealed class DirectionPlanner : IDirectionPlanner
         List<DirectionTransition> transitions,
         HashSet<DirectionResourceClaim> claims)
     {
-        var stage = GetOrCreateStage(stages, patch.StageId);
+        if (!stages.TryGetValue(patch.StageId, out var stage))
+            throw new DirectionReferenceException($"Stage '{patch.StageId}' is not defined.");
         var actors = stage.Actors.ToDictionary(pair => pair.Key, pair => pair.Value);
         var actorExists = actors.TryGetValue(patch.ActorId, out var actor);
         actor ??= ActorState.CreateDefault(patch.ActorId);
@@ -180,7 +292,6 @@ public sealed class DirectionPlanner : IDirectionPlanner
             RegisterWrite(prefix + "position", patch.SourceLocation, writes, paths);
             actor = actor with { Position = patch.Position.Value };
         }
-
         if (patch.Appearance.HasValue)
         {
             var appearance = patch.Appearance.Value;
@@ -195,13 +306,11 @@ public sealed class DirectionPlanner : IDirectionPlanner
                     $"{patch.ActorId}/{appearance}"));
             }
         }
-
         if (patch.Scale.HasValue)
         {
             RegisterWrite(prefix + "scale", patch.SourceLocation, writes, paths);
             actor = actor with { Scale = patch.Scale.Value };
         }
-
         if (patch.Z.HasValue)
         {
             RegisterWrite(prefix + "z", patch.SourceLocation, writes, paths);
@@ -230,16 +339,7 @@ public sealed class DirectionPlanner : IDirectionPlanner
         }
 
         var actorPrefix = ActorPath(patch.StageId, patch.ActorId, string.Empty);
-        var existingWrite = writes.FirstOrDefault(pair =>
-            pair.Key.StartsWith(actorPrefix, StringComparison.Ordinal));
-        if (!string.IsNullOrEmpty(existingWrite.Key))
-        {
-            throw new DirectionConflictException(
-                existingWrite.Key,
-                existingWrite.Value,
-                patch.SourceLocation);
-        }
-
+        EnsureNoWritesWithPrefix(actorPrefix, writes, patch.SourceLocation);
         var paths = new List<string>();
         RegisterWrite(
             ActorPath(patch.StageId, patch.ActorId, "presence"),
@@ -253,42 +353,41 @@ public sealed class DirectionPlanner : IDirectionPlanner
         AddTransition(patch.Transition, paths, transitions, patch.SourceLocation);
     }
 
-    private static void ApplyView(
-        ViewPatch patch,
+    private static void ApplyViewCreate(
+        ViewCreatePatch patch,
+        Dictionary<StageId, StageState> stages,
+        Dictionary<ViewId, ViewState> views,
+        Dictionary<string, DirectionSourceLocation?> writes)
+    {
+        if (!stages.ContainsKey(patch.StageId))
+            throw new DirectionReferenceException($"Stage '{patch.StageId}' is not defined.");
+        if (views.TryGetValue(patch.ViewId, out var existing))
+        {
+            if (existing.StageId != patch.StageId)
+            {
+                throw new DirectionReferenceException(
+                    $"View '{patch.ViewId}' is already bound to Stage '{existing.StageId}'.");
+            }
+            return;
+        }
+
+        var paths = new List<string>();
+        RegisterWrite(ViewPath(patch.ViewId, "existence"), patch.SourceLocation, writes, paths);
+        views.Add(patch.ViewId, new ViewState(patch.ViewId, patch.StageId, ViewPose.Default));
+    }
+
+    private static void ApplyViewPose(
+        ViewPosePatch patch,
         Dictionary<ViewId, ViewState> views,
         Dictionary<string, DirectionSourceLocation?> writes,
         List<DirectionTransition> transitions,
-        HashSet<DirectionResourceClaim> claims,
         bool allowSequencedPose,
         HashSet<ViewId> sequencedViews)
     {
-        var viewExists = views.TryGetValue(patch.ViewId, out var view);
-        if (!viewExists && !patch.Source.HasValue)
-        {
-            throw new DirectionReferenceException(
-                $"New View '{patch.ViewId}' requires a Stage or CG source.");
-        }
+        if (!views.TryGetValue(patch.ViewId, out var view))
+            throw new DirectionReferenceException($"View '{patch.ViewId}' is not defined.");
 
-        view ??= new ViewState(
-            patch.ViewId,
-            patch.Source.Value,
-            ViewPose.Default);
         var paths = new List<string>();
-        if (!viewExists)
-            RegisterWrite(ViewPath(patch.ViewId, "existence"), patch.SourceLocation, writes, paths);
-
-        if (patch.Source.HasValue)
-        {
-            RegisterWrite(ViewPath(patch.ViewId, "source"), patch.SourceLocation, writes, paths);
-            view = view with { Source = patch.Source.Value };
-            if (patch.Source.Value is CgViewSource cg)
-            {
-                claims.Add(new DirectionResourceClaim(
-                    DirectionResourceKind.Cg,
-                    cg.Resource.ToString()));
-            }
-        }
-
         var pose = view.Pose;
         if (patch.Center.HasValue)
         {
@@ -303,7 +402,6 @@ public sealed class DirectionPlanner : IDirectionPlanner
                 patch.ViewId);
             pose = pose with { Center = patch.Center.Value };
         }
-
         if (patch.Zoom.HasValue)
         {
             RegisterViewPoseWrite(
@@ -316,7 +414,6 @@ public sealed class DirectionPlanner : IDirectionPlanner
                 patch.ViewId);
             pose = pose with { Zoom = patch.Zoom.Value };
         }
-
         if (patch.RotationDegrees.HasValue)
         {
             RegisterViewPoseWrite(
@@ -335,8 +432,34 @@ public sealed class DirectionPlanner : IDirectionPlanner
         AddTransition(patch.Transition, paths, transitions, patch.SourceLocation);
     }
 
+    private static void ApplyViewRelease(
+        ViewReleasePatch patch,
+        Dictionary<ViewId, ViewState> views,
+        ScreenState screen,
+        Dictionary<string, DirectionSourceLocation?> writes)
+    {
+        if (!views.TryGetValue(patch.ViewId, out var view))
+            throw new DirectionReferenceException($"View '{patch.ViewId}' does not exist.");
+        if (patch.ViewId == ViewId.Main || patch.ViewId.Value == view.StageId.Value)
+        {
+            throw new DirectionReferenceException(
+                $"Default View '{patch.ViewId}' must be released with its Stage.");
+        }
+        var displayed = screen.Bindings.FirstOrDefault(pair => pair.Value == patch.ViewId);
+        if (!string.IsNullOrWhiteSpace(displayed.Key.Value))
+        {
+            throw new DirectionReferenceException(
+                $"View '{patch.ViewId}' cannot be released while Screen slot '{displayed.Key}' displays it.");
+        }
+        EnsureNoWritesWithPrefix(ViewPath(patch.ViewId, string.Empty), writes, patch.SourceLocation);
+        var paths = new List<string>();
+        RegisterWrite(ViewPath(patch.ViewId, "existence"), patch.SourceLocation, writes, paths);
+        views.Remove(patch.ViewId);
+    }
+
     private static ScreenState ApplyScreen(
         ScreenPatch patch,
+        Dictionary<ViewId, ViewState> views,
         Dictionary<string, DirectionSourceLocation?> writes,
         List<DirectionTransition> transitions,
         HashSet<DirectionResourceClaim> claims)
@@ -362,6 +485,11 @@ public sealed class DirectionPlanner : IDirectionPlanner
         }
         foreach (var binding in patch.Bindings)
         {
+            if (!views.ContainsKey(binding.Value))
+            {
+                throw new DirectionReferenceException(
+                    $"Screen slot '{binding.Key}' references undefined View '{binding.Value}'.");
+            }
             RegisterWrite(
                 $"screen/slot/{binding.Key.Value}",
                 patch.SourceLocation,
@@ -382,14 +510,12 @@ public sealed class DirectionPlanner : IDirectionPlanner
     {
         foreach (var view in views.Values)
         {
-            if (view.Source is StageViewSource stageSource &&
-                !stages.ContainsKey(stageSource.StageId))
+            if (!stages.ContainsKey(view.StageId))
             {
                 throw new DirectionReferenceException(
-                    $"View '{view.Id}' references unknown Stage '{stageSource.StageId}'.");
+                    $"View '{view.Id}' references unknown Stage '{view.StageId}'.");
             }
         }
-
         foreach (var binding in screen.Bindings)
         {
             if (!views.ContainsKey(binding.Value))
@@ -431,12 +557,13 @@ public sealed class DirectionPlanner : IDirectionPlanner
     private static string? TransitionComponent(string path)
     {
         if (path == "*") return "*";
-        var parts = path.Split('/');
-        if (parts.Length < 2) return path;
-        return parts[0] switch
+        var separator = path.LastIndexOf('/');
+        if (separator <= 0) return path;
+        var kindSeparator = path.IndexOf('/');
+        var kind = kindSeparator > 0 ? path[..kindSeparator] : path;
+        return kind switch
         {
-            "stage" or "view" => $"{parts[0]}/{parts[1]}",
-            "actor" when parts.Length >= 3 => $"actor/{parts[1]}/{parts[2]}",
+            "stage" or "view" or "actor" => path[..separator],
             "screen" => "screen",
             "effect" => "effect",
             _ => path,
@@ -453,19 +580,20 @@ public sealed class DirectionPlanner : IDirectionPlanner
             previous.Kind != DirectionTransitionKind.Cut ||
             current.Kind != DirectionTransitionKind.Move)
             return false;
-        var parts = component.Split('/');
-        return parts.Length == 2 &&
-            viewSequences.ContainsKey(new ViewId(parts[1]));
+        var viewId = component["view/".Length..];
+        return !string.IsNullOrWhiteSpace(viewId) &&
+            viewSequences.ContainsKey(new ViewId(viewId));
     }
 
-    private static StageState GetOrCreateStage(
-        Dictionary<StageId, StageState> stages,
-        StageId stageId)
+    private static void EnsureNoWritesWithPrefix(
+        string prefix,
+        IReadOnlyDictionary<string, DirectionSourceLocation?> writes,
+        DirectionSourceLocation? location)
     {
-        if (stages.TryGetValue(stageId, out var stage)) return stage;
-        stage = StageState.Create(stageId);
-        stages.Add(stageId, stage);
-        return stage;
+        var existing = writes.FirstOrDefault(pair =>
+            pair.Key.StartsWith(prefix, StringComparison.Ordinal));
+        if (!string.IsNullOrEmpty(existing.Key))
+            throw new DirectionConflictException(existing.Key, existing.Value, location);
     }
 
     private static void AddTransition(
@@ -504,10 +632,7 @@ public sealed class DirectionPlanner : IDirectionPlanner
         if (writes.ContainsKey(path))
         {
             if (!allowSequencedPose)
-                throw new DirectionConflictException(
-                    path,
-                    writes[path],
-                    location);
+                throw new DirectionConflictException(path, writes[path], location);
             directivePaths.Add(path);
             return;
         }
@@ -516,6 +641,9 @@ public sealed class DirectionPlanner : IDirectionPlanner
 
     private static string StagePath(StageId stageId, string property) =>
         $"stage/{stageId.Value}/{property}";
+
+    private static string ActorStagePath(StageId stageId) =>
+        $"actor/{stageId.Value}/";
 
     private static string ActorPath(StageId stageId, ActorId actorId, string property) =>
         $"actor/{stageId.Value}/{actorId.Value}/{property}";

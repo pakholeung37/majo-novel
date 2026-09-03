@@ -392,7 +392,7 @@ public partial class MajoRuntimeBootstrap : Node
                         resolver.Get<IResourceManager>());
                     var backend = new CompositeDirectionPreparationBackend(
                         resolver.Get<GodotDirectionStageBackend>(),
-                        new GodotDirectionViewBackend(host, textures),
+                        new GodotDirectionViewBackend(host),
                         new GodotDirectionScreenBackend(host),
                         new GodotDirectionEffectBackend(host));
                     return new DirectionTransactionCoordinator(

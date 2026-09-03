@@ -57,15 +57,22 @@ public sealed class StageCommandTests
         var resetArguments = binder.Bind<CameraResetDirectionCommandArguments>(
             reset.Descriptor,
             new[] { "via:dissolve", "duration:0.6", "wait:true" });
-        Assert.Equal("main", resetArguments.View);
+        Assert.Null(resetArguments.Stage);
+        Assert.Null(resetArguments.View);
         Assert.Equal(DirectionTransitionKind.Dissolve, resetArguments.Via);
         Assert.Equal(0.6, resetArguments.Duration);
         Assert.True(resetArguments.Wait);
-        var resetStage = Assert.Throws<RuntimeCommandException>(() =>
+        var resetStage = binder.Bind<CameraResetDirectionCommandArguments>(
+            reset.Descriptor,
+            new[] { "stage:main" });
+        Assert.Equal("main", resetStage.Stage);
+        Assert.Null(resetStage.View);
+        var resetAmbiguous = Assert.Throws<RuntimeCommandException>(() =>
             binder.Bind<CameraResetDirectionCommandArguments>(
                 reset.Descriptor,
-                new[] { "stage:main" }));
-        Assert.Contains("unknown parameter 'stage'", resetStage.Message);
+                new[] { "stage:main", "view:main" }));
+        Assert.Contains("stage", resetAmbiguous.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("view", resetAmbiguous.Message, StringComparison.OrdinalIgnoreCase);
 
         var shake = catalog.Get("camera shake");
         var defaultShake = binder.Bind<CameraShakeDirectionCommandArguments>(

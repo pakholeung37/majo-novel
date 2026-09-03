@@ -67,7 +67,7 @@ public partial class HeadlessTestRunner
             CreateActorManager);
         var composite = new CompositeDirectionPreparationBackend(
             stageBackend,
-            new GodotDirectionViewBackend(host, textures),
+            new GodotDirectionViewBackend(host),
             new GodotDirectionScreenBackend(host),
             new GodotDirectionEffectBackend(host));
         var coordinator = new DirectionTransactionCoordinator(
@@ -96,7 +96,7 @@ public partial class HeadlessTestRunner
         Assert(host.Backdrop.Texture is not null,
             "Direction Backdrop committed without a Texture2D.");
         var stageBackdropTexture = host.Backdrop.Texture;
-        Assert(host.PublishedView?.Source is StageViewSource,
+        Assert(host.PublishedView?.StageId == StageId.Main,
             "Default Direction View stopped observing main Stage.");
         var firstActorRoot = GetVisibleActorRoot(host);
         var firstActor = firstActorRoot.GetNode<Sprite2D>("hero");
@@ -106,51 +106,54 @@ public partial class HeadlessTestRunner
                 firstActor.ZIndex == 7 && firstActor.Texture is not null,
             "Direction Actor did not commit appearance, scale, and z-index together.");
 
-        var cgKey = new ResourceKey("tests/headless/fixtures/background_light.svg");
-        var cgTransaction = await coordinator.ExecuteAsync(
+        var illustration = new StageId("illustration");
+        var illustrationView = new ViewId("illustration");
+        var illustrationKey = new ResourceKey("tests/headless/fixtures/background_light.svg");
+        var illustrationPose = new ViewPose(new DirectionPoint(37.384f, 74.816f), 3, 10);
+        var illustrationTransaction = await coordinator.ExecuteAsync(
             new IDirectionDirective[]
             {
-                ViewPatchFor(
-                    new CgViewSource(cgKey),
-                    new ViewPose(new DirectionPoint(37.384f, 74.816f), 3, 10),
+                new StageCreatePatch(
+                    illustration,
+                    illustrationView,
+                    DirectionTransitionSpec.Cut),
+                new BackdropPatch(
+                    illustration,
+                    new BackdropState(illustrationKey),
+                    DirectionTransitionSpec.Cut),
+                ViewPoseFor(illustrationView, illustrationPose, DirectionTransitionSpec.Cut),
+                ShowView(
+                    illustrationView,
                     new DirectionTransitionSpec(
                         DirectionTransitionKind.Dissolve,
                         2,
                         DirectionEase.SineInOut)),
             });
 
-        Assert(host.PublishedView?.Source is CgViewSource cg && cg.Resource == cgKey,
-            "CG did not become the main View source at Commit.");
-        Assert(Equals(host.PublishedView?.Pose,
-                new ViewPose(new DirectionPoint(37.384f, 74.816f), 3, 10)),
-            "CG View Pose was not committed atomically.");
-        Assert(host.GetViewTransitionSource(ViewId.Main).Visible,
-            "CG dissolve did not retain a prepared source frame.");
+        Assert(coordinator.State.Screen.Bindings[LayoutSlotId.Main] == illustrationView,
+            "Illustration Stage did not become the Screen's active View at Commit.");
+        Assert(Equals(coordinator.State.Views[illustrationView].Pose, illustrationPose),
+            "Illustration View Pose was not committed atomically.");
         Assert(ReferenceEquals(stageBackdropTexture, host.Backdrop.Texture),
-            "CG View mutation replaced the Stage Backdrop texture.");
+            "Illustration Stage mutation replaced the main Stage Backdrop texture.");
         Assert(host.PublishedBackdrop?.Resource == backdropKey,
-            "CG View mutation changed the Stage Backdrop state.");
+            "Illustration Stage mutation changed the main Stage Backdrop state.");
 
-        await coordinator.FinishAsync(cgTransaction);
-        Assert(!host.GetViewTransitionSource(ViewId.Main).Visible &&
-                host.GetViewTransitionSource(ViewId.Main).Texture is null,
-            "Finishing a CG dissolve leaked its transition capture.");
+        await coordinator.FinishAsync(illustrationTransaction);
+        Assert(host.PublishedScreen.Bindings[LayoutSlotId.Main] == illustrationView,
+            "Finishing the illustration transition did not retain its Screen binding.");
 
         await coordinator.ExecuteAsync(
             new IDirectionDirective[]
             {
-                ViewPatchFor(
-                    new StageViewSource(StageId.Main),
-                    ViewPose.Default,
-                    DirectionTransitionSpec.Cut),
+                ShowView(ViewId.Main, DirectionTransitionSpec.Cut),
             },
             DirectionCompletionBarrier.Settle);
 
-        Assert(host.PublishedView?.Source is StageViewSource stage &&
-                stage.StageId == StageId.Main,
-            "Direction View did not return from CG to main Stage.");
+        Assert(host.PublishedScreen.Bindings[LayoutSlotId.Main] == ViewId.Main,
+            "Direction Screen did not return from the illustration Stage to main.");
         Assert(ReferenceEquals(stageBackdropTexture, host.Backdrop.Texture),
-            "Returning from CG rebuilt or replaced the stable Stage Backdrop.");
+            "Returning from the illustration rebuilt or replaced the stable main Backdrop.");
 
         var cutPose = new ViewPose(
             new DirectionPoint(37.384f, 74.816f),
@@ -163,23 +166,9 @@ public partial class HeadlessTestRunner
         var sequenceTransaction = await coordinator.ExecuteAsync(
             new IDirectionDirective[]
             {
-                new ViewPatch(
+                ViewPoseFor(ViewId.Main, cutPose, DirectionTransitionSpec.Cut),
+                new ViewPosePatch(
                     ViewId.Main,
-                    DirectionValue.From<ViewSource>(new CgViewSource(cgKey)),
-                    default,
-                    default,
-                    default,
-                    DirectionTransitionSpec.Cut),
-                new ViewPatch(
-                    ViewId.Main,
-                    default,
-                    DirectionValue.From(cutPose.Center),
-                    DirectionValue.From(cutPose.Zoom),
-                    DirectionValue.From(cutPose.RotationDegrees),
-                    DirectionTransitionSpec.Cut),
-                new ViewPatch(
-                    ViewId.Main,
-                    default,
                     DirectionValue.From(movePose.Center),
                     default,
                     default,
@@ -279,7 +268,7 @@ public partial class HeadlessTestRunner
             {
                 new BackdropPatch(
                     StageId.Main,
-                    new BackdropState(cgKey),
+                    new BackdropState(illustrationKey),
                     DirectionTransitionSpec.Cut),
                 ActorPatchFor(
                     "hero",
@@ -321,12 +310,17 @@ public partial class HeadlessTestRunner
             "Direction leave did not publish an empty target actor tree.");
 
         var broadcast = new StageId("broadcast");
+        var broadcastView = new ViewId("broadcast");
         await coordinator.ExecuteAsync(
             new IDirectionDirective[]
             {
+                new StageCreatePatch(
+                    broadcast,
+                    broadcastView,
+                    DirectionTransitionSpec.Cut),
                 new BackdropPatch(
                     broadcast,
-                    new BackdropState(cgKey),
+                    new BackdropState(illustrationKey),
                     DirectionTransitionSpec.Cut),
                 ActorPatchFor(
                     "hero",
@@ -335,10 +329,7 @@ public partial class HeadlessTestRunner
                     1,
                     2,
                     stageId: broadcast),
-                ViewPatchFor(
-                    new StageViewSource(broadcast),
-                    ViewPose.Default,
-                    DirectionTransitionSpec.Cut),
+                ShowView(broadcastView, DirectionTransitionSpec.Cut),
             },
             DirectionCompletionBarrier.Settle);
         var broadcastSurface = host.GetStage(broadcast);
@@ -346,10 +337,9 @@ public partial class HeadlessTestRunner
             .OfType<Node2D>()
             .Single(root => root.Visible)
             .GetNode<Sprite2D>("hero");
-        Assert(host.PublishedView?.Source is StageViewSource broadcastSource &&
-                broadcastSource.StageId == broadcast &&
+        Assert(host.PublishedScreen.Bindings[LayoutSlotId.Main] == broadcastView &&
                 broadcastActor.Position.IsEqualApprox(new Vector2(480, 360)),
-            "Direction main View did not switch to the independently prepared Stage.");
+            "Direction Screen did not switch to the independently prepared Stage View.");
 
         await coordinator.ExecuteAsync(
             new IDirectionDirective[]
@@ -360,14 +350,10 @@ public partial class HeadlessTestRunner
                     "red",
                     1,
                     1),
-                ViewPatchFor(
-                    new StageViewSource(StageId.Main),
-                    ViewPose.Default,
-                    DirectionTransitionSpec.Cut),
+                ShowView(ViewId.Main, DirectionTransitionSpec.Cut),
             },
             DirectionCompletionBarrier.Settle);
-        Assert(host.PublishedView?.Source is StageViewSource mainSource &&
-                mainSource.StageId == StageId.Main &&
+        Assert(host.PublishedScreen.Bindings[LayoutSlotId.Main] == ViewId.Main &&
                 broadcastSurface.Actors.GetChildren()
                     .OfType<Node2D>()
                     .Single(root => root.Visible)
@@ -375,11 +361,15 @@ public partial class HeadlessTestRunner
             "Returning to main Stage mutated the dormant broadcast Stage.");
 
         var revisionBeforeMultiStageFailure = coordinator.State.Revision;
-        var viewBeforeMultiStageFailure = host.PublishedView;
+        var screenBeforeMultiStageFailure = host.PublishedScreen;
         var failedStage = new StageId("failed");
         _ = await AssertThrowsAsync<ActorException>(() => coordinator.ExecuteAsync(
             new IDirectionDirective[]
             {
+                new StageCreatePatch(
+                    failedStage,
+                    new ViewId("failed"),
+                    DirectionTransitionSpec.Cut),
                 new BackdropPatch(
                     failedStage,
                     new BackdropState(backdropKey),
@@ -391,14 +381,10 @@ public partial class HeadlessTestRunner
                     1,
                     0,
                     stageId: failedStage),
-                ViewPatchFor(
-                    new StageViewSource(failedStage),
-                    ViewPose.Default,
-                    DirectionTransitionSpec.Cut),
             },
             DirectionCompletionBarrier.Settle));
         Assert(coordinator.State.Revision == revisionBeforeMultiStageFailure &&
-                Equals(host.PublishedView, viewBeforeMultiStageFailure) &&
+                Equals(host.PublishedScreen, screenBeforeMultiStageFailure) &&
                 !host.StageIds.Contains(failedStage),
             "Failed Multi-Stage Prepare partially published state or changed the View.");
 
@@ -407,11 +393,14 @@ public partial class HeadlessTestRunner
         await coordinator.ExecuteAsync(
             new IDirectionDirective[]
             {
-                ViewPatchFor(
-                    new StageViewSource(StageId.Main),
+                new ViewCreatePatch(
+                    reaction,
+                    StageId.Main,
+                    DirectionTransitionSpec.Cut),
+                ViewPoseFor(
+                    reaction,
                     new ViewPose(new DirectionPoint(65, 50), 1.8f, 0),
-                    DirectionTransitionSpec.Cut,
-                    reaction),
+                    DirectionTransitionSpec.Cut),
                 new ScreenPatch(
                     new LayoutId("split"),
                     new Dictionary<LayoutSlotId, ViewId>
@@ -427,11 +416,27 @@ public partial class HeadlessTestRunner
                 host.PublishedScreen.Bindings[inset] == reaction,
             "Direction split layout did not publish a second persistent View.");
 
+        await coordinator.ExecuteAsync(
+            new IDirectionDirective[]
+            {
+                ShowView(ViewId.Main, DirectionTransitionSpec.Cut),
+                new ViewReleasePatch(reaction, DirectionTransitionSpec.Cut),
+                new StageReleasePatch(broadcast, DirectionTransitionSpec.Cut),
+                new StageReleasePatch(illustration, DirectionTransitionSpec.Cut),
+            },
+            DirectionCompletionBarrier.Settle);
+        Assert(!host.ViewIds.Contains(reaction) &&
+                !host.ViewIds.Contains(broadcastView) &&
+                !host.ViewIds.Contains(illustrationView) &&
+                !host.StageIds.Contains(broadcast) &&
+                !host.StageIds.Contains(illustration),
+            "Direction Stage/View release retained prepared render surfaces.");
+
         await stageBackend.ResetAsync(CancellationToken.None);
         await host.ResetAsync(CancellationToken.None);
         Assert(host.PublishedBackdrop is null && host.Backdrop.Texture is null,
             "Direction render host Reset retained its Backdrop.");
-        Assert(host.PublishedView?.Source is StageViewSource,
+        Assert(host.PublishedView?.StageId == StageId.Main,
             "Direction render host Reset did not restore main Stage source.");
         Assert(host.Actors.GetChildCount() == 0,
             "Direction render Reset retained an Actor tree.");
@@ -451,16 +456,24 @@ public partial class HeadlessTestRunner
             "Direction render host leaked viewport or output nodes after Shutdown.");
     }
 
-    private static ViewPatch ViewPatchFor(
-        ViewSource source,
+    private static ViewPosePatch ViewPoseFor(
+        ViewId viewId,
         ViewPose pose,
-        DirectionTransitionSpec transition,
-        ViewId? viewId = null) => new(
-            viewId ?? ViewId.Main,
-            DirectionValue.From(source),
+        DirectionTransitionSpec transition) => new(
+            viewId,
             DirectionValue.From(pose.Center),
             DirectionValue.From(pose.Zoom),
             DirectionValue.From(pose.RotationDegrees),
+            transition);
+
+    private static ScreenPatch ShowView(
+        ViewId viewId,
+        DirectionTransitionSpec transition) => new(
+            LayoutId.SingleLayout,
+            new Dictionary<LayoutSlotId, ViewId>
+            {
+                [LayoutSlotId.Main] = viewId,
+            },
             transition);
 
     private static ActorPatch ActorPatchFor(

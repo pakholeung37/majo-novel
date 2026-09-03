@@ -37,10 +37,15 @@ public sealed class DirectionRuntimeTests
 
         Assert.Equal(
             [
+                "stage define",
+                "stage show",
+                "stage clear",
+                "stage release",
                 "backdrop",
                 "character",
                 "leave",
-                "cg",
+                "view define",
+                "view release",
                 "camera pose",
                 "camera move",
                 "camera reset",
@@ -59,7 +64,7 @@ public sealed class DirectionRuntimeTests
             ],
             names);
         Assert.DoesNotContain(names, name => name is
-            "back" or "char" or "hide" or "place" or "shot cg" or
+            "back" or "char" or "hide" or "place" or
             "shot pose" or "shake" or "camera zoom" or "camera rotate");
     }
 
@@ -73,6 +78,10 @@ public sealed class DirectionRuntimeTests
 
         await coordinator.ExecuteAsync(new IDirectionDirective[]
         {
+            new StageCreatePatch(
+                new StageId("broadcast"),
+                new ViewId("broadcast"),
+                DirectionTransitionSpec.Cut),
             new BackdropPatch(
                 new StageId("broadcast"),
                 new BackdropState(new ResourceKey("Background_025_001")),
@@ -88,12 +97,52 @@ public sealed class DirectionRuntimeTests
     }
 
     [Fact]
+    public async Task DirectionStateContributorPersistsStagesViewsAndScreenBindings()
+    {
+        var coordinator = CreateCoordinator(new FakeDirectionBackend { AutoSettle = true });
+        var contributor = new DirectionStateContributor(coordinator);
+        var illustration = new StageId("illustration");
+        var illustrationView = new ViewId("illustration");
+        var illustrationPose = new ViewPose(new DirectionPoint(44, 72), 3, 10);
+        await coordinator.ExecuteAsync(new IDirectionDirective[]
+        {
+            new StageCreatePatch(illustration, illustrationView, DirectionTransitionSpec.Cut),
+            new BackdropPatch(
+                illustration,
+                new BackdropState(new ResourceKey("Still_490_001")),
+                DirectionTransitionSpec.Cut),
+            View(
+                illustrationView,
+                center: illustrationPose.Center,
+                zoom: illustrationPose.Zoom,
+                rotation: illustrationPose.RotationDegrees),
+            new ScreenPatch(
+                LayoutId.SingleLayout,
+                new Dictionary<LayoutSlotId, ViewId>
+                {
+                    [LayoutSlotId.Main] = illustrationView,
+                },
+                DirectionTransitionSpec.Cut),
+        }, DirectionCompletionBarrier.Settle);
+        var snapshot = await contributor.CaptureAsync(default);
+
+        await coordinator.ResetAsync(default);
+        await contributor.RestoreAsync(snapshot, default);
+        Assert.Equal(
+            new ResourceKey("Still_490_001"),
+            coordinator.State.Stages[illustration].Backdrop?.Resource);
+        Assert.Equal(illustration, coordinator.State.Views[illustrationView].StageId);
+        Assert.Equal(illustrationPose, coordinator.State.Views[illustrationView].Pose);
+        Assert.Equal(illustrationView, coordinator.State.Screen.Bindings[LayoutSlotId.Main]);
+    }
+
+    [Fact]
     public async Task DirectionStateContributorRejectsSnapshotsMissingMainStageOrView()
     {
         var contributor = new DirectionStateContributor(
             CreateCoordinator(new FakeDirectionBackend { AutoSettle = true }));
         const string mainStage = "[{\"id\":\"main\",\"effects\":{\"tint\":{\"r\":1,\"g\":1,\"b\":1,\"a\":1}},\"actors\":[]}]";
-        const string mainView = "[{\"id\":\"main\",\"source\":\"stage:main\",\"centerX\":50,\"centerY\":50,\"zoom\":1,\"rotation\":0}]";
+        const string mainView = "[{\"id\":\"main\",\"stageId\":\"main\",\"centerX\":50,\"centerY\":50,\"zoom\":1,\"rotation\":0}]";
         var missingStage = CreateDirectionRecord("[]", mainView);
         var missingView = CreateDirectionRecord(mainStage, "[]");
 
@@ -104,7 +153,7 @@ public sealed class DirectionRuntimeTests
     }
 
     [Fact]
-    public async Task DirectionStateContributorAcceptsLegacySnapshotsWithoutEffects()
+    public async Task DirectionStateContributorRejectsVersionOneSnapshots()
     {
         var contributor = new DirectionStateContributor(
             CreateCoordinator(new FakeDirectionBackend { AutoSettle = true }));
@@ -122,7 +171,8 @@ public sealed class DirectionRuntimeTests
                 }
                 """).RootElement.Clone());
 
-        await contributor.PreflightAsync(record, CancellationToken.None);
+        await Assert.ThrowsAsync<StateSnapshotException>(() =>
+            contributor.PreflightAsync(record, CancellationToken.None).AsTask());
     }
 
     [Fact(Timeout = 5_000)]
@@ -307,30 +357,19 @@ public sealed class DirectionRuntimeTests
     [Fact]
     public void PlannerPreservesCutPoseAsStartOfFollowingMove()
     {
-        var cg = new CgViewSource(new ResourceKey("Still_490_001"));
         var cutPose = new ViewPose(new DirectionPoint(37.384f, 74.816f), 3, 10);
         var movePose = new ViewPose(new DirectionPoint(44.438f, 71.950f), 3, 10);
         var plan = new DirectionPlanner().Plan(
             DirectionState.CreateDefault(),
             new IDirectionDirective[]
             {
-                new ViewPatch(
+                View(
                     ViewId.Main,
-                    DirectionValue.From<ViewSource>(cg),
-                    default,
-                    default,
-                    default,
-                    DirectionTransitionSpec.Cut),
-                new ViewPatch(
+                    center: cutPose.Center,
+                    zoom: cutPose.Zoom,
+                    rotation: cutPose.RotationDegrees),
+                new ViewPosePatch(
                     ViewId.Main,
-                    default,
-                    DirectionValue.From(cutPose.Center),
-                    DirectionValue.From(cutPose.Zoom),
-                    DirectionValue.From(cutPose.RotationDegrees),
-                    DirectionTransitionSpec.Cut),
-                new ViewPatch(
-                    ViewId.Main,
-                    default,
                     DirectionValue.From(movePose.Center),
                     default,
                     default,
@@ -344,6 +383,39 @@ public sealed class DirectionRuntimeTests
         Assert.Equal(cutPose, sequence.StartState.Pose);
         Assert.Equal(DirectionTransitionKind.Move, sequence.Transition.Kind);
         Assert.Equal(movePose, plan.TargetState.Views[ViewId.Main].Pose);
+    }
+
+    [Fact]
+    public void StageReleaseRemovesItsDefaultAndAdditionalViews()
+    {
+        var planner = new DirectionPlanner();
+        var illustration = new StageId("illustration");
+        var illustrationView = new ViewId("illustration");
+        var closeup = new ViewId("closeup");
+        var created = planner.Plan(
+            DirectionState.CreateDefault(),
+            new IDirectionDirective[]
+            {
+                new StageCreatePatch(
+                    illustration,
+                    illustrationView,
+                    DirectionTransitionSpec.Cut),
+                new ViewCreatePatch(
+                    closeup,
+                    illustration,
+                    DirectionTransitionSpec.Cut),
+            }).TargetState;
+
+        var released = planner.Plan(
+            created,
+            new IDirectionDirective[]
+            {
+                new StageReleasePatch(illustration, DirectionTransitionSpec.Cut),
+            }).TargetState;
+
+        Assert.DoesNotContain(illustration, released.Stages.Keys);
+        Assert.DoesNotContain(illustrationView, released.Views.Keys);
+        Assert.DoesNotContain(closeup, released.Views.Keys);
     }
 
     [Fact(Timeout = 5_000)]
@@ -554,22 +626,21 @@ public sealed class DirectionRuntimeTests
         return new StateRecord(
             BuiltInStateKeys.Direction,
             StateScope.Game,
-            1,
+            2,
             JsonDocument.Parse(json).RootElement.Clone());
     }
 
-    private static ViewPatch View(
+    private static ViewPosePatch View(
         ViewId viewId,
-        ViewSource? source = null,
+        DirectionPoint? center = null,
         float? zoom = null,
         float? rotation = null,
         DirectionTransitionSpec? transition = null,
         DirectionSourceLocation? location = null) => new(
             viewId,
-            source is not null
-                ? DirectionValue.From(source)
+            center is { } centerValue
+                ? DirectionValue.From(centerValue)
                 : default,
-            default,
             zoom is { } zoomValue
                 ? DirectionValue.From(zoomValue)
                 : default,

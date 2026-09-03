@@ -18,13 +18,15 @@ public interface IDirectionScopeResolver : IRuntimeService
 
     ViewId ResolveView(string nodeId, string symbol);
 
+    ViewId ResolveDefaultView(string nodeId, string stageSymbol);
+
     void ImportStage(string nodeId, string aliasName, string sourceNodeId, string sourceSymbol);
 
     void ImportView(string nodeId, string aliasName, string sourceNodeId, string sourceSymbol);
 
-    void DefineShot(string nodeId, string shotAlias, ViewPatch patch);
+    void DefineShot(string nodeId, string shotAlias, ViewPosePatch patch);
 
-    ViewPatch ResolveShot(string nodeId, string shotAlias);
+    ViewPosePatch ResolveShot(string nodeId, string shotAlias);
 
     void ApplyModule(NodeDirectionModule directionModule);
     void EnterNode(string nodeId);
@@ -42,7 +44,7 @@ public sealed class DirectionScopeResolver : IDirectionScopeResolver
 {
     private readonly Dictionary<(string Node, string Alias), StageId> stageImports = new();
     private readonly Dictionary<(string Node, string Alias), ViewId> viewImports = new();
-    private readonly Dictionary<(string Node, string Alias), ViewPatch> shotAliases = new();
+    private readonly Dictionary<(string Node, string Alias), ViewPosePatch> shotAliases = new();
     private readonly Dictionary<(string Node, string Name), DirectionPoint> marks = new();
     private string? activeNode;
     private NodeDirectionModule? activeModule;
@@ -65,9 +67,20 @@ public sealed class DirectionScopeResolver : IDirectionScopeResolver
             return ViewId.Main;
         if (viewImports.TryGetValue((node, local), out var imported))
             return imported;
+        if (stageImports.TryGetValue((node, local), out var importedStage))
+            return new ViewId(importedStage.Value);
+        if (activeModule is not null &&
+            string.Equals(activeNode, node, StringComparison.Ordinal) &&
+            activeModule.Symbols.Stages.Contains(local))
+        {
+            return new ViewId(ResolveStage(node, local).Value);
+        }
         EnsureKnownSymbol(node, local, isStage: false);
         return new ViewId(Qualify(node, "views", local));
     }
+
+    public ViewId ResolveDefaultView(string nodeId, string stageSymbol) =>
+        new(ResolveStage(nodeId, stageSymbol).Value);
 
     public void ImportStage(
         string nodeId,
@@ -101,14 +114,14 @@ public sealed class DirectionScopeResolver : IDirectionScopeResolver
         AddImport(viewImports, (node, localAlias), source, "View");
     }
 
-    public void DefineShot(string nodeId, string shotAlias, ViewPatch patch)
+    public void DefineShot(string nodeId, string shotAlias, ViewPosePatch patch)
     {
         ArgumentNullException.ThrowIfNull(patch);
         var (node, localAlias) = Validate(nodeId, shotAlias);
         AddImport(shotAliases, (node, localAlias), patch, "Shot");
     }
 
-    public ViewPatch ResolveShot(string nodeId, string shotAlias)
+    public ViewPosePatch ResolveShot(string nodeId, string shotAlias)
     {
         var (node, localAlias) = Validate(nodeId, shotAlias);
         if (!shotAliases.TryGetValue((node, localAlias), out var patch))

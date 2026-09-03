@@ -179,7 +179,6 @@ public sealed class ComponentBackendHarness :
 public sealed class CatalogResourceResolver : IDirectionResourceKeyResolver
 {
     public ResourceKey ResolveBackdrop(string semanticId) => new(semanticId);
-    public ResourceKey ResolveCg(string semanticId) => new(semanticId);
 }
 
 public sealed class CatalogPositionResolver : IDirectionPositionResolver
