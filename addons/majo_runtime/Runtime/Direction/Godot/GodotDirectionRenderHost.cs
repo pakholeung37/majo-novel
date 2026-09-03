@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Core;
+using Majo.Runtime.Direction.Camera;
 using Majo.Runtime.Direction.Core;
 
 namespace Majo.Runtime.Direction.Godot;
@@ -20,7 +21,6 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
     private readonly Dictionary<StageId, GodotDirectionStageSurface> stages = new();
     private readonly Dictionary<ViewId, GodotDirectionViewSurface> views = new();
     private readonly Dictionary<LayoutSlotId, TextureRect> screenSlots = new();
-    private readonly Dictionary<ViewId, Tween> shakeTweens = new();
     private readonly Dictionary<ViewId, long> viewGenerations = new();
     private readonly Dictionary<StageId, long> stageGenerations = new();
     private long screenGeneration;
@@ -207,7 +207,6 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
             QueueFree(view.Viewport);
             views.Remove(view.Id);
         }
-        foreach (var viewId in shakeTweens.Keys.ToArray()) ClearViewShake(viewId);
         foreach (var slot in screenSlots.Keys.Where(slot => slot != LayoutSlotId.Main).ToArray())
         {
             QueueFree(screenSlots[slot]);
@@ -240,7 +239,6 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
         ClearBackdropTransition(StageId.Main);
         ClearViewTransition(ViewId.Main);
         ClearScreenTransition();
-        foreach (var viewId in shakeTweens.Keys.ToArray()) ClearViewShake(viewId);
         QueueFree(OutputLayer);
         QueueFree(ScreenViewport);
         QueueFree(ViewViewport);
@@ -512,104 +510,31 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
         ApplyViewTransform(surface);
     }
 
-    internal async Task ShakeViewAsync(ShakeCue cue, CancellationToken cancellationToken)
-    {
-        EnsureInitialized();
-        cancellationToken.ThrowIfCancellationRequested();
-        RequireView(cue.ViewId);
-        ClearViewShake(cue.ViewId);
-        if (cue.DurationSeconds <= 0 || cue.Strength <= 0) return;
-
-        var tween = owner.CreateTween();
-        shakeTweens[cue.ViewId] = tween;
-        var samples = Math.Max(1, (int)Math.Ceiling(cue.DurationSeconds * cue.Frequency));
-        var sampleDuration = cue.DurationSeconds / samples;
-        var random = Random.Shared;
-        var initialSign = random.Next(2) == 0 ? 1f : -1f;
-        var initialAngle = (float)(random.NextDouble() * Math.PI * 2);
-        var previous = Vector2.Zero;
-
-        for (var index = 0; index < samples; index++)
-        {
-            var progress = (float)index / samples;
-            var decay = (1f - progress) * (1f - progress);
-            var sign = (index % 2 == 0 ? 1f : -1f) * initialSign;
-            var noise = 0.7f + 0.3f * (float)random.NextDouble();
-            var amount = sign * noise * cue.Strength * decay;
-            var offset = cue.Axis switch
-            {
-                Majo.Runtime.Stage.CameraShakeAxis.X => new Vector2(amount, 0),
-                Majo.Runtime.Stage.CameraShakeAxis.Y => new Vector2(0, amount),
-                Majo.Runtime.Stage.CameraShakeAxis.Diagonal => new Vector2(amount, amount),
-                _ => RandomShakeOffset(initialAngle, index, noise * cue.Strength * decay, random),
-            };
-            var from = previous;
-            tween.TweenMethod(
-                Callable.From<Vector2>(value => ApplyViewShakeOffset(cue.ViewId, value)),
-                from,
-                offset,
-                sampleDuration);
-            previous = offset;
-        }
-        tween.TweenMethod(
-            Callable.From<Vector2>(value => ApplyViewShakeOffset(cue.ViewId, value)),
-            previous,
-            Vector2.Zero,
-            sampleDuration);
-
-        var completion = new TaskCompletionSource(
-            TaskCreationOptions.RunContinuationsAsynchronously);
-        void OnFinished() => completion.TrySetResult();
-        tween.Finished += OnFinished;
-        using var registration = cancellationToken.Register(
-            () => completion.TrySetCanceled(cancellationToken));
-        try { await completion.Task; }
-        finally
-        {
-            if (GodotObject.IsInstanceValid(tween)) tween.Finished -= OnFinished;
-            if (shakeTweens.TryGetValue(cue.ViewId, out var current) &&
-                ReferenceEquals(current, tween))
-            {
-                ClearViewShake(cue.ViewId);
-            }
-        }
-    }
-
-    internal void ApplyViewShakeOffset(ViewId viewId, Vector2 offset)
+    internal void ApplyViewModifierDelta(ViewId viewId, CameraPoseDelta delta)
     {
         var surface = RequireView(viewId);
-        surface.ShakeOffset = offset;
+        surface.ModifierDelta = delta;
         ApplyViewTransform(surface);
     }
 
-    internal void ClearViewShake(ViewId viewId)
+    internal void ClearViewModifierDelta(ViewId viewId)
     {
-        if (shakeTweens.Remove(viewId, out var tween))
-            GodotDirectionRendering.Kill(tween);
         if (!views.TryGetValue(viewId, out var surface) ||
             !GodotObject.IsInstanceValid(surface.Transform)) return;
-        surface.ShakeOffset = Vector2.Zero;
+        surface.ModifierDelta = CameraPoseDelta.Identity;
         ApplyViewTransform(surface);
-    }
-
-    private static Vector2 RandomShakeOffset(
-        float initialAngle,
-        int index,
-        float radius,
-        Random random)
-    {
-        var angle = initialAngle + index * MathF.PI +
-            (float)(random.NextDouble() * 0.6 - 0.3);
-        return new Vector2(MathF.Cos(angle) * radius, MathF.Sin(angle) * radius);
     }
 
     private static void ApplyViewTransform(GodotDirectionViewSurface surface)
     {
         var pose = surface.CurrentPose;
+        var delta = surface.ModifierDelta;
+        var effectiveRotation = pose.RotationDegrees + delta.RotationDegreesOffset;
+        var effectiveZoom = pose.Zoom * delta.ZoomMultiplier;
         var size = new Vector2(surface.Viewport.Size.X, surface.Viewport.Size.Y);
         var basis = new Transform2D(
-            Mathf.DegToRad(pose.RotationDegrees),
-            new Vector2(pose.Zoom, pose.Zoom),
+            Mathf.DegToRad(effectiveRotation),
+            new Vector2(effectiveZoom, effectiveZoom),
             0,
             Vector2.Zero);
         var sceneCenter = new Vector2(
@@ -618,7 +543,7 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
         surface.Transform.Transform = new Transform2D(
             basis.X,
             basis.Y,
-            size / 2 - basis * sceneCenter + surface.ShakeOffset);
+            size / 2 - basis * sceneCenter + delta.CenterOffset);
     }
 
     public void ClearBackdropTransition(StageId stageId)
@@ -1033,5 +958,5 @@ internal sealed class GodotDirectionViewSurface
     public TextureRect TransitionSource { get; }
     public ViewState? PublishedView { get; set; }
     public ViewPose CurrentPose { get; set; } = ViewPose.Default;
-    public Vector2 ShakeOffset { get; set; }
+    public CameraPoseDelta ModifierDelta { get; set; } = CameraPoseDelta.Identity;
 }

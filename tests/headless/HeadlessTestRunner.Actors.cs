@@ -56,7 +56,7 @@ public partial class HeadlessTestRunner
         var characterLayer = actorRoot.GetNode<Node2D>("Characters");
         var manager = bootstrap.Host!.Services.Get<IActorManager>();
         var scheduler = bootstrap.Host.Services.Get<IOperationScheduler>();
-        var character = manager.GetActor<ICharacterActor>(
+        var character = (CharacterActor)manager.GetActor<ICharacterActor>(
             manager.Create("hero").Id);
         var background = manager.GetActor<IBackgroundActor>(
             manager.Create("courtroom").Id);

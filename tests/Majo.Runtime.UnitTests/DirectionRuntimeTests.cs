@@ -49,7 +49,7 @@ public sealed class DirectionRuntimeTests
                 "camera pose",
                 "camera move",
                 "camera reset",
-                "camera shake",
+                "camera fx",
                 "shot use",
                 "layout",
                 "import",

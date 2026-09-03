@@ -43,6 +43,82 @@ public enum DirectionTransitionKind
     Dissolve,
 }
 
+public readonly record struct DirectionTransitionId : IEquatable<DirectionTransitionId>, IComparable<DirectionTransitionId>
+{
+    public string Value { get; }
+
+    public DirectionTransitionId(string? value)
+    {
+        Value = string.IsNullOrWhiteSpace(value)
+            ? string.Empty
+            : value.Trim().ToLowerInvariant();
+    }
+
+    public static DirectionTransitionId Cut { get; } = new("cut");
+    public static DirectionTransitionId Move { get; } = new("move");
+    public static DirectionTransitionId Fade { get; } = new("fade");
+    public static DirectionTransitionId Dissolve { get; } = new("dissolve");
+
+    public bool IsEmpty => string.IsNullOrEmpty(Value);
+
+    public bool Equals(DirectionTransitionId other) =>
+        string.Equals(Value, other.Value, StringComparison.OrdinalIgnoreCase);
+
+    public override int GetHashCode() =>
+        StringComparer.OrdinalIgnoreCase.GetHashCode(Value ?? string.Empty);
+
+    public int CompareTo(DirectionTransitionId other) =>
+        string.Compare(Value, other.Value, StringComparison.OrdinalIgnoreCase);
+
+    public override string ToString() => Value ?? string.Empty;
+
+    public static implicit operator DirectionTransitionId(string? value) => new(value);
+    public static implicit operator DirectionTransitionId(DirectionTransitionKind kind) => FromKind(kind);
+
+    public static DirectionTransitionId FromKind(DirectionTransitionKind kind) => kind switch
+    {
+        DirectionTransitionKind.Cut => Cut,
+        DirectionTransitionKind.Move => Move,
+        DirectionTransitionKind.Fade => Fade,
+        DirectionTransitionKind.Dissolve => Dissolve,
+        _ => new(kind.ToString().ToLowerInvariant()),
+    };
+
+    public bool TryToKind(out DirectionTransitionKind kind)
+    {
+        if (Equals(Cut)) { kind = DirectionTransitionKind.Cut; return true; }
+        if (Equals(Move)) { kind = DirectionTransitionKind.Move; return true; }
+        if (Equals(Fade)) { kind = DirectionTransitionKind.Fade; return true; }
+        if (Equals(Dissolve)) { kind = DirectionTransitionKind.Dissolve; return true; }
+        kind = default;
+        return false;
+    }
+
+    public static bool operator ==(DirectionTransitionId id, DirectionTransitionKind kind) =>
+        id.Equals(FromKind(kind));
+
+    public static bool operator !=(DirectionTransitionId id, DirectionTransitionKind kind) =>
+        !id.Equals(FromKind(kind));
+
+    public static bool operator ==(DirectionTransitionKind kind, DirectionTransitionId id) =>
+        id.Equals(FromKind(kind));
+
+    public static bool operator !=(DirectionTransitionKind kind, DirectionTransitionId id) =>
+        !id.Equals(FromKind(kind));
+
+    public static bool operator <(DirectionTransitionId left, DirectionTransitionId right) =>
+        left.CompareTo(right) < 0;
+
+    public static bool operator <=(DirectionTransitionId left, DirectionTransitionId right) =>
+        left.CompareTo(right) <= 0;
+
+    public static bool operator >(DirectionTransitionId left, DirectionTransitionId right) =>
+        left.CompareTo(right) > 0;
+
+    public static bool operator >=(DirectionTransitionId left, DirectionTransitionId right) =>
+        left.CompareTo(right) >= 0;
+}
+
 public enum DirectionEase
 {
     Linear,
@@ -102,17 +178,28 @@ public static class DirectionEaseExtensions
 }
 
 public sealed record DirectionTransitionSpec(
-    DirectionTransitionKind Kind,
+    DirectionTransitionId Kind,
     double DurationSeconds,
     DirectionEase Ease = DirectionEase.Linear,
     bool Skippable = true)
 {
+    public DirectionTransitionId Id => Kind;
+
+    public DirectionTransitionSpec(
+        DirectionTransitionKind kind,
+        double durationSeconds,
+        DirectionEase ease = DirectionEase.Linear,
+        bool skippable = true)
+        : this(DirectionTransitionId.FromKind(kind), durationSeconds, ease, skippable)
+    {
+    }
+
     public static DirectionTransitionSpec Cut { get; } =
-        new(DirectionTransitionKind.Cut, 0);
+        new(DirectionTransitionId.Cut, 0);
 
     public DirectionTransitionSpec Validate()
     {
-        if (!Enum.IsDefined(Kind)) throw new ArgumentOutOfRangeException(nameof(Kind));
+        if (Kind.IsEmpty) throw new ArgumentException("Transition ID cannot be empty.");
         if (!Enum.IsDefined(Ease)) throw new ArgumentOutOfRangeException(nameof(Ease));
         if (!double.IsFinite(DurationSeconds) || DurationSeconds < 0)
             throw new ArgumentOutOfRangeException(nameof(DurationSeconds));
@@ -217,15 +304,17 @@ public sealed record DirectionCue(
     IReadOnlyDictionary<string, string> Arguments,
     DirectionSourceLocation? SourceLocation = null) : ITransientDirectionCue;
 
-public sealed record ShakeCue(
-    ViewId ViewId,
-    float Strength, CameraShakeAxis Axis, int Frequency, double DurationSeconds,
-    DirectionSourceLocation? SourceLocation = null) : ITransientDirectionCue;
-
 public sealed record FlashCue(
     DirectionColor Color, float Intensity, double DurationSeconds,
     DirectionSourceLocation? SourceLocation = null) : ITransientDirectionCue;
 
 public sealed record CurtainCue(
     bool Open, DirectionColor Color, double DurationSeconds,
+    DirectionSourceLocation? SourceLocation = null) : ITransientDirectionCue;
+
+public sealed record CameraFxCue(
+    ViewId ViewId,
+    string EffectName,
+    IReadOnlyDictionary<string, string> Parameters,
+    double DurationSeconds,
     DirectionSourceLocation? SourceLocation = null) : ITransientDirectionCue;

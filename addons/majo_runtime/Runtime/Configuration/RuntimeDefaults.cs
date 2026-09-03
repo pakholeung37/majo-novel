@@ -6,7 +6,6 @@ public static class RuntimeDefaults
 
     public const double TransitionDurationSeconds = 0.5;
 
-    public const double CameraShakeDurationSeconds = 0.4;
 
     public const double FlashDurationSeconds = 0.2;
     public const double CurtainDurationSeconds = 0.4;

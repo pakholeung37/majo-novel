@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
+using Majo.Runtime.Direction.Transitions;
 using Majo.Runtime.Stage;
 
 namespace Majo.Runtime.Dialogue.Commands;
@@ -50,7 +51,7 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
 			.Register<CameraPoseDirectionCommandArguments>(CameraPoseAsync)
 			.Register<CameraMoveDirectionCommandArguments>(CameraMoveAsync)
 			.Register<CameraResetDirectionCommandArguments>(CameraResetAsync)
-			.Register<CameraShakeDirectionCommandArguments>(CameraShakeAsync)
+			.Register<CameraFxDirectionCommandArguments>(CameraFxAsync)
 			.Register<ShotUseDirectionCommandArguments>(ShotUseAsync)
 			.Register<LayoutDirectionCommandArguments>(LayoutAsync)
 			.Register<DirectionImportCommandArguments>(ImportAsync)
@@ -246,17 +247,23 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
 		await beats.SubmitAsync(patch, Barrier(a.Wait), c.CancellationToken);
 	});
 
-	private Task CameraShakeAsync(
-		CameraShakeDirectionCommandArguments a,
-		RuntimeCommandContext c) => ExecuteAsync("camera shake", async () =>
+	private Task CameraFxAsync(
+		CameraFxDirectionCommandArguments a,
+		RuntimeCommandContext c) => ExecuteAsync("camera fx", async () =>
 	{
+		var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+		if (a.Strength.HasValue) parameters["strength"] = a.Strength.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+		if (a.Axis.HasValue) parameters["axis"] = a.Axis.Value.ToString().ToLowerInvariant();
+		if (a.Frequency.HasValue) parameters["frequency"] = a.Frequency.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+		if (a.Zoom.HasValue) parameters["zoom"] = a.Zoom.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+		var duration = a.Duration ?? 0.4;
+
 		await beats.SubmitAsync(
-			new ShakeCue(
+			new CameraFxCue(
 				CameraTarget(a.Stage, a.View),
-				(float)a.Strength,
-				a.Axis,
-				a.Frequency,
-				a.Duration,
+				a.Effect,
+				parameters,
+				duration,
 				new DirectionSourceLocation(RequireNode(), 0, 0)),
 			Barrier(a.Wait),
 			c.CancellationToken);
@@ -269,7 +276,7 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
 		var patch = scopes.ResolveShot(RequireNode(), a.Alias);
 		if (a.Stage is not null || a.View is not null)
 			patch = patch with { ViewId = CameraTarget(a.Stage, a.View) };
-		patch = patch with { Transition = Transition(a, c, Enum.GetValues<DirectionTransitionKind>()) };
+		patch = patch with { Transition = Transition(a, c, DirectionTransitionId.Cut, DirectionTransitionId.Move, DirectionTransitionId.Fade, DirectionTransitionId.Dissolve) };
 		await beats.SubmitAsync(patch, Barrier(a.Wait), c.CancellationToken);
 	});
 
@@ -393,7 +400,7 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
 	private DirectionTransitionSpec Transition(
 		DirectionTransitionCommandArguments a,
 		RuntimeCommandContext context,
-		params DirectionTransitionKind[] allowed)
+		params DirectionTransitionId[] allowed)
 	{
 		var isCharacterCommand = a is CharacterDirectionCommandArguments or LeaveDirectionCommandArguments;
 		var kind = a.Via ?? (context.Binding?.ResolveAnimation(
@@ -406,14 +413,22 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
 				CharacterDirectionCommandArguments => "character",
 				LeaveDirectionCommandArguments => "leave",
 				_ => string.Empty,
-			}) ?? (isCharacterCommand ? DirectionTransitionKind.Fade : DirectionTransitionKind.Cut));
-		if (Array.IndexOf(allowed, kind) < 0)
+			}) ?? (isCharacterCommand ? DirectionTransitionId.Fade : DirectionTransitionId.Cut));
+
+		var isRegistered = !isCharacterCommand && context.Services is not null &&
+			context.Services.TryGet<ITransitionDriverRegistry>(out var registry) &&
+			registry is not null &&
+			registry.Supports(
+				kind,
+				TransitionDomains.Stage);
+
+		if (Array.IndexOf(allowed, kind) < 0 && !isRegistered)
 		{
 			throw new DirectionException(
 				$"Transition '{kind.ToString().ToLowerInvariant()}' is not supported by this command.");
 		}
 		var defaults = beats.OpenBeatDefaults;
-		var duration = a.Duration ?? (kind == DirectionTransitionKind.Cut
+		var duration = a.Duration ?? (kind == DirectionTransitionId.Cut
 			? 0
 			: isCharacterCommand
 				? context.Binding?.DefaultCharacterAnimationDurationSeconds ??
@@ -427,7 +442,7 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
 	private DirectionTransitionSpec MotionTransition(
 		DirectionTimingCommandArguments a,
 		RuntimeCommandContext context,
-		DirectionTransitionKind kind)
+		DirectionTransitionId kind)
 	{
 		var defaults = beats.OpenBeatDefaults;
 		var duration = a.Duration ?? defaults?.DurationSeconds ??
@@ -438,7 +453,7 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
 
 	private DirectionTransitionSpec CameraPoseTransition(
 		DirectionTimingCommandArguments a,
-		DirectionTransitionKind? via,
+		DirectionTransitionId? via,
 		RuntimeCommandContext context,
 		bool reset = false)
 	{
@@ -446,14 +461,17 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
 		// camera-pan shorthand. The cut remains the default when no duration
 		// is supplied, while `via:cut` still requires duration:0.
 		var kind = via ?? (a.Duration.HasValue
-			? DirectionTransitionKind.Move
-			: context.Binding?.ResolveAnimation(reset ? "camera reset" : "camera pose") ?? DirectionTransitionKind.Cut);
-		var allowed = Enum.GetValues<DirectionTransitionKind>();
-		if (Array.IndexOf(allowed, kind) < 0)
+			? DirectionTransitionId.Move
+			: context.Binding?.ResolveAnimation(reset ? "camera reset" : "camera pose") ?? DirectionTransitionId.Cut);
+		var isRegistered = context.Services is not null &&
+			context.Services.TryGet<ITransitionDriverRegistry>(out var registry) &&
+			registry is not null &&
+			registry.Supports(kind, TransitionDomains.View);
+		if (!kind.TryToKind(out _) && !isRegistered)
 			throw new DirectionException(
 				$"Transition '{kind.ToString().ToLowerInvariant()}' is not supported by this command.");
 		var defaults = beats.OpenBeatDefaults;
-		var duration = a.Duration ?? (kind == DirectionTransitionKind.Cut
+		var duration = a.Duration ?? (kind == DirectionTransitionId.Cut
 			? 0
 			: defaults?.DurationSeconds ??
 				context.Binding?.DefaultAnimationDurationSeconds ?? 0);
@@ -563,17 +581,19 @@ public sealed class DirectionMarkCommandArguments
 	[CommandParameter("at", 1, Required = true)] public string At { get; set; } = string.Empty;
 }
 
-[RuntimeCommand("camera", "shake", Category = "Direction", Usage = "camera shake [stage:<id>|view:<id>] [strength:<number>] [axis:<all|x|y|diagonal>] [frequency:<number>] [duration:<seconds>] [wait:<bool>]")]
+[RuntimeCommand("camera", "fx", Category = "Direction", Usage = "camera fx <effect> [stage:<id>|view:<id>] [duration:<seconds>] [strength:<number>] [axis:<all|x|y|diagonal>] [frequency:<number>] [zoom:<number>] [wait:<bool>]")]
 [CommandParameterSet(CommandParameterSetRule.AtMostOne, "stage", "view")]
-public sealed class CameraShakeDirectionCommandArguments
+public sealed class CameraFxDirectionCommandArguments
 {
-	[CommandParameter("stage", 0)] public string? Stage { get; set; }
-	[CommandParameter("view", 1)] public string? View { get; set; }
-	[CommandParameter("strength", 2, DefaultValue = "8", Minimum = 0)] public double Strength { get; set; }
-	[CommandParameter("axis", 3, DefaultValue = "all")] public CameraShakeAxis Axis { get; set; }
-	[CommandParameter("frequency", 4, DefaultValue = "20", Minimum = 0.001)] public int Frequency { get; set; }
-	[CommandParameter("duration", 5, DefaultSource = CommandDefaultSource.CameraShakeDuration, Minimum = 0)] public double Duration { get; set; }
-	[CommandParameter("wait", 6, DefaultValue = "false")] public bool Wait { get; set; }
+	[CommandParameter("effect", 0, Primary = true, Required = true)] public string Effect { get; set; } = string.Empty;
+	[CommandParameter("stage", 1)] public string? Stage { get; set; }
+	[CommandParameter("view", 2)] public string? View { get; set; }
+	[CommandParameter("duration", 3, Minimum = 0)] public double? Duration { get; set; }
+	[CommandParameter("strength", 4, Minimum = 0)] public double? Strength { get; set; }
+	[CommandParameter("axis", 5)] public CameraShakeAxis? Axis { get; set; }
+	[CommandParameter("frequency", 6)] public int? Frequency { get; set; }
+	[CommandParameter("zoom", 7)] public double? Zoom { get; set; }
+	[CommandParameter("wait", 20, DefaultValue = "false")] public bool Wait { get; set; }
 }
 
 [RuntimeCommand("flash", Category = "Direction", Usage = "flash [intensity:<0..1>] [duration:<seconds>] [r:<0..1>] [g:<0..1>] [b:<0..1>] [wait:<bool>]")]
@@ -608,7 +628,7 @@ public abstract class DirectionTimingCommandArguments
 
 public abstract class DirectionTransitionCommandArguments : DirectionTimingCommandArguments
 {
-	[CommandParameter("via", 20)] public DirectionTransitionKind? Via { get; set; }
+	[CommandParameter("via", 20)] public DirectionTransitionId? Via { get; set; }
 }
 
 [RuntimeCommand("stage", "define", Category = "Direction", Usage = "stage define <id>")]
@@ -702,7 +722,7 @@ public abstract class CameraPatchDirectionCommandArguments : DirectionTimingComm
 public sealed class CameraPoseDirectionCommandArguments : CameraPatchDirectionCommandArguments
 {
 	[CommandParameter("as", 5)] public string? As { get; set; }
-	[CommandParameter("via", 20)] public DirectionTransitionKind? Via { get; set; }
+	[CommandParameter("via", 20)] public DirectionTransitionId? Via { get; set; }
 }
 
 [RuntimeCommand("camera", "move", Category = "Direction", Usage = "camera move [stage:<id>|view:<id>] [center:<x,y>] [zoom:<number>] [rotation:<degrees>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]

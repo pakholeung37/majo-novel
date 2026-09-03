@@ -17,13 +17,13 @@ public sealed class StageCommandTests
             .Register<CameraMoveDirectionCommandArguments>((_, _) => Task.CompletedTask)
             .Register<CameraPoseDirectionCommandArguments>((_, _) => Task.CompletedTask)
             .Register<CameraResetDirectionCommandArguments>((_, _) => Task.CompletedTask)
-            .Register<CameraShakeDirectionCommandArguments>((_, _) => Task.CompletedTask);
+            .Register<CameraFxDirectionCommandArguments>((_, _) => Task.CompletedTask);
         var catalog = registry.BuildCatalog();
 
         Assert.Contains(catalog.Commands, command => command.Name == "camera move");
         Assert.Contains(catalog.Commands, command => command.Name == "camera pose");
         Assert.Contains(catalog.Commands, command => command.Name == "camera reset");
-        Assert.Contains(catalog.Commands, command => command.Name == "camera shake");
+        Assert.Contains(catalog.Commands, command => command.Name == "camera fx");
 
         var binder = new CommandBinder(new CommandBindingContext(0.35));
         foreach (var command in catalog.Commands) binder.Validate(command.Descriptor);
@@ -74,57 +74,17 @@ public sealed class StageCommandTests
         Assert.Contains("stage", resetAmbiguous.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("view", resetAmbiguous.Message, StringComparison.OrdinalIgnoreCase);
 
-        var shake = catalog.Get("camera shake");
-        var defaultShake = binder.Bind<CameraShakeDirectionCommandArguments>(
-            shake.Descriptor, Array.Empty<string>());
-        Assert.Equal(8, defaultShake.Strength);
-        Assert.Equal(CameraShakeAxis.All, defaultShake.Axis);
-        Assert.Equal(20, defaultShake.Frequency);
-        Assert.Equal(0.4, defaultShake.Duration);
-        Assert.False(defaultShake.Wait);
-        Assert.Null(defaultShake.Stage);
-        Assert.Null(defaultShake.View);
-
-        var stageShake = binder.Bind<CameraShakeDirectionCommandArguments>(
-            shake.Descriptor, new[] { "stage:illustration", "axis:x" });
-        Assert.Equal("illustration", stageShake.Stage);
-        Assert.Null(stageShake.View);
-        Assert.Equal(CameraShakeAxis.X, stageShake.Axis);
-
-        var ambiguousShake = Assert.Throws<RuntimeCommandException>(() =>
-            binder.Bind<CameraShakeDirectionCommandArguments>(
-                shake.Descriptor,
-                new[] { "stage:main", "view:main" }));
-        Assert.Contains("stage", ambiguousShake.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("view", ambiguousShake.Message, StringComparison.OrdinalIgnoreCase);
-
-        var allShake = binder.Bind<CameraShakeDirectionCommandArguments>(
-            shake.Descriptor, new[] { "axis:all" });
-        Assert.Equal(CameraShakeAxis.All, allShake.Axis);
-
-        var bothShake = binder.Bind<CameraShakeDirectionCommandArguments>(
-            shake.Descriptor, new[] { "axis:both" });
-        Assert.Equal(CameraShakeAxis.All, bothShake.Axis);
-
-        var diagShake = binder.Bind<CameraShakeDirectionCommandArguments>(
-            shake.Descriptor, new[] { "strength:15", "axis:diagonal", "frequency:30", "duration:0.8", "wait:true" });
-        Assert.Equal(15, diagShake.Strength);
-        Assert.Equal(CameraShakeAxis.Diagonal, diagShake.Axis);
-        Assert.Equal(30, diagShake.Frequency);
-        Assert.Equal(0.8, diagShake.Duration);
-        Assert.True(diagShake.Wait);
-
-        var xShake = binder.Bind<CameraShakeDirectionCommandArguments>(
-            shake.Descriptor, new[] { "axis:x" });
-        Assert.Equal(CameraShakeAxis.X, xShake.Axis);
-
-        var yShake = binder.Bind<CameraShakeDirectionCommandArguments>(
-            shake.Descriptor, new[] { "axis:y" });
-        Assert.Equal(CameraShakeAxis.Y, yShake.Axis);
-
-        var shortDiagShake = binder.Bind<CameraShakeDirectionCommandArguments>(
-            shake.Descriptor, new[] { "axis:diag" });
-        Assert.Equal(CameraShakeAxis.Diagonal, shortDiagShake.Axis);
+        var fx = catalog.Get("camera fx");
+        var fxArguments = binder.Bind<CameraFxDirectionCommandArguments>(
+            fx.Descriptor,
+            new[] { "shake", "stage:illustration", "strength:15", "axis:diagonal", "frequency:30", "duration:0.8", "wait:true" });
+        Assert.Equal("shake", fxArguments.Effect);
+        Assert.Equal("illustration", fxArguments.Stage);
+        Assert.Equal(15, fxArguments.Strength);
+        Assert.Equal(CameraShakeAxis.Diagonal, fxArguments.Axis);
+        Assert.Equal(30, fxArguments.Frequency);
+        Assert.Equal(0.8, fxArguments.Duration);
+        Assert.True(fxArguments.Wait);
     }
 
     [Fact]

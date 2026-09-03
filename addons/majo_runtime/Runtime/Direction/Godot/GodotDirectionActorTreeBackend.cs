@@ -234,16 +234,17 @@ internal sealed class GodotDirectionActorTreeBackend
             }
 
             if (IsAppearanceChange(before, target, pair.Key) &&
-                pair.Value.Kind != DirectionTransitionKind.Move)
+                pair.Value.Kind != DirectionTransitionId.Move)
             {
                 continue;
             }
 
-            if (pair.Value.Kind is DirectionTransitionKind.Fade or DirectionTransitionKind.Dissolve)
+            if (pair.Value.Kind != DirectionTransitionId.Move &&
+                pair.Value.Kind != DirectionTransitionId.Cut)
             {
                 actor!.SetOpacity(0);
             }
-            else if (pair.Value.Kind == DirectionTransitionKind.Move &&
+            else if (pair.Value.Kind == DirectionTransitionId.Move &&
                 before?.Actors.TryGetValue(pair.Key, out var sourceState) == true)
             {
                 actor!.SetScenePosition(new Vector2(
@@ -425,12 +426,13 @@ internal sealed class GodotDirectionActorTreeBackend
 
                 if (pair.Value.DurationSeconds <= 0) continue;
                 var animation = ToAnimationSpec(pair.Value);
-                if (pair.Value.Kind is DirectionTransitionKind.Fade or DirectionTransitionKind.Dissolve)
+                if (pair.Value.Kind != DirectionTransitionId.Move &&
+                    pair.Value.Kind != DirectionTransitionId.Cut)
                 {
                     if (hasSource) operations.Add(source!.ChangeOpacity(0, animation));
                     if (hasTarget) operations.Add(destination!.ChangeOpacity(1, animation));
                 }
-                else if (pair.Value.Kind == DirectionTransitionKind.Move && hasTarget)
+                else if (pair.Value.Kind == DirectionTransitionId.Move && hasTarget)
                 {
                     var state = targetState!.Actors[pair.Key];
                     destination!.SetScenePosition(new Vector2(
@@ -461,7 +463,8 @@ internal sealed class GodotDirectionActorTreeBackend
                 var actorId = new ActorId(actor.Id);
                 var keepForCrossfade = !IsAppearanceChange(actorId) &&
                     transitions.TryGetValue(actorId, out var transition) &&
-                    (transition.Kind is DirectionTransitionKind.Fade or DirectionTransitionKind.Dissolve) &&
+                    transition.Kind != DirectionTransitionId.Move &&
+                    transition.Kind != DirectionTransitionId.Cut &&
                     transition.DurationSeconds > 0;
                 if (keepForCrossfade)
                     retainsVisibleSource = true;

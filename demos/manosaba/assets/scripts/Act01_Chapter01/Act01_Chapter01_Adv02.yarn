@@ -45,7 +45,7 @@ Ema: 咦，怎么回事，这里是……？ #line:0101Adv02_Ema002
 
 室内光线昏暗，空气也并不畅通。[br /]并且——有一道铁栅栏限制了自由。 #line:0101Adv02_Narrative006
 
-<<camera shake stage:illustration axis:x duration:0.6>>
+<<camera fx shake stage:illustration axis:x duration:0.6>>
 
 Ema: 牢、牢房……！？为什么！？ #line:0101Adv02_Ema003
 

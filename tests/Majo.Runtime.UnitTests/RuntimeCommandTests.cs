@@ -698,7 +698,7 @@ public sealed class RuntimeCommandTests
         {
         }
 
-        public Sprite2D View => null!;
+        public CanvasItem View => null!;
 
         public Vector2 Scale { get; private set; } = Vector2.One;
 

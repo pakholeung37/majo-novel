@@ -11,6 +11,7 @@ using Majo.Runtime.Actors.Godot;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
 using Majo.Runtime.Direction.Core;
+using Majo.Runtime.Direction.Camera;
 using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Direction.Godot;
 using Majo.Runtime.Direction.Rendering;
@@ -52,11 +53,13 @@ public partial class HeadlessTestRunner
         await actorFrameClock.InitializeAsync(CancellationToken.None);
         var actorScheduler = new OperationScheduler(actorFrameClock, actorLifetime);
         await actorScheduler.InitializeAsync(CancellationToken.None);
-        var shakeManager = new GodotDirectionShakeManager(
-            host,
+        var cameraModifiers = new CameraModifierManager(
+            (viewId, delta) => host.ApplyViewModifierDelta(viewId, delta),
+            viewId => host.ClearViewModifierDelta(viewId),
             actorScheduler,
-            new StageAccessibility());
-        await shakeManager.InitializeAsync(CancellationToken.None);
+            new StageAccessibility(),
+            actorFrameClock);
+        await cameraModifiers.InitializeAsync(CancellationToken.None);
         IActorManager CreateActorManager(Node2D actorRoot) => new ActorManager(
             actorDefinitions,
             new IActorFactory[]
@@ -157,21 +160,25 @@ public partial class HeadlessTestRunner
 
         var illustrationSurface = host.RequireView(illustrationView);
         var stableIllustrationTransform = illustrationSurface.Transform.Transform;
-        var shake = shakeManager.Shake(new ShakeCue(
+        var shake = cameraModifiers.ApplyEffect(new CameraFxCue(
             illustrationView,
-            20,
-            CameraShakeAxis.X,
-            20,
+            "shake",
+            new Dictionary<string, string>
+            {
+                ["strength"] = "20",
+                ["axis"] = "x",
+                ["frequency"] = "20",
+            },
             1));
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        Assert(Mathf.Abs(illustrationSurface.ShakeOffset.X) > 0.01f &&
-                Mathf.IsZeroApprox(illustrationSurface.ShakeOffset.Y) &&
+        Assert(Mathf.Abs(illustrationSurface.ModifierDelta.CenterOffset.X) > 0.01f &&
+                Mathf.IsZeroApprox(illustrationSurface.ModifierDelta.CenterOffset.Y) &&
                 !illustrationSurface.Transform.Transform.IsEqualApprox(stableIllustrationTransform),
             "Direction camera shake did not offset the targeted non-main View.");
         shake.Complete();
         await shake.Completion;
-        Assert(illustrationSurface.ShakeOffset.IsZeroApprox() &&
+        Assert(illustrationSurface.ModifierDelta.CenterOffset.IsZeroApprox() &&
                 illustrationSurface.Transform.Transform.IsEqualApprox(stableIllustrationTransform),
             "Direction camera shake did not restore the targeted View's stable pose.");
 
@@ -474,7 +481,7 @@ public partial class HeadlessTestRunner
             "Direction render Reset retained an Actor tree.");
 
         await stageBackend.ShutdownAsync(CancellationToken.None);
-        await shakeManager.ShutdownAsync(CancellationToken.None);
+        await cameraModifiers.ShutdownAsync(CancellationToken.None);
         await actorScheduler.ShutdownAsync(CancellationToken.None);
         await actorFrameClock.ShutdownAsync(CancellationToken.None);
         actorLifetime.Dispose();

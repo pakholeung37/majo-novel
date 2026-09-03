@@ -48,8 +48,8 @@ internal sealed class GodotDirectionScreenBackend : IDirectionScreenBackend
                 plan,
                 path => path.StartsWith("screen/", StringComparison.Ordinal));
             if (transition.DurationSeconds > 0 &&
-                transition.Kind is DirectionTransitionKind.Fade or
-                    DirectionTransitionKind.Dissolve)
+                transition.Kind != DirectionTransitionId.Cut &&
+                transition.Kind != DirectionTransitionId.Move)
             {
                 source = await host.CaptureScreenAsync(cancellationToken);
             }
@@ -105,42 +105,37 @@ internal sealed class GodotDirectionScreenBackend : IDirectionScreenBackend
                 throw new InvalidOperationException("Screen is no longer preparable.");
             committed = true;
             generation = host.BeginScreenGeneration();
-            if (transition.DurationSeconds <= 0 || transition.Kind == DirectionTransitionKind.Cut)
+            if (transition.DurationSeconds <= 0 || transition.Kind == DirectionTransitionId.Cut)
             {
                 host.PublishScreen(target);
                 settlement.TrySetResult();
                 return;
             }
 
-            switch (transition.Kind)
+            if (transition.Kind == DirectionTransitionId.Move)
             {
-                case DirectionTransitionKind.Move:
-                    tween = host.CreateTween();
-                    GodotDirectionRendering.Configure(tween, transition.Ease);
-                    tween.TweenMethod(Callable.From<float>(progress =>
-                    {
-                        if (host.IsCurrentScreenGeneration(generation))
-                            host.PublishScreenLayout(target, before, progress);
-                    }), 0.0f, 1.0f, transition.DurationSeconds);
-                    break;
-                case DirectionTransitionKind.Fade:
-                case DirectionTransitionKind.Dissolve:
-                    if (source is null)
-                        throw new DirectionException(
-                            "Direction Screen transition committed without a source capture.");
-                    host.PublishScreen(target);
-                    host.PublishScreenTransition(source);
-                    tween = host.CreateTween();
-                    GodotDirectionRendering.Configure(tween, transition.Ease);
-                    tween.TweenMethod(Callable.From<float>(opacity =>
-                    {
-                        if (host.IsCurrentScreenGeneration(generation))
-                            host.SetScreenTransitionOpacity(opacity);
-                    }), 1.0f, 0.0f, transition.DurationSeconds);
-                    break;
-                default:
+                tween = host.CreateTween();
+                GodotDirectionRendering.Configure(tween, transition.Ease);
+                tween.TweenMethod(Callable.From<float>(progress =>
+                {
+                    if (host.IsCurrentScreenGeneration(generation))
+                        host.PublishScreenLayout(target, before, progress);
+                }), 0.0f, 1.0f, transition.DurationSeconds);
+            }
+            else
+            {
+                if (source is null)
                     throw new DirectionException(
-                        $"Unsupported Direction Screen transition '{transition.Kind}'.");
+                        "Direction Screen transition committed without a source capture.");
+                host.PublishScreen(target);
+                host.PublishScreenTransition(source);
+                tween = host.CreateTween();
+                GodotDirectionRendering.Configure(tween, transition.Ease);
+                tween.TweenMethod(Callable.From<float>(opacity =>
+                {
+                    if (host.IsCurrentScreenGeneration(generation))
+                        host.SetScreenTransitionOpacity(opacity);
+                }), 1.0f, 0.0f, transition.DurationSeconds);
             }
             tween.Finished += OnFinished;
         }

@@ -7,16 +7,21 @@ using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Rendering;
+using Majo.Runtime.Direction.Transitions;
 
 namespace Majo.Runtime.Direction.Godot;
 
 internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
 {
     private readonly GodotDirectionRenderHost host;
+    private readonly ITransitionDriverRegistry drivers;
 
-    public GodotDirectionViewBackend(GodotDirectionRenderHost host)
+    public GodotDirectionViewBackend(
+        GodotDirectionRenderHost host,
+        ITransitionDriverRegistry? drivers = null)
     {
         this.host = host ?? throw new ArgumentNullException(nameof(host));
+        this.drivers = drivers ?? new TransitionDriverRegistry();
     }
 
     public async Task<IPreparedDirectionComponent> PrepareAsync(
@@ -51,7 +56,8 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
                 path => path.StartsWith($"view/{viewId.Value}/", StringComparison.Ordinal));
             ImageTexture? capture = null;
             if (transition.DurationSeconds > 0 &&
-                transition.Kind is DirectionTransitionKind.Fade or DirectionTransitionKind.Dissolve)
+                transition.Kind != DirectionTransitionId.Cut &&
+                transition.Kind != DirectionTransitionId.Move)
             {
                 capture = await host.CaptureViewAsync(viewId, cancellationToken);
             }
@@ -72,7 +78,8 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
                 targetTexture,
                 capture,
                 transition,
-                sequence is not null);
+                sequence is not null,
+                drivers);
             return createdView ? new PreparedViewLifecycle(host, viewId, prepared) : prepared;
         }
         catch
@@ -139,6 +146,7 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
         private readonly ImageTexture? capture;
         private readonly DirectionTransitionSpec transition;
         private readonly bool publishTransitionStart;
+        private readonly ITransitionDriverRegistry drivers;
         private readonly TaskCompletionSource settlement = new(
             TaskCreationOptions.RunContinuationsAsynchronously);
         private Tween? tween;
@@ -157,7 +165,8 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
             Texture2D targetTexture,
             ImageTexture? capture,
             DirectionTransitionSpec transition,
-            bool publishTransitionStart)
+            bool publishTransitionStart,
+            ITransitionDriverRegistry drivers)
         {
             this.host = host;
             this.viewId = viewId;
@@ -169,6 +178,7 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
             this.capture = capture;
             this.transition = transition;
             this.publishTransitionStart = publishTransitionStart;
+            this.drivers = drivers;
         }
 
         public Task Settlement => settlement.Task;
@@ -195,7 +205,7 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
                 viewId,
                 publishTransitionStart ? before : target,
                 targetTexture);
-            if (transition.DurationSeconds <= 0 || transition.Kind == DirectionTransitionKind.Cut)
+            if (transition.DurationSeconds <= 0 || transition.Kind == DirectionTransitionId.Cut)
             {
                 Complete();
                 return;
@@ -203,41 +213,52 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
 
             tween = host.CreateTween();
             GodotDirectionRendering.Configure(tween, transition.Ease);
-            switch (transition.Kind)
+            if (transition.Kind == DirectionTransitionId.Move)
             {
-                case DirectionTransitionKind.Move:
-                    host.ApplyViewPose(viewId, before.Pose);
-                    tween.TweenMethod(
-                        Callable.From<float>(progress =>
-                        {
-                            if (!host.IsCurrentViewGeneration(viewId, generation)) return;
-                            host.ApplyViewPose(
-                                viewId,
-                                GodotDirectionRendering.Interpolate(
-                                    before.Pose,
-                                    target.Pose,
-                                    progress));
-                        }),
-                        0.0f,
-                        1.0f,
-                        transition.DurationSeconds);
-                    break;
-                case DirectionTransitionKind.Fade:
-                case DirectionTransitionKind.Dissolve:
-                    if (capture is null)
+                host.ApplyViewPose(viewId, before.Pose);
+                tween.TweenMethod(
+                    Callable.From<float>(progress =>
                     {
-                        Complete();
-                        return;
-                    }
+                        if (!host.IsCurrentViewGeneration(viewId, generation)) return;
+                        host.ApplyViewPose(
+                            viewId,
+                            GodotDirectionRendering.Interpolate(
+                                before.Pose,
+                                target.Pose,
+                                progress));
+                    }),
+                    0.0f,
+                    1.0f,
+                    transition.DurationSeconds);
+            }
+            else
+            {
+                if (capture is null)
+                {
+                    Complete();
+                    return;
+                }
+
+                if (drivers.TryGet(transition.Kind, out var driver) && driver is not null)
+                {
+                    var transitionContext = new VisualTransitionContext(
+                        transitionSource,
+                        transition,
+                        tween,
+                        () => host.IsCurrentViewGeneration(viewId, generation),
+                        capture,
+                        targetTexture);
+                    driver.Setup(transitionContext);
+                }
+                else
+                {
                     tween.TweenMethod(Callable.From<float>(progress =>
                     {
                         if (host.IsCurrentViewGeneration(viewId, generation))
                             transitionSource.Modulate = new Color(
                                 transitionSource.Modulate, 1 - progress);
                     }), 0.0f, 1.0f, transition.DurationSeconds);
-                    break;
-                default:
-                    throw new InvalidOperationException($"Unsupported transition kind: {transition.Kind}.");
+                }
             }
             tween.Finished += OnFinished;
         }

@@ -151,7 +151,7 @@ public partial class HeadlessTestRunner
             CharacterPositionPreset.Center));
         Assert(warden.FactoryId == ActorFactoryIds.Character,
             "Warden should use the ordinary character factory.");
-        Assert(warden.View.Texture?.GetSize() == new Vector2(1536, 1984),
+        Assert(((Sprite2D)warden.View).Texture?.GetSize() == new Vector2(1536, 1984),
             "Warden appearance 1 was not loaded from the extracted diced-sprite PNG.");
 
         bootstrap.QueueFree();

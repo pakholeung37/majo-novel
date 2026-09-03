@@ -430,7 +430,6 @@ public partial class MajoProjectConfiguration : Resource
             (nameof(Animation.DefaultCharacterAnimationDurationSeconds), Animation.DefaultCharacterAnimationDurationSeconds),
             (nameof(Animation.DefaultStageTransitionDurationSeconds), Animation.DefaultStageTransitionDurationSeconds),
             (nameof(Animation.DefaultStageEffectDurationSeconds), Animation.DefaultStageEffectDurationSeconds),
-            (nameof(Animation.DefaultCameraShakeDurationSeconds), Animation.DefaultCameraShakeDurationSeconds),
             (nameof(Animation.DefaultFlashDurationSeconds), Animation.DefaultFlashDurationSeconds),
             (nameof(Animation.DefaultCurtainDurationSeconds), Animation.DefaultCurtainDurationSeconds),
             (nameof(Animation.DefaultAudioFadeDurationSeconds), Animation.DefaultAudioFadeDurationSeconds),
@@ -706,23 +705,23 @@ public partial class MajoProjectConfiguration : Resource
 
         ValidateNonNegativeDuration(
             Presentation.FadeUpDurationSeconds,
-            nameof(Presentation.FadeUpDurationSeconds),
+            $"{nameof(Presentation)}.{nameof(Presentation.FadeUpDurationSeconds)}",
             issues);
         ValidateNonNegativeDuration(
             Presentation.FadeDownDurationSeconds,
-            nameof(Presentation.FadeDownDurationSeconds),
+            $"{nameof(Presentation)}.{nameof(Presentation.FadeDownDurationSeconds)}",
             issues);
     }
 
     private static void ValidateNonNegativeDuration(
         double value,
-        string property,
+        string path,
         List<ConfigurationIssue> issues)
     {
         if (!double.IsFinite(value) || value < 0)
         {
             issues.Add(new ConfigurationIssue(
-                $"{nameof(Presentation)}.{property}",
+                path,
                 "Value must be finite and non-negative."));
         }
     }

@@ -35,7 +35,6 @@ public sealed record CommandBindingContext(
         CommandDefaultSource.AudioFadeDuration => Animation?.DefaultAudioFadeDurationSeconds ?? DefaultAudioFadeDurationSeconds,
         CommandDefaultSource.StageTransitionDuration => Animation?.DefaultStageTransitionDurationSeconds ?? RuntimeDefaults.TransitionDurationSeconds,
         CommandDefaultSource.StageEffectDuration => Animation?.DefaultStageEffectDurationSeconds ?? RuntimeDefaults.AnimationDurationSeconds,
-        CommandDefaultSource.CameraShakeDuration => Animation?.DefaultCameraShakeDurationSeconds ?? RuntimeDefaults.CameraShakeDurationSeconds,
         CommandDefaultSource.FlashDuration => Animation?.DefaultFlashDurationSeconds ?? RuntimeDefaults.FlashDurationSeconds,
         CommandDefaultSource.CurtainDuration => Animation?.DefaultCurtainDurationSeconds ?? RuntimeDefaults.CurtainDurationSeconds,
         CommandDefaultSource.VoiceFadeDuration => Animation?.DefaultVoiceFadeDurationSeconds ?? RuntimeDefaults.ImmediateDurationSeconds,
@@ -135,6 +134,7 @@ public sealed class CommandValueConverterRegistry
             "diagonal" or "diag" => CameraShakeAxis.Diagonal,
             _ => throw new FormatException("must be 'all', 'x', 'y', or 'diagonal'"),
         });
+        Register<DirectionTransitionId>(value => new DirectionTransitionId(value));
     }
 
     public CommandValueConverterRegistry Register<TValue>(Func<string, TValue> converter)

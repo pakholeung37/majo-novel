@@ -199,8 +199,10 @@ public partial class HeadlessTestRunner
                 issue.Path.StartsWith("Presentation", StringComparison.Ordinal)) == 3,
             "Invalid M8 Presentation values were not diagnosed together.");
         Assert(validation.Issues.Count(issue =>
-                issue.Path.StartsWith("Audio", StringComparison.Ordinal)) == 4,
-            "Invalid M9 Audio values were not diagnosed together.");
+                issue.Path.StartsWith("Audio", StringComparison.Ordinal)) == 3 &&
+                validation.Issues.Count(issue =>
+                    issue.Path.StartsWith("Animation", StringComparison.Ordinal)) == 1,
+            "Invalid M9 Audio/Animation values were not diagnosed together.");
         Assert(validation.Issues.Count(issue =>
                 issue.Path.StartsWith("Auto", StringComparison.Ordinal)) == 1 &&
                 validation.Issues.Count(issue =>

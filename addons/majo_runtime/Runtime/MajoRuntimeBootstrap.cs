@@ -14,9 +14,11 @@ using Majo.Runtime.Auto;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
 using Majo.Runtime.Diagnostics;
+using Majo.Runtime.Direction.Camera;
 using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Direction.Godot;
 using Majo.Runtime.Direction.Rendering;
+using Majo.Runtime.Direction.Transitions;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Dialogue.Commands.Audio;
@@ -31,6 +33,7 @@ using Majo.Runtime.Localization;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Operations.Godot;
 using Majo.Runtime.Played;
+using Majo.Runtime.Plugins;
 using Majo.Runtime.Preloading;
 using Majo.Runtime.Resources;
 using Majo.Runtime.Resources.Godot;
@@ -79,6 +82,30 @@ public partial class MajoRuntimeBootstrap : Node
     private bool isExitingTree;
     private bool isBootstrapLifetimeDisposed;
     private bool isRuntimeShutdownSignalEmitted;
+    private readonly PluginManager pluginManager = new();
+    private readonly RuntimeCommandRegistry commandRegistry = new();
+    private readonly TransitionDriverRegistry transitionDrivers = new();
+    private readonly CameraModifierRegistry cameraModifiers = new();
+    private readonly TransientCueHandlerRegistry transientCueHandlers = new();
+    private readonly PluginRegistrationContext pluginRegistration;
+
+    public MajoRuntimeBootstrap()
+    {
+        pluginRegistration = new PluginRegistrationContext(
+            commandRegistry, transitionDrivers, cameraModifiers, transientCueHandlers);
+    }
+
+    public IPluginManager Plugins => pluginManager;
+
+    public Action<ITransitionDriverRegistry>? ConfigureTransitionDrivers { get; set; }
+
+    public Action<ICameraModifierRegistry>? ConfigureCameraModifiers { get; set; }
+
+    public MajoRuntimeBootstrap AddPlugin(IMajoPlugin plugin)
+    {
+        pluginManager.Register(plugin);
+        return this;
+    }
 
     [Export]
     public MajoProjectConfiguration? Configuration { get; set; }
@@ -230,17 +257,35 @@ public partial class MajoRuntimeBootstrap : Node
             var minLevel = Configuration.Diagnostics?.MinimumLevel ?? RuntimeLogLevel.Information;
             Logger = new StructuredRuntimeLogger(compositeSink, minLevel);
 
+            ConfigureTransitionDrivers?.Invoke(transitionDrivers);
+            ConfigureCameraModifiers?.Invoke(cameraModifiers);
+            pluginManager.Configure(pluginRegistration);
+            transitionDrivers.Seal();
+            cameraModifiers.Seal();
+            transientCueHandlers.Seal();
+            pluginManager.SealRegistration();
             var services = new RuntimeServiceRegistry();
             RegisterDefaultServices(services);
+            // Plugins configure against the complete built-in graph. This makes
+            // ReplaceSingleton useful while still keeping every registration
+            // before the graph is sealed and instantiated.
+            pluginManager.ConfigureServices(services);
             ConfigureServices?.Invoke(services);
             Host = services.Build(Logger);
             Logger.SetRootCorrelation(new RuntimeLogCorrelation(
                 Host.RuntimeId,
                 Host.SessionId));
+
             await ExecuteWithLifecycleTimeoutAsync(
                 token => Host.InitializeAsync(token),
                 "initialization",
                 bootstrapLifetime.Token);
+
+            var pluginContext = new PluginContext(
+                Host.Services,
+                Configuration!,
+                Logger);
+            await pluginManager.InitializeAllAsync(pluginContext, bootstrapLifetime.Token);
 
             if (Host.Services.TryGet<IYarnCommandAdapter>(out var adapter))
             {
@@ -363,6 +408,9 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(IActorTextureLoader),
                 typeof(IFrameClock),
                 typeof(ILocaleManager))
+            .AddSingleton<IPluginManager>(_ => pluginManager)
+            .AddSingleton<ITransitionDriverRegistry>(_ =>
+                transitionDrivers)
             .AddSingleton<GodotDirectionRenderHost>(
                 _ => new GodotDirectionRenderHost(
                     this,
@@ -377,22 +425,25 @@ public partial class MajoRuntimeBootstrap : Node
                         resolver.Get<IOperationScheduler>(),
                         resolver.Get<IActorTextureLoader>(),
                         resolver.Get<IFrameClock>(),
-                        resolver.Get<ILocaleManager>())),
+                        resolver.Get<ILocaleManager>()),
+                    resolver.Get<ITransitionDriverRegistry>()),
                 typeof(GodotDirectionRenderHost),
                 typeof(IResourceManager),
                 typeof(IOperationScheduler),
                 typeof(IActorTextureLoader),
                 typeof(IFrameClock),
-                typeof(ILocaleManager))
+                typeof(ILocaleManager),
+                typeof(ITransitionDriverRegistry))
             .AddSingleton<IDirectionTransactionCoordinator>(
                 resolver =>
                 {
                     var host = resolver.Get<GodotDirectionRenderHost>();
+                    var drivers = resolver.Get<ITransitionDriverRegistry>();
                     var textures = new DirectionTextureLoader(
                         resolver.Get<IResourceManager>());
                     var backend = new CompositeDirectionPreparationBackend(
                         resolver.Get<GodotDirectionStageBackend>(),
-                        new GodotDirectionViewBackend(host),
+                        new GodotDirectionViewBackend(host, drivers),
                         new GodotDirectionScreenBackend(host),
                         new GodotDirectionEffectBackend(host));
                     return new DirectionTransactionCoordinator(
@@ -401,26 +452,40 @@ public partial class MajoRuntimeBootstrap : Node
                 },
                 typeof(GodotDirectionRenderHost),
                 typeof(GodotDirectionStageBackend),
+                typeof(ITransitionDriverRegistry),
                 typeof(IResourceManager))
-            .AddSingleton<IDirectionShakeManager>(
-                resolver => new GodotDirectionShakeManager(
-                    resolver.Get<GodotDirectionRenderHost>(),
-                    resolver.Get<IOperationScheduler>(),
-                    resolver.Get<IStageAccessibility>()),
+            .AddSingleton<ICameraModifierManager>(
+                resolver =>
+                {
+                    var host = resolver.Get<GodotDirectionRenderHost>();
+                    var manager = new CameraModifierManager(
+                        (viewId, delta) => host.ApplyViewModifierDelta(viewId, delta),
+                        viewId => host.ClearViewModifierDelta(viewId),
+                        resolver.Get<IOperationScheduler>(),
+                        resolver.Get<IStageAccessibility>(),
+                        resolver.Get<IFrameClock>(),
+                        registry: cameraModifiers);
+                    return manager;
+                },
                 typeof(GodotDirectionRenderHost),
                 typeof(IOperationScheduler),
-                typeof(IStageAccessibility))
+                typeof(IStageAccessibility),
+                typeof(IFrameClock))
+            .AddSingleton<ITransientCueHandlerRegistry>(_ => transientCueHandlers)
             .AddSingleton<IDirectionBeatRuntime>(
                 resolver => new DirectionBeatRuntime(
                     resolver.Get<IDirectionTransactionCoordinator>(),
                     new TransientDirectionCueExecutor(
-                        resolver.Get<IDirectionShakeManager>(),
+                        resolver.Get<ITransientCueHandlerRegistry>(),
+                        resolver.Get<ICameraModifierManager>(),
                         resolver.Get<IScreenEffectManager>(),
-                        resolver.Get<IStageCurtainManager>())),
+                        resolver.Get<IStageCurtainManager>(),
+                        resolver)),
                 typeof(IDirectionTransactionCoordinator),
-                typeof(IDirectionShakeManager),
                 typeof(IScreenEffectManager),
-                typeof(IStageCurtainManager))
+                typeof(IStageCurtainManager),
+                typeof(ICameraModifierManager),
+                typeof(ITransientCueHandlerRegistry))
             .AddSingleton<IDirectionScopeResolver>(_ => new DirectionScopeResolver())
             .AddSingleton<IScriptPreloadManager>(
                 resolver => new ScriptPreloadManager(
@@ -1035,7 +1100,7 @@ public partial class MajoRuntimeBootstrap : Node
         IAudioManager audio,
         IDirectionBeatRuntime direction)
     {
-        var commands = new RuntimeCommandRegistry();
+        var commands = commandRegistry;
         BuiltInRuntimeCommands.Register(commands);
         commands.RegisterModule(new AudioCommandModule(audio));
         commands.RegisterModule(new StageCommandModule());
@@ -1106,6 +1171,7 @@ public partial class MajoRuntimeBootstrap : Node
             new ActorCreationConventions(
                 Configuration.Resources!.CharactersPath,
                 Configuration.Resources.BackgroundsPath));
+        ConfigurePluginActorFactories(manager);
         ConfigureActorFactories?.Invoke(manager);
         return manager;
     }
@@ -1118,7 +1184,7 @@ public partial class MajoRuntimeBootstrap : Node
         ILocaleManager locales)
     {
         var actorConfiguration = Configuration!.Actors!;
-        return new ActorManager(
+        var manager = new ActorManager(
             ActorConfigurationCompiler.Compile(
                 actorConfiguration,
                 Configuration.Resources!)
@@ -1146,6 +1212,14 @@ public partial class MajoRuntimeBootstrap : Node
             new ActorCreationConventions(
                 Configuration.Resources!.CharactersPath,
                 Configuration.Resources.BackgroundsPath));
+        ConfigurePluginActorFactories(manager);
+        return manager;
+    }
+
+    private void ConfigurePluginActorFactories(ActorManager manager)
+    {
+        foreach (var configure in pluginRegistration.ActorFactoryConfigurations)
+            configure(manager);
     }
 
     private ResourceManager CreateResourceManager(

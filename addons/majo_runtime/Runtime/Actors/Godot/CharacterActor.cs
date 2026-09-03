@@ -26,6 +26,7 @@ public sealed class CharacterActor : ActorBase, ICharacterActor
     }
 
     public new Sprite2D View => (Sprite2D)base.View;
+    CanvasItem ICharacterActor.View => View;
 
     public override Vector2 Position => View.Position;
 

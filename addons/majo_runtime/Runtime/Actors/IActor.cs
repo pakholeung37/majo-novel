@@ -123,8 +123,7 @@ public interface IGodotActorView
 
 public interface ICharacterActor : IActor, IGodotActorView
 {
-    Sprite2D View { get; }
-
+    CanvasItem View { get; }
     Vector2 Scale { get; }
 
     CharacterPositionPreset PositionPreset { get; }

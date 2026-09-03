@@ -10,6 +10,7 @@ using Majo.Runtime.Actors;
 using Majo.Runtime.Core;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Rendering;
+using Majo.Runtime.Direction.Transitions;
 
 namespace Majo.Runtime.Direction.Godot;
 
@@ -18,16 +19,19 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
     private readonly GodotDirectionRenderHost host;
     private readonly IDirectionTextureLoader textures;
     private readonly Func<Node2D, IActorManager>? createActorManager;
+    private readonly ITransitionDriverRegistry drivers;
     private readonly Dictionary<StageId, GodotDirectionActorTreeBackend> actors = new();
 
     public GodotDirectionStageBackend(
         GodotDirectionRenderHost host,
         IDirectionTextureLoader textures,
-        Func<Node2D, IActorManager>? createActorManager = null)
+        Func<Node2D, IActorManager>? createActorManager = null,
+        ITransitionDriverRegistry? drivers = null)
     {
         this.host = host ?? throw new ArgumentNullException(nameof(host));
         this.textures = textures ?? throw new ArgumentNullException(nameof(textures));
         this.createActorManager = createActorManager;
+        this.drivers = drivers ?? new TransitionDriverRegistry();
     }
 
     public Task InitializeAsync(CancellationToken cancellationToken)
@@ -198,7 +202,8 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
             surface.Backdrop.Texture,
             target?.Backdrop,
             targetTexture,
-            transition);
+            transition,
+            drivers);
     }
 
     private static bool DirectionActorsEqual(StageState? before, StageState? target)
@@ -339,6 +344,7 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
         private readonly BackdropState? target;
         private readonly Texture2D? targetTexture;
         private readonly DirectionTransitionSpec transition;
+        private readonly ITransitionDriverRegistry drivers;
         private readonly TaskCompletionSource settlement = new(
             TaskCreationOptions.RunContinuationsAsynchronously);
         private Tween? tween;
@@ -354,7 +360,8 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
             Texture2D? sourceTexture,
             BackdropState? target,
             Texture2D? targetTexture,
-            DirectionTransitionSpec transition)
+            DirectionTransitionSpec transition,
+            ITransitionDriverRegistry drivers)
         {
             this.host = host;
             this.surface = surface;
@@ -363,6 +370,7 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
             this.target = target;
             this.targetTexture = targetTexture;
             this.transition = transition;
+            this.drivers = drivers;
         }
 
         public Task Settlement => settlement.Task;
@@ -376,8 +384,7 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
             if (host.IsCurrentStageGeneration(surface.Id, generation))
                 host.ClearBackdropTransition(surface.Id);
             var animate = transition.DurationSeconds > 0 &&
-                transition.Kind is DirectionTransitionKind.Fade or
-                    DirectionTransitionKind.Dissolve &&
+                transition.Kind != DirectionTransitionId.Cut &&
                 sourceTexture is not null &&
                 source is not null;
             if (animate)
@@ -394,12 +401,26 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
 
             tween = host.CreateTween();
             GodotDirectionRendering.Configure(tween, transition.Ease);
-            tween.TweenMethod(Callable.From<float>(progress =>
+            if (drivers.TryGet(transition.Kind, out var driver) && driver is not null)
             {
-                if (host.IsCurrentStageGeneration(surface.Id, generation))
-                    surface.BackdropTransition.Modulate = new Color(
-                        surface.BackdropTransition.Modulate, 1 - progress);
-            }), 0.0f, 1.0f, transition.DurationSeconds);
+                var context = new VisualTransitionContext(
+                    surface.BackdropTransition,
+                    transition,
+                    tween,
+                    () => host.IsCurrentStageGeneration(surface.Id, generation),
+                    sourceTexture,
+                    targetTexture);
+                driver.Setup(context);
+            }
+            else
+            {
+                tween.TweenMethod(Callable.From<float>(progress =>
+                {
+                    if (host.IsCurrentStageGeneration(surface.Id, generation))
+                        surface.BackdropTransition.Modulate = new Color(
+                            surface.BackdropTransition.Modulate, 1 - progress);
+                }), 0.0f, 1.0f, transition.DurationSeconds);
+            }
             tween.Finished += OnFinished;
         }
 
