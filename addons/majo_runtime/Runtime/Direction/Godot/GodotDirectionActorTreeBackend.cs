@@ -340,7 +340,7 @@ internal sealed class GodotDirectionActorTreeBackend
             cancellationToken.ThrowIfCancellationRequested();
             if (!committed || rolledBack || disposed)
                 throw new InvalidOperationException("Actor tree cannot finish in its current state.");
-            foreach (var operation in operations) operation.Complete();
+            foreach (var operation in operations) operation.Finish();
             await Task.WhenAll(operations.Select(operation => operation.Completion))
                 .WaitAsync(cancellationToken);
             CompleteSettlement();

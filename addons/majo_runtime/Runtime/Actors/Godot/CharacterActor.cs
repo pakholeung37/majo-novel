@@ -13,10 +13,10 @@ public sealed class CharacterActor : ActorBase, ICharacterActor
     public CharacterActor(
         ActorDefinition definition,
         Sprite2D view,
-        IOperationScheduler scheduler,
+        IOperationRunner runner,
         IActorTextureLoader textureLoader,
         CharacterPositionMap positions)
-        : base(definition, view, scheduler, textureLoader)
+        : base(definition, view, runner, textureLoader)
     {
         this.positions = positions ?? throw new ArgumentNullException(nameof(positions));
         PositionPreset = definition.InitialPosition;
@@ -51,9 +51,7 @@ public sealed class CharacterActor : ActorBase, ICharacterActor
 
     public IOperationHandle ChangeAppearance(
         string appearance,
-        double durationSeconds,
-        string? operationId = null,
-        string? groupId = null)
+        double durationSeconds)
     {
         var texture = TextureLoader.Load(
             Definition.GetAppearanceResourceKey(appearance),
@@ -61,30 +59,22 @@ public sealed class CharacterActor : ActorBase, ICharacterActor
         return CrossFadeToAppearance(
             appearance,
             () => ApplyTexture(texture),
-            durationSeconds,
-            operationId,
-            groupId);
+            durationSeconds);
     }
 
     public IOperationHandle ChangePosition(
         CharacterPositionPreset preset,
-        double durationSeconds,
-        string? operationId = null,
-        string? groupId = null) => ChangePosition(
+        double durationSeconds) => ChangePosition(
             preset,
-            new AnimationSpec(durationSeconds),
-            operationId,
-            groupId);
+            new AnimationSpec(durationSeconds));
 
     public IOperationHandle ChangePosition(
         CharacterPositionPreset preset,
-        AnimationSpec animation,
-        string? operationId = null,
-        string? groupId = null)
+        AnimationSpec animation)
     {
         PositionPreset = preset;
         return ChangePosition(
-            positions.Get(preset), animation, operationId, groupId);
+            positions.Get(preset), animation);
     }
 
     protected override void ApplyTexture(Texture2D texture)

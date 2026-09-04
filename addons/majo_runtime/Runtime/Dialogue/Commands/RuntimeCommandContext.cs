@@ -15,7 +15,7 @@ public sealed class RuntimeCommandContext
 
     internal RuntimeCommandContext(
         IActorManager? actors,
-        IOperationScheduler? operations,
+        IOperationRunner? operations,
         IServiceResolver? services,
         CancellationToken cancellationToken,
         Action<IOperationHandle>? operationTracked = null,
@@ -31,7 +31,7 @@ public sealed class RuntimeCommandContext
 
     public IActorManager? Actors { get; }
 
-    public IOperationScheduler? Operations { get; }
+    public IOperationRunner? Operations { get; }
 
     public IServiceResolver? Services { get; }
 
@@ -67,7 +67,7 @@ public sealed class RuntimeCommandContext
         }
         catch
         {
-            // OperationScheduler owns fault reporting; this observer only releases registration.
+            // OperationRunner owns fault reporting; this observer only releases registration.
         }
         finally
         {

@@ -16,7 +16,7 @@ public sealed class LayeredCharacterActorFactory : IConventionActorFactory
 {
     private const string ManifestFileName = "layered_character.json";
     private readonly Node2D host;
-    private readonly IOperationScheduler scheduler;
+    private readonly IOperationRunner runner;
     private readonly IActorTextureLoader textureLoader;
     private readonly IFrameClock? frameClock;
     private readonly CharacterPositionMap positions;
@@ -28,14 +28,14 @@ public sealed class LayeredCharacterActorFactory : IConventionActorFactory
 
     public LayeredCharacterActorFactory(
         Node2D host,
-        IOperationScheduler scheduler,
+        IOperationRunner runner,
         IActorTextureLoader textureLoader,
         CharacterPositionMap positions,
         string resourceRootPath,
         string charactersPath)
         : this(
             host,
-            scheduler,
+            runner,
             textureLoader,
             null!,
             positions,
@@ -46,7 +46,7 @@ public sealed class LayeredCharacterActorFactory : IConventionActorFactory
 
     public LayeredCharacterActorFactory(
         Node2D host,
-        IOperationScheduler scheduler,
+        IOperationRunner runner,
         IActorTextureLoader textureLoader,
         IFrameClock frameClock,
         CharacterPositionMap positions,
@@ -54,7 +54,7 @@ public sealed class LayeredCharacterActorFactory : IConventionActorFactory
         string charactersPath)
     {
         this.host = host ?? throw new ArgumentNullException(nameof(host));
-        this.scheduler = scheduler ?? throw new ArgumentNullException(nameof(scheduler));
+        this.runner = runner ?? throw new ArgumentNullException(nameof(runner));
         this.textureLoader = textureLoader ?? throw new ArgumentNullException(nameof(textureLoader));
         this.frameClock = frameClock;
         this.positions = positions ?? throw new ArgumentNullException(nameof(positions));
@@ -127,7 +127,7 @@ public sealed class LayeredCharacterActorFactory : IConventionActorFactory
             return new LayeredCharacterActor(
                 definition,
                 view,
-                scheduler,
+                runner,
                 textureLoader,
                 positions,
                 manifest,
@@ -182,7 +182,7 @@ public sealed class LayeredCharacterActorFactory : IConventionActorFactory
             actor = new LayeredCharacterActor(
                 definition,
                 view,
-                scheduler,
+                runner,
                 textureLoader,
                 positions,
                 manifest,

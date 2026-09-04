@@ -36,20 +36,12 @@ internal sealed class OperationHandle : IOperationHandle, IDisposable
         this.onTerminated = onTerminated;
         context = new OperationContext(
             frameClock,
-            definition.Id,
-            definition.GroupId,
             executionCancellation.Token);
         lifetimeCancellationRegistration = lifetimeCancellationToken.Register(
             static state => ((OperationHandle)state!).Cancel(), this);
     }
 
-    public string? Id => definition.Id;
-
-    public string? GroupId => definition.GroupId;
-
-    public bool IsSkippable => definition.IsSkippable;
-
-    public string DiagnosticId => definition.Id ?? diagnosticId;
+    internal string DiagnosticId => diagnosticId;
 
     public OperationState State
     {
@@ -101,8 +93,8 @@ internal sealed class OperationHandle : IOperationHandle, IDisposable
         OperationControlRequest.Cancel,
         OperationState.Cancelling);
 
-    public void Complete() => RequestControl(
-        OperationControlRequest.Complete,
+    public void Finish() => RequestControl(
+        OperationControlRequest.Finish,
         OperationState.Completing);
 
     private void RequestControl(
@@ -160,9 +152,9 @@ internal sealed class OperationHandle : IOperationHandle, IDisposable
         Exception? finalizationException = null;
         try
         {
-            if (request == OperationControlRequest.Complete)
+            if (request == OperationControlRequest.Finish)
             {
-                await definition.CompleteAsync(CancellationToken.None);
+                await definition.FinishAsync(CancellationToken.None);
             }
             else if (request == OperationControlRequest.Cancel)
             {
@@ -252,7 +244,7 @@ internal sealed class OperationHandle : IOperationHandle, IDisposable
     {
         None,
         Cancel,
-        Complete,
+        Finish,
     }
 
     public void Dispose()

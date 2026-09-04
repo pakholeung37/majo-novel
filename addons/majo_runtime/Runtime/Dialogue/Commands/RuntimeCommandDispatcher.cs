@@ -16,7 +16,7 @@ public sealed class RuntimeCommandDispatcher : IDisposable
     private readonly object operationGate = new();
     private readonly CommandBinder binder;
     private readonly IActorManager? actors;
-    private readonly IOperationScheduler? operations;
+    private readonly IOperationRunner? operations;
     private readonly IServiceResolver? services;
     private readonly IRuntimeLogger logger;
     private readonly bool abortOnRecoverableFailure;
@@ -31,7 +31,7 @@ public sealed class RuntimeCommandDispatcher : IDisposable
     public RuntimeCommandDispatcher(
         CommandBinder binder,
         IActorManager? actors = null,
-        IOperationScheduler? operations = null,
+        IOperationRunner? operations = null,
         IServiceResolver? services = null,
         IRuntimeLogger? logger = null,
         bool abortOnRecoverableFailure = false,
@@ -357,7 +357,7 @@ public sealed class RuntimeCommandDispatcher : IDisposable
         }
         catch
         {
-            // OperationScheduler owns terminal fault observation.
+            // OperationRunner owns terminal fault observation.
         }
         finally
         {

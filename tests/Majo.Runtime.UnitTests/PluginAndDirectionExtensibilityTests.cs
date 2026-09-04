@@ -121,7 +121,7 @@ public sealed class PluginAndDirectionExtensibilityTests
 
         var clock = new TestFrameClock();
         using var lifetime = new TestRuntimeLifetime();
-        var scheduler = new OperationScheduler(clock, lifetime);
+        var scheduler = new OperationRunner(clock, lifetime);
         await scheduler.InitializeAsync(CancellationToken.None);
         var accessibility = new StageAccessibility(reduceMotion: false);
 
@@ -165,7 +165,7 @@ public sealed class PluginAndDirectionExtensibilityTests
 
         var transitions = new TransitionDriverRegistry();
         using var lifetime = new TestRuntimeLifetime();
-        var scheduler = new OperationScheduler(new TestFrameClock(), lifetime);
+        var scheduler = new OperationRunner(new TestFrameClock(), lifetime);
         var commands = new RuntimeCommandRegistry();
         var logger = NullRuntimeLogger.Instance;
 

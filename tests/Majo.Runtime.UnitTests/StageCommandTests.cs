@@ -104,8 +104,8 @@ public sealed class StageCommandTests
         var backend = new FakeStageBackend();
         var registry = new RuntimeServiceRegistry()
             .AddSingleton<IFrameClock>(_ => new ImmediateFrameClock())
-            .AddSingleton<IOperationScheduler>(
-                resolver => new OperationScheduler(
+            .AddSingleton<IOperationRunner>(
+                resolver => new OperationRunner(
                     resolver.Get<IFrameClock>(),
                     resolver.Get<IRuntimeLifetime>()),
                 typeof(IFrameClock),
@@ -115,10 +115,10 @@ public sealed class StageCommandTests
             .AddSingleton<ICameraManager>(
                 resolver => new CameraManager(
                     resolver.Get<IStageBackend>(),
-                    resolver.Get<IOperationScheduler>(),
+                    resolver.Get<IOperationRunner>(),
                     resolver.Get<IStageAccessibility>()),
                 typeof(IStageBackend),
-                typeof(IOperationScheduler),
+                typeof(IOperationRunner),
                 typeof(IStageAccessibility));
         var host = registry.Build();
         await host.InitializeAsync();
@@ -160,8 +160,8 @@ public sealed class StageCommandTests
         var backend = new FakeStageBackend();
         var registry = new RuntimeServiceRegistry()
             .AddSingleton<IFrameClock>(_ => new ImmediateFrameClock())
-            .AddSingleton<IOperationScheduler>(
-                resolver => new OperationScheduler(
+            .AddSingleton<IOperationRunner>(
+                resolver => new OperationRunner(
                     resolver.Get<IFrameClock>(),
                     resolver.Get<IRuntimeLifetime>()),
                 typeof(IFrameClock),
@@ -171,10 +171,10 @@ public sealed class StageCommandTests
             .AddSingleton<ICameraManager>(
                 resolver => new CameraManager(
                     resolver.Get<IStageBackend>(),
-                    resolver.Get<IOperationScheduler>(),
+                    resolver.Get<IOperationRunner>(),
                     resolver.Get<IStageAccessibility>()),
                 typeof(IStageBackend),
-                typeof(IOperationScheduler),
+                typeof(IOperationRunner),
                 typeof(IStageAccessibility));
         var host = registry.Build();
         await host.InitializeAsync();
@@ -199,8 +199,8 @@ public sealed class StageCommandTests
         var backend = new FakeStageBackend();
         var registry = new RuntimeServiceRegistry()
             .AddSingleton<IFrameClock>(_ => new ImmediateFrameClock())
-            .AddSingleton<IOperationScheduler>(
-                resolver => new OperationScheduler(
+            .AddSingleton<IOperationRunner>(
+                resolver => new OperationRunner(
                     resolver.Get<IFrameClock>(),
                     resolver.Get<IRuntimeLifetime>()),
                 typeof(IFrameClock),
@@ -210,10 +210,10 @@ public sealed class StageCommandTests
             .AddSingleton<ICameraManager>(
                 resolver => new CameraManager(
                     resolver.Get<IStageBackend>(),
-                    resolver.Get<IOperationScheduler>(),
+                    resolver.Get<IOperationRunner>(),
                     resolver.Get<IStageAccessibility>()),
                 typeof(IStageBackend),
-                typeof(IOperationScheduler),
+                typeof(IOperationRunner),
                 typeof(IStageAccessibility));
         var host = registry.Build();
         await host.InitializeAsync();

@@ -51,7 +51,7 @@ public partial class HeadlessTestRunner
         var actorLifetime = new HeadlessDirectionRuntimeLifetime();
         var actorFrameClock = new GodotFrameClock(GetTree());
         await actorFrameClock.InitializeAsync(CancellationToken.None);
-        var actorScheduler = new OperationScheduler(actorFrameClock, actorLifetime);
+        var actorScheduler = new OperationRunner(actorFrameClock, actorLifetime);
         await actorScheduler.InitializeAsync(CancellationToken.None);
         var cameraModifiers = new CameraModifierManager(
             (viewId, delta) => host.ApplyViewModifierDelta(viewId, delta),
@@ -176,7 +176,7 @@ public partial class HeadlessTestRunner
                 Mathf.IsZeroApprox(illustrationSurface.ModifierDelta.CenterOffset.Y) &&
                 !illustrationSurface.Transform.Transform.IsEqualApprox(stableIllustrationTransform),
             "Direction camera shake did not offset the targeted non-main View.");
-        shake.Complete();
+        shake.Finish();
         await shake.Completion;
         Assert(illustrationSurface.ModifierDelta.CenterOffset.IsZeroApprox() &&
                 illustrationSurface.Transform.Transform.IsEqualApprox(stableIllustrationTransform),

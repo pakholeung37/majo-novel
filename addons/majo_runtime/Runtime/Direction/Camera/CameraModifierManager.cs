@@ -78,7 +78,7 @@ public sealed class CameraModifierManager : ICameraModifierManager
 {
     private readonly Action<ViewId, CameraPoseDelta> applyDeltaCallback;
     private readonly Action<ViewId> clearDeltaCallback;
-    private readonly IOperationScheduler operations;
+    private readonly IOperationRunner operations;
     private readonly IStageAccessibility accessibility;
     private readonly IFrameClock? frameClock;
     private readonly object gate = new();
@@ -90,7 +90,7 @@ public sealed class CameraModifierManager : ICameraModifierManager
     public CameraModifierManager(
         Action<ViewId, CameraPoseDelta> applyDeltaCallback,
         Action<ViewId> clearDeltaCallback,
-        IOperationScheduler operations,
+        IOperationRunner operations,
         IStageAccessibility accessibility,
         IFrameClock? frameClock = null,
         bool registerDefaults = true,

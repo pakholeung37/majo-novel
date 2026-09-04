@@ -18,7 +18,7 @@ public sealed class StateManager : IStateManager, IStateRestoreTransaction, IDis
     private readonly IReadOnlyList<IStateContributor> contributors;
     private readonly IDialoguePlayer dialogue;
     private readonly IInputManager input;
-    private readonly IOperationScheduler operations;
+    private readonly IOperationRunner operations;
     private readonly IStateEligibility eligibility;
     private readonly StateMigrationRegistry migrations;
     private readonly IRuntimeLogger logger;
@@ -30,7 +30,7 @@ public sealed class StateManager : IStateManager, IStateRestoreTransaction, IDis
         IReadOnlyList<IStateContributor> contributors,
         IDialoguePlayer dialogue,
         IInputManager input,
-        IOperationScheduler operations,
+        IOperationRunner operations,
         IStateEligibility? eligibility = null,
         StateMigrationRegistry? migrations = null,
         IRuntimeLogger? logger = null)

@@ -55,7 +55,7 @@ public partial class HeadlessTestRunner
         var backgroundLayer = actorRoot.GetNode<Control>("Backgrounds");
         var characterLayer = actorRoot.GetNode<Node2D>("Characters");
         var manager = bootstrap.Host!.Services.Get<IActorManager>();
-        var scheduler = bootstrap.Host.Services.Get<IOperationScheduler>();
+        var scheduler = bootstrap.Host.Services.Get<IOperationRunner>();
         var character = (CharacterActor)manager.GetActor<ICharacterActor>(
             manager.Create("hero").Id);
         var background = manager.GetActor<IBackgroundActor>(
@@ -118,10 +118,10 @@ public partial class HeadlessTestRunner
 
         character.SetPosition(configuration.Actors.LeftPosition);
         var firstMove = character.ChangePosition(
-            CharacterPositionPreset.Center, 1, "first-move");
+            CharacterPositionPreset.Center, 1);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         var secondMove = character.ChangePosition(
-            CharacterPositionPreset.Right, 0.04, "second-move");
+            CharacterPositionPreset.Right, 0.04);
         await firstMove.Completion;
         Assert(firstMove.State == OperationState.Completed,
             "Conflicting prior position operation was not force-completed.");
@@ -132,7 +132,7 @@ public partial class HeadlessTestRunner
             "Second position operation did not reach its target.");
 
         character.SetOpacity(0);
-        var fade = character.ChangeOpacity(1, 0.08, "character-fade");
+        var fade = character.ChangeOpacity(1, 0.08);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         Assert(character.Opacity is > 0 and < 1,
@@ -167,7 +167,7 @@ public partial class HeadlessTestRunner
             "Camera dissolve did not commit its target and release the source capture.");
 
         var resetOperation = character.ChangePosition(
-            CharacterPositionPreset.Left, 10, "reset-character");
+            CharacterPositionPreset.Left, 10);
         await bootstrap.ResetRuntimeAsync();
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);

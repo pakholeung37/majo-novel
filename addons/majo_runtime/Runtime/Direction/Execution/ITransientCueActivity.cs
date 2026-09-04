@@ -48,7 +48,7 @@ public sealed class TransientCueActivity : ITransientCueActivity
             {
                 try
                 {
-                    handle.Complete();
+                    handle.Finish();
                 }
                 catch (Exception ex)
                 {

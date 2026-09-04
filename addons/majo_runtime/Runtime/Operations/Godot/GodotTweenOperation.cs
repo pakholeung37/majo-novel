@@ -15,8 +15,6 @@ public static class GodotTweenOperation
         Action<float> applyValue,
         float finalValue,
         double durationSeconds,
-        string? id = null,
-        string? groupId = null,
         Tween.TransitionType transition = Tween.TransitionType.Linear,
         Tween.EaseType ease = Tween.EaseType.InOut,
         bool ignoreTimeScale = false)
@@ -55,9 +53,7 @@ public static class GodotTweenOperation
                 tween = null;
                 applyValue(finalValue);
             },
-            id,
-            groupId,
-            _ =>
+            onFinish: _ =>
             {
                 KillTween(tween);
                 tween = null;
@@ -65,7 +61,7 @@ public static class GodotTweenOperation
                 applyValue(finalValue);
                 return Task.CompletedTask;
             },
-            _ =>
+            onCancel: _ =>
             {
                 KillTween(tween);
                 tween = null;
@@ -79,8 +75,6 @@ public static class GodotTweenOperation
         NodePath property,
         Variant finalValue,
         double durationSeconds,
-        string? id = null,
-        string? groupId = null,
         Tween.TransitionType transition = Tween.TransitionType.Linear,
         Tween.EaseType ease = Tween.EaseType.InOut,
         bool ignoreTimeScale = false)
@@ -111,9 +105,7 @@ public static class GodotTweenOperation
                 await WaitForTweenAsync(tween, context.CancellationToken);
                 tween = null;
             },
-            id,
-            groupId,
-            _ =>
+            onFinish: _ =>
             {
                 KillTween(tween);
                 tween = null;
@@ -121,7 +113,7 @@ public static class GodotTweenOperation
                 target.SetIndexed(property, finalValue);
                 return Task.CompletedTask;
             },
-            _ =>
+            onCancel: _ =>
             {
                 KillTween(tween);
                 tween = null;

@@ -17,13 +17,13 @@ public partial class MajoRuntimeBootstrap : Node
         services.AddSingleton<IAudioManager>(
             resolver => CreateAudioManager(
                 resolver.Get<IResourceManager>(),
-                resolver.Get<IOperationScheduler>(),
+                resolver.Get<IOperationRunner>(),
                 resolver.Get<IMissingResourceReporter>(),
                 resolver.Get<ILocaleManager>(),
                 resolver.Get<ILocalizedResourceResolver>(),
                 resolver.Get<IRuntimeActivityRegistry>()),
             typeof(IResourceManager),
-            typeof(IOperationScheduler),
+            typeof(IOperationRunner),
             typeof(IMissingResourceReporter),
             typeof(ILocaleManager),
             typeof(ILocalizedResourceResolver),
@@ -32,7 +32,7 @@ public partial class MajoRuntimeBootstrap : Node
 
     private AudioManager CreateAudioManager(
         IResourceManager resources,
-        IOperationScheduler operations,
+        IOperationRunner operations,
         IMissingResourceReporter missingResources,
         ILocaleManager locales,
         ILocalizedResourceResolver localizedResources,

@@ -10,9 +10,9 @@ public sealed class BackgroundActor : ActorBase, IBackgroundActor
     public BackgroundActor(
         ActorDefinition definition,
         Control container,
-        IOperationScheduler scheduler,
+        IOperationRunner runner,
         IActorTextureLoader textureLoader)
-        : base(definition, container, scheduler, textureLoader)
+        : base(definition, container, runner, textureLoader)
     {
         Container.Resized += LayoutViews;
         CurrentView = CreateView();

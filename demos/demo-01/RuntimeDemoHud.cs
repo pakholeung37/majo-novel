@@ -31,7 +31,7 @@ public partial class RuntimeDemoHud : CanvasLayer
     private IStateManager? state;
     private IScriptPlayback? script;
     private IDialoguePlayer? dialogue;
-    private IOperationScheduler? operations;
+    private IOperationRunner? operations;
     private IInputManager? input;
     private IFrameClock? frameClock;
     private IRuntimeDiagnostics? diagnostics;
@@ -77,7 +77,7 @@ public partial class RuntimeDemoHud : CanvasLayer
         IStateManager stateManager,
         IScriptPlayback scriptPlayback,
         IDialoguePlayer dialoguePlayer,
-        IOperationScheduler operationScheduler,
+        IOperationRunner operationScheduler,
         IInputManager inputManager,
         IFrameClock runtimeFrameClock,
         IRuntimeDiagnostics runtimeDiagnostics,

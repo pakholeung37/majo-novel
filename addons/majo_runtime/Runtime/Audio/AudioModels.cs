@@ -90,10 +90,6 @@ internal sealed class CompletedAudioOperation : IOperationHandle
 {
     public static CompletedAudioOperation Instance { get; } = new();
 
-    public string? Id => null;
-
-    public string? GroupId => null;
-
     public OperationState State => OperationState.Completed;
 
     public Task Completion => Task.CompletedTask;
@@ -102,7 +98,7 @@ internal sealed class CompletedAudioOperation : IOperationHandle
     {
     }
 
-    public void Complete()
+    public void Finish()
     {
     }
 }

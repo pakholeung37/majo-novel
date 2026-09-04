@@ -21,12 +21,12 @@ public partial class MajoRuntimeBootstrap : Node
             .AddSingleton<IActorManager>(
                 resolver => CreateActorManager(
                     resolver.Get<GodotActorHost>(),
-                    resolver.Get<IOperationScheduler>(),
+                    resolver.Get<IOperationRunner>(),
                     resolver.Get<IActorTextureLoader>(),
                     resolver.Get<IFrameClock>(),
                     resolver.Get<ILocaleManager>()),
                 typeof(GodotActorHost),
-                typeof(IOperationScheduler),
+                typeof(IOperationRunner),
                 typeof(IActorTextureLoader),
                 typeof(IFrameClock),
                 typeof(ILocaleManager))
@@ -39,10 +39,10 @@ public partial class MajoRuntimeBootstrap : Node
             .AddSingleton<ICameraManager>(
                 resolver => new CameraManager(
                     resolver.Get<IStageBackend>(),
-                    resolver.Get<IOperationScheduler>(),
+                    resolver.Get<IOperationRunner>(),
                     resolver.Get<IStageAccessibility>()),
                 typeof(IStageBackend),
-                typeof(IOperationScheduler),
+                typeof(IOperationRunner),
                 typeof(IStageAccessibility))
             .AddSingleton<IStageTransitionManager>(
                 resolver =>
@@ -51,30 +51,30 @@ public partial class MajoRuntimeBootstrap : Node
                     ConfigureStageTransitionProviders?.Invoke(registry);
                     return new StageTransitionManager(
                         resolver.Get<IStageBackend>(),
-                        resolver.Get<IOperationScheduler>(),
+                        resolver.Get<IOperationRunner>(),
                         registry.Providers);
                 },
                 typeof(IStageBackend),
-                typeof(IOperationScheduler))
+                typeof(IOperationRunner))
             .AddSingleton<IStageCurtainManager>(
                 resolver => new StageCurtainManager(
                     resolver.Get<IStageBackend>(),
-                    resolver.Get<IOperationScheduler>()),
+                    resolver.Get<IOperationRunner>()),
                 typeof(IStageBackend),
-                typeof(IOperationScheduler))
+                typeof(IOperationRunner))
             .AddSingleton<IScreenEffectManager>(
                 resolver => new ScreenEffectManager(
                     resolver.Get<IStageBackend>(),
-                    resolver.Get<IOperationScheduler>(),
+                    resolver.Get<IOperationRunner>(),
                     resolver.Get<IStageAccessibility>()),
                 typeof(IStageBackend),
-                typeof(IOperationScheduler),
+                typeof(IOperationRunner),
                 typeof(IStageAccessibility));
     }
 
     private ActorManager CreateActorManager(
         GodotActorHost host,
-        IOperationScheduler scheduler,
+        IOperationRunner scheduler,
         IActorTextureLoader textureLoader,
         IFrameClock frameClock,
         ILocaleManager locales)

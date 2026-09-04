@@ -89,29 +89,21 @@ public interface IActor
 
     IOperationHandle ChangePosition(
         Vector2 position,
-        double durationSeconds,
-        string? operationId = null,
-        string? groupId = null);
+        double durationSeconds);
 
     IOperationHandle ChangePosition(
         Vector2 position,
-        AnimationSpec animation,
-        string? operationId = null,
-        string? groupId = null) => ChangePosition(
-            position, animation.DurationSeconds, operationId, groupId);
+        AnimationSpec animation) => ChangePosition(
+            position, animation.DurationSeconds);
 
     IOperationHandle ChangeOpacity(
         float opacity,
-        double durationSeconds,
-        string? operationId = null,
-        string? groupId = null);
+        double durationSeconds);
 
     IOperationHandle ChangeOpacity(
         float opacity,
-        AnimationSpec animation,
-        string? operationId = null,
-        string? groupId = null) => ChangeOpacity(
-            opacity, animation.DurationSeconds, operationId, groupId);
+        AnimationSpec animation) => ChangeOpacity(
+            opacity, animation.DurationSeconds);
 
     void Destroy();
 }
@@ -136,22 +128,16 @@ public interface ICharacterActor : IActor, IGodotActorView
 
     IOperationHandle ChangeAppearance(
         string appearance,
-        double durationSeconds,
-        string? operationId = null,
-        string? groupId = null);
+        double durationSeconds);
 
     IOperationHandle ChangePosition(
         CharacterPositionPreset preset,
-        double durationSeconds,
-        string? operationId = null,
-        string? groupId = null);
+        double durationSeconds);
 
     IOperationHandle ChangePosition(
         CharacterPositionPreset preset,
-        AnimationSpec animation,
-        string? operationId = null,
-        string? groupId = null) => ChangePosition(
-            preset, animation.DurationSeconds, operationId, groupId);
+        AnimationSpec animation) => ChangePosition(
+            preset, animation.DurationSeconds);
 }
 
 public interface IBackgroundActor : IActor, IGodotActorView

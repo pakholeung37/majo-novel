@@ -15,7 +15,7 @@ public sealed class CameraManager : ICameraManager
 {
     private readonly object gate = new();
     private readonly IStageBackend backend;
-    private readonly IOperationScheduler operations;
+    private readonly IOperationRunner operations;
     private readonly IStageAccessibility accessibility;
     private readonly Dictionary<string, IOperationHandle> propertyOperations = new(StringComparer.Ordinal);
     private IOperationHandle? viewTransitionOperation;
@@ -24,7 +24,7 @@ public sealed class CameraManager : ICameraManager
 
     public CameraManager(
         IStageBackend backend,
-        IOperationScheduler operations,
+        IOperationRunner operations,
         IStageAccessibility accessibility)
     {
         this.backend = backend ?? throw new ArgumentNullException(nameof(backend));
@@ -135,7 +135,7 @@ public sealed class CameraManager : ICameraManager
         EnsureInitialized();
         shake.Validate();
         var spec = shake.EffectiveOperation.Validate();
-        lock (gate) shakeOperation?.Complete();
+        lock (gate) shakeOperation?.Finish();
         IOperationHandle? handle = null;
         var definition = new OperationDefinition(
             async context =>
@@ -148,11 +148,8 @@ public sealed class CameraManager : ICameraManager
                         context.CancellationToken);
                 backend.ClearShake();
             },
-            spec.OperationId,
-            spec.GroupId,
-            _ => { backend.ClearShake(); return Task.CompletedTask; },
-            _ => { backend.ClearShake(); return Task.CompletedTask; },
-            spec.Skippable);
+            onFinish: _ => { backend.ClearShake(); return Task.CompletedTask; },
+            onCancel: _ => { backend.ClearShake(); return Task.CompletedTask; });
         handle = operations.Start(definition);
         lock (gate) shakeOperation = handle;
         _ = ClearShakeWhenDoneAsync(handle);
@@ -188,8 +185,8 @@ public sealed class CameraManager : ICameraManager
                 .ToArray();
             propertyOperations.Clear();
             viewTransitionOperation = null;
-            foreach (var predecessor in predecessors) predecessor.Complete();
-            shakeOperation?.Complete();
+            foreach (var predecessor in predecessors) predecessor.Finish();
+            shakeOperation?.Finish();
             final = pose.Apply(TargetState).Validate();
             TargetState = final;
         }
@@ -208,23 +205,20 @@ public sealed class CameraManager : ICameraManager
                     context.CancellationToken);
                 lock (gate) State = final;
             },
-            spec.OperationId,
-            spec.GroupId,
-            _ =>
+            onFinish: _ =>
             {
                 backend.ClearCameraViewTransition();
                 backend.ApplyCamera(final);
                 lock (gate) State = TargetState = final;
                 return Task.CompletedTask;
             },
-            _ =>
+            onCancel: _ =>
             {
                 backend.ClearCameraViewTransition();
                 backend.ApplyCamera(final);
                 lock (gate) State = TargetState = final;
                 return Task.CompletedTask;
-            },
-            spec.Skippable);
+            });
         handle = operations.Start(definition);
         lock (gate) viewTransitionOperation = handle;
         _ = ClearViewTransitionWhenDoneAsync(handle);
@@ -245,7 +239,7 @@ public sealed class CameraManager : ICameraManager
             : spec;
         IOperationHandle? viewPredecessor;
         lock (gate) viewPredecessor = viewTransitionOperation;
-        viewPredecessor?.Complete();
+        viewPredecessor?.Finish();
         IOperationHandle[] predecessors;
         CameraState final;
         lock (gate)
@@ -272,15 +266,13 @@ public sealed class CameraManager : ICameraManager
                 await animate(from, final, playbackSpec, context.CancellationToken);
                 lock (gate) State = MergeProperties(State, final, properties);
             },
-            spec.OperationId,
-            spec.GroupId,
-            _ =>
+            onFinish: _ =>
             {
                 lock (gate) State = MergeProperties(State, final, properties);
                 backend.ApplyCameraPose(CreatePoseUpdate(final, properties));
                 return Task.CompletedTask;
             },
-            _ =>
+            onCancel: _ =>
             {
                 var sampled = backend.RenderedCamera;
                 lock (gate)
@@ -289,8 +281,7 @@ public sealed class CameraManager : ICameraManager
                     TargetState = MergeProperties(TargetState, sampled, properties);
                 }
                 return Task.CompletedTask;
-            },
-            spec.Skippable);
+            });
         handle = operations.Start(definition);
         lock (gate) foreach (var property in properties) propertyOperations[property] = handle;
         _ = ClearPropertiesWhenDoneAsync(handle, properties);
@@ -390,14 +381,14 @@ public sealed class StageTransitionManager : IStageTransitionManager
 {
     private readonly object gate = new();
     private readonly IStageBackend backend;
-    private readonly IOperationScheduler operations;
+    private readonly IOperationRunner operations;
     private readonly Dictionary<string, IStageTransitionProvider> providers;
     private IOperationHandle? active;
     private bool isInitialized;
 
     public StageTransitionManager(
         IStageBackend backend,
-        IOperationScheduler operations,
+        IOperationRunner operations,
         IEnumerable<IStageTransitionProvider>? providers = null)
     {
         this.backend = backend ?? throw new ArgumentNullException(nameof(backend));
@@ -442,7 +433,7 @@ public sealed class StageTransitionManager : IStageTransitionManager
             !providers.TryGetValue(request.ProviderId!, out provider))
             throw new InvalidOperationException(
                 $"Stage transition provider '{request.ProviderId}' is not registered.");
-        lock (gate) active?.Complete();
+        lock (gate) active?.Finish();
         IOperationHandle? handle = null;
         var definition = new OperationDefinition(
             async context =>
@@ -456,22 +447,19 @@ public sealed class StageTransitionManager : IStageTransitionManager
                 Appearance = request.TargetAppearance ?? Appearance;
                 backend.ClearTransition();
             },
-            request.Operation.OperationId,
-            request.Operation.GroupId,
-            _ =>
+            onFinish: _ =>
             {
                 if (provider is null) backend.ClearTransition();
                 else provider.Complete(backend, request);
                 Appearance = request.TargetAppearance ?? Appearance;
                 return Task.CompletedTask;
             },
-            _ =>
+            onCancel: _ =>
             {
                 if (provider is null) backend.ClearTransition();
                 else provider.Cancel(backend, request);
                 return Task.CompletedTask;
-            },
-            request.Operation.Skippable);
+            });
         handle = operations.Start(definition);
         lock (gate) active = handle;
         _ = ClearWhenDoneAsync(handle);
@@ -501,13 +489,13 @@ public sealed class StageCurtainManager : IStageCurtainManager
 {
     private readonly object gate = new();
     private readonly IStageBackend backend;
-    private readonly IOperationScheduler operations;
+    private readonly IOperationRunner operations;
     private IOperationHandle? active;
     private bool isInitialized;
 
     public StageCurtainManager(
         IStageBackend backend,
-        IOperationScheduler operations)
+        IOperationRunner operations)
     {
         this.backend = backend ?? throw new ArgumentNullException(nameof(backend));
         this.operations = operations ?? throw new ArgumentNullException(nameof(operations));
@@ -557,7 +545,7 @@ public sealed class StageCurtainManager : IStageCurtainManager
         lock (gate)
         {
             predecessor = active;
-            predecessor?.Complete();
+            predecessor?.Finish();
             TargetState = target;
         }
 
@@ -573,15 +561,13 @@ public sealed class StageCurtainManager : IStageCurtainManager
                     from, target, spec.DurationSeconds, context.CancellationToken);
                 lock (gate) State = target;
             },
-            spec.OperationId,
-            spec.GroupId,
-            _ =>
+            onFinish: _ =>
             {
                 lock (gate) State = target;
                 backend.ApplyCurtain(target);
                 return Task.CompletedTask;
             },
-            _ =>
+            onCancel: _ =>
             {
                 StageCurtainState stable;
                 lock (gate)
@@ -591,8 +577,7 @@ public sealed class StageCurtainManager : IStageCurtainManager
                 }
                 backend.ApplyCurtain(stable);
                 return Task.CompletedTask;
-            },
-            spec.Skippable));
+            }));
         lock (gate) active = handle;
         _ = ClearWhenDoneAsync(handle);
         return handle;
@@ -625,7 +610,7 @@ public sealed class ScreenEffectManager : IScreenEffectManager
 {
     private readonly object gate = new();
     private readonly IStageBackend backend;
-    private readonly IOperationScheduler operations;
+    private readonly IOperationRunner operations;
     private readonly IStageAccessibility accessibility;
     private readonly Dictionary<string, IOperationHandle> propertyOperations = new(StringComparer.Ordinal);
     private IOperationHandle? flashOperation;
@@ -633,7 +618,7 @@ public sealed class ScreenEffectManager : IScreenEffectManager
 
     public ScreenEffectManager(
         IStageBackend backend,
-        IOperationScheduler operations,
+        IOperationRunner operations,
         IStageAccessibility accessibility)
     {
         this.backend = backend;
@@ -695,7 +680,7 @@ public sealed class ScreenEffectManager : IScreenEffectManager
         if (!float.IsFinite(intensity) || intensity is < 0 or > 1)
             throw new ArgumentOutOfRangeException(nameof(intensity));
         var spec = (operation ?? new StageOperationSpec(0.2)).Validate();
-        lock (gate) flashOperation?.Complete();
+        lock (gate) flashOperation?.Finish();
         IOperationHandle? handle = null;
         handle = operations.Start(new OperationDefinition(
             async context =>
@@ -704,11 +689,8 @@ public sealed class ScreenEffectManager : IScreenEffectManager
                     await backend.FlashAsync(color, intensity, spec.DurationSeconds, context.CancellationToken);
                 backend.ClearFlash();
             },
-            spec.OperationId,
-            spec.GroupId,
-            _ => { backend.ClearFlash(); return Task.CompletedTask; },
-            _ => { backend.ClearFlash(); return Task.CompletedTask; },
-            spec.Skippable));
+            onFinish: _ => { backend.ClearFlash(); return Task.CompletedTask; },
+            onCancel: _ => { backend.ClearFlash(); return Task.CompletedTask; }));
         lock (gate) flashOperation = handle;
         _ = ClearFlashWhenDoneAsync(handle);
         return handle;
@@ -736,7 +718,7 @@ public sealed class ScreenEffectManager : IScreenEffectManager
         lock (gate)
         {
             propertyOperations.TryGetValue(property, out predecessor);
-            predecessor?.Complete();
+            predecessor?.Finish();
             final = target(TargetState).Validate();
             TargetState = final;
         }
@@ -751,21 +733,18 @@ public sealed class ScreenEffectManager : IScreenEffectManager
                 await animate(from, final, spec.DurationSeconds, context.CancellationToken);
                 lock (gate) State = Merge(State, final, property);
             },
-            spec.OperationId,
-            spec.GroupId,
-            _ =>
+            onFinish: _ =>
             {
                 lock (gate) State = Merge(State, final, property);
                 backend.ApplyScreenEffect(TargetState);
                 return Task.CompletedTask;
             },
-            _ =>
+            onCancel: _ =>
             {
                 lock (gate) TargetState = Merge(TargetState, State, property);
                 backend.ApplyScreenEffect(State);
                 return Task.CompletedTask;
-            },
-            spec.Skippable));
+            }));
         lock (gate) propertyOperations[property] = handle;
         _ = ClearPropertyWhenDoneAsync(property, handle);
         return handle;

@@ -145,14 +145,14 @@ public sealed class RuntimeDiagnosticsService : IRuntimeDiagnostics
                 a.Elapsed.TotalSeconds)).ToArray();
             operationDiag = new OperationDiagnostics(activeOps.Length, activeOps);
         }
-        else if (services.TryGet<IOperationScheduler>(out var operations) && operations is not null)
+        else if (services.TryGet<IOperationRunner>(out var operations) && operations is not null)
         {
-            initializedServicesList.Add(nameof(IOperationScheduler));
+            initializedServicesList.Add(nameof(IOperationRunner));
             var activeOps = operations.ActiveOperations.Select(op => new ActiveOperationInfo(
-                op.DiagnosticId,
-                op.GroupId,
+                $"op-{op.GetHashCode():x8}",
+                null,
                 op.State,
-                op.Elapsed.TotalSeconds)).ToArray();
+                0.0)).ToArray();
             operationDiag = new OperationDiagnostics(activeOps.Length, activeOps);
         }
 

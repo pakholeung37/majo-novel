@@ -33,7 +33,7 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IDisposa
     public LayeredCharacterActor(
         ActorDefinition definition,
         Sprite2D view,
-        IOperationScheduler scheduler,
+        IOperationRunner runner,
         IActorTextureLoader textureLoader,
         CharacterPositionMap positions,
         LayeredCharacterManifest manifest,
@@ -44,7 +44,7 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IDisposa
         : base(
             definition,
             view,
-            scheduler,
+            runner,
             textureLoader,
             manifest.DefaultAppearance)
     {
@@ -105,27 +105,19 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IDisposa
 
     public override IOperationHandle ChangeOpacity(
         float opacity,
-        double durationSeconds,
-        string? operationId = null,
-        string? groupId = null) => ChangeOpacity(
+        double durationSeconds) => ChangeOpacity(
         opacity,
-        new AnimationSpec(durationSeconds),
-        operationId,
-        groupId);
+        new AnimationSpec(durationSeconds));
 
     public override IOperationHandle ChangeOpacity(
         float opacity,
-        AnimationSpec animation,
-        string? operationId = null,
-        string? groupId = null)
+        AnimationSpec animation)
     {
         ValidateOpacity(opacity);
         TargetOpacity = opacity;
         return StartSequencedOperation(
             OpacityProperty,
             CreateCompositeOpacityTween(opacity, animation),
-            operationId,
-            groupId,
             animation.ConflictPolicy);
     }
 
@@ -137,9 +129,7 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IDisposa
 
     public IOperationHandle ChangeAppearance(
         string appearance,
-        double durationSeconds,
-        string? operationId = null,
-        string? groupId = null)
+        double durationSeconds)
     {
         var nextLayers = new HashSet<string>(targetLayers, StringComparer.Ordinal);
         resolver.Apply(nextLayers, appearance);
@@ -223,26 +213,23 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IDisposa
                 await Task.WhenAll(fades.Select(fade => fade.ExecuteAsync(context)));
                 Commit();
             },
-            completeAsync: async cancellationToken =>
+            onFinish: async cancellationToken =>
             {
                 PrepareTransition();
                 await Task.WhenAll(fades.Select(
-                    fade => fade.CompleteAsync(cancellationToken)));
+                    fade => fade.FinishAsync(cancellationToken)));
                 Commit();
             },
-            cancelAsync: async cancellationToken =>
+            onCancel: async cancellationToken =>
             {
                 PrepareTransition();
                 await Task.WhenAll(fades.Select(
                     fade => fade.CancelAsync(cancellationToken)));
                 Commit();
-            },
-            isSkippable: true);
+            });
         return StartSequencedOperation(
             AppearanceProperty,
-            transition,
-            operationId,
-            groupId);
+            transition);
     }
 
     public override void SetAppearance(string appearance)
@@ -269,22 +256,16 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IDisposa
 
     public IOperationHandle ChangePosition(
         CharacterPositionPreset preset,
-        double durationSeconds,
-        string? operationId = null,
-        string? groupId = null) => ChangePosition(
+        double durationSeconds) => ChangePosition(
             preset,
-            new AnimationSpec(durationSeconds),
-            operationId,
-            groupId);
+            new AnimationSpec(durationSeconds));
 
     public IOperationHandle ChangePosition(
         CharacterPositionPreset preset,
-        AnimationSpec animation,
-        string? operationId = null,
-        string? groupId = null)
+        AnimationSpec animation)
     {
         PositionPreset = preset;
-        return ChangePosition(positions.Get(preset), animation, operationId, groupId);
+        return ChangePosition(positions.Get(preset), animation);
     }
 
     protected override void ApplyTexture(Texture2D texture)

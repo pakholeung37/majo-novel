@@ -93,7 +93,7 @@ public partial class HeadlessTestRunner
             narratorVoice.GetLength() > 10 &&
             mayaVoice.GetLength() > 5,
             "Runtime Demo audio assets were missing, invalid, or configured with unsafe loops.");
-        var scheduler = bootstrap.Host.Services.Get<IOperationScheduler>();
+        var scheduler = bootstrap.Host.Services.Get<IOperationRunner>();
         var caseService = bootstrap.Host.Services.Get<DemoSessionService>();
         var dialogue = bootstrap.Host.Services.Get<IDialoguePlayer>();
         var variables = bootstrap.Host.Services.Get<IDialogueVariables>();

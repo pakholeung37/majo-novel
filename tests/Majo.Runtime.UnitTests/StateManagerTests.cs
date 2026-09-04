@@ -352,7 +352,7 @@ public sealed class StateManagerTests
         contributors,
         new StubDialoguePlayer(events),
         new StubInputManager(events),
-        new StubOperationScheduler(),
+        new StubOperationRunner(),
         eligibility,
         migrations: migrations);
 
@@ -545,25 +545,13 @@ public sealed class StateManagerTests
         }
     }
 
-    private sealed class StubOperationScheduler : IOperationScheduler
+    private sealed class StubOperationRunner : IOperationRunner
     {
         public IReadOnlyCollection<IOperationHandle> ActiveOperations => [];
         public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public IOperationHandle Start(OperationDefinition definition) =>
-            throw new NotSupportedException();
-        public Task WaitAsync(
-            OperationTarget target,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-        public Task CancelAsync(
-            OperationTarget target,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-        public Task CompleteAsync(
-            OperationTarget target,
-            CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
     }
 

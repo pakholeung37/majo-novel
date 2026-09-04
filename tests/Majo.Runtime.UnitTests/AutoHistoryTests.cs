@@ -656,12 +656,10 @@ public sealed class AutoHistoryTests
     private sealed class CompletedOperation : IOperationHandle
     {
         public static CompletedOperation Instance { get; } = new();
-        public string? Id => null;
-        public string? GroupId => null;
         public OperationState State => OperationState.Completed;
         public Task Completion => Task.CompletedTask;
         public void Cancel() { }
-        public void Complete() { }
+        public void Finish() { }
     }
 
     private sealed class RecordingDirectionCoordinator : IDirectionTransactionCoordinator

@@ -141,7 +141,7 @@ public sealed class Phase0BaselineContractTests
         Assert.Equal(OperationState.Running, handle.State);
 
         // Test complete/finish
-        handle.Complete();
+        handle.Finish();
         await handle.Completion;
         Assert.Equal(OperationState.Completed, handle.State);
 
@@ -168,7 +168,7 @@ public sealed class Phase0BaselineContractTests
 
         var handle = handler.Execute(cue, context);
         Assert.NotNull(handle);
-        handle.Complete();
+        handle.Finish();
         await handle.Completion;
         Assert.Equal(OperationState.Completed, handle.State);
 
@@ -194,7 +194,7 @@ public sealed class Phase0BaselineContractTests
 
         var handle = handler.Execute(cue, context);
         Assert.NotNull(handle);
-        handle.Complete();
+        handle.Finish();
         await handle.Completion;
         Assert.Equal(OperationState.Completed, handle.State);
 
@@ -473,12 +473,7 @@ public sealed class Phase0BaselineContractTests
             State = OperationState.Running;
         }
 
-        public string? Id => null;
-        public string? GroupId => null;
-        public bool IsSkippable => true;
-        public string DiagnosticId => "mock";
         public OperationState State { get; private set; }
-        public TimeSpan Elapsed => TimeSpan.Zero;
         public Task Completion => tcs.Task;
 
         public void Cancel()
@@ -488,7 +483,7 @@ public sealed class Phase0BaselineContractTests
             tcs.TrySetCanceled();
         }
 
-        public void Complete()
+        public void Finish()
         {
             if (State is OperationState.Completed or OperationState.Cancelled) return;
             State = OperationState.Completed;
@@ -645,8 +640,8 @@ public sealed class Phase0BaselineContractTests
             var registry = new RuntimeServiceRegistry()
                 .AddSingleton<IFrameClock>(_ => frameClock)
                 .AddSingleton<IMissingResourceReporter>(_ => missingResources)
-                .AddSingleton<IOperationScheduler>(
-                    resolver => new OperationScheduler(
+                .AddSingleton<IOperationRunner>(
+                    resolver => new OperationRunner(
                         resolver.Get<IFrameClock>(),
                         resolver.Get<IRuntimeLifetime>()),
                     typeof(IFrameClock),
@@ -654,13 +649,13 @@ public sealed class Phase0BaselineContractTests
                 .AddSingleton<IAudioManager>(
                     resolver => new AudioManager(
                         backend,
-                        resolver.Get<IOperationScheduler>(),
+                        resolver.Get<IOperationRunner>(),
                         bgm,
                         sfx,
                         voice,
                         new AudioSettings(),
                         missingResources: resolver.Get<IMissingResourceReporter>()),
-                    typeof(IOperationScheduler),
+                    typeof(IOperationRunner),
                     typeof(IMissingResourceReporter));
 
             var host = registry.Build();

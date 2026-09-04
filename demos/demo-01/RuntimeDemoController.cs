@@ -72,7 +72,7 @@ public partial class RuntimeDemoController : Node
             await runtime.InitializationCompletion;
             var services = runtime.Host!.Services;
             var dialogue = services.Get<IDialoguePlayer>();
-            var scheduler = services.Get<IOperationScheduler>();
+            var scheduler = services.Get<IOperationRunner>();
             var state = services.Get<IStateManager>();
             if (!automatic)
             {

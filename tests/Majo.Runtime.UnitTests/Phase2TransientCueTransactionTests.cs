@@ -376,15 +376,10 @@ public sealed class Phase2TransientCueTransactionTests
             Completion = completion;
         }
 
-        public string? Id => "fake-handle";
-        public string? GroupId => null;
-        public bool IsSkippable => true;
-        public string DiagnosticId => "fake-handle";
         public OperationState State => OperationState.Running;
         public Task Completion { get; }
-        public TimeSpan Elapsed => TimeSpan.Zero;
 
-        public void Complete() => onComplete();
+        public void Finish() => onComplete();
         public void Cancel() => onCancel();
     }
 }

@@ -164,8 +164,6 @@ public enum StageTransitionKind
 
 public sealed record StageOperationSpec(
     double DurationSeconds = RuntimeDefaults.AnimationDurationSeconds,
-    string? OperationId = null,
-    string? GroupId = null,
     bool Skippable = true,
     MotionCurve Curve = MotionCurve.Linear)
 {
@@ -174,10 +172,6 @@ public sealed record StageOperationSpec(
         if (!double.IsFinite(DurationSeconds) || DurationSeconds < 0)
             throw new ArgumentOutOfRangeException(
                 nameof(DurationSeconds), "Duration must be finite and non-negative.");
-        if (OperationId is not null && string.IsNullOrWhiteSpace(OperationId))
-            throw new ArgumentException("Operation ID cannot be blank.");
-        if (GroupId is not null && string.IsNullOrWhiteSpace(GroupId))
-            throw new ArgumentException("Group ID cannot be blank.");
         if (!Enum.IsDefined(Curve))
             throw new ArgumentOutOfRangeException(nameof(Curve));
         return this;

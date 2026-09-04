@@ -23,15 +23,6 @@ public class FakeOperationHandle : IOperationHandle
         }
     }
 
-    public FakeOperationHandle(string? id, string? groupId = null, OperationState initialState = OperationState.Running)
-        : this(initialState)
-    {
-        Id = id;
-        GroupId = groupId;
-    }
-
-    public string? Id { get; init; }
-    public string? GroupId { get; init; }
     public OperationState State { get; private set; }
     public Task Completion => completion.Task;
 
@@ -47,7 +38,7 @@ public class FakeOperationHandle : IOperationHandle
         _ = completion.Task.Exception;
     }
 
-    public void Complete()
+    public void Finish()
     {
         State = OperationState.Completed;
         completion.TrySetResult();
@@ -98,40 +89,32 @@ public class FakeActor : IActor
 
     public virtual IOperationHandle ChangePosition(
         Vector2 position,
-        double durationSeconds,
-        string? operationId = null,
-        string? groupId = null)
+        double durationSeconds)
     {
         Position = position;
-        return LastOperation = new FakeOperationHandle(operationId, groupId, OperationState.Completed);
+        return LastOperation = new FakeOperationHandle(OperationState.Completed);
     }
 
     public virtual IOperationHandle ChangeOpacity(
         float opacity,
-        double durationSeconds,
-        string? operationId = null,
-        string? groupId = null)
+        double durationSeconds)
     {
         Opacity = opacity;
-        return LastOperation = new FakeOperationHandle(operationId, groupId, OperationState.Completed);
+        return LastOperation = new FakeOperationHandle(OperationState.Completed);
     }
 
     public virtual IOperationHandle Show(
-        double durationSeconds,
-        string? operationId = null,
-        string? groupId = null)
+        double durationSeconds = 0)
     {
         Visible = true;
-        return LastOperation = new FakeOperationHandle(operationId, groupId, OperationState.Completed);
+        return LastOperation = new FakeOperationHandle(OperationState.Completed);
     }
 
     public virtual IOperationHandle Hide(
-        double durationSeconds,
-        string? operationId = null,
-        string? groupId = null)
+        double durationSeconds = 0)
     {
         Visible = false;
-        return LastOperation = new FakeOperationHandle(operationId, groupId, OperationState.Completed);
+        return LastOperation = new FakeOperationHandle(OperationState.Completed);
     }
 
     public virtual void Destroy()

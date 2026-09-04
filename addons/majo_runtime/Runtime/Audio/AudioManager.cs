@@ -17,7 +17,7 @@ public sealed class AudioManager : IAudioManager, IDisposable
     private readonly object gate = new();
     private readonly SemaphoreSlim mutations = new(1, 1);
     private readonly IAudioBackend backend;
-    private readonly IOperationScheduler operations;
+    private readonly IOperationRunner operations;
     private readonly Dictionary<string, AudioPlayback> bgm = new(StringComparer.Ordinal);
     private readonly Dictionary<string, AudioPlayback> sfx = new(StringComparer.Ordinal);
     private readonly Dictionary<string, IOperationHandle> bgmTransitions =
@@ -48,7 +48,7 @@ public sealed class AudioManager : IAudioManager, IDisposable
 
     public AudioManager(
         IAudioBackend backend,
-        IOperationScheduler operations,
+        IOperationRunner operations,
         IAudioClipLoader bgmLoader,
         IAudioClipLoader sfxLoader,
         IAudioClipLoader voiceLoader,
@@ -634,9 +634,7 @@ public sealed class AudioManager : IAudioManager, IDisposable
                     throw;
                 }
             },
-            null,
-            null,
-            _ =>
+            onFinish: _ =>
             {
                 foreach (var target in targets)
                 {
@@ -646,12 +644,11 @@ public sealed class AudioManager : IAudioManager, IDisposable
                 CompleteOnce();
                 return Task.CompletedTask;
             },
-            _ =>
+            onCancel: _ =>
             {
                 CancelOnce();
                 return Task.CompletedTask;
-            },
-            isSkippable: true));
+            }));
     }
 
     private AudioPlayback CreatePlayback(
@@ -931,7 +928,7 @@ public sealed class AudioManager : IAudioManager, IDisposable
             return;
         }
 
-        transition.Complete();
+        transition.Finish();
         try
         {
             await transition.Completion.WaitAsync(cancellationToken);
@@ -965,7 +962,7 @@ public sealed class AudioManager : IAudioManager, IDisposable
 
         foreach (var transition in transitions)
         {
-            transition.Complete();
+            transition.Finish();
         }
 
         AudioPlayback[] snapshot;
@@ -1003,7 +1000,7 @@ public sealed class AudioManager : IAudioManager, IDisposable
             }
             catch
             {
-                // OperationScheduler owns reporting; volume projection still runs.
+                // OperationRunner owns reporting; volume projection still runs.
             }
         }
 

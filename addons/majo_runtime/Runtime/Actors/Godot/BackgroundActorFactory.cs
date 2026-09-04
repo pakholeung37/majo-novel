@@ -7,16 +7,16 @@ namespace Majo.Runtime.Actors.Godot;
 public sealed class BackgroundActorFactory : IActorFactory
 {
     private readonly Control host;
-    private readonly IOperationScheduler scheduler;
+    private readonly IOperationRunner runner;
     private readonly IActorTextureLoader textureLoader;
 
     public BackgroundActorFactory(
         Control host,
-        IOperationScheduler scheduler,
+        IOperationRunner runner,
         IActorTextureLoader textureLoader)
     {
         this.host = host ?? throw new ArgumentNullException(nameof(host));
-        this.scheduler = scheduler ?? throw new ArgumentNullException(nameof(scheduler));
+        this.runner = runner ?? throw new ArgumentNullException(nameof(runner));
         this.textureLoader = textureLoader ?? throw new ArgumentNullException(nameof(textureLoader));
     }
 
@@ -36,7 +36,7 @@ public sealed class BackgroundActorFactory : IActorFactory
         container.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         try
         {
-            return new BackgroundActor(definition, container, scheduler, textureLoader);
+            return new BackgroundActor(definition, container, runner, textureLoader);
         }
         catch
         {

@@ -169,7 +169,7 @@ public sealed class Phase1ActivityObserverTests
         var backend = new FakeAudioBackend { AutoCompleteFades = true };
         var clock = new StubFrameClock();
         var lifetime = new FakeLifetime();
-        var scheduler = new OperationScheduler(clock, lifetime);
+        var scheduler = new OperationRunner(clock, lifetime);
         var bgmLoader = new FakeAudioClipLoader("audio/bgm").Register("bgm1");
         var sfxLoader = new FakeAudioClipLoader("audio/sfx").Register("sfx1");
         var voiceLoader = new FakeAudioClipLoader("audio/voice").Register("v_hello").Register("en/v_hello");

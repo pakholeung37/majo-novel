@@ -222,14 +222,14 @@ public static class RuntimeDemoComposition
             services.ReplaceSingleton<IAudioManager>(
                 resolver => new AudioManager(
                     new FakeAudioBackend(),
-                    resolver.Get<IOperationScheduler>(),
+                    resolver.Get<IOperationRunner>(),
                     audio,
                     audio,
                     audio,
                     new AudioSettings(),
                     runtime.Logger,
                     resolver.Get<IMissingResourceReporter>()),
-                typeof(IOperationScheduler),
+                typeof(IOperationRunner),
                 typeof(IMissingResourceReporter));
         };
         runtime.ConfigureCommands += RegisterCommands;

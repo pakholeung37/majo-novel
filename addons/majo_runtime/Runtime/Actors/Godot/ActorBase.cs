@@ -23,12 +23,12 @@ public abstract class ActorBase : IActor, IGodotActorView
     protected ActorBase(
         ActorDefinition definition,
         CanvasItem view,
-        IOperationScheduler scheduler,
+        IOperationRunner runner,
         IActorTextureLoader textureLoader)
         : this(
             definition,
             view,
-            scheduler,
+            runner,
             textureLoader,
             definition.DefaultAppearance)
     {
@@ -37,13 +37,13 @@ public abstract class ActorBase : IActor, IGodotActorView
     protected ActorBase(
         ActorDefinition definition,
         CanvasItem view,
-        IOperationScheduler scheduler,
+        IOperationRunner runner,
         IActorTextureLoader textureLoader,
         string initialAppearance)
     {
         Definition = definition ?? throw new ArgumentNullException(nameof(definition));
         View = view ?? throw new ArgumentNullException(nameof(view));
-        Scheduler = scheduler ?? throw new ArgumentNullException(nameof(scheduler));
+        Runner = runner ?? throw new ArgumentNullException(nameof(runner));
         TextureLoader = textureLoader ?? throw new ArgumentNullException(nameof(textureLoader));
         ArgumentException.ThrowIfNullOrWhiteSpace(initialAppearance);
         Appearance = initialAppearance;
@@ -57,7 +57,7 @@ public abstract class ActorBase : IActor, IGodotActorView
 
     protected CanvasItem View { get; }
 
-    protected IOperationScheduler Scheduler { get; }
+    protected IOperationRunner Runner { get; }
 
     protected IActorTextureLoader TextureLoader { get; }
 
@@ -161,19 +161,13 @@ public abstract class ActorBase : IActor, IGodotActorView
 
     public IOperationHandle ChangePosition(
         Vector2 position,
-        double durationSeconds,
-        string? operationId = null,
-        string? groupId = null) => ChangePosition(
+        double durationSeconds) => ChangePosition(
             position,
-            new AnimationSpec(durationSeconds),
-            operationId,
-            groupId);
+            new AnimationSpec(durationSeconds));
 
     public IOperationHandle ChangePosition(
         Vector2 position,
-        AnimationSpec animation,
-        string? operationId = null,
-        string? groupId = null)
+        AnimationSpec animation)
     {
         EnsureAlive();
         ValidatePosition(position);
@@ -188,24 +182,18 @@ public abstract class ActorBase : IActor, IGodotActorView
             ease: GodotAnimationSpec.Ease(animation.Ease),
             ignoreTimeScale: animation.TimeMode == AnimationTimeMode.Unscaled);
         return StartSequencedOperation(
-            PositionProperty, tween, operationId, groupId, animation.ConflictPolicy);
+            PositionProperty, tween, animation.ConflictPolicy);
     }
 
     public virtual IOperationHandle ChangeOpacity(
         float opacity,
-        double durationSeconds,
-        string? operationId = null,
-        string? groupId = null) => ChangeOpacity(
+        double durationSeconds) => ChangeOpacity(
             opacity,
-            new AnimationSpec(durationSeconds),
-            operationId,
-            groupId);
+            new AnimationSpec(durationSeconds));
 
     public virtual IOperationHandle ChangeOpacity(
         float opacity,
-        AnimationSpec animation,
-        string? operationId = null,
-        string? groupId = null)
+        AnimationSpec animation)
     {
         EnsureAlive();
         ValidateOpacity(opacity);
@@ -220,7 +208,7 @@ public abstract class ActorBase : IActor, IGodotActorView
             ease: GodotAnimationSpec.Ease(animation.Ease),
             ignoreTimeScale: animation.TimeMode == AnimationTimeMode.Unscaled);
         return StartSequencedOperation(
-            OpacityProperty, tween, operationId, groupId, animation.ConflictPolicy);
+            OpacityProperty, tween, animation.ConflictPolicy);
     }
 
     public virtual void Destroy()
@@ -250,8 +238,6 @@ public abstract class ActorBase : IActor, IGodotActorView
     protected IOperationHandle StartSequencedOperation(
         string property,
         OperationDefinition operation,
-        string? operationId,
-        string? groupId,
         AnimationConflictPolicy conflictPolicy = AnimationConflictPolicy.CompletePrevious)
     {
         EnsureAlive();
@@ -263,7 +249,7 @@ public abstract class ActorBase : IActor, IGodotActorView
 
         if (conflictPolicy == AnimationConflictPolicy.CompletePrevious)
         {
-            previous?.Complete();
+            previous?.Finish();
         }
         else
         {
@@ -275,20 +261,17 @@ public abstract class ActorBase : IActor, IGodotActorView
                 await WaitForPredecessorAsync(previous, context.CancellationToken);
                 await operation.ExecuteAsync(context);
             },
-            operationId,
-            groupId,
-            async cancellationToken =>
+            onFinish: async cancellationToken =>
             {
                 await WaitForPredecessorAsync(previous, cancellationToken);
-                await operation.CompleteAsync(cancellationToken);
+                await operation.FinishAsync(cancellationToken);
             },
-            async cancellationToken =>
+            onCancel: async cancellationToken =>
             {
                 await WaitForPredecessorAsync(previous, cancellationToken);
                 await operation.CancelAsync(cancellationToken);
-            },
-            isSkippable: true);
-        var handle = Scheduler.Start(sequenced);
+            });
+        var handle = Runner.Start(sequenced);
         propertyOperations[property] = handle;
         return handle;
     }
@@ -299,8 +282,6 @@ public abstract class ActorBase : IActor, IGodotActorView
         string appearance,
         Action applyAppearance,
         double durationSeconds,
-        string? operationId = null,
-        string? groupId = null,
         CanvasItem? compositeView = null)
     {
         EnsureAlive();
@@ -371,15 +352,15 @@ public abstract class ActorBase : IActor, IGodotActorView
                     fadeIn!.ExecuteAsync(context));
                 CleanupPreviousView();
             },
-            completeAsync: async cancellationToken =>
+            onFinish: async cancellationToken =>
             {
                 PrepareTransition();
                 await Task.WhenAll(
-                    fadeOut!.CompleteAsync(cancellationToken),
-                    fadeIn!.CompleteAsync(cancellationToken));
+                    fadeOut!.FinishAsync(cancellationToken),
+                    fadeIn!.FinishAsync(cancellationToken));
                 CleanupPreviousView();
             },
-            cancelAsync: async cancellationToken =>
+            onCancel: async cancellationToken =>
             {
                 if (fadeOut is not null && fadeIn is not null)
                 {
@@ -391,13 +372,10 @@ public abstract class ActorBase : IActor, IGodotActorView
                 RestoreFinalState();
                 TargetOpacity = 1;
                 TargetVisible = true;
-            },
-            isSkippable: true);
+            });
         return StartSequencedOperation(
             OpacityProperty,
-            transition,
-            operationId,
-            groupId);
+            transition);
     }
 
     private static async Task WaitForPredecessorAsync(

@@ -30,17 +30,17 @@ public partial class HeadlessTestRunner
         bootstrap.ConfigureServices = services => services.ReplaceSingleton<IAudioManager>(
             resolver => new AudioManager(
                 new GodotAudioBackend(bootstrap),
-                resolver.Get<IOperationScheduler>(),
+                resolver.Get<IOperationRunner>(),
                 loader,
                 loader,
                 loader,
                 new AudioSettings()),
-            typeof(IOperationScheduler));
+            typeof(IOperationRunner));
         AddChild(bootstrap);
         await bootstrap.InitializationCompletion;
 
         var audio = bootstrap.Host!.Services.Get<IAudioManager>();
-        var operations = bootstrap.Host.Services.Get<IOperationScheduler>();
+        var operations = bootstrap.Host.Services.Get<IOperationRunner>();
         var audioHost = bootstrap.GetNode("MajoAudioHost");
         await audio.PlayBgmAsync("calm", "music");
         var crossfade = await audio.PlayBgmAsync(
@@ -80,7 +80,7 @@ public partial class HeadlessTestRunner
             "calm",
             "music",
             fade: new AudioFade(1));
-        completed.FadeOperation.Complete();
+        completed.FadeOperation.Finish();
         await completed.FadeOperation.Completion;
         Assert(completed.Playback.State == AudioPlaybackState.Playing &&
                 audio.BgmTracks.Single().ClipId == "calm",

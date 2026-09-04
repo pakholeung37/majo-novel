@@ -53,7 +53,7 @@ public sealed class AudioManagerTests
 
         var completed = await harness.Audio.PlayBgmAsync(
             "battle", "music", fade: new AudioFade(1));
-        completed.FadeOperation.Complete();
+        completed.FadeOperation.Finish();
         await completed.FadeOperation.Completion;
 
         Assert.Equal(AudioPlaybackState.Stopped, original.State);
@@ -242,8 +242,8 @@ public sealed class AudioManagerTests
         var host = new RuntimeServiceRegistry()
             .AddSingleton<IFrameClock>(_ => frameClock)
             .AddSingleton<IMissingResourceReporter>(_ => missingResources)
-            .AddSingleton<IOperationScheduler>(
-                resolver => new OperationScheduler(
+            .AddSingleton<IOperationRunner>(
+                resolver => new OperationRunner(
                     resolver.Get<IFrameClock>(),
                     resolver.Get<IRuntimeLifetime>()),
                 typeof(IFrameClock),
@@ -251,7 +251,7 @@ public sealed class AudioManagerTests
             .AddSingleton<IAudioManager>(
                 resolver => new AudioManager(
                     backend,
-                    resolver.Get<IOperationScheduler>(),
+                    resolver.Get<IOperationRunner>(),
                     bgm,
                     sfx,
                     voice,
@@ -259,7 +259,7 @@ public sealed class AudioManagerTests
                     missingResources: missingResources,
                     locales: localeManager,
                     localizedResources: localizedResolver),
-                typeof(IOperationScheduler))
+                typeof(IOperationRunner))
             .Build();
         await host.InitializeAsync();
         var audio = host.Services.Get<IAudioManager>();
@@ -296,8 +296,8 @@ public sealed class AudioManagerTests
         var host = new RuntimeServiceRegistry()
             .AddSingleton<IFrameClock>(_ => frameClock)
             .AddSingleton<IMissingResourceReporter>(_ => missingResources)
-            .AddSingleton<IOperationScheduler>(
-                resolver => new OperationScheduler(
+            .AddSingleton<IOperationRunner>(
+                resolver => new OperationRunner(
                     resolver.Get<IFrameClock>(),
                     resolver.Get<IRuntimeLifetime>()),
                 typeof(IFrameClock),
@@ -305,7 +305,7 @@ public sealed class AudioManagerTests
             .AddSingleton<IAudioManager>(
                 resolver => new AudioManager(
                     backend,
-                    resolver.Get<IOperationScheduler>(),
+                    resolver.Get<IOperationRunner>(),
                     bgm,
                     sfx,
                     voice,
@@ -313,7 +313,7 @@ public sealed class AudioManagerTests
                     missingResources: missingResources,
                     locales: localeManager,
                     localizedResources: localizedResolver),
-                typeof(IOperationScheduler))
+                typeof(IOperationRunner))
             .Build();
         await host.InitializeAsync();
         var audio = host.Services.Get<IAudioManager>();
@@ -334,7 +334,7 @@ public sealed class AudioManagerTests
         var registry = new RuntimeCommandRegistry();
         var backend = new FakeAudioBackend();
         var loader = new FakeAudioClipLoader("audio").Register("unused");
-        var operations = new StubOperationScheduler();
+        var operations = new StubOperationRunner();
         var audio = new AudioManager(
             backend, operations, loader, loader, loader, new AudioSettings());
         registry.RegisterModule(new AudioCommandModule(audio));
@@ -369,7 +369,7 @@ public sealed class AudioManagerTests
             RuntimeHost host,
             FakeAudioBackend backend,
             IAudioManager audio,
-            IOperationScheduler operations,
+            IOperationRunner operations,
             IMissingResourceReporter missingResources)
         {
             Host = host;
@@ -385,7 +385,7 @@ public sealed class AudioManagerTests
 
         public IAudioManager Audio { get; }
 
-        public IOperationScheduler Operations { get; }
+        public IOperationRunner Operations { get; }
 
         public IMissingResourceReporter MissingResources { get; }
 
@@ -406,8 +406,8 @@ public sealed class AudioManagerTests
             var registry = new RuntimeServiceRegistry()
                 .AddSingleton<IFrameClock>(_ => frameClock)
                 .AddSingleton<IMissingResourceReporter>(_ => missingResources)
-                .AddSingleton<IOperationScheduler>(
-                    resolver => new OperationScheduler(
+                .AddSingleton<IOperationRunner>(
+                    resolver => new OperationRunner(
                         resolver.Get<IFrameClock>(),
                         resolver.Get<IRuntimeLifetime>()),
                     typeof(IFrameClock),
@@ -415,13 +415,13 @@ public sealed class AudioManagerTests
                 .AddSingleton<IAudioManager>(
                     resolver => new AudioManager(
                         backend,
-                        resolver.Get<IOperationScheduler>(),
+                        resolver.Get<IOperationRunner>(),
                         bgm,
                         sfx,
                         voice,
                         new AudioSettings(FailOnMissingClips: failOnMissingClips),
                         missingResources: resolver.Get<IMissingResourceReporter>()),
-                    typeof(IOperationScheduler),
+                    typeof(IOperationRunner),
                     typeof(IMissingResourceReporter));
             var host = registry.Build();
             await host.InitializeAsync();
@@ -429,7 +429,7 @@ public sealed class AudioManagerTests
                 host,
                 backend,
                 host.Services.Get<IAudioManager>(),
-                host.Services.Get<IOperationScheduler>(),
+                host.Services.Get<IOperationRunner>(),
                 host.Services.Get<IMissingResourceReporter>());
         }
     }
@@ -450,7 +450,7 @@ public sealed class AudioManagerTests
             CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
-    private sealed class StubOperationScheduler : IOperationScheduler
+    private sealed class StubOperationRunner : IOperationRunner
     {
         public IReadOnlyCollection<IOperationHandle> ActiveOperations => [];
 
@@ -461,15 +461,6 @@ public sealed class AudioManagerTests
         public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
         public IOperationHandle Start(OperationDefinition definition) =>
-            throw new NotSupportedException();
-
-        public Task WaitAsync(OperationTarget target, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task CancelAsync(OperationTarget target, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task CompleteAsync(OperationTarget target, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
     }
 

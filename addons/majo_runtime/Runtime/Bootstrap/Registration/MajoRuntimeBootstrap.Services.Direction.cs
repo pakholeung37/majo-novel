@@ -37,14 +37,14 @@ public partial class MajoRuntimeBootstrap : Node
                     new DirectionTextureLoader(resolver.Get<IResourceManager>()),
                     root => CreateDirectionActorManager(
                         root,
-                        resolver.Get<IOperationScheduler>(),
+                        resolver.Get<IOperationRunner>(),
                         resolver.Get<IActorTextureLoader>(),
                         resolver.Get<IFrameClock>(),
                         resolver.Get<ILocaleManager>()),
                     resolver.Get<ITransitionDriverRegistry>()),
                 typeof(GodotDirectionRenderHost),
                 typeof(IResourceManager),
-                typeof(IOperationScheduler),
+                typeof(IOperationRunner),
                 typeof(IActorTextureLoader),
                 typeof(IFrameClock),
                 typeof(ILocaleManager),
@@ -56,14 +56,14 @@ public partial class MajoRuntimeBootstrap : Node
                     var manager = new CameraModifierManager(
                         (viewId, delta) => host.ApplyViewModifierDelta(viewId, delta),
                         viewId => host.ClearViewModifierDelta(viewId),
-                        resolver.Get<IOperationScheduler>(),
+                        resolver.Get<IOperationRunner>(),
                         resolver.Get<IStageAccessibility>(),
                         resolver.Get<IFrameClock>(),
                         registry: cameraModifiers);
                     return manager;
                 },
                 typeof(GodotDirectionRenderHost),
-                typeof(IOperationScheduler),
+                typeof(IOperationRunner),
                 typeof(IStageAccessibility),
                 typeof(IFrameClock))
             .AddSingleton<ITransientCueHandlerRegistry>(_ => transientCueHandlers)
@@ -121,7 +121,7 @@ public partial class MajoRuntimeBootstrap : Node
 
     private ActorManager CreateDirectionActorManager(
         Node2D root,
-        IOperationScheduler scheduler,
+        IOperationRunner scheduler,
         IActorTextureLoader textureLoader,
         IFrameClock frameClock,
         ILocaleManager locales)

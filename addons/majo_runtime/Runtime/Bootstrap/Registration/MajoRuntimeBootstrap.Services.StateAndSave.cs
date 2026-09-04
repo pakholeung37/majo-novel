@@ -158,7 +158,7 @@ public partial class MajoRuntimeBootstrap : Node
                 resolver.Get<IScriptPlayback>(),
                 resolver.Get<IDialoguePlayer>(),
                 resolver.Get<IInputManager>(),
-                resolver.Get<IOperationScheduler>(),
+                resolver.Get<IOperationRunner>(),
                 resolver.Get<IStateEligibility>(),
                 resolver.Get<IDirectionTransactionCoordinator>(),
                 stateMigrations,
@@ -170,7 +170,7 @@ public partial class MajoRuntimeBootstrap : Node
             typeof(IScriptPlayback),
             typeof(IDialoguePlayer),
             typeof(IInputManager),
-            typeof(IOperationScheduler),
+            typeof(IOperationRunner),
             typeof(IStateEligibility),
             typeof(IDirectionTransactionCoordinator));
 
@@ -306,7 +306,7 @@ public partial class MajoRuntimeBootstrap : Node
         IScriptPlayback scriptPlayback,
         IDialoguePlayer dialogue,
         IInputManager input,
-        IOperationScheduler operations,
+        IOperationRunner operations,
         IStateEligibility eligibility,
         IDirectionTransactionCoordinator direction,
         StateMigrationRegistry migrations,

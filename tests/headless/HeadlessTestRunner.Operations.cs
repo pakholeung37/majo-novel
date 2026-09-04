@@ -20,15 +20,15 @@ public partial class HeadlessTestRunner
             ConfigureServices = services =>
                 services.AddSingleton<ShutdownStartsOperationService>(
                     resolver => new ShutdownStartsOperationService(
-                        resolver.Get<IOperationScheduler>()),
-                    typeof(IOperationScheduler)),
+                        resolver.Get<IOperationRunner>()),
+                    typeof(IOperationRunner)),
         };
         var tweenTarget = new Node2D { Name = "TweenTarget" };
         AddChild(tweenTarget);
         AddChild(bootstrap);
         await bootstrap.InitializationCompletion;
 
-        var scheduler = bootstrap.Host!.Services.Get<IOperationScheduler>();
+        var scheduler = bootstrap.Host!.Services.Get<IOperationRunner>();
         var shutdownStarter = bootstrap.Host.Services.Get<ShutdownStartsOperationService>();
         var advancedFrames = 0;
         var frameOperation = scheduler.Start(new OperationDefinition(
@@ -38,8 +38,7 @@ public partial class HeadlessTestRunner
                 advancedFrames++;
                 await context.FrameClock.NextFrameAsync(context.CancellationToken);
                 advancedFrames++;
-            },
-            id: "real-frames"));
+            }));
 
         Assert(!frameOperation.Completion.IsCompleted,
             "Real-frame operation completed before Godot advanced a frame.");
@@ -52,8 +51,7 @@ public partial class HeadlessTestRunner
             tweenTarget,
             new NodePath("position"),
             new Vector2(80, 20),
-            0.03,
-            id: "natural-tween"));
+            0.03));
         await naturalTween.Completion;
         Assert(tweenTarget.Position.IsEqualApprox(new Vector2(80, 20)),
             "Naturally completed Tween did not reach its final property value.");
@@ -64,10 +62,10 @@ public partial class HeadlessTestRunner
             tweenTarget,
             new NodePath("position"),
             new Vector2(100, 0),
-            1,
-            id: "cancelled-tween"));
+            1));
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        await scheduler.CancelAsync(OperationTarget.ForId("cancelled-tween"));
+        cancelledTween.Cancel();
+        try { await cancelledTween.Completion; } catch (OperationCanceledException) { }
         Assert(cancelledTween.State == OperationState.Cancelled,
             "Cancelled Tween did not enter Cancelled state.");
         Assert(!tweenTarget.Position.IsEqualApprox(new Vector2(100, 0)),
@@ -79,10 +77,10 @@ public partial class HeadlessTestRunner
             tweenTarget,
             new NodePath("position"),
             new Vector2(120, 40),
-            1,
-            id: "completed-tween"));
+            1));
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        await scheduler.CompleteAsync(OperationTarget.ForId("completed-tween"));
+        completedTween.Finish();
+        await completedTween.Completion;
         Assert(completedTween.State == OperationState.Completed,
             "Force-completed Tween did not enter Completed state.");
         Assert(tweenTarget.Position.IsEqualApprox(new Vector2(120, 40)),
@@ -94,8 +92,7 @@ public partial class HeadlessTestRunner
             () => methodTweenValue,
             value => methodTweenValue = value,
             1,
-            0.03,
-            id: "natural-method-tween"));
+            0.03));
         await naturalMethodTween.Completion;
         Assert(Mathf.IsEqualApprox(methodTweenValue, 1),
             "Naturally completed method Tween did not apply its exact final value.");
@@ -106,10 +103,10 @@ public partial class HeadlessTestRunner
             () => methodTweenValue,
             value => methodTweenValue = value,
             1,
-            1,
-            id: "cancelled-method-tween"));
+            1));
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        await scheduler.CancelAsync(OperationTarget.ForId("cancelled-method-tween"));
+        cancelledMethodTween.Cancel();
+        try { await cancelledMethodTween.Completion; } catch (OperationCanceledException) { }
         Assert(cancelledMethodTween.State == OperationState.Cancelled &&
                 methodTweenValue < 1,
             "Cancelled method Tween incorrectly applied its final value.");
@@ -120,10 +117,10 @@ public partial class HeadlessTestRunner
             () => methodTweenValue,
             value => methodTweenValue = value,
             1,
-            1,
-            id: "completed-method-tween"));
+            1));
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        await scheduler.CompleteAsync(OperationTarget.ForId("completed-method-tween"));
+        completedMethodTween.Finish();
+        await completedMethodTween.Completion;
         Assert(completedMethodTween.State == OperationState.Completed &&
                 Mathf.IsEqualApprox(methodTweenValue, 1),
             "Force-completed method Tween did not apply its final value.");
@@ -134,8 +131,7 @@ public partial class HeadlessTestRunner
             tweenTarget,
             new NodePath("position"),
             new Vector2(200, 0),
-            10,
-            id: "shutdown-tween"));
+            10));
         bootstrap.QueueFree();
         await bootstrap.ShutdownCompletion;
         await WaitForConditionAsync(
@@ -158,9 +154,9 @@ public partial class HeadlessTestRunner
 
     private sealed class ShutdownStartsOperationService : IRuntimeService
     {
-        private readonly IOperationScheduler scheduler;
+        private readonly IOperationRunner scheduler;
 
-        public ShutdownStartsOperationService(IOperationScheduler scheduler)
+        public ShutdownStartsOperationService(IOperationRunner scheduler)
         {
             this.scheduler = scheduler;
         }
@@ -174,8 +170,7 @@ public partial class HeadlessTestRunner
         public async Task ShutdownAsync(CancellationToken cancellationToken)
         {
             StartedOperation = scheduler.Start(new OperationDefinition(
-                context => context.FrameClock.NextFrameAsync(context.CancellationToken),
-                id: "started-during-shutdown"));
+                context => context.FrameClock.NextFrameAsync(context.CancellationToken)));
             try
             {
                 await StartedOperation.Completion;

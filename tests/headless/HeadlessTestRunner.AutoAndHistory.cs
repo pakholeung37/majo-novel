@@ -42,12 +42,12 @@ public partial class HeadlessTestRunner
         bootstrap.ConfigureServices = services => services.ReplaceSingleton<IAudioManager>(
             resolver => new AudioManager(
                 audioBackend,
-                resolver.Get<IOperationScheduler>(),
+                resolver.Get<IOperationRunner>(),
                 audioLoader,
                 audioLoader,
                 audioLoader,
                 new AudioSettings()),
-            typeof(IOperationScheduler));
+            typeof(IOperationRunner));
         AddChild(bootstrap);
         await bootstrap.InitializationCompletion;
 
@@ -60,7 +60,7 @@ public partial class HeadlessTestRunner
         var audio = services.Get<IAudioManager>();
         var clock = services.Get<IFrameClock>();
         var input = services.Get<IInputManager>();
-        var operations = services.Get<IOperationScheduler>();
+        var operations = services.Get<IOperationRunner>();
         var historyOverlay = bootstrap.FindChild(
             "MajoHistoryOverlay",
             recursive: true,

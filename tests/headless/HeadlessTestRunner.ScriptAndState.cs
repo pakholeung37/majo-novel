@@ -72,12 +72,12 @@ public partial class HeadlessTestRunner
         bootstrap.ConfigureServices = services => services.ReplaceSingleton<IAudioManager>(
             resolver => new AudioManager(
                 new GodotAudioBackend(bootstrap),
-                resolver.Get<IOperationScheduler>(),
+                resolver.Get<IOperationRunner>(),
                 loader,
                 loader,
                 loader,
                 new AudioSettings()),
-            typeof(IOperationScheduler));
+            typeof(IOperationRunner));
         AddChild(bootstrap);
         await bootstrap.InitializationCompletion;
 
@@ -97,7 +97,7 @@ public partial class HeadlessTestRunner
         var transitions = services.Get<IStageTransitionManager>();
         var direction = services.Get<IDirectionTransactionCoordinator>();
         var input = services.Get<IInputManager>();
-        var operations = services.Get<IOperationScheduler>();
+        var operations = services.Get<IOperationRunner>();
         var serializer = services.Get<IStateSerializer>();
         var storage = services.Get<IStateStorage>();
         var sessions = services.Get<IGameSessionCoordinator>();
@@ -141,7 +141,7 @@ public partial class HeadlessTestRunner
         var curtainFade = curtain.SetCurtain(
             Colors.Black,
             0,
-            new StageOperationSpec(0.2, "curtain-interpolation-probe", Skippable: false));
+            new StageOperationSpec(0.2));
         await WaitForConditionAsync(
             () => curtainRect.Color.A is > 0.05f and < 0.95f,
             1);
@@ -474,7 +474,7 @@ public partial class HeadlessTestRunner
         var longFadeCurtain = curtain.SetCurtain(
             Colors.Black,
             0.5f,
-            new StageOperationSpec(10.0, "long-curtain-fade", Skippable: false));
+            new StageOperationSpec(10.0));
         Assert(operations.ActiveOperations.Count > 0,
             "Failed to start active background operation for rapid load regression test.");
         var loadTask = slots.LoadAsync(new SaveSlotId(SaveSlotKind.Manual, 1));

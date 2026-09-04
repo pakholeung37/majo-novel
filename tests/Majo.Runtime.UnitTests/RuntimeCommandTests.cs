@@ -360,7 +360,7 @@ public sealed class RuntimeCommandTests
     {
         var yarnRegistry = new FakeCommandRegistry();
         var actorManager = new FakeActorManager();
-        var scheduler = new FakeOperationScheduler();
+        var scheduler = new FakeOperationRunner();
         var operation = new FakeOperationHandle();
         ProbeCommandArguments? received = null;
         var adapter = CreateAdapter(
@@ -383,7 +383,7 @@ public sealed class RuntimeCommandTests
 
         Assert.Equal("alpha", received!.Value);
         Assert.Equal("beta", received.Detail);
-        operation.Complete();
+        operation.Finish();
         await operation.Completion;
         await adapter.ShutdownAsync(CancellationToken.None);
     }
@@ -426,7 +426,7 @@ public sealed class RuntimeCommandTests
         FakeCommandRegistry yarnRegistry,
         out RuntimeCommandCatalog catalog,
         IActorManager? actors = null,
-        IOperationScheduler? operations = null,
+        IOperationRunner? operations = null,
         Action<RuntimeCommandRegistry>? configure = null,
         IRuntimeLogger? logger = null,
         bool abortOnRecoverableFailure = true)
@@ -642,32 +642,18 @@ public sealed class RuntimeCommandTests
 
         public IOperationHandle ChangeAppearance(
             string appearance,
-            double durationSeconds,
-            string? operationId = null,
-            string? groupId = null)
+            double durationSeconds)
         {
             Appearance = appearance;
-            return LastOperation = new FakeOperationHandle(operationId, groupId);
-        }
-
-        public IOperationHandle ChangeScenePosition(
-            Vector2 scenePosition,
-            double durationSeconds,
-            string? operationId = null,
-            string? groupId = null)
-        {
-            Position = scenePosition;
-            return LastOperation = new FakeOperationHandle(operationId, groupId);
+            return LastOperation = new FakeOperationHandle(OperationState.Completed);
         }
 
         public IOperationHandle ChangePosition(
             CharacterPositionPreset preset,
-            double durationSeconds,
-            string? operationId = null,
-            string? groupId = null)
+            double durationSeconds)
         {
             PositionPreset = preset;
-            return LastOperation = new FakeOperationHandle(operationId, groupId);
+            return LastOperation = new FakeOperationHandle(OperationState.Completed);
         }
     }
 
@@ -706,38 +692,12 @@ public sealed class RuntimeCommandTests
     }
 
 
-    private sealed class FakeOperationScheduler : IOperationScheduler
+    private sealed class FakeOperationRunner : IOperationRunner
     {
-        public List<(string Action, OperationTarget Target)> Calls { get; } = new();
-
         public IReadOnlyCollection<IOperationHandle> ActiveOperations => [];
 
         public IOperationHandle Start(OperationDefinition definition) =>
             throw new NotSupportedException();
-
-        public Task WaitAsync(
-            OperationTarget target,
-            CancellationToken cancellationToken = default)
-        {
-            Calls.Add(("wait", target));
-            return Task.CompletedTask;
-        }
-
-        public Task CancelAsync(
-            OperationTarget target,
-            CancellationToken cancellationToken = default)
-        {
-            Calls.Add(("cancel", target));
-            return Task.CompletedTask;
-        }
-
-        public Task CompleteAsync(
-            OperationTarget target,
-            CancellationToken cancellationToken = default)
-        {
-            Calls.Add(("complete", target));
-            return Task.CompletedTask;
-        }
 
         public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 

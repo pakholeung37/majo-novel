@@ -67,8 +67,8 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(IMissingResourceReporter),
                 typeof(ILocalizedResourceResolver),
                 typeof(ILocaleManager))
-            .AddSingleton<IOperationScheduler>(
-                resolver => new OperationScheduler(
+            .AddSingleton<IOperationRunner>(
+                resolver => new OperationRunner(
                     resolver.Get<IFrameClock>(),
                     resolver.Get<IRuntimeLifetime>(),
                     Logger),
