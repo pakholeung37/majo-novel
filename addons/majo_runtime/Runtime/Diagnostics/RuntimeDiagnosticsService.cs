@@ -133,27 +133,24 @@ public sealed class RuntimeDiagnosticsService : IRuntimeDiagnostics
                 commandAdapter.LastFailure?.Message);
         }
 
-        OperationDiagnostics? operationDiag = null;
+        RuntimeActivityDiagnostics? activityDiag = null;
         if (services.TryGet<IRuntimeActivityObserver>(out var activities) && activities is not null)
         {
             initializedServicesList.Add(nameof(IRuntimeActivityObserver));
             var snapshot = activities.Snapshot();
-            var activeOps = snapshot.Select(a => new ActiveOperationInfo(
-                a.DiagnosticId,
-                $"{a.Owner}:{a.Type}",
-                OperationState.Running,
-                a.Elapsed.TotalSeconds)).ToArray();
-            operationDiag = new OperationDiagnostics(activeOps.Length, activeOps);
+            activityDiag = new RuntimeActivityDiagnostics(snapshot.Count, snapshot);
         }
         else if (services.TryGet<IOperationRunner>(out var operations) && operations is not null)
         {
             initializedServicesList.Add(nameof(IOperationRunner));
-            var activeOps = operations.ActiveOperations.Select(op => new ActiveOperationInfo(
+            var activeActivities = operations.ActiveOperations.Select(op => new RuntimeActivityInfo(
                 $"op-{op.GetHashCode():x8}",
-                null,
-                op.State,
-                0.0)).ToArray();
-            operationDiag = new OperationDiagnostics(activeOps.Length, activeOps);
+                RuntimeActivityOwner.Other,
+                "Operation",
+                IsCancelable: true,
+                IsFinishable: true,
+                Elapsed: TimeSpan.Zero)).ToArray();
+            activityDiag = new RuntimeActivityDiagnostics(activeActivities.Length, activeActivities);
         }
 
         InputDiagnostics? inputDiag = null;
@@ -422,7 +419,7 @@ public sealed class RuntimeDiagnosticsService : IRuntimeDiagnostics
             runtimeHost?.InitializedServiceNames ?? initializedServicesList,
             dialogueDiag,
             commandDiag,
-            operationDiag,
+            activityDiag,
             inputDiag,
             actorDiag,
             audioDiag,
@@ -493,13 +490,13 @@ public sealed class RuntimeDiagnosticsService : IRuntimeDiagnostics
             builder.AppendLine();
         }
 
-        if (snapshot.Operation is not null)
+        if (snapshot.Activities is not null)
         {
-            builder.AppendLine("## Operations");
-            builder.AppendLine(CultureInfo.InvariantCulture, $"- Active Operations: {snapshot.Operation.ActiveCount}");
-            foreach (var op in snapshot.Operation.ActiveOperations)
+            builder.AppendLine("## Activities");
+            builder.AppendLine(CultureInfo.InvariantCulture, $"- Active Activities: {snapshot.Activities.ActiveCount}");
+            foreach (var act in snapshot.Activities.ActiveActivities)
             {
-                builder.AppendLine(CultureInfo.InvariantCulture, $"  - ID: `{op.Id ?? "<anon>"}` (Group: `{op.GroupId ?? "<none>"}`), State: `{op.State}`");
+                builder.AppendLine(CultureInfo.InvariantCulture, $"  - [{act.Owner}] {act.Type}: `{act.DiagnosticId}` (Source: `{act.Source ?? "<none>"}`)");
             }
             builder.AppendLine();
         }

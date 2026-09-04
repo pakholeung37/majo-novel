@@ -4,7 +4,6 @@ using System;
 using System.Collections.Generic;
 using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue;
-using Majo.Runtime.Operations;
 using Majo.Runtime.Save;
 using Majo.Runtime.Settings;
 using Majo.Runtime.State;
@@ -19,7 +18,7 @@ public sealed record RuntimeDiagnosticsSnapshot(
     IReadOnlyList<string> InitializedServices,
     DialogueDiagnostics? Dialogue = null,
     CommandDiagnostics? Command = null,
-    OperationDiagnostics? Operation = null,
+    RuntimeActivityDiagnostics? Activities = null,
     InputDiagnostics? Input = null,
     ActorDiagnostics? Actor = null,
     AudioDiagnostics? Audio = null,
@@ -93,15 +92,9 @@ public sealed record ActiveCommandInfo(
     string? LineId,
     double ElapsedSeconds);
 
-public sealed record OperationDiagnostics(
+public sealed record RuntimeActivityDiagnostics(
     int ActiveCount,
-    IReadOnlyList<ActiveOperationInfo> ActiveOperations);
-
-public sealed record ActiveOperationInfo(
-    string? Id,
-    string? GroupId,
-    OperationState State,
-    double ElapsedSeconds);
+    IReadOnlyList<RuntimeActivityInfo> ActiveActivities);
 
 public sealed record InputDiagnostics(
     bool Enabled,

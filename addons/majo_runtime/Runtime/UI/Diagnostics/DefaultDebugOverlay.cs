@@ -156,7 +156,7 @@ public partial class DefaultDebugOverlay : CanvasLayer, IDisposable
         if (activitySummaryLabel is not null)
         {
             activitySummaryLabel.Text =
-                $"OPS {snapshot.Operation?.ActiveCount ?? 0}  ·  CMDS {snapshot.Command?.ActiveCount ?? 0}  ·  MISSING {snapshot.MissingResources?.UniqueCount ?? 0}/{snapshot.MissingResources?.TotalCount ?? 0}\n" +
+                $"ACTIVITIES {snapshot.Activities?.ActiveCount ?? 0}  ·  CMDS {snapshot.Command?.ActiveCount ?? 0}  ·  MISSING {snapshot.MissingResources?.UniqueCount ?? 0}/{snapshot.MissingResources?.TotalCount ?? 0}\n" +
                 $"{snapshot.Playback?.Mode ?? "Manual"}  ·  History {snapshot.Playback?.HistoryItemCount ?? 0}  ·  State {snapshot.StateDiagnostics?.Status.ToString() ?? "Idle"}";
         }
 

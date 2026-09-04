@@ -277,10 +277,12 @@ public sealed class Phase1ActivityObserverTests
         using var lease = registry.BeginActivity(RuntimeActivityOwner.Audio, "Fade", "bgm_intro");
 
         var snapshot = diagnostics.CaptureSnapshot();
-        Assert.NotNull(snapshot.Operation);
-        Assert.Equal(1, snapshot.Operation!.ActiveCount);
-        Assert.Single(snapshot.Operation.ActiveOperations);
-        Assert.Equal("Audio:Fade", snapshot.Operation.ActiveOperations[0].GroupId);
+        Assert.NotNull(snapshot.Activities);
+        Assert.Equal(1, snapshot.Activities!.ActiveCount);
+        var act = Assert.Single(snapshot.Activities.ActiveActivities);
+        Assert.Equal(RuntimeActivityOwner.Audio, act.Owner);
+        Assert.Equal("Fade", act.Type);
+        Assert.Equal("bgm_intro", act.Source);
     }
 
     private sealed class FakeLifetime : IRuntimeLifetime
