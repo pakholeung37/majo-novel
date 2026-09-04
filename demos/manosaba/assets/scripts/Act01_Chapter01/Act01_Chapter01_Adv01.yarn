@@ -15,12 +15,14 @@ title: Act01_Chapter01_Adv01
 // ========================================
 // ●シーン1‐0-1
 // ========================================
+<<beat begin>>
 <<curtain closed duration:0>>
 <<backdrop Still_140_001>>
 <<curtain open duration:1.2>>
-<<wait 1.8>>
+<<beat end wait:true>>
+<<wait 1.2>>
 
-<<bgm Ambient_011_001 track:ambi>>
+<<bgm Ambient_011_001>>
 // <<autoSave>>
 ——这里是囚牢。 #line:0101Adv01_Narrative001
 

@@ -36,12 +36,14 @@ public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
     private CancellationTokenSource? pendingReload;
     private FileSystemWatcher? watcher;
     private System.Threading.Timer? consistencyTimer;
-    private SynchronizationContext? mainContext;
+    private YarnHotReloadDispatcher? dispatcher;
     private long requestedGeneration;
     private bool enabled;
     private readonly Dictionary<string, YarnProjectVersion> pendingCandidates =
         new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> lastRejectedSourceFingerprints =
+        new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> observedSourceFingerprints =
         new(StringComparer.Ordinal);
     private readonly SemaphoreSlim applyGate = new(1, 1);
     private CancellationTokenSource? resetCancellation;
@@ -82,7 +84,7 @@ public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
     public Task InitializeAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        mainContext = SynchronizationContext.Current;
+        dispatcher = new YarnHotReloadDispatcher(SynchronizationContext.Current);
         enabled = configuration.Enabled && OS.IsDebugBuild() &&
             (OS.HasFeature("editor") || configuration.EnableInExportedDebugBuild);
         if (!enabled)
@@ -118,7 +120,7 @@ public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
         watcher.Renamed += HandleSourceEvent;
         watcher.Error += HandleWatcherError;
         consistencyTimer = new System.Threading.Timer(
-            _ => QueueReload(defaultProjectId),
+            _ => _ = RunConsistencyScanAsync(defaultProjectId),
             null,
             configuration.ConsistencyScanMilliseconds,
             configuration.ConsistencyScanMilliseconds);
@@ -156,6 +158,7 @@ public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
             resetCancellation = new CancellationTokenSource();
             pendingCandidates.Clear();
             lastRejectedSourceFingerprints.Clear();
+            observedSourceFingerprints.Clear();
         }
         pendingToDispose?.Cancel();
         pendingToDispose?.Dispose();
@@ -246,6 +249,54 @@ public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
         QueueReload(defaultProjectId);
     }
 
+    private async Task RunConsistencyScanAsync(string projectId)
+    {
+        var currentLifetime = lifetime;
+        if (!enabled || currentLifetime?.IsCancellationRequested != false)
+        {
+            return;
+        }
+
+        try
+        {
+            var snapshot = await YarnSourceSnapshotReader.ReadAsync(
+                projectId,
+                ResolveManifestPath(projectId),
+                currentLifetime.Token);
+            string? previous;
+            lock (sync)
+            {
+                observedSourceFingerprints.TryGetValue(projectId, out previous);
+                observedSourceFingerprints[projectId] = snapshot.SourceFingerprint;
+            }
+
+            // The first consistency scan establishes the baseline. In
+            // particular, this avoids treating the imported project's empty
+            // source fingerprint as a change during a cold start.
+            if (previous is null)
+            {
+                versions.UpdateSourceFingerprint(projectId, snapshot.SourceFingerprint);
+                return;
+            }
+
+            if (!string.Equals(previous, snapshot.SourceFingerprint, StringComparison.Ordinal))
+            {
+                QueueReload(projectId);
+            }
+        }
+        catch (OperationCanceledException) when (currentLifetime.Token.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            logger.Warning(
+                LogCategory,
+                "script.hot_reload.consistency_scan_failed",
+                $"Yarn consistency scan failed for project '{projectId}'.",
+                exception);
+        }
+    }
+
     private void QueueReload(string projectId)
     {
         var currentLifetime = lifetime;
@@ -324,6 +375,10 @@ public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
                 projectId,
                 ResolveManifestPath(projectId),
                 cancellationToken);
+            lock (sync)
+            {
+                observedSourceFingerprints[projectId] = snapshot.SourceFingerprint;
+            }
             var active = versions.GetActiveVersion(projectId);
             if (active is not null && string.Equals(
                 active.SourceFingerprint,
@@ -378,7 +433,7 @@ public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
                 return;
             }
 
-            var version = await RunOnMainThreadAsync(
+            var version = await dispatcher!.InvokeAsync(
                 () => YarnProjectMaterializer.Materialize(generation, compilation),
                 cancellationToken);
             lock (sync)
@@ -394,7 +449,7 @@ public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
             }
 
             var currentActive = versions.GetActiveVersion(projectId) ?? active;
-            if (currentActive is not null && IsContentEquivalent(currentActive, version))
+            if (currentActive is not null && YarnHotReloadComparison.IsContentEquivalent(currentActive, version))
             {
                 versions.UpdateSourceFingerprint(projectId, version.SourceFingerprint);
                 PublishAttempt(projectId, generation, YarnHotReloadOutcome.NoSourceChange,
@@ -520,7 +575,7 @@ public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
         await applyGate.WaitAsync(cancellationToken);
         try
         {
-            await RunOnMainThreadAsync(
+            await dispatcher!.InvokeAsync(
                 () => ApplyCandidateOnMainThreadAsync(candidate, cancellationToken),
                 cancellationToken);
         }
@@ -743,65 +798,6 @@ public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
         return Path.Combine(scriptsRoot, projectId + YarnSpinnerGodot.YarnProject.YARN_PROJECT_EXTENSION);
     }
 
-    private Task<T> RunOnMainThreadAsync<T>(Func<T> action, CancellationToken cancellationToken)
-    {
-        if (mainContext is null || ReferenceEquals(SynchronizationContext.Current, mainContext))
-        {
-            return Task.FromResult(action());
-        }
-        var completion = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var cancellationRegistration = cancellationToken.Register(
-            () => completion.TrySetCanceled(cancellationToken));
-        _ = completion.Task.ContinueWith(
-            _ => cancellationRegistration.Dispose(),
-            CancellationToken.None,
-            TaskContinuationOptions.ExecuteSynchronously,
-            TaskScheduler.Default);
-        mainContext.Post(_ =>
-        {
-            try
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                completion.TrySetResult(action());
-            }
-            catch (Exception exception)
-            {
-                completion.TrySetException(exception);
-            }
-        }, null);
-        return completion.Task;
-    }
-
-    private Task RunOnMainThreadAsync(Func<Task> action, CancellationToken cancellationToken)
-    {
-        if (mainContext is null || ReferenceEquals(SynchronizationContext.Current, mainContext))
-        {
-            return action();
-        }
-        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var cancellationRegistration = cancellationToken.Register(
-            () => completion.TrySetCanceled(cancellationToken));
-        _ = completion.Task.ContinueWith(
-            _ => cancellationRegistration.Dispose(),
-            CancellationToken.None,
-            TaskContinuationOptions.ExecuteSynchronously,
-            TaskScheduler.Default);
-        mainContext.Post(async _ =>
-        {
-            try
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                await action();
-                completion.TrySetResult();
-            }
-            catch (Exception exception)
-            {
-                completion.TrySetException(exception);
-            }
-        }, null);
-        return completion.Task;
-    }
-
     private void PublishFailure(string projectId, long generation, Exception exception)
     {
         var message = $"Yarn hot reload failed: {exception.Message}";
@@ -880,92 +876,6 @@ public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(value, parameter);
         return value.Trim();
-    }
-
-    private static bool IsContentEquivalent(
-        YarnProjectVersion active,
-        YarnProjectVersion candidate)
-    {
-        if (!string.Equals(active.ProgramFingerprint, candidate.ProgramFingerprint, StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        if (!active.NodeNames.SetEquals(candidate.NodeNames) ||
-            !active.LineIds.SetEquals(candidate.LineIds))
-        {
-            return false;
-        }
-
-        if (active.LineNodes.Count != candidate.LineNodes.Count)
-        {
-            return false;
-        }
-
-        foreach (var (lineId, node) in candidate.LineNodes)
-        {
-            if (!active.LineNodes.TryGetValue(lineId, out var activeNode) ||
-                !string.Equals(activeNode, node, StringComparison.Ordinal))
-            {
-                return false;
-            }
-        }
-
-        if (!active.ImplicitLineIds.SetEquals(candidate.ImplicitLineIds))
-        {
-            return false;
-        }
-
-        if (!DirectionModulesEquivalent(active.DirectionModules, candidate.DirectionModules))
-        {
-            return false;
-        }
-
-        var activeLoc = active.Project.baseLocalization;
-        var candidateLoc = candidate.Project.baseLocalization;
-
-        foreach (var lineId in candidate.LineIds)
-        {
-            var activeText = activeLoc?.GetLocalizedString(lineId);
-            var candidateText = candidateLoc?.GetLocalizedString(lineId);
-            if (!string.Equals(activeText, candidateText, StringComparison.Ordinal))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private static bool DirectionModulesEquivalent(
-        IReadOnlyList<NodeDirectionModule> active,
-        IReadOnlyList<NodeDirectionModule> candidate)
-    {
-        if (active.Count != candidate.Count)
-        {
-            return false;
-        }
-
-        for (var index = 0; index < active.Count; index++)
-        {
-            var left = active[index];
-            var right = candidate[index];
-            if (!string.Equals(left.NodeId, right.NodeId, StringComparison.Ordinal) ||
-                !left.Symbols.Stages.SetEquals(right.Symbols.Stages) ||
-                !left.Symbols.Views.SetEquals(right.Symbols.Views) ||
-                !left.Symbols.ShotAliases.SetEquals(right.Symbols.ShotAliases) ||
-                !left.Symbols.Marks.SetEquals(right.Symbols.Marks) ||
-                !left.Resources.SequenceEqual(right.Resources) ||
-                !left.SourceMaps.SequenceEqual(right.SourceMaps) ||
-                !left.Imports.SequenceEqual(right.Imports) ||
-                !left.MarkDefinitions.SequenceEqual(right.MarkDefinitions) ||
-                !left.Diagnostics.SequenceEqual(right.Diagnostics))
-            {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     public void Dispose()
