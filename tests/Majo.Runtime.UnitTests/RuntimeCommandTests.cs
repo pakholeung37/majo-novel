@@ -361,7 +361,6 @@ public sealed class RuntimeCommandTests
         var yarnRegistry = new FakeCommandRegistry();
         var actorManager = new FakeActorManager();
         var scheduler = new FakeOperationRunner();
-        var operation = new FakeOperationHandle();
         ProbeCommandArguments? received = null;
         var adapter = CreateAdapter(
             yarnRegistry,
@@ -373,7 +372,6 @@ public sealed class RuntimeCommandTests
                 received = arguments;
                 Assert.Same(actorManager, context.Actors);
                 Assert.Same(scheduler, context.Operations);
-                context.Track(operation);
                 return Task.CompletedTask;
             }));
 
@@ -383,8 +381,6 @@ public sealed class RuntimeCommandTests
 
         Assert.Equal("alpha", received!.Value);
         Assert.Equal("beta", received.Detail);
-        operation.Finish();
-        await operation.Completion;
         await adapter.ShutdownAsync(CancellationToken.None);
     }
 
@@ -407,6 +403,88 @@ public sealed class RuntimeCommandTests
 
         Assert.Null(adapter.LastFailure);
         Assert.Equal(0, yarnRegistry.AbortCount);
+        await adapter.ShutdownAsync(CancellationToken.None);
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task CommandActivityRegistersWithActivityRegistryAndReachesQuiescence()
+    {
+        var registry = new RuntimeActivityRegistry();
+        var yarnRegistry = new FakeCommandRegistry();
+        var cmdTcs = new TaskCompletionSource();
+        var allowExitTcs = new TaskCompletionSource();
+
+        var commands = new RuntimeCommandRegistry();
+        commands.Register<ProbeCommandArguments>(async (args, ctx) =>
+        {
+            cmdTcs.SetResult();
+            await allowExitTcs.Task;
+        });
+        var catalog = commands.BuildCatalog();
+        var dispatcher = new RuntimeCommandDispatcher(
+            new CommandBinder(new CommandBindingContext(0.35)),
+            activities: registry);
+        var adapter = new YarnCommandAdapter(yarnRegistry, catalog, dispatcher);
+
+        await adapter.InitializeAsync(CancellationToken.None);
+        var handler = Assert.IsType<Func<string[], Task>>(yarnRegistry.Handlers["probe"]);
+        var runTask = handler(["test", "detail:active"]);
+
+        await cmdTcs.Task;
+        Assert.True(adapter.HasActiveCommands);
+        Assert.True(registry.HasActiveActivities(RuntimeActivityOwner.Dialogue));
+
+        var quiescenceTask = adapter.WaitForQuiescenceAsync(CancellationToken.None);
+        Assert.False(quiescenceTask.IsCompleted);
+
+        allowExitTcs.SetResult();
+        await runTask;
+        await quiescenceTask;
+
+        Assert.False(adapter.HasActiveCommands);
+        Assert.False(registry.HasActiveActivities(RuntimeActivityOwner.Dialogue));
+        await adapter.ShutdownAsync(CancellationToken.None);
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task CommandExecutionDirectlyBindsToSessionCancellation()
+    {
+        var yarnRegistry = new FakeCommandRegistry();
+        var cmdStartedTcs = new TaskCompletionSource();
+        var cmdCancelledTcs = new TaskCompletionSource();
+
+        var commands = new RuntimeCommandRegistry();
+        commands.Register<ProbeCommandArguments>(async (args, ctx) =>
+        {
+            cmdStartedTcs.SetResult();
+            try
+            {
+                await Task.Delay(10_000, ctx.CancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                cmdCancelledTcs.SetResult();
+                throw;
+            }
+        });
+        var catalog = commands.BuildCatalog();
+        var dispatcher = new RuntimeCommandDispatcher(
+            new CommandBinder(new CommandBindingContext(0.35)));
+        var adapter = new YarnCommandAdapter(yarnRegistry, catalog, dispatcher);
+
+        await adapter.InitializeAsync(CancellationToken.None);
+        var handler = Assert.IsType<Func<string[], Task>>(yarnRegistry.Handlers["probe"]);
+        var runTask = handler(["test", "detail:cancelled"]);
+
+        await cmdStartedTcs.Task;
+        Assert.True(adapter.HasActiveCommands);
+
+        yarnRegistry.CancelDialogue();
+        await runTask;
+        await cmdCancelledTcs.Task;
+
+        await adapter.WaitForQuiescenceAsync(CancellationToken.None);
+        Assert.False(adapter.HasActiveCommands);
         await adapter.ShutdownAsync(CancellationToken.None);
     }
 

@@ -11,14 +11,11 @@ namespace Majo.Runtime.Dialogue.Commands;
 
 public sealed class RuntimeCommandContext
 {
-    private readonly Action<IOperationHandle>? operationTracked;
-
     internal RuntimeCommandContext(
         IActorManager? actors,
         IOperationRunner? operations,
         IServiceResolver? services,
         CancellationToken cancellationToken,
-        Action<IOperationHandle>? operationTracked = null,
         CommandBindingContext? binding = null)
     {
         Actors = actors;
@@ -26,7 +23,6 @@ public sealed class RuntimeCommandContext
         Services = services;
         CancellationToken = cancellationToken;
         Binding = binding;
-        this.operationTracked = operationTracked;
     }
 
     public IActorManager? Actors { get; }
@@ -42,36 +38,4 @@ public sealed class RuntimeCommandContext
     public static TService Require<TService>(TService? service, string serviceName)
         where TService : class => service ?? throw new RuntimeCommandException(
             "extension", $"Runtime command context does not provide {serviceName}.");
-
-    public IOperationHandle Track(IOperationHandle operation)
-    {
-        ArgumentNullException.ThrowIfNull(operation);
-        operationTracked?.Invoke(operation);
-        if (!CancellationToken.CanBeCanceled)
-        {
-            return operation;
-        }
-
-        var registration = CancellationToken.Register(operation.Cancel);
-        _ = DisposeRegistrationWhenCompletedAsync(operation, registration);
-        return operation;
-    }
-
-    private static async Task DisposeRegistrationWhenCompletedAsync(
-        IOperationHandle operation,
-        CancellationTokenRegistration registration)
-    {
-        try
-        {
-            await operation.Completion;
-        }
-        catch
-        {
-            // OperationRunner owns fault reporting; this observer only releases registration.
-        }
-        finally
-        {
-            registration.Dispose();
-        }
-    }
 }

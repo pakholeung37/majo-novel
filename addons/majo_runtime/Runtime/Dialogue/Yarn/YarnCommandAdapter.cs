@@ -41,8 +41,8 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
 
     public void CancelDialogue() => registry.CancelDialogue();
 
-    public Task DrainDialogueOperationsAsync(CancellationToken cancellationToken) =>
-        dispatcher.DrainDialogueOperationsAsync(cancellationToken);
+    public Task WaitForQuiescenceAsync(CancellationToken cancellationToken = default) =>
+        dispatcher.WaitForQuiescenceAsync(cancellationToken);
 
     public Task InitializeAsync(CancellationToken cancellationToken)
     {
@@ -86,7 +86,7 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
     public async Task ResetAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        await dispatcher.DrainDialogueOperationsAsync(cancellationToken);
+        await dispatcher.WaitForQuiescenceAsync(cancellationToken);
         dispatcher.Reset();
     }
 
@@ -102,7 +102,7 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
         cancellationToken.ThrowIfCancellationRequested();
         try
         {
-            await dispatcher.DrainDialogueOperationsAsync(cancellationToken);
+            await dispatcher.WaitForQuiescenceAsync(cancellationToken);
             dispatcher.Reset();
             dispatcher.CommandFailed -= HandleCommandFailed;
             registry.UnhandledCommand -= HandleUnhandledCommand;

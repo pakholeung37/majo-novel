@@ -21,8 +21,6 @@ public sealed class RuntimeCommandDispatcher : IDisposable
     private readonly IRuntimeLogger logger;
     private readonly bool abortOnRecoverableFailure;
     private readonly IRuntimeActivityRegistry? activities;
-    private readonly HashSet<IOperationHandle> dialogueOperations =
-        new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<string, RuntimeCommandActivity> activeCommands =
         new(StringComparer.Ordinal);
     private TaskCompletionSource commandQuiescence = CompletedQuiescence();
@@ -62,7 +60,7 @@ public sealed class RuntimeCommandDispatcher : IDisposable
         {
             lock (operationGate)
             {
-                return activeCommandCount > 0 || dialogueOperations.Count > 0;
+                return activeCommandCount > 0;
             }
         }
     }
@@ -133,7 +131,6 @@ public sealed class RuntimeCommandDispatcher : IDisposable
             operations,
             services,
             cancellationToken,
-            TrackOperation,
             binder.Context);
         try
         {
@@ -193,8 +190,10 @@ public sealed class RuntimeCommandDispatcher : IDisposable
         LastFailure = null;
         lock (operationGate)
         {
-            dialogueOperations.Clear();
             activeCommands.Clear();
+            activeCommandCount = 0;
+            commandQuiescence.TrySetResult();
+            commandQuiescence = CompletedQuiescence();
         }
     }
 
@@ -280,22 +279,8 @@ public sealed class RuntimeCommandDispatcher : IDisposable
         }
     }
 
-    public async Task DrainDialogueOperationsAsync(CancellationToken cancellationToken)
+    public async Task WaitForQuiescenceAsync(CancellationToken cancellationToken = default)
     {
-        IOperationHandle[] operationsToDrain;
-        lock (operationGate)
-        {
-            operationsToDrain = dialogueOperations.ToArray();
-        }
-
-        foreach (var operation in operationsToDrain)
-        {
-            operation.Cancel();
-        }
-
-        await Task.WhenAll(operationsToDrain.Select(
-            operation => ObserveCancellationAsync(operation, cancellationToken)));
-
         Task commands;
         lock (operationGate)
         {
@@ -311,16 +296,6 @@ public sealed class RuntimeCommandDispatcher : IDisposable
     {
         LastFailure = failure;
         CommandFailed?.Invoke(failure);
-    }
-
-    private void TrackOperation(IOperationHandle operation)
-    {
-        lock (operationGate)
-        {
-            dialogueOperations.Add(operation);
-        }
-
-        _ = RemoveCompletedOperationAsync(operation);
     }
 
     private void BeginCommand(RuntimeCommandActivity activity)
@@ -346,39 +321,6 @@ public sealed class RuntimeCommandDispatcher : IDisposable
             {
                 commandQuiescence.TrySetResult();
             }
-        }
-    }
-
-    private async Task RemoveCompletedOperationAsync(IOperationHandle operation)
-    {
-        try
-        {
-            await operation.Completion;
-        }
-        catch
-        {
-            // OperationRunner owns terminal fault observation.
-        }
-        finally
-        {
-            lock (operationGate)
-            {
-                dialogueOperations.Remove(operation);
-            }
-        }
-    }
-
-    private static async Task ObserveCancellationAsync(
-        IOperationHandle operation,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            await operation.Completion.WaitAsync(cancellationToken);
-        }
-        catch (OperationCanceledException) when (
-            operation.State == OperationState.Cancelled)
-        {
         }
     }
 

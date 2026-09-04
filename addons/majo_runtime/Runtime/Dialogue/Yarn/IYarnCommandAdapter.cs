@@ -22,5 +22,5 @@ public interface IYarnCommandAdapter : IRuntimeService
 
     void CancelDialogue();
 
-    Task DrainDialogueOperationsAsync(CancellationToken cancellationToken);
+    Task WaitForQuiescenceAsync(CancellationToken cancellationToken = default);
 }

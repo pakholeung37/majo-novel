@@ -282,7 +282,7 @@ public sealed class Phase0BaselineContractTests
         Assert.False(dispatcher.HasActiveCommands);
 
         // Quiescence drain should complete immediately when no commands are active
-        await dispatcher.DrainDialogueOperationsAsync(CancellationToken.None);
+        await dispatcher.WaitForQuiescenceAsync(CancellationToken.None);
     }
 
     [RuntimeCommand("fail_cmd")]
@@ -346,7 +346,7 @@ public sealed class Phase0BaselineContractTests
         await runTask;
         await cancelledTcs.Task;
 
-        await dispatcher.DrainDialogueOperationsAsync(CancellationToken.None);
+        await dispatcher.WaitForQuiescenceAsync(CancellationToken.None);
         Assert.False(dispatcher.HasActiveCommands);
     }
 

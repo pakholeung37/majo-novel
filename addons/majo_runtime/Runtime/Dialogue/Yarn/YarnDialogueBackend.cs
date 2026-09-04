@@ -303,7 +303,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
             commandAdapter?.CancelDialogue();
             if (commandAdapter is not null)
             {
-                await commandAdapter.DrainDialogueOperationsAsync(cancellationToken);
+                await commandAdapter.WaitForQuiescenceAsync(cancellationToken);
             }
 
             if (Runner.IsDialogueRunning && waitForBoundary)
@@ -338,7 +338,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
         }
         else if (commandAdapter is not null)
         {
-            await commandAdapter.DrainDialogueOperationsAsync(cancellationToken);
+            await commandAdapter.WaitForQuiescenceAsync(cancellationToken);
         }
 
         if (!isInternalMigration)
