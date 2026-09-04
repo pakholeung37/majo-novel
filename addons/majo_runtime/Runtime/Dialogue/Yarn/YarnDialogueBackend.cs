@@ -523,7 +523,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
                 $"Script '{checkpoint.Spot.Script}' no longer matches checkpoint fingerprint.");
         }
 
-        logger.Warning(
+        logger.Debug(
             "script",
             "script.checkpoint_program_changed",
             $"Script '{checkpoint.Spot.Script}' changed after the checkpoint was captured; " +

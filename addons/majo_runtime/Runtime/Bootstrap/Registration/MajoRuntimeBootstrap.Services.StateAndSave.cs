@@ -160,6 +160,7 @@ public partial class MajoRuntimeBootstrap : Node
                 resolver.Get<IRuntimeRestoreBoundary>(),
                 resolver.Get<IStateEligibility>(),
                 resolver.Get<IDirectionTransactionCoordinator>(),
+                resolver.Get<IStageCurtainManager>(),
                 stateMigrations,
                 gameStateContributors),
             typeof(IDialogueVariables),
@@ -170,7 +171,8 @@ public partial class MajoRuntimeBootstrap : Node
             typeof(IInputManager),
             typeof(IRuntimeRestoreBoundary),
             typeof(IStateEligibility),
-            typeof(IDirectionTransactionCoordinator));
+            typeof(IDirectionTransactionCoordinator),
+            typeof(IStageCurtainManager));
 
         services.AddSingleton<IGameSessionCoordinator>(
             resolver => new GameSessionCoordinator(
@@ -306,6 +308,7 @@ public partial class MajoRuntimeBootstrap : Node
         IRuntimeRestoreBoundary restoreBoundary,
         IStateEligibility eligibility,
         IDirectionTransactionCoordinator direction,
+        IStageCurtainManager curtain,
         StateMigrationRegistry migrations,
         IReadOnlyList<IStateContributor> customContributors)
     {
@@ -314,7 +317,7 @@ public partial class MajoRuntimeBootstrap : Node
             .Register(new ActorStateContributor(actors))
             .Register(new AudioStateContributor(audio))
             .Register(new SessionHistoryStateContributor(history))
-            .Register(new DirectionStateContributor(direction));
+            .Register(new DirectionStateContributor(direction, curtain));
         foreach (var contributor in customContributors)
         {
             contributors.Register(contributor);

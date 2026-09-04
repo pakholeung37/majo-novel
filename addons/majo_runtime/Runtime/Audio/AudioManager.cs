@@ -538,7 +538,11 @@ public sealed class AudioManager : IAudioManager, IDisposable
                     "Voice",
                     localizedId,
                     isCancelable: true,
-                    isFinishable: true);
+                    isFinishable: true,
+                    // Voice can intentionally overlap the next line and does
+                    // not mutate durable state; it must not block checkpoint
+                    // capture at an AwaitingAdvance boundary.
+                    isIgnorable: true);
             }
             var transition = StartFade(
                 [new AudioFadeTarget(playback, EffectiveVolume(playback))],

@@ -400,6 +400,16 @@ public sealed class DialogueTravelManager : IDialogueTravelManager, IDisposable
                 return;
             }
 
+            lock (sync)
+            {
+                if (!isInitialized || isTravelling ||
+                    capturedLineGeneration != lineGeneration ||
+                    capturedTimelineGeneration != timelineGeneration)
+                {
+                    return;
+                }
+            }
+
             var snapshot = await state.CaptureGameAsync();
             DialogueTravelEntry entry;
 
