@@ -26,8 +26,7 @@ public sealed record PlayedIdentity(
 public sealed record PlayedPresentation(
     PlayedIdentity Identity,
     string? ContentFingerprint,
-    bool WasPlayedBeforePresentation,
-    string? CorrelationGroupId);
+    bool WasPlayedBeforePresentation);
 
 public sealed record PlayedEntry(
     PlayedIdentity Identity,

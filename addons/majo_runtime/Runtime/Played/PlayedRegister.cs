@@ -17,7 +17,6 @@ public sealed class PlayedRegister : IPlayedRegister, IStateContributor, IStateD
 {
     public const string StateKey = "majo.global.played";
     private const string FingerprintMetadataPrefix = "majo:fingerprint=";
-    private const string GroupMetadataPrefix = "majo:operation-group=";
     private readonly object sync = new();
     private readonly IDialoguePlayer dialogue;
     private readonly IDialoguePresentation presentation;
@@ -168,14 +167,12 @@ public sealed class PlayedRegister : IPlayedRegister, IStateContributor, IStateD
         var projectId = dialogue.CurrentProjectId ?? throw new InvalidOperationException(
             "A presented line must belong to a dialogue project.");
         var fingerprint = MetadataValue(line.Metadata, FingerprintMetadataPrefix);
-        var group = MetadataValue(line.Metadata, GroupMetadataPrefix);
         var locale = LocalePolicy == PlayedLocalePolicy.PerLocale ? localeProvider() : null;
         var identity = NormalizeIdentity(projectId, line.Id, locale);
         CurrentPresentation = new PlayedPresentation(
             identity,
             fingerprint,
-            IsPlayed(projectId, line.Id, locale, fingerprint),
-            group);
+            IsPlayed(projectId, line.Id, locale, fingerprint));
     }
 
     private void HandleLineDisplayCompleted()

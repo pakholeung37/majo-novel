@@ -9,6 +9,7 @@ using Majo.Runtime.Audio;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue;
+using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.History;
 using Majo.Runtime.Input;
 using Majo.Runtime.Operations;
@@ -27,7 +28,7 @@ public sealed class PlaybackModeManager : IPlaybackModeManager, IDisposable
     private readonly IInputManager input;
     private readonly IHistoryManager history;
     private readonly IPlayedRegister played;
-    private readonly IOperationScheduler operations;
+    private readonly IDirectionTransactionCoordinator direction;
     private readonly IRuntimeLogger logger;
     private readonly Dictionary<PlaybackPauseReason, int> pauseCounts = new();
     private CancellationTokenSource? lifetime;
@@ -44,7 +45,7 @@ public sealed class PlaybackModeManager : IPlaybackModeManager, IDisposable
         IInputManager input,
         IHistoryManager history,
         IPlayedRegister played,
-        IOperationScheduler operations,
+        IDirectionTransactionCoordinator direction,
         TimeSpan extraDelay,
         bool waitForVoice,
         TimeSpan? skipDelay = null,
@@ -58,7 +59,7 @@ public sealed class PlaybackModeManager : IPlaybackModeManager, IDisposable
         this.input = input ?? throw new ArgumentNullException(nameof(input));
         this.history = history ?? throw new ArgumentNullException(nameof(history));
         this.played = played ?? throw new ArgumentNullException(nameof(played));
-        this.operations = operations ?? throw new ArgumentNullException(nameof(operations));
+        this.direction = direction ?? throw new ArgumentNullException(nameof(direction));
         this.logger = logger ?? NullRuntimeLogger.Instance;
         ArgumentOutOfRangeException.ThrowIfLessThan(extraDelay, TimeSpan.Zero);
 
@@ -298,7 +299,7 @@ public sealed class PlaybackModeManager : IPlaybackModeManager, IDisposable
     {
         if (IsSkip(Mode) && playback.Category == AudioCategory.Voice)
         {
-            _ = StopVoiceAndCompleteOperationsAsync(groupId: null);
+            _ = StopVoiceAsync();
         }
     }
 
@@ -512,7 +513,7 @@ public sealed class PlaybackModeManager : IPlaybackModeManager, IDisposable
             SetMode(PlaybackMode.Manual);
             return;
         }
-        _ = StopVoiceAndCompleteOperationsAsync(current?.CorrelationGroupId);
+        _ = ExecuteSkipAsync();
         // LinePresented is published by the facade presenter before the native
         // LinePresenter begins its typewriter. Cancelling Yarn's hurry-up token
         // here makes both the current line and every subsequent skipped line
@@ -521,15 +522,14 @@ public sealed class PlaybackModeManager : IPlaybackModeManager, IDisposable
         ReconcileDeadline();
     }
 
-    private async Task StopVoiceAndCompleteOperationsAsync(string? groupId)
+    private async Task ExecuteSkipAsync()
     {
         try
         {
-            await audio.StopVoiceAsync(cancellationToken: lifetime?.Token ?? default);
-            if (!string.IsNullOrWhiteSpace(groupId))
-            {
-                await operations.CompleteSkippableAsync(groupId, lifetime?.Token ?? default);
-            }
+            var token = lifetime?.Token ?? default;
+            await Task.WhenAll(
+                audio.StopVoiceAsync(cancellationToken: token),
+                direction.FinishSkippableAsync(token));
         }
         catch (OperationCanceledException) when (lifetime?.IsCancellationRequested != false)
         {
@@ -537,6 +537,22 @@ public sealed class PlaybackModeManager : IPlaybackModeManager, IDisposable
         catch (Exception exception)
         {
             logger.Error("auto", "skip.complete_failed", $"Skip completion failed: {exception.Message}", exception);
+            Failed?.Invoke(exception);
+        }
+    }
+
+    private async Task StopVoiceAsync()
+    {
+        try
+        {
+            await audio.StopVoiceAsync(cancellationToken: lifetime?.Token ?? default);
+        }
+        catch (OperationCanceledException) when (lifetime?.IsCancellationRequested != false)
+        {
+        }
+        catch (Exception exception)
+        {
+            logger.Error("auto", "skip.stop_voice_failed", $"Stop voice failed: {exception.Message}", exception);
             Failed?.Invoke(exception);
         }
     }

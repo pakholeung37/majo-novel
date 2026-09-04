@@ -2,6 +2,8 @@ using Majo.Runtime.Audio;
 using Majo.Runtime.Auto;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Presentation;
+using Majo.Runtime.Direction.Core;
+using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.History;
 using Majo.Runtime.Input;
 using Majo.Runtime.Operations;
@@ -187,19 +189,35 @@ public sealed class AutoHistoryTests
         harness.Audio.StartVoice("first-voice");
         harness.Dialogue.EmitLine(Line(
             "line:first",
-            "First",
-            "majo:operation-group=group:first"));
+            "First"));
         harness.Playback.SetMode(PlaybackMode.SkipAll);
         Assert.Equal(1, harness.Dialogue.HurryUpRequests);
         Assert.Null(harness.Audio.CurrentVoice);
-        Assert.Equal("group:first", harness.Operations.CompletedGroup);
+        Assert.Equal(1, harness.Direction.FinishSkippableCallCount);
 
         harness.Dialogue.EmitLine(Line(
             "line:second",
-            "Second",
-            "majo:operation-group=group:second"));
+            "Second"));
         Assert.Equal(2, harness.Dialogue.HurryUpRequests);
-        Assert.Equal("group:second", harness.Operations.CompletedGroup);
+        Assert.Equal(2, harness.Direction.FinishSkippableCallCount);
+
+        await harness.ShutdownAsync();
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task SameFrameToggleSkipAndManualDoesNotDuplicateFinish()
+    {
+        var harness = await AutoHarness.CreateAsync();
+
+        harness.Audio.StartVoice("test-voice-1");
+        harness.Playback.SetMode(PlaybackMode.SkipAll);
+        Assert.Equal(1, harness.Direction.FinishSkippableCallCount);
+
+        harness.Playback.SetMode(PlaybackMode.Manual);
+        Assert.Equal(1, harness.Direction.FinishSkippableCallCount);
+
+        harness.Playback.SetMode(PlaybackMode.Manual);
+        Assert.Equal(1, harness.Direction.FinishSkippableCallCount);
 
         await harness.ShutdownAsync();
     }
@@ -328,7 +346,7 @@ public sealed class AutoHistoryTests
             FakeHistoryManager history,
             FakeDialoguePresentation presentation,
             PlayedRegister played,
-            RecordingOperationScheduler operations,
+            RecordingDirectionCoordinator direction,
             PlaybackModeManager playback)
         {
             InputBackend = inputBackend;
@@ -340,7 +358,7 @@ public sealed class AutoHistoryTests
             History = history;
             Presentation = presentation;
             Played = played;
-            Operations = operations;
+            Direction = direction;
             Playback = playback;
         }
 
@@ -353,7 +371,7 @@ public sealed class AutoHistoryTests
         public FakeHistoryManager History { get; }
         public FakeDialoguePresentation Presentation { get; }
         public PlayedRegister Played { get; }
-        public RecordingOperationScheduler Operations { get; }
+        public RecordingDirectionCoordinator Direction { get; }
         public PlaybackModeManager Playback { get; }
 
         public static async Task<AutoHarness> CreateAsync()
@@ -369,7 +387,7 @@ public sealed class AutoHistoryTests
             var history = new FakeHistoryManager();
             var presentation = new FakeDialoguePresentation();
             var played = new PlayedRegister(dialogue, presentation);
-            var operations = new RecordingOperationScheduler();
+            var direction = new RecordingDirectionCoordinator();
             var playback = new PlaybackModeManager(
                 script,
                 dialogue,
@@ -378,7 +396,7 @@ public sealed class AutoHistoryTests
                 input,
                 history,
                 played,
-                operations,
+                direction,
                 TimeSpan.FromSeconds(1),
                 waitForVoice: true,
                 skipDelay: TimeSpan.FromMilliseconds(10));
@@ -394,7 +412,7 @@ public sealed class AutoHistoryTests
                 history,
                 presentation,
                 played,
-                operations,
+                direction,
                 playback);
         }
 
@@ -646,19 +664,38 @@ public sealed class AutoHistoryTests
         public void Complete() { }
     }
 
-    private sealed class RecordingOperationScheduler : IOperationScheduler
+    private sealed class RecordingDirectionCoordinator : IDirectionTransactionCoordinator
     {
-        public IReadOnlyCollection<IOperationHandle> ActiveOperations => [];
-        public string? CompletedGroup { get; private set; }
-        public IOperationHandle Start(OperationDefinition definition) => throw new NotSupportedException();
-        public Task WaitAsync(OperationTarget target, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task CancelAsync(OperationTarget target, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task CompleteAsync(OperationTarget target, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task CompleteSkippableAsync(string groupId, CancellationToken cancellationToken = default)
+        public DirectionState State => DirectionState.CreateDefault();
+        public int FinishSkippableCallCount { get; private set; }
+
+        public Task<CommittedDirectionTransaction> ExecuteAsync(
+            IEnumerable<IDirectionDirective> directives,
+            DirectionCompletionBarrier completion = DirectionCompletionBarrier.Commit,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<CommittedDirectionTransaction> RollbackAsync(
+            CommittedDirectionTransaction transaction,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task FinishAsync(
+            CommittedDirectionTransaction transaction,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task RestoreAsync(
+            DirectionState target,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task FinishSkippableAsync(CancellationToken cancellationToken = default)
         {
-            CompletedGroup = groupId;
+            FinishSkippableCallCount++;
             return Task.CompletedTask;
         }
+
         public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;

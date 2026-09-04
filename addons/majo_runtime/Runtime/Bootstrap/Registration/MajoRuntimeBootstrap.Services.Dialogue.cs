@@ -227,7 +227,7 @@ public partial class MajoRuntimeBootstrap : Node
                     resolver.Get<IInputManager>(),
                     resolver.Get<IHistoryManager>(),
                     resolver.Get<IPlayedRegister>(),
-                    resolver.Get<IOperationScheduler>(),
+                    resolver.Get<IDirectionTransactionCoordinator>(),
                     TimeSpan.FromSeconds(Configuration!.Auto!.ExtraDelaySeconds),
                     Configuration.Auto.WaitForVoice,
                     TimeSpan.FromSeconds(Configuration.Settings!.SkipDelaySeconds),
@@ -242,7 +242,7 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(IInputManager),
                 typeof(IHistoryManager),
                 typeof(IPlayedRegister),
-                typeof(IOperationScheduler));
+                typeof(IDirectionTransactionCoordinator));
 
         if (Configuration!.History!.ShowDefaultUi)
         {

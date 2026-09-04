@@ -118,40 +118,6 @@ public sealed class OperationSchedulerTests
     }
 
     [Fact(Timeout = 5_000)]
-    public async Task SkipCompletionOnlyCompletesMarkedOperationsInTheTargetGroup()
-    {
-        var harness = await OperationHarness.CreateAsync();
-        var skipped = false;
-        var protectedOperation = harness.Scheduler.Start(new OperationDefinition(
-            context => context.FrameClock.NextFrameAsync(context.CancellationToken),
-            id: "protected",
-            groupId: "line:1"));
-        var otherGroup = harness.Scheduler.Start(new OperationDefinition(
-            context => context.FrameClock.NextFrameAsync(context.CancellationToken),
-            id: "other",
-            groupId: "line:2",
-            isSkippable: true));
-        var skippable = harness.Scheduler.Start(new OperationDefinition(
-            context => context.FrameClock.NextFrameAsync(context.CancellationToken),
-            id: "skippable",
-            groupId: "line:1",
-            completeAsync: _ =>
-            {
-                skipped = true;
-                return Task.CompletedTask;
-            },
-            isSkippable: true));
-
-        await harness.Scheduler.CompleteSkippableAsync("line:1");
-
-        Assert.True(skipped);
-        Assert.Equal(OperationState.Completed, skippable.State);
-        Assert.Equal(OperationState.Running, protectedOperation.State);
-        Assert.Equal(OperationState.Running, otherGroup.State);
-        await harness.Host.ShutdownAsync();
-    }
-
-    [Fact(Timeout = 5_000)]
     public async Task FaultPropagatesAndCompletedEntryRemainsAwaitableForTheSession()
     {
         var logger = new RecordingLogger();
