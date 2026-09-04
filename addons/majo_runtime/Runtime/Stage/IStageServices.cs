@@ -57,10 +57,6 @@ public interface IScreenEffectManager : IRuntimeService
         float opacity,
         StageOperationSpec? operation = null);
     IOperationHandle SetLetterbox(float ratio, StageOperationSpec? operation = null);
-    IOperationHandle Flash(
-        Color color,
-        float intensity = 1,
-        StageOperationSpec? operation = null);
     void ApplyStableState(ScreenEffectState state);
 }
 
@@ -109,6 +105,4 @@ public interface IStageBackend : IRuntimeService
         double duration,
         CancellationToken cancellationToken);
     Task AnimateLetterboxAsync(float from, float target, double duration, CancellationToken cancellationToken);
-    Task FlashAsync(Color color, float intensity, double duration, CancellationToken cancellationToken);
-    void ClearFlash();
 }

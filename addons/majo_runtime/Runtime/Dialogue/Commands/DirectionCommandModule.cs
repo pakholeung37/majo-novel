@@ -56,7 +56,6 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
 			.Register<LayoutDirectionCommandArguments>(LayoutAsync)
 			.Register<DirectionImportCommandArguments>(ImportAsync)
 			.Register<DirectionMarkCommandArguments>(MarkAsync)
-			.Register<FlashDirectionCommandArguments>(FlashAsync)
 			.Register<CurtainDirectionCommandArguments>(CurtainAsync)
 			.Register<BeatBeginDirectionCommandArguments>(BeatBeginAsync)
 			.Register<BeatEndDirectionCommandArguments>(BeatEndAsync)
@@ -323,19 +322,6 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
 		return Task.CompletedTask;
 	});
 
-	private Task FlashAsync(FlashDirectionCommandArguments a, RuntimeCommandContext c) =>
-		ExecuteAsync("flash", async () =>
-		{
-			await beats.SubmitAsync(
-				new FlashCue(
-					new DirectionColor((float)a.R, (float)a.G, (float)a.B),
-					(float)a.Intensity,
-					a.Duration,
-					new DirectionSourceLocation(RequireNode(), 0, 0)),
-				Barrier(a.Wait),
-				c.CancellationToken);
-		});
-
 	private Task CurtainAsync(CurtainDirectionCommandArguments a, RuntimeCommandContext c) =>
 		ExecuteAsync("curtain", async () =>
 		{
@@ -594,17 +580,6 @@ public sealed class CameraFxDirectionCommandArguments
 	[CommandParameter("frequency", 6)] public int? Frequency { get; set; }
 	[CommandParameter("zoom", 7)] public double? Zoom { get; set; }
 	[CommandParameter("wait", 20, DefaultValue = "false")] public bool Wait { get; set; }
-}
-
-[RuntimeCommand("flash", Category = "Direction", Usage = "flash [intensity:<0..1>] [duration:<seconds>] [r:<0..1>] [g:<0..1>] [b:<0..1>] [wait:<bool>]")]
-public sealed class FlashDirectionCommandArguments
-{
-	[CommandParameter("intensity", 0, DefaultValue = "1", Minimum = 0)] public double Intensity { get; set; }
-	[CommandParameter("duration", 1, DefaultSource = CommandDefaultSource.FlashDuration, Minimum = 0)] public double Duration { get; set; }
-	[CommandParameter("r", 2, DefaultValue = "1", Minimum = 0)] public double R { get; set; }
-	[CommandParameter("g", 3, DefaultValue = "1", Minimum = 0)] public double G { get; set; }
-	[CommandParameter("b", 4, DefaultValue = "1", Minimum = 0)] public double B { get; set; }
-	[CommandParameter("wait", 5, DefaultValue = "false")] public bool Wait { get; set; }
 }
 
 [RuntimeCommand("curtain", Category = "Direction", Usage = "curtain <open|closed> [duration:<seconds>] [r:<0..1>] [g:<0..1>] [b:<0..1>] [wait:<bool>]")]

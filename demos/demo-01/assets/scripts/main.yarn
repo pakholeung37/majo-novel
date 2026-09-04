@@ -21,7 +21,6 @@ Narrator: M18 显式预取了本章背景、立绘、BGM 与 Voice；preload gro
 
 <<beat begin>>
 <<camera move center:48,50 zoom:1.08 duration:0.25>>
-<<flash intensity:0.35 duration:0.15>>
 <<beat end wait:true>>
 Narrator: Camera 与瞬态视觉效果已由同一个 Direction Beat 提交并汇合，不再经过旧 Stage Operation command。 #line:demo-m19-stage
 

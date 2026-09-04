@@ -54,7 +54,6 @@ public sealed class DirectionRuntimeTests
                 "layout",
                 "import",
                 "mark",
-                "flash",
                 "curtain",
                 "beat begin",
                 "beat end",

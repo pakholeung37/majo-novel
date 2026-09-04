@@ -430,7 +430,6 @@ public partial class MajoProjectConfiguration : Resource
             (nameof(Animation.DefaultCharacterAnimationDurationSeconds), Animation.DefaultCharacterAnimationDurationSeconds),
             (nameof(Animation.DefaultStageTransitionDurationSeconds), Animation.DefaultStageTransitionDurationSeconds),
             (nameof(Animation.DefaultStageEffectDurationSeconds), Animation.DefaultStageEffectDurationSeconds),
-            (nameof(Animation.DefaultFlashDurationSeconds), Animation.DefaultFlashDurationSeconds),
             (nameof(Animation.DefaultCurtainDurationSeconds), Animation.DefaultCurtainDurationSeconds),
             (nameof(Animation.DefaultAudioFadeDurationSeconds), Animation.DefaultAudioFadeDurationSeconds),
             (nameof(Animation.DefaultVoiceFadeDurationSeconds), Animation.DefaultVoiceFadeDurationSeconds),

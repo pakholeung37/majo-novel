@@ -35,7 +35,6 @@ public sealed record CommandBindingContext(
         CommandDefaultSource.AudioFadeDuration => Animation?.DefaultAudioFadeDurationSeconds ?? DefaultAudioFadeDurationSeconds,
         CommandDefaultSource.StageTransitionDuration => Animation?.DefaultStageTransitionDurationSeconds ?? RuntimeDefaults.TransitionDurationSeconds,
         CommandDefaultSource.StageEffectDuration => Animation?.DefaultStageEffectDurationSeconds ?? RuntimeDefaults.AnimationDurationSeconds,
-        CommandDefaultSource.FlashDuration => Animation?.DefaultFlashDurationSeconds ?? RuntimeDefaults.FlashDurationSeconds,
         CommandDefaultSource.CurtainDuration => Animation?.DefaultCurtainDurationSeconds ?? RuntimeDefaults.CurtainDurationSeconds,
         CommandDefaultSource.VoiceFadeDuration => Animation?.DefaultVoiceFadeDurationSeconds ?? RuntimeDefaults.ImmediateDurationSeconds,
         _ => throw new ArgumentOutOfRangeException(nameof(source), source, null),

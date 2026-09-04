@@ -84,7 +84,6 @@ public enum CommandDefaultSource
     AudioFadeDuration,
     StageTransitionDuration,
     StageEffectDuration,
-    FlashDuration,
     CurtainDuration,
     VoiceFadeDuration,
 }

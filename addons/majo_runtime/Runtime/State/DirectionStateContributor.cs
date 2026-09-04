@@ -9,16 +9,21 @@ using System.Threading.Tasks;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Resources;
+using Majo.Runtime.Stage;
 
 namespace Majo.Runtime.State;
 
 public sealed class DirectionStateContributor : IStateContributor
 {
     private readonly IDirectionTransactionCoordinator direction;
+    private readonly IStageCurtainManager? curtain;
 
-    public DirectionStateContributor(IDirectionTransactionCoordinator direction)
+    public DirectionStateContributor(
+        IDirectionTransactionCoordinator direction,
+        IStageCurtainManager? curtain = null)
     {
         this.direction = direction ?? throw new ArgumentNullException(nameof(direction));
+        this.curtain = curtain;
     }
 
     public string Key => BuiltInStateKeys.Direction;
@@ -30,11 +35,30 @@ public sealed class DirectionStateContributor : IStateContributor
     {
         cancellationToken.ThrowIfCancellationRequested();
         direction.State.Validate();
+        var state = direction.State;
+        // Curtain cues are transient operations on the legacy stage manager,
+        // so use its settled state when available. Otherwise a cue can change
+        // the rendered curtain without changing DirectionState and be lost on
+        // save/rollback.
+        if (curtain is not null)
+        {
+            var stageCurtain = curtain.State;
+            state = state with
+            {
+                Effects = new StableEffectState(new CurtainState(
+                    new DirectionColor(
+                        stageCurtain.Color.R,
+                        stageCurtain.Color.G,
+                        stageCurtain.Color.B,
+                        stageCurtain.Color.A),
+                    stageCurtain.Opacity))
+            };
+        }
         return ValueTask.FromResult(new StateRecord(
             Key,
             Scope,
             SchemaVersion,
-            StateJson.Serialize(ToPayload(direction.State))));
+            StateJson.Serialize(ToPayload(state))));
     }
 
     public ValueTask PreflightAsync(StateRecord record, CancellationToken cancellationToken)
@@ -47,9 +71,15 @@ public sealed class DirectionStateContributor : IStateContributor
     public async ValueTask RestoreAsync(StateRecord record, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        await direction.RestoreAsync(
-            Decode(record),
-            cancellationToken);
+        var restored = Decode(record);
+        await direction.RestoreAsync(restored, cancellationToken);
+        if (curtain is not null)
+        {
+            var value = restored.Effects.Curtain;
+            curtain.ApplyStableState(new StageCurtainState(
+                new Godot.Color(value.Color.R, value.Color.G, value.Color.B, value.Color.A),
+                value.Opacity));
+        }
     }
 
     public ValueTask ResetAsync(CancellationToken cancellationToken)

@@ -16,7 +16,6 @@ public sealed class FakeStageBackend : IStageBackend
     public bool IsShaking { get; private set; }
     public CameraShakeSpec? LastShake { get; private set; }
     public bool IsTransitioning { get; private set; }
-    public bool IsFlashing { get; private set; }
     public StageOperationSpec? LastCameraOperation { get; private set; }
     public CameraViewTransitionKind? LastCameraTransition { get; private set; }
     public CameraState? LastDissolveSource { get; private set; }
@@ -30,7 +29,7 @@ public sealed class FakeStageBackend : IStageBackend
         Camera = CameraState.Default;
         Curtain = StageCurtainState.Default;
         ScreenEffect = ScreenEffectState.Default;
-        IsShaking = IsTransitioning = IsFlashing = false;
+        IsShaking = IsTransitioning = false;
         LastShake = null;
         LastCameraOperation = null;
         LastCameraTransition = null;
@@ -123,12 +122,4 @@ public sealed class FakeStageBackend : IStageBackend
         ScreenEffect = ScreenEffect with { LetterboxRatio = target };
         return Task.CompletedTask;
     }
-    public Task FlashAsync(Color color, float intensity, double duration, CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        IsFlashing = true;
-        IsFlashing = false;
-        return Task.CompletedTask;
-    }
-    public void ClearFlash() => IsFlashing = false;
 }

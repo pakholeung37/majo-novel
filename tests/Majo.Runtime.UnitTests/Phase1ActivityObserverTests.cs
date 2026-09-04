@@ -44,7 +44,9 @@ public sealed class Phase1ActivityObserverTests
         Assert.True(registry.HasActiveActivities());
         Assert.True(registry.HasActiveActivities(includeIgnorable: true));
         Assert.True(registry.HasActiveActivities(RuntimeActivityOwner.Direction));
-        Assert.True(registry.HasActiveActivities(RuntimeActivityOwner.Audio));
+        Assert.True(registry.HasActiveActivities(
+            RuntimeActivityOwner.Audio,
+            includeIgnorable: true));
         Assert.False(registry.HasActiveActivities(RuntimeActivityOwner.Dialogue, includeIgnorable: false));
         Assert.True(registry.HasActiveActivities(RuntimeActivityOwner.Dialogue, includeIgnorable: true));
 
@@ -190,7 +192,9 @@ public sealed class Phase1ActivityObserverTests
         Assert.NotNull(result.Playback);
 
         // Registry should show Audio Voice activity
-        Assert.True(registry.HasActiveActivities(RuntimeActivityOwner.Audio));
+        Assert.True(registry.HasActiveActivities(
+            RuntimeActivityOwner.Audio,
+            includeIgnorable: true));
         var snap = registry.Snapshot();
         Assert.Contains(snap, a => a.Owner == RuntimeActivityOwner.Audio && a.Type == "Voice");
 

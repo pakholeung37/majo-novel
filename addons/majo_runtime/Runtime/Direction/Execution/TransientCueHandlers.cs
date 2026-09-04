@@ -63,7 +63,6 @@ public sealed class TransientCueHandlerRegistry : ITransientCueHandlerRegistry
     {
         if (!registerDefaults) return;
         Register(new CameraFxCueHandler());
-        Register(new FlashCueHandler());
         Register(new CurtainCueHandler());
         Register(new GenericCurtainCueHandler());
     }
@@ -131,34 +130,6 @@ internal sealed class CameraFxCueHandler : ITransientCueHandler
     }
     public IOperationHandle Execute(ITransientDirectionCue cue, TransientCueExecutionContext context) =>
         context.CameraModifiers.ApplyEffect((CameraFxCue)cue);
-
-    private static void ValidateDuration(double duration)
-    {
-        if (!double.IsFinite(duration) || duration < 0)
-            throw new DirectionException("Transient cue duration must be finite and non-negative.");
-    }
-}
-
-internal sealed class FlashCueHandler : ITransientCueHandler
-{
-    public string Id => "flash";
-    public bool CanHandle(ITransientDirectionCue cue) => cue is FlashCue;
-    public void Validate(ITransientDirectionCue cue)
-    {
-        var value = (FlashCue)cue;
-        value.Color.Validate();
-        if (!float.IsFinite(value.Intensity) || value.Intensity < 0 || value.Intensity > 1)
-            throw new DirectionException("Flash cue intensity must be between zero and one.");
-        ValidateDuration(value.DurationSeconds);
-    }
-    public IOperationHandle Execute(ITransientDirectionCue cue, TransientCueExecutionContext context)
-    {
-        var value = (FlashCue)cue;
-        return context.ScreenEffects.Flash(
-            new Color(value.Color.R, value.Color.G, value.Color.B, value.Color.A),
-            value.Intensity,
-            new StageOperationSpec(value.DurationSeconds));
-    }
 
     private static void ValidateDuration(double duration)
     {

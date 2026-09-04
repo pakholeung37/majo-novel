@@ -613,7 +613,6 @@ public sealed class ScreenEffectManager : IScreenEffectManager
     private readonly IOperationRunner operations;
     private readonly IStageAccessibility accessibility;
     private readonly Dictionary<string, IOperationHandle> propertyOperations = new(StringComparer.Ordinal);
-    private IOperationHandle? flashOperation;
     private bool isInitialized;
 
     public ScreenEffectManager(
@@ -638,7 +637,6 @@ public sealed class ScreenEffectManager : IScreenEffectManager
     {
         CancelAll();
         State = TargetState = ScreenEffectState.Default;
-        backend.ClearFlash();
         backend.ApplyScreenEffect(State);
         return Task.CompletedTask;
     }
@@ -646,7 +644,6 @@ public sealed class ScreenEffectManager : IScreenEffectManager
     {
         if (!isInitialized) return Task.CompletedTask;
         CancelAll();
-        backend.ClearFlash();
         isInitialized = false;
         return Task.CompletedTask;
     }
@@ -672,28 +669,6 @@ public sealed class ScreenEffectManager : IScreenEffectManager
             (from, to, duration, token) => backend.AnimateLetterboxAsync(
                 from.LetterboxRatio, to.LetterboxRatio, duration, token),
             operation);
-    }
-
-    public IOperationHandle Flash(Color color, float intensity = 1, StageOperationSpec? operation = null)
-    {
-        EnsureInitialized();
-        if (!float.IsFinite(intensity) || intensity is < 0 or > 1)
-            throw new ArgumentOutOfRangeException(nameof(intensity));
-        var spec = (operation ?? new StageOperationSpec(0.2)).Validate();
-        lock (gate) flashOperation?.Finish();
-        IOperationHandle? handle = null;
-        handle = operations.Start(new OperationDefinition(
-            async context =>
-            {
-                if (!accessibility.ReduceMotion)
-                    await backend.FlashAsync(color, intensity, spec.DurationSeconds, context.CancellationToken);
-                backend.ClearFlash();
-            },
-            onFinish: _ => { backend.ClearFlash(); return Task.CompletedTask; },
-            onCancel: _ => { backend.ClearFlash(); return Task.CompletedTask; }));
-        lock (gate) flashOperation = handle;
-        _ = ClearFlashWhenDoneAsync(handle);
-        return handle;
     }
 
     public void ApplyStableState(ScreenEffectState state)
@@ -764,20 +739,13 @@ public sealed class ScreenEffectManager : IScreenEffectManager
             if (propertyOperations.TryGetValue(property, out var current) && ReferenceEquals(current, handle))
                 propertyOperations.Remove(property);
     }
-    private async Task ClearFlashWhenDoneAsync(IOperationHandle handle)
-    {
-        try { await handle.Completion; } catch { }
-        lock (gate) if (ReferenceEquals(flashOperation, handle)) flashOperation = null;
-    }
     private void CancelAll()
     {
         IOperationHandle[] snapshot;
         lock (gate)
         {
-            snapshot = propertyOperations.Values.Append(flashOperation)
-                .Where(value => value is not null).Cast<IOperationHandle>().Distinct().ToArray();
+            snapshot = propertyOperations.Values.Distinct().ToArray();
             propertyOperations.Clear();
-            flashOperation = null;
         }
         foreach (var operation in snapshot) operation.Cancel();
     }

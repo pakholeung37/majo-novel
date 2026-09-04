@@ -70,7 +70,7 @@ public sealed class NodeDirectionCompiler
 {
     private static readonly HashSet<string> DirectionCommands = new(
         new[] { "stage", "view", "backdrop", "character", "leave", "camera", "shot",
-            "layout", "import", "mark", "flash", "curtain", "beat" },
+            "layout", "import", "mark", "curtain", "beat" },
         StringComparer.OrdinalIgnoreCase);
     private static readonly Regex NodeHeader = new(
         "^title:\\s*(?<id>.+?)\\s*$",

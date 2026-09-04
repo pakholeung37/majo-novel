@@ -230,7 +230,10 @@ public sealed class StateManager : IStateManager, IStateRestoreTransaction, IDis
         {
             LastFailureMessage = exception.Message;
             SetStatus(StateManagerStatus.Idle);
-            logger.Warning("state", "state.capture_rejected", exception.Message);
+            // Eligibility rejection is an expected result for opportunistic
+            // saves/checkpoints racing an active command or transition; keep
+            // it out of the warning channel to avoid misleading console noise.
+            logger.Debug("state", "state.capture_rejected", exception.Message);
             throw;
         }
         catch (Exception exception)

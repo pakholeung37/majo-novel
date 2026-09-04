@@ -153,32 +153,6 @@ public sealed class Phase0BaselineContractTests
     }
 
     [Fact(Timeout = 5_000)]
-    public async Task FlashCueHandler_Settlement_Cancel_Finish_Contracts()
-    {
-        var mockEffects = new MockScreenEffectManager();
-        var context = new TransientCueExecutionContext(
-            new MockCameraModifierManager(),
-            mockEffects,
-            new MockStageCurtainManager());
-
-        var cueRegistry = new TransientCueHandlerRegistry();
-        var cue = new FlashCue(new DirectionColor(1, 1, 1, 1), 0.8f, 0.4);
-        var handler = cueRegistry.Resolve(cue);
-        handler.Validate(cue);
-
-        var handle = handler.Execute(cue, context);
-        Assert.NotNull(handle);
-        handle.Finish();
-        await handle.Completion;
-        Assert.Equal(OperationState.Completed, handle.State);
-
-        var handle2 = handler.Execute(cue, context);
-        handle2.Cancel();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => handle2.Completion);
-        Assert.Equal(OperationState.Cancelled, handle2.State);
-    }
-
-    [Fact(Timeout = 5_000)]
     public async Task CurtainCueHandler_Settlement_Cancel_Finish_Contracts()
     {
         var mockCurtain = new MockStageCurtainManager();
@@ -437,9 +411,6 @@ public sealed class Phase0BaselineContractTests
             new MockOperationHandle(operation?.DurationSeconds ?? 0);
 
         public IOperationHandle SetLetterbox(float ratio, StageOperationSpec? operation = null) =>
-            new MockOperationHandle(operation?.DurationSeconds ?? 0);
-
-        public IOperationHandle Flash(Color color, float intensity, StageOperationSpec? operation = null) =>
             new MockOperationHandle(operation?.DurationSeconds ?? 0);
 
         public void ApplyStableState(ScreenEffectState state) { }

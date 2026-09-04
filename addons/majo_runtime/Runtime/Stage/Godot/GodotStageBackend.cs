@@ -19,7 +19,6 @@ internal sealed class GodotStageBackend : IStageBackend, IDisposable
     private readonly ColorRect curtain;
     private readonly ColorRect transition;
     private readonly ColorRect overlay;
-    private readonly ColorRect flash;
     private readonly ColorRect letterboxTop;
     private readonly ColorRect letterboxBottom;
     private CameraState camera = CameraState.Default;
@@ -33,7 +32,6 @@ internal sealed class GodotStageBackend : IStageBackend, IDisposable
     private Tween? curtainTween;
     private Tween? overlayTween;
     private Tween? letterboxTween;
-    private Tween? flashTween;
     private bool isInitialized;
 
     public GodotStageBackend(Node owner, GodotActorHost actors)
@@ -45,13 +43,11 @@ internal sealed class GodotStageBackend : IStageBackend, IDisposable
         curtain = CreateFullRect("Curtain");
         transition = CreateFullRect("Transition");
         overlay = CreateFullRect("Overlay");
-        flash = CreateFullRect("Flash");
         letterboxTop = CreateLetterbox("LetterboxTop", top: true);
         letterboxBottom = CreateLetterbox("LetterboxBottom", top: false);
         curtainLayer.AddChild(curtain);
         effectLayer.AddChild(transition);
         effectLayer.AddChild(overlay);
-        effectLayer.AddChild(flash);
         effectLayer.AddChild(letterboxTop);
         effectLayer.AddChild(letterboxBottom);
     }
@@ -68,7 +64,6 @@ internal sealed class GodotStageBackend : IStageBackend, IDisposable
         ApplyScreenEffect(screen);
         ClearTransition();
         ClearCameraViewTransition();
-        ClearFlash();
         isInitialized = true;
         return Task.CompletedTask;
     }
@@ -85,7 +80,6 @@ internal sealed class GodotStageBackend : IStageBackend, IDisposable
         ApplyScreenEffect(screen);
         ClearTransition();
         ClearCameraViewTransition();
-        ClearFlash();
         return Task.CompletedTask;
     }
 
@@ -422,35 +416,6 @@ internal sealed class GodotStageBackend : IStageBackend, IDisposable
             }),
             cancellationToken);
 
-    public async Task FlashAsync(
-        Color color,
-        float intensity,
-        double duration,
-        CancellationToken cancellationToken)
-    {
-        KillTween(flashTween);
-        flash.Visible = true;
-        flash.Color = new Color(color.R, color.G, color.B, intensity);
-        flashTween = owner.CreateTween();
-        flashTween.TweenProperty(flash, "color:a", 0, duration);
-        await WaitForTweenAsync(flashTween, cancellationToken);
-        flashTween = null;
-        ClearFlash();
-    }
-
-    public void ClearFlash()
-    {
-        KillTween(flashTween);
-        flashTween = null;
-        try
-        {
-            if (!GodotObject.IsInstanceValid(flash)) return;
-            flash.Visible = false;
-            flash.Color = new Color(Colors.White, 0);
-        }
-        catch (ObjectDisposedException) { }
-    }
-
     private async Task AnimateAsync(
         Tween? existing,
         Action<Tween?> setSlot,
@@ -515,9 +480,8 @@ internal sealed class GodotStageBackend : IStageBackend, IDisposable
         KillTween(curtainTween);
         KillTween(overlayTween);
         KillTween(letterboxTween);
-        KillTween(flashTween);
         cameraViewTransitionTween = shakeTween = transitionTween = curtainTween = overlayTween =
-            letterboxTween = flashTween = null;
+            letterboxTween = null;
     }
 
     private static void KillTween(Tween? tween)
