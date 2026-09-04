@@ -21,7 +21,10 @@ public partial class MajoRuntimeBootstrap : Node
 {
     private void RegisterCoreServices(RuntimeServiceRegistry services)
     {
+        var activityRegistry = new RuntimeActivityRegistry();
         services
+            .AddSingleton<IRuntimeActivityRegistry>(_ => activityRegistry)
+            .AddSingleton<IRuntimeActivityObserver>(_ => activityRegistry)
             .AddSingleton<IRuntimeDiagnostics>(
                 resolver =>
                 {

@@ -141,11 +141,11 @@ public partial class MajoRuntimeBootstrap : Node
         services.AddSingleton<IStateEligibility>(
             resolver => new StateEligibility(
                 resolver.Get<IScriptPlayback>(),
-                resolver.Get<IOperationScheduler>(),
+                resolver.Get<IRuntimeActivityObserver>(),
                 resolver.Get<IInputManager>(),
                 resolver.Get<IYarnCommandAdapter>()),
             typeof(IScriptPlayback),
-            typeof(IOperationScheduler),
+            typeof(IRuntimeActivityObserver),
             typeof(IInputManager),
             typeof(IYarnCommandAdapter));
 

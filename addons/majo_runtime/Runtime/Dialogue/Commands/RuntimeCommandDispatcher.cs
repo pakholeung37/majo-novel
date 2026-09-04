@@ -20,6 +20,7 @@ public sealed class RuntimeCommandDispatcher : IDisposable
     private readonly IServiceResolver? services;
     private readonly IRuntimeLogger logger;
     private readonly bool abortOnRecoverableFailure;
+    private readonly IRuntimeActivityRegistry? activities;
     private readonly HashSet<IOperationHandle> dialogueOperations =
         new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<string, RuntimeCommandActivity> activeCommands =
@@ -33,7 +34,8 @@ public sealed class RuntimeCommandDispatcher : IDisposable
         IOperationScheduler? operations = null,
         IServiceResolver? services = null,
         IRuntimeLogger? logger = null,
-        bool abortOnRecoverableFailure = false)
+        bool abortOnRecoverableFailure = false,
+        IRuntimeActivityRegistry? activities = null)
     {
         this.binder = binder ?? throw new ArgumentNullException(nameof(binder));
         this.actors = actors;
@@ -41,6 +43,11 @@ public sealed class RuntimeCommandDispatcher : IDisposable
         this.services = services;
         this.logger = logger ?? NullRuntimeLogger.Instance;
         this.abortOnRecoverableFailure = abortOnRecoverableFailure;
+        if (activities is null && services is not null && services.TryGet<IRuntimeActivityRegistry>(out var resolved))
+        {
+            activities = resolved;
+        }
+        this.activities = activities;
     }
 
     public event Action<RuntimeCommandException>? CommandFailed;
@@ -93,6 +100,12 @@ public sealed class RuntimeCommandDispatcher : IDisposable
         services?.TryGet(out dialogue);
         var host = lifetime as RuntimeHost;
         var executionId = Guid.NewGuid().ToString("N");
+        using var activityLease = activities?.BeginActivity(
+            RuntimeActivityOwner.Dialogue,
+            "Command",
+            registration.Name,
+            isCancelable: true,
+            isFinishable: false);
         BeginCommand(new RuntimeCommandActivity(
             registration.Name,
             executionId,

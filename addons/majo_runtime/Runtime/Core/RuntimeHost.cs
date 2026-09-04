@@ -226,6 +226,20 @@ public sealed class RuntimeHost : IRuntimeLifetime, IRuntimeSessionController, I
                 }
             }
 
+            if (resolver.TryGet<IRuntimeActivityObserver>(out var activities) && activities is not null)
+            {
+                try
+                {
+                    await activities.WaitForQuiescenceAsync(cancellationToken);
+                }
+                catch (Exception exception)
+                {
+                    exceptions.Add(new RuntimeLifecycleException(
+                        "Timed out or failed waiting for activity quiescence during reset.",
+                        exception));
+                }
+            }
+
             foreach (var descriptor in initializedServices)
             {
                 if ((directionReset &&
@@ -304,6 +318,20 @@ public sealed class RuntimeHost : IRuntimeLifetime, IRuntimeSessionController, I
             {
                 try { await directionSkipTask; }
                 catch (Exception exception) { exceptions.Add(exception); }
+            }
+
+            if (resolver.TryGet<IRuntimeActivityObserver>(out var activities) && activities is not null)
+            {
+                try
+                {
+                    await activities.WaitForQuiescenceAsync(cancellationToken);
+                }
+                catch (Exception exception)
+                {
+                    exceptions.Add(new RuntimeLifecycleException(
+                        "Timed out or failed waiting for activity quiescence during shutdown.",
+                        exception));
+                }
             }
 
             exceptions.AddRange(await ShutdownInitializedServicesAsync(cancellationToken));

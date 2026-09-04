@@ -20,12 +20,14 @@ public partial class MajoRuntimeBootstrap : Node
                 resolver.Get<IOperationScheduler>(),
                 resolver.Get<IMissingResourceReporter>(),
                 resolver.Get<ILocaleManager>(),
-                resolver.Get<ILocalizedResourceResolver>()),
+                resolver.Get<ILocalizedResourceResolver>(),
+                resolver.Get<IRuntimeActivityRegistry>()),
             typeof(IResourceManager),
             typeof(IOperationScheduler),
             typeof(IMissingResourceReporter),
             typeof(ILocaleManager),
-            typeof(ILocalizedResourceResolver));
+            typeof(ILocalizedResourceResolver),
+            typeof(IRuntimeActivityRegistry));
     }
 
     private AudioManager CreateAudioManager(
@@ -33,7 +35,8 @@ public partial class MajoRuntimeBootstrap : Node
         IOperationScheduler operations,
         IMissingResourceReporter missingResources,
         ILocaleManager locales,
-        ILocalizedResourceResolver localizedResources)
+        ILocalizedResourceResolver localizedResources,
+        IRuntimeActivityRegistry activities)
     {
         var configuration = Configuration!.Audio!;
         return new AudioManager(
@@ -56,6 +59,7 @@ public partial class MajoRuntimeBootstrap : Node
             Logger,
             missingResources,
             locales,
-            localizedResources);
+            localizedResources,
+            activities);
     }
 }

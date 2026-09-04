@@ -76,7 +76,7 @@ public sealed class StateEligibility : IStateEligibility
 {
     private readonly object sync = new();
     private readonly IScriptPlayback script;
-    private readonly IOperationScheduler operations;
+    private readonly IRuntimeActivityObserver activities;
     private readonly IInputManager input;
     private readonly IYarnCommandAdapter? commands;
     private readonly List<BarrierHandle> barriers = new();
@@ -86,12 +86,12 @@ public sealed class StateEligibility : IStateEligibility
 
     public StateEligibility(
         IScriptPlayback script,
-        IOperationScheduler operations,
+        IRuntimeActivityObserver activities,
         IInputManager input,
         IYarnCommandAdapter? commands = null)
     {
         this.script = script ?? throw new ArgumentNullException(nameof(script));
-        this.operations = operations ?? throw new ArgumentNullException(nameof(operations));
+        this.activities = activities ?? throw new ArgumentNullException(nameof(activities));
         this.input = input ?? throw new ArgumentNullException(nameof(input));
         this.commands = commands;
     }
@@ -156,11 +156,12 @@ public sealed class StateEligibility : IStateEligibility
                 "A runtime command is active."));
         }
 
-        if (!isDestructiveRestore && operations.ActiveOperations.Count > 0)
+        if (!isDestructiveRestore && activities.HasActiveActivities(includeIgnorable: false))
         {
+            var activeCount = activities.Snapshot().Count(a => !a.IsIgnorable);
             reasons.Add(new StateEligibilityReason(
                 StateEligibilityReasonCode.ActiveOperation,
-                $"{operations.ActiveOperations.Count} operation(s) are active."));
+                $"{activeCount} operation(s) are active."));
         }
 
         var modal = input.ActiveHandles.FirstOrDefault(value => value.IsModal);

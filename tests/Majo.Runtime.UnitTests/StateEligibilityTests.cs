@@ -1,5 +1,5 @@
+using Majo.Runtime.Core;
 using Majo.Runtime.Input;
-using Majo.Runtime.Operations;
 using Majo.Runtime.Script;
 using Majo.Runtime.State;
 using Xunit;
@@ -15,9 +15,18 @@ public sealed class StateEligibilityTests
         {
             PhaseValue = ScriptPlaybackPhase.Executing,
         };
-        var operations = new EligibilityOperations
+        var activities = new EligibilityActivityObserver
         {
-            Active = [new EligibilityOperation()],
+            Activities =
+            [
+                new RuntimeActivityInfo(
+                    "a1",
+                    RuntimeActivityOwner.Direction,
+                    "Transaction",
+                    true,
+                    true,
+                    TimeSpan.Zero),
+            ],
         };
         var input = new EligibilityInput
         {
@@ -31,7 +40,7 @@ public sealed class StateEligibilityTests
                     []),
             ],
         };
-        var eligibility = new StateEligibility(script, operations, input);
+        var eligibility = new StateEligibility(script, activities, input);
         await eligibility.InitializeAsync(CancellationToken.None);
         using var barrier = eligibility.AcquireBarrier(
             new object(),
@@ -54,7 +63,7 @@ public sealed class StateEligibilityTests
         Assert.Equal(first.Operation, second.Operation);
         Assert.Equal(first.Reasons, second.Reasons);
         Assert.Equal(ScriptPlaybackPhase.Executing, script.Phase);
-        Assert.Single(operations.ActiveOperations);
+        Assert.Single(activities.Snapshot());
         Assert.Single(input.ActiveHandles);
 
         var restore = eligibility.Check(StateOperationKind.Restore);
@@ -64,7 +73,7 @@ public sealed class StateEligibilityTests
 
         barrier.Dispose();
         script.PhaseValue = ScriptPlaybackPhase.AwaitingAdvance;
-        operations.Active = [];
+        activities.Activities = [];
         input.Handles = [];
         Assert.True(eligibility.Check(StateOperationKind.Save).IsAllowed);
     }
@@ -78,7 +87,7 @@ public sealed class StateEligibilityTests
         };
         var eligibility = new StateEligibility(
             script,
-            new EligibilityOperations(),
+            new EligibilityActivityObserver(),
             new EligibilityInput());
         await eligibility.InitializeAsync(CancellationToken.None);
         using var barrier = eligibility.AcquireBarrier(
@@ -110,33 +119,23 @@ public sealed class StateEligibilityTests
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
-    private sealed class EligibilityOperations : IOperationScheduler
+    private sealed class EligibilityActivityObserver : IRuntimeActivityObserver
     {
-        public IReadOnlyCollection<IOperationHandle> Active { get; set; } = [];
-        public IReadOnlyCollection<IOperationHandle> ActiveOperations => Active;
+        public IReadOnlyList<RuntimeActivityInfo> Activities { get; set; } = [];
+
         public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public IOperationHandle Start(OperationDefinition definition) => throw new NotSupportedException();
-        public Task WaitAsync(
-            OperationTarget target,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task CancelAsync(
-            OperationTarget target,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task CompleteAsync(
-            OperationTarget target,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
-    }
 
-    private sealed class EligibilityOperation : IOperationHandle
-    {
-        public string Id => "active";
-        public string? GroupId => "test";
-        public OperationState State => OperationState.Running;
-        public Task Completion => Task.CompletedTask;
-        public void Complete() { }
-        public void Cancel() { }
+        public IReadOnlyList<RuntimeActivityInfo> Snapshot() => Activities;
+
+        public bool HasActiveActivities(RuntimeActivityOwner owner, bool includeIgnorable = false) =>
+            Activities.Any(a => a.Owner == owner && (includeIgnorable || !a.IsIgnorable));
+
+        public bool HasActiveActivities(bool includeIgnorable = false) =>
+            Activities.Any(a => includeIgnorable || !a.IsIgnorable);
+
+        public Task WaitForQuiescenceAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     private sealed class EligibilityInput : IInputManager

@@ -22,6 +22,7 @@ public sealed class CommittedDirectionTransaction : IDisposable
 {
     private readonly object owner;
     private readonly IPreparedDirectionTransaction prepared;
+    private readonly IDisposable? activityLease;
     private readonly SemaphoreSlim lifecycleGate = new(1, 1);
     private int status = (int)DirectionTransactionStatus.Committed;
     private int disposed;
@@ -30,12 +31,14 @@ public sealed class CommittedDirectionTransaction : IDisposable
         object owner,
         DirectionPlan plan,
         DirectionCommitToken token,
-        IPreparedDirectionTransaction prepared)
+        IPreparedDirectionTransaction prepared,
+        IDisposable? activityLease = null)
     {
         this.owner = owner ?? throw new ArgumentNullException(nameof(owner));
         Plan = plan;
         Token = token;
         this.prepared = prepared;
+        this.activityLease = activityLease;
         Settlement = ObserveSettlementAsync();
     }
 
@@ -110,7 +113,10 @@ public sealed class CommittedDirectionTransaction : IDisposable
         try
         {
             if (Interlocked.Exchange(ref disposed, 1) == 0)
+            {
+                activityLease?.Dispose();
                 await prepared.DisposeAsync();
+            }
         }
         finally
         {
@@ -194,6 +200,7 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
     ];
     private readonly IDirectionPlanner planner;
     private readonly IDirectionPreparationBackend backend;
+    private readonly IRuntimeActivityRegistry? activities;
     private readonly SemaphoreSlim commitGate = new(1, 1);
     private readonly object stateGate = new();
     private readonly List<CommittedDirectionTransaction> transactions = new();
@@ -202,10 +209,12 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
     public DirectionTransactionCoordinator(
         IDirectionPlanner planner,
         IDirectionPreparationBackend backend,
-        DirectionState? initialState = null)
+        DirectionState? initialState = null,
+        IRuntimeActivityRegistry? activities = null)
     {
         this.planner = planner ?? throw new ArgumentNullException(nameof(planner));
         this.backend = backend ?? throw new ArgumentNullException(nameof(backend));
+        this.activities = activities;
         state = initialState ?? DirectionState.CreateDefault();
         state.Validate();
     }
@@ -430,6 +439,7 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
         var commitStarted = false;
         var ownershipTransferred = false;
         DirectionCommitToken token = default;
+        IDisposable? activityLease = null;
         try
         {
             prepared = await backend.PrepareAsync(plan, cancellationToken);
@@ -448,6 +458,13 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
                 }
             }
 
+            activityLease = activities?.BeginActivity(
+                RuntimeActivityOwner.Direction,
+                "Transaction",
+                plan.Id.Value.ToString(),
+                isCancelable: true,
+                isFinishable: true);
+
             // Commit is deliberately outside stateGate. The commit gate still
             // serializes writers, while readers never block on Godot/backend work.
             commitStarted = true;
@@ -462,7 +479,7 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
                 state = plan.TargetState;
             }
 
-            var committed = new CommittedDirectionTransaction(this, plan, token, prepared);
+            var committed = new CommittedDirectionTransaction(this, plan, token, prepared, activityLease);
             ownershipTransferred = true;
             lock (stateGate)
             {
@@ -477,6 +494,8 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
         {
             if (prepared is null || ownershipTransferred)
                 throw;
+
+            activityLease?.Dispose();
 
             List<Exception>? cleanupFailures = null;
             if (commitStarted)

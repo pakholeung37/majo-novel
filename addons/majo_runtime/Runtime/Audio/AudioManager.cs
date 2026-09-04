@@ -29,7 +29,9 @@ public sealed class AudioManager : IAudioManager, IDisposable
     private readonly bool failOnMissingClips;
     private readonly ILocaleManager? locales;
     private readonly ILocalizedResourceResolver? localizedResources;
+    private readonly IRuntimeActivityRegistry? activities;
     private AudioPlayback? voice;
+    private IDisposable? voiceActivityLease;
     private IOperationHandle? voiceTransition;
     private long generatedSfxId;
     private bool isInitialized;
@@ -54,7 +56,8 @@ public sealed class AudioManager : IAudioManager, IDisposable
         IRuntimeLogger? logger = null,
         IMissingResourceReporter? missingResources = null,
         ILocaleManager? locales = null,
-        ILocalizedResourceResolver? localizedResources = null)
+        ILocalizedResourceResolver? localizedResources = null,
+        IRuntimeActivityRegistry? activities = null)
     {
         this.backend = backend ?? throw new ArgumentNullException(nameof(backend));
         this.operations = operations ?? throw new ArgumentNullException(nameof(operations));
@@ -65,6 +68,7 @@ public sealed class AudioManager : IAudioManager, IDisposable
         this.missingResources = missingResources;
         this.locales = locales;
         this.localizedResources = localizedResources;
+        this.activities = activities;
         ArgumentNullException.ThrowIfNull(settings);
         masterVolume = ValidateVolume(settings.MasterVolume);
         bgmVolume = ValidateVolume(settings.BgmVolume);
@@ -486,6 +490,8 @@ public sealed class AudioManager : IAudioManager, IDisposable
             {
                 previous = voice;
                 voice = null;
+                voiceActivityLease?.Dispose();
+                voiceActivityLease = null;
             }
 
             if (previous is not null)
@@ -500,7 +506,16 @@ public sealed class AudioManager : IAudioManager, IDisposable
             var playback = CreatePlayback(
                 AudioCategory.Voice, localizedId, "voice", clip, looping, volume,
                 fade.DurationSeconds > 0 ? 0 : EffectiveVolume(AudioCategory.Voice, volume));
-            lock (gate) { voice = playback; }
+            lock (gate)
+            {
+                voice = playback;
+                voiceActivityLease = activities?.BeginActivity(
+                    RuntimeActivityOwner.Audio,
+                    "Voice",
+                    localizedId,
+                    isCancelable: true,
+                    isFinishable: true);
+            }
             var operation = StartFade(
                 [new FadeTarget(playback, EffectiveVolume(playback))],
                 fade,
@@ -576,11 +591,18 @@ public sealed class AudioManager : IAudioManager, IDisposable
         Action? complete,
         Action? cancel)
     {
+        var lease = activities?.BeginActivity(
+            RuntimeActivityOwner.Audio,
+            "Fade",
+            targets.Count > 0 ? targets[0].Playback.ClipId : null,
+            isCancelable: true,
+            isFinishable: true);
         var finalized = 0;
         void CompleteOnce()
         {
             if (Interlocked.Exchange(ref finalized, 1) == 0)
             {
+                lease?.Dispose();
                 complete?.Invoke();
             }
         }
@@ -589,6 +611,7 @@ public sealed class AudioManager : IAudioManager, IDisposable
         {
             if (Interlocked.Exchange(ref finalized, 1) == 0)
             {
+                lease?.Dispose();
                 cancel?.Invoke();
             }
         }
@@ -596,12 +619,20 @@ public sealed class AudioManager : IAudioManager, IDisposable
         return operations.Start(new OperationDefinition(
             async context =>
             {
-                await Task.WhenAll(targets.Select(target =>
-                    target.Playback.Backend.FadeVolumeAsync(
-                        target.Volume,
-                        TimeSpan.FromSeconds(fade.DurationSeconds),
-                        context.CancellationToken)));
-                CompleteOnce();
+                try
+                {
+                    await Task.WhenAll(targets.Select(target =>
+                        target.Playback.Backend.FadeVolumeAsync(
+                            target.Volume,
+                            TimeSpan.FromSeconds(fade.DurationSeconds),
+                            context.CancellationToken)));
+                    CompleteOnce();
+                }
+                catch
+                {
+                    lease?.Dispose();
+                    throw;
+                }
             },
             null,
             null,
@@ -684,6 +715,8 @@ public sealed class AudioManager : IAudioManager, IDisposable
             else if (playback.Category == AudioCategory.Voice && voice == playback)
             {
                 voice = null;
+                voiceActivityLease?.Dispose();
+                voiceActivityLease = null;
             }
         }
 
@@ -718,6 +751,8 @@ public sealed class AudioManager : IAudioManager, IDisposable
             else if (playback.Category == AudioCategory.Voice && voice == playback)
             {
                 voice = null;
+                voiceActivityLease?.Dispose();
+                voiceActivityLease = null;
             }
         }
 
@@ -743,6 +778,8 @@ public sealed class AudioManager : IAudioManager, IDisposable
             bgm.Clear();
             sfx.Clear();
             voice = null;
+            voiceActivityLease?.Dispose();
+            voiceActivityLease = null;
             bgmTransitions.Clear();
             sfxTransitions.Clear();
             voiceTransition = null;
@@ -1111,5 +1148,10 @@ public sealed class AudioManager : IAudioManager, IDisposable
 
     private sealed record FadeTarget(AudioPlayback Playback, float Volume);
 
-    public void Dispose() => mutations.Dispose();
+    public void Dispose()
+    {
+        voiceActivityLease?.Dispose();
+        voiceActivityLease = null;
+        mutations.Dispose();
+    }
 }

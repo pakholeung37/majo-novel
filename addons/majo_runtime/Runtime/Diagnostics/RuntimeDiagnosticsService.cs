@@ -134,7 +134,18 @@ public sealed class RuntimeDiagnosticsService : IRuntimeDiagnostics
         }
 
         OperationDiagnostics? operationDiag = null;
-        if (services.TryGet<IOperationScheduler>(out var operations) && operations is not null)
+        if (services.TryGet<IRuntimeActivityObserver>(out var activities) && activities is not null)
+        {
+            initializedServicesList.Add(nameof(IRuntimeActivityObserver));
+            var snapshot = activities.Snapshot();
+            var activeOps = snapshot.Select(a => new ActiveOperationInfo(
+                a.DiagnosticId,
+                $"{a.Owner}:{a.Type}",
+                OperationState.Running,
+                a.Elapsed.TotalSeconds)).ToArray();
+            operationDiag = new OperationDiagnostics(activeOps.Length, activeOps);
+        }
+        else if (services.TryGet<IOperationScheduler>(out var operations) && operations is not null)
         {
             initializedServicesList.Add(nameof(IOperationScheduler));
             var activeOps = operations.ActiveOperations.Select(op => new ActiveOperationInfo(

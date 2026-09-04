@@ -63,12 +63,14 @@ public partial class MajoRuntimeBootstrap : Node
                         new GodotDirectionEffectBackend(host));
                     return new DirectionTransactionCoordinator(
                         new DirectionPlanner(),
-                        backend);
+                        backend,
+                        activities: resolver.Get<IRuntimeActivityRegistry>());
                 },
                 typeof(GodotDirectionRenderHost),
                 typeof(GodotDirectionStageBackend),
                 typeof(ITransitionDriverRegistry),
-                typeof(IResourceManager))
+                typeof(IResourceManager),
+                typeof(IRuntimeActivityRegistry))
             .AddSingleton<ICameraModifierManager>(
                 resolver =>
                 {
