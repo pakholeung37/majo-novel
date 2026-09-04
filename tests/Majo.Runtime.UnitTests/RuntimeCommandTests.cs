@@ -53,33 +53,15 @@ public sealed class RuntimeCommandTests
         Assert.True(constant.Enabled);
     }
 
-    [Fact]
-    public void BinderSupportsAwaitBlockAndTargetForms()
-    {
-        var block = Bind<AwaitCommandArguments>([]);
-        var completeBlock = Bind<AwaitCommandArguments>(["complete:true"]);
-        var target = Bind<AwaitCommandArguments>(["group:opening"]);
-
-        Assert.False(block.Complete);
-        Assert.Null(block.Group);
-        Assert.True(completeBlock.Complete);
-        Assert.Equal("opening", target.Group);
-        Assert.Null(target.Operation);
-        _ = Bind<EndAwaitCommandArguments>([]);
-    }
-
     [Theory]
     [InlineData("at least one", "character hero")]
     [InlineData("integer", "character hero appearance:happy z:1.5")]
     [InlineData("duration", "backdrop dark duration:NaN")]
     [InlineData("at least 0", "backdrop dark duration:-0.1")]
-    [InlineData("mutually exclusive", "await group:setup operation:move")]
     [InlineData("duplicated", "character hero appearance:happy wait:false WAIT:true")]
     [InlineData("unknown parameter", "backdrop dark time:1")]
     [InlineData("unknown parameter", "backdrop dark over:0.3")]
     [InlineData("unknown parameter", "character hero appearance:happy until:settle")]
-    [InlineData("unexpected positional", "endAwait now")]
-    [InlineData("either group or operation", "cancel")]
     public void BinderRejectsInvalidArgumentsWithUsage(
         string expectedDiagnostic,
         string commandText)
@@ -96,15 +78,6 @@ public sealed class RuntimeCommandTests
                 case "backdrop":
                     Bind<BackdropDirectionCommandArguments>(pieces[1..]);
                     break;
-                case "await":
-                    Bind<AwaitCommandArguments>(pieces[1..]);
-                    break;
-                case "endAwait":
-                    Bind<EndAwaitCommandArguments>(pieces[1..]);
-                    break;
-                case "cancel":
-                    Bind<CancelCommandArguments>(pieces[1..]);
-                    break;
             }
         });
 
@@ -120,7 +93,7 @@ public sealed class RuntimeCommandTests
         var catalog = commands.BuildCatalog();
 
         Assert.Equal(
-            ["await", "endAwait", "cancel", "save", "autoSave"],
+            ["save", "autoSave"],
             catalog.Commands.Select(command => command.Name));
         Assert.Equal(
             catalog.Commands.Count,
@@ -135,7 +108,7 @@ public sealed class RuntimeCommandTests
         BuiltInRuntimeCommands.Register(commands);
 
         var duplicate = Assert.Throws<RuntimeCommandException>(() =>
-            commands.Register<DuplicateEndAwaitArguments>((_, _) => Task.CompletedTask));
+            commands.Register<DuplicateProbeArguments>((_, _) => Task.CompletedTask));
         Assert.Contains("already registered", duplicate.Message, StringComparison.OrdinalIgnoreCase);
 
         var reserved = Assert.Throws<RuntimeCommandException>(() =>
@@ -175,7 +148,7 @@ public sealed class RuntimeCommandTests
         Assert.DoesNotContain(
             commands.Registrations,
             registration => registration.Name == "probe");
-        Assert.Equal(5, commands.Registrations.Count);
+        Assert.Equal(2, commands.Registrations.Count);
     }
 
     [Fact]
@@ -378,51 +351,8 @@ public sealed class RuntimeCommandTests
         await adapter.ShutdownAsync(CancellationToken.None);
     }
 
-    [Fact(Timeout = 5_000)]
-    public async Task TargetedAwaitAndCancelUseTypedSchedulerTargets()
-    {
-        var registry = new FakeCommandRegistry();
-        var actors = new FakeActorManager();
-        var scheduler = new FakeOperationScheduler();
-        var adapter = CreateAdapter(
-            registry,
-            out _,
-            actors,
-            scheduler);
-        await adapter.InitializeAsync(CancellationToken.None);
-        var awaitHandler = Assert.IsType<Func<string[], Task>>(registry.Handlers["await"]);
-        var cancelHandler = Assert.IsType<Func<string[], Task>>(registry.Handlers["cancel"]);
-
-        await awaitHandler(["group:setup"]);
-        await awaitHandler(["operation:hero-move", "complete:true"]);
-        await cancelHandler(["operation:hero-move"]);
-
-        Assert.Equal(("wait", OperationTarget.ForGroup("setup")), scheduler.Calls[0]);
-        Assert.Equal(("complete", OperationTarget.ForId("hero-move")), scheduler.Calls[1]);
-        Assert.Equal(("cancel", OperationTarget.ForId("hero-move")), scheduler.Calls[2]);
-        await adapter.ShutdownAsync(CancellationToken.None);
-    }
 
 
-
-
-    [Fact(Timeout = 5_000)]
-    public async Task UnmatchedEndAwaitAbortsDialogueWithClearFailure()
-    {
-        var registry = new FakeCommandRegistry();
-        var adapter = CreateAdapter(
-            registry,
-            out _);
-        await adapter.InitializeAsync(CancellationToken.None);
-
-        var handler = Assert.IsType<Func<string[], Task>>(registry.Handlers["endAwait"]);
-        var exception = await Assert.ThrowsAsync<RuntimeCommandException>(() => handler([]));
-
-        Assert.Same(exception, adapter.LastFailure);
-        Assert.Contains("matching await block", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(1, registry.AbortCount);
-        await adapter.ShutdownAsync(CancellationToken.None);
-    }
 
 
     [Fact(Timeout = 5_000)]
@@ -448,18 +378,13 @@ public sealed class RuntimeCommandTests
             }));
 
         await adapter.InitializeAsync(CancellationToken.None);
-        var begin = Assert.IsType<Func<string[], Task>>(yarnRegistry.Handlers["await"]);
         var handler = Assert.IsType<Func<string[], Task>>(yarnRegistry.Handlers["probe"]);
-        var end = Assert.IsType<Func<string[], Task>>(yarnRegistry.Handlers["endAwait"]);
-        await begin([]);
         await handler(["alpha", "detail:beta"]);
-        var endTask = end([]);
 
         Assert.Equal("alpha", received!.Value);
         Assert.Equal("beta", received.Detail);
-        Assert.False(endTask.IsCompleted);
         operation.Complete();
-        await endTask;
+        await operation.Completion;
         await adapter.ShutdownAsync(CancellationToken.None);
     }
 
@@ -471,12 +396,14 @@ public sealed class RuntimeCommandTests
         var yarnRegistry = new FakeCommandRegistry();
         var adapter = CreateAdapter(
             yarnRegistry,
-            out _);
+            out _,
+            configure: commands => commands.Register<ProbeCommandArguments>((_, _) =>
+                Task.CompletedTask));
         await adapter.InitializeAsync(CancellationToken.None);
-        var end = Assert.IsType<Func<string[], Task>>(yarnRegistry.Handlers["endAwait"]);
 
+        var handler = Assert.IsType<Func<string[], Task>>(yarnRegistry.Handlers["probe"]);
         adapter.CancelDialogue();
-        await end([]);
+        await handler(["ignored", "detail:value"]);
 
         Assert.Null(adapter.LastFailure);
         Assert.Equal(0, yarnRegistry.AbortCount);
@@ -540,8 +467,8 @@ public sealed class RuntimeCommandTests
         public string Detail { get; set; } = string.Empty;
     }
 
-    [RuntimeCommand("endAwait")]
-    private sealed class DuplicateEndAwaitArguments
+    [RuntimeCommand("save")]
+    private sealed class DuplicateProbeArguments
     {
     }
 
@@ -561,7 +488,7 @@ public sealed class RuntimeCommandTests
         public void Register(IRuntimeCommandRegistrar commands)
         {
             commands.Register<ProbeCommandArguments>((_, _) => Task.CompletedTask);
-            commands.Register<DuplicateEndAwaitArguments>((_, _) => Task.CompletedTask);
+            commands.Register<DuplicateProbeArguments>((_, _) => Task.CompletedTask);
         }
     }
 

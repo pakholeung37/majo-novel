@@ -31,10 +31,7 @@ public sealed class AudioCommandModule : IRuntimeCommandModule
 
 internal static class AudioCommandExecution
 {
-    public static AudioFade Fade(
-        double duration,
-        string? operation,
-        string? group) => new(duration, operation, group);
+    public static AudioFade Fade(double duration) => new(duration);
 
     public static async Task TrackAndWaitAsync(
         IOperationHandle operation,

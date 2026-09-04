@@ -19,7 +19,7 @@ public sealed class AudioManagerTests
         await harness.Audio.PlayBgmAsync("calm", "music");
 
         var result = await harness.Audio.PlayBgmAsync(
-            "battle", "music", fade: new AudioFade(1, "crossfade", "audio"));
+            "battle", "music", fade: new AudioFade(1));
 
         Assert.Equal(2, harness.Backend.ActivePlayers.Count);
         Assert.Equal("battle", Assert.Single(harness.Audio.BgmTracks).ClipId);
@@ -41,7 +41,7 @@ public sealed class AudioManagerTests
         var harness = await AudioHarness.CreateAsync(autoCompleteFades: false);
         var original = (await harness.Audio.PlayBgmAsync("calm", "music")).Playback;
         var cancelled = await harness.Audio.PlayBgmAsync(
-            "battle", "music", fade: new AudioFade(1, "cancel-me"));
+            "battle", "music", fade: new AudioFade(1));
 
         cancelled.FadeOperation.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
@@ -52,7 +52,7 @@ public sealed class AudioManagerTests
         Assert.Equal(AudioPlaybackState.Playing, original.State);
 
         var completed = await harness.Audio.PlayBgmAsync(
-            "battle", "music", fade: new AudioFade(1, "complete-me"));
+            "battle", "music", fade: new AudioFade(1));
         completed.FadeOperation.Complete();
         await completed.FadeOperation.Completion;
 
@@ -87,7 +87,7 @@ public sealed class AudioManagerTests
     {
         var harness = await AudioHarness.CreateAsync(autoCompleteFades: false);
         var result = await harness.Audio.PlaySfxAsync(
-            "hit", "short", fade: new AudioFade(10, "long-fade"));
+            "hit", "short", fade: new AudioFade(10));
         var backendPlayer = harness.Backend.Players.Single(
             player => player.InstanceId == "short");
 
@@ -161,7 +161,7 @@ public sealed class AudioManagerTests
     {
         var harness = await AudioHarness.CreateAsync(autoCompleteFades: false);
         var result = await harness.Audio.PlayBgmAsync(
-            "calm", "music", fade: new AudioFade(10, "volume-fade"));
+            "calm", "music", fade: new AudioFade(10));
 
         harness.Audio.MasterVolume = 0.5f;
         await result.FadeOperation.Completion.WaitAsync(TimeSpan.FromSeconds(1));
@@ -179,9 +179,9 @@ public sealed class AudioManagerTests
     {
         var harness = await AudioHarness.CreateAsync(autoCompleteFades: false);
         var bgm = await harness.Audio.PlayBgmAsync(
-            "calm", "music", fade: new AudioFade(1, "bgm-fade"));
+            "calm", "music", fade: new AudioFade(1));
         var sfx = await harness.Audio.PlaySfxAsync(
-            "hit", "impact", fade: new AudioFade(1, "sfx-fade"));
+            "hit", "impact", fade: new AudioFade(1));
 
         await harness.Host.ResetAsync();
 

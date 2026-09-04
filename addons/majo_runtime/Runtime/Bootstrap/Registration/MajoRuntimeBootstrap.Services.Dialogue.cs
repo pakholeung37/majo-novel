@@ -302,7 +302,6 @@ public partial class MajoRuntimeBootstrap : Node
         var commands = commandRegistry;
         BuiltInRuntimeCommands.Register(commands);
         commands.RegisterModule(new AudioCommandModule(audio));
-        commands.RegisterModule(new StageCommandModule());
         commands.RegisterModule(new DirectionCommandModule(
             direction,
             DirectionResourceResolver ??

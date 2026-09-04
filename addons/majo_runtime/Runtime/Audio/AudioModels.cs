@@ -34,9 +34,7 @@ public sealed record AudioSettings(
     bool FailOnMissingClips = false);
 
 public readonly record struct AudioFade(
-    double DurationSeconds = RuntimeDefaults.ImmediateDurationSeconds,
-    string? OperationId = null,
-    string? GroupId = null)
+    double DurationSeconds = RuntimeDefaults.ImmediateDurationSeconds)
 {
     public AudioFade Validate()
     {

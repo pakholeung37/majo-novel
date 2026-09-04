@@ -3,7 +3,7 @@ tags: runtime validation demo
 ---
 <<declare $visitor = "调查员">>
 
-<<bgm demo-theme track:music duration:0.35 operation:demo-music-in>>
+<<bgm demo-theme track:music duration:0.35>>
 Narrator: 欢迎来到 Majo Runtime 第三阶段验证场景，{$visitor}。除了基础演出，右侧面板现在覆盖 M11 Diagnostics 到 M15 Played/Skip 的完整玩家循环。 #line:demo-welcome #voice:narrator-welcome
 
 <<beat begin>>
@@ -19,17 +19,13 @@ Narrator: Voice locale 已切换为 zh-CN，文本、语音与资源解析各自
 <<demo_preload m18-opening>>
 Narrator: M18 显式预取了本章背景、立绘、BGM 与 Voice；preload group 完成后才继续，离开演示段落时会释放 lease。 #line:demo-m18-preload
 
-<<camera move center:48,50 zoom:1.08 duration:0.25 wait:true>>
-<<transition wipeLeft appearance:spotlight duration:0.3 group:m19-stage operation:demo-stage-transition>>
-<<overlay 0.18 duration:0.25 group:m19-stage operation:demo-stage-overlay>>
-<<letterbox 0.08 duration:0.25 group:m19-stage operation:demo-stage-letterbox>>
-<<flash intensity:0.35 duration:0.15 wait:true>>
-<<await group:m19-stage>>
-Narrator: M19 Stage 已汇合 Camera、Transition 与 Screen FX Operation；这些效果可独立等待、取消、Skip，并把稳定终态写入 Game State。 #line:demo-m19-stage
+<<beat begin>>
+<<camera move center:48,50 zoom:1.08 duration:0.25>>
+<<flash intensity:0.35 duration:0.15>>
+<<beat end wait:true>>
+Narrator: Camera 与瞬态视觉效果已由同一个 Direction Beat 提交并汇合，不再经过旧 Stage Operation command。 #line:demo-m19-stage
 
 <<camera reset via:move duration:0.2 wait:true>>
-<<overlay 0 duration:0.2 wait:true operation:demo-stage-overlay-reset>>
-<<letterbox 0 duration:0.2 wait:true operation:demo-stage-letterbox-reset>>
 <<demo_release_preload>>
 Narrator: M17-M19 演示资源已释放，接下来继续原有的 Audio、State、Save/Load 与 Played 流程。 #line:demo-m17-m19-complete
 
@@ -62,8 +58,7 @@ Narrator: 在这行完整显示后点击右侧“Capture”。M12 快照会保�
 <<backdrop backdrop/spotlight via:dissolve duration:0.35>>
 <<character hero appearance:determined at:right via:move duration:0.35>>
 <<beat end wait:true>>
-<<bgm demo-tension track:music duration:0.35 operation:demo-state-music>>
-<<await operation:demo-state-music>>
+<<bgm demo-tension track:music duration:0.35 wait:true>>
 Narrator: Game State 已被明显改变。现在可点击“Restore”，验证背景、角色、BGM 和当前脚本行一起回到快照，History 则继续保留。 #line:demo-state-mutated
 
 Maya: M13 的 Saves 面板提供 Manual Slot 的保存、覆盖、重命名、删除与加载；Quick Save 和 API Auto Save 也能直接从验证面板触发。 #line:demo-save-guide
@@ -82,6 +77,6 @@ Maya: 进入选项时 Auto 会暂停；选择后恢复原来的 Auto 模式。�
 
 Narrator: 脚本、SVG 立绘和背景都由约定式 Resource Manager 加载；同一流程也能由无图形 Probe 自动执行。 #line:demo-resource-summary
 
-<<stopBgm track:music duration:0.35 wait:true operation:demo-music-out>>
+<<stopBgm track:music duration:0.35 wait:true>>
 Narrator: M11-M15 验证流程完成。右侧状态会保留最近的诊断、Slot、Settings、Global、Played 与 Playback 结果，方便继续交互检查。 #line:demo-finished
 ===

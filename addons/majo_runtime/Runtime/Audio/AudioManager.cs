@@ -603,8 +603,8 @@ public sealed class AudioManager : IAudioManager, IDisposable
                         context.CancellationToken)));
                 CompleteOnce();
             },
-            fade.OperationId,
-            fade.GroupId,
+            null,
+            null,
             _ =>
             {
                 foreach (var target in targets)

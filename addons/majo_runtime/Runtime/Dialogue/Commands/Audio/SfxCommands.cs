@@ -9,7 +9,7 @@ namespace Majo.Runtime.Dialogue.Commands.Audio;
 [RuntimeCommand(
     "sfx",
     Category = "Audio",
-    Usage = "sfx <clip> [instance:<id>] [loop:<bool>] [volume:<0..1>] [duration:<seconds>] [wait:<bool>] [waitPlayback:<bool>] [group:<id>] [operation:<id>]")]
+    Usage = "sfx <clip> [instance:<id>] [loop:<bool>] [volume:<0..1>] [duration:<seconds>] [wait:<bool>] [waitPlayback:<bool>]")]
 public sealed class PlaySfxCommandArguments
 {
     [CommandParameter("clip", 0, Primary = true, Required = true)]
@@ -33,11 +33,6 @@ public sealed class PlaySfxCommandArguments
     [CommandParameter("waitPlayback", 6)]
     public bool WaitPlayback { get; set; }
 
-    [CommandParameter("group", 7)]
-    public string? Group { get; set; }
-
-    [CommandParameter("operation", 8)]
-    public string? Operation { get; set; }
 }
 
 public sealed class PlaySfxCommandHandler : IRuntimeCommandHandler<PlaySfxCommandArguments>
@@ -57,7 +52,7 @@ public sealed class PlaySfxCommandHandler : IRuntimeCommandHandler<PlaySfxComman
             arguments.Loop,
             (float)arguments.Volume,
             AudioCommandExecution.Fade(
-                arguments.Duration, arguments.Operation, arguments.Group),
+                arguments.Duration),
             context.CancellationToken);
         await AudioCommandExecution.TrackAndWaitAsync(
             result.FadeOperation, arguments.Wait, context);
@@ -71,7 +66,7 @@ public sealed class PlaySfxCommandHandler : IRuntimeCommandHandler<PlaySfxComman
 [RuntimeCommand(
     "stopSfx",
     Category = "Audio",
-    Usage = "stopSfx [instance:<id>] [duration:<seconds>] [wait:<bool>] [group:<id>] [operation:<id>]")]
+    Usage = "stopSfx [instance:<id>] [duration:<seconds>] [wait:<bool>]")]
 public sealed class StopSfxCommandArguments
 {
     [CommandParameter("instance", 0)]
@@ -83,11 +78,6 @@ public sealed class StopSfxCommandArguments
     [CommandParameter("wait", 2)]
     public bool Wait { get; set; }
 
-    [CommandParameter("group", 3)]
-    public string? Group { get; set; }
-
-    [CommandParameter("operation", 4)]
-    public string? Operation { get; set; }
 }
 
 public sealed class StopSfxCommandHandler : IRuntimeCommandHandler<StopSfxCommandArguments>
@@ -104,7 +94,7 @@ public sealed class StopSfxCommandHandler : IRuntimeCommandHandler<StopSfxComman
         var operation = await audio.StopSfxAsync(
             arguments.Instance,
             AudioCommandExecution.Fade(
-                arguments.Duration, arguments.Operation, arguments.Group),
+                arguments.Duration),
             context.CancellationToken);
         await AudioCommandExecution.TrackAndWaitAsync(operation, arguments.Wait, context);
     }

@@ -10,7 +10,7 @@ namespace Majo.Runtime.Dialogue.Commands.Audio;
 [RuntimeCommand(
     "voice",
     Category = "Audio",
-    Usage = "voice <clip> [volume:<0..1>] [duration:<seconds>] [wait:<bool>] [group:<id>] [operation:<id>]")]
+    Usage = "voice <clip> [volume:<0..1>] [duration:<seconds>] [wait:<bool>]")]
 public sealed class PlayVoiceCommandArguments
 {
     [CommandParameter("clip", 0, Primary = true, Required = true)]
@@ -25,11 +25,6 @@ public sealed class PlayVoiceCommandArguments
     [CommandParameter("wait", 3)]
     public bool Wait { get; set; }
 
-    [CommandParameter("group", 4)]
-    public string? Group { get; set; }
-
-    [CommandParameter("operation", 5)]
-    public string? Operation { get; set; }
 }
 
 public sealed class PlayVoiceCommandHandler : IRuntimeCommandHandler<PlayVoiceCommandArguments>
@@ -47,7 +42,7 @@ public sealed class PlayVoiceCommandHandler : IRuntimeCommandHandler<PlayVoiceCo
             arguments.Clip,
             volume: (float)arguments.Volume,
             fade: AudioCommandExecution.Fade(
-                arguments.Duration, arguments.Operation, arguments.Group),
+                arguments.Duration),
             cancellationToken: context.CancellationToken);
         context.Track(result.FadeOperation);
         if (arguments.Wait)

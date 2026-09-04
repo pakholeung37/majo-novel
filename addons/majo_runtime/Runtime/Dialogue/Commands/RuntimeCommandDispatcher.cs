@@ -20,7 +20,6 @@ public sealed class RuntimeCommandDispatcher : IDisposable
     private readonly IServiceResolver? services;
     private readonly IRuntimeLogger logger;
     private readonly bool abortOnRecoverableFailure;
-    private readonly AwaitScopeCoordinator awaitScopes = new();
     private readonly HashSet<IOperationHandle> dialogueOperations =
         new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<string, RuntimeCommandActivity> activeCommands =
@@ -122,7 +121,6 @@ public sealed class RuntimeCommandDispatcher : IDisposable
             services,
             cancellationToken,
             TrackOperation,
-            awaitScopes,
             binder.Context);
         try
         {
@@ -180,7 +178,6 @@ public sealed class RuntimeCommandDispatcher : IDisposable
     public void Reset()
     {
         LastFailure = null;
-        awaitScopes.Reset();
         lock (operationGate)
         {
             dialogueOperations.Clear();
@@ -295,7 +292,7 @@ public sealed class RuntimeCommandDispatcher : IDisposable
         await commands.WaitAsync(cancellationToken);
     }
 
-    public void Dispose() => awaitScopes.Dispose();
+    public void Dispose() { }
 
     private void ReportFailure(RuntimeCommandException failure)
     {
@@ -305,7 +302,6 @@ public sealed class RuntimeCommandDispatcher : IDisposable
 
     private void TrackOperation(IOperationHandle operation)
     {
-        awaitScopes.Track(operation);
         lock (operationGate)
         {
             dialogueOperations.Add(operation);

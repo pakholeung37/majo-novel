@@ -9,7 +9,7 @@ namespace Majo.Runtime.Dialogue.Commands.Audio;
 [RuntimeCommand(
     "bgm",
     Category = "Audio",
-    Usage = "bgm <clip> [track:<id>] [loop:<bool>] [volume:<0..1>] [duration:<seconds>] [wait:<bool>] [group:<id>] [operation:<id>]")]
+    Usage = "bgm <clip> [track:<id>] [loop:<bool>] [volume:<0..1>] [duration:<seconds>] [wait:<bool>]")]
 public sealed class PlayBgmCommandArguments
 {
     [CommandParameter("clip", 0, Primary = true, Required = true)]
@@ -30,11 +30,6 @@ public sealed class PlayBgmCommandArguments
     [CommandParameter("wait", 5)]
     public bool Wait { get; set; }
 
-    [CommandParameter("group", 6)]
-    public string? Group { get; set; }
-
-    [CommandParameter("operation", 7)]
-    public string? Operation { get; set; }
 }
 
 public sealed class PlayBgmCommandHandler : IRuntimeCommandHandler<PlayBgmCommandArguments>
@@ -54,7 +49,7 @@ public sealed class PlayBgmCommandHandler : IRuntimeCommandHandler<PlayBgmComman
             arguments.Loop,
             (float)arguments.Volume,
             AudioCommandExecution.Fade(
-                arguments.Duration, arguments.Operation, arguments.Group),
+                arguments.Duration),
             context.CancellationToken);
         await AudioCommandExecution.TrackAndWaitAsync(
             result.FadeOperation, arguments.Wait, context);
@@ -64,7 +59,7 @@ public sealed class PlayBgmCommandHandler : IRuntimeCommandHandler<PlayBgmComman
 [RuntimeCommand(
     "stopBgm",
     Category = "Audio",
-    Usage = "stopBgm [track:<id>] [duration:<seconds>] [wait:<bool>] [group:<id>] [operation:<id>]")]
+    Usage = "stopBgm [track:<id>] [duration:<seconds>] [wait:<bool>]")]
 public sealed class StopBgmCommandArguments
 {
     [CommandParameter("track", 0)]
@@ -76,11 +71,6 @@ public sealed class StopBgmCommandArguments
     [CommandParameter("wait", 2)]
     public bool Wait { get; set; }
 
-    [CommandParameter("group", 3)]
-    public string? Group { get; set; }
-
-    [CommandParameter("operation", 4)]
-    public string? Operation { get; set; }
 }
 
 public sealed class StopBgmCommandHandler : IRuntimeCommandHandler<StopBgmCommandArguments>
@@ -97,7 +87,7 @@ public sealed class StopBgmCommandHandler : IRuntimeCommandHandler<StopBgmComman
         var operation = await audio.StopBgmAsync(
             arguments.Track,
             AudioCommandExecution.Fade(
-                arguments.Duration, arguments.Operation, arguments.Group),
+                arguments.Duration),
             context.CancellationToken);
         await AudioCommandExecution.TrackAndWaitAsync(operation, arguments.Wait, context);
     }

@@ -20,9 +20,6 @@ public sealed class PlaybackCommandModule : IRuntimeCommandModule
     {
         ArgumentNullException.ThrowIfNull(commands);
         commands
-            .Register(new AwaitCommandHandler())
-            .Register(new EndAwaitCommandHandler())
-            .Register(new CancelCommandHandler())
             .Register(new SaveCommandHandler())
             .Register(new AutoSaveCommandHandler());
     }

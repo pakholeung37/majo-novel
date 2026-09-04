@@ -46,7 +46,7 @@ public partial class HeadlessTestRunner
         var crossfade = await audio.PlayBgmAsync(
             "battle",
             "music",
-            fade: new AudioFade(0.08, "headless-crossfade", "headless-audio"));
+            fade: new AudioFade(0.08));
         Assert(audioHost.GetChildCount() == 2,
             "M9 BGM crossfade did not keep old and new Godot players concurrently.");
         await crossfade.FadeOperation.Completion;
@@ -69,8 +69,9 @@ public partial class HeadlessTestRunner
         var cancelled = await audio.PlayBgmAsync(
             "calm",
             "music",
-            fade: new AudioFade(1, "headless-cancel"));
-        await operations.CancelAsync(OperationTarget.ForId("headless-cancel"));
+            fade: new AudioFade(1));
+        cancelled.FadeOperation.Cancel();
+        try { await cancelled.FadeOperation.Completion; } catch (OperationCanceledException) { }
         Assert(cancelled.Playback.State == AudioPlaybackState.Stopped &&
                 audio.BgmTracks.Single().ClipId == "battle",
             "M9 cancel did not restore the pre-crossfade BGM terminal state.");
@@ -78,8 +79,9 @@ public partial class HeadlessTestRunner
         var completed = await audio.PlayBgmAsync(
             "calm",
             "music",
-            fade: new AudioFade(1, "headless-complete"));
-        await operations.CompleteAsync(OperationTarget.ForId("headless-complete"));
+            fade: new AudioFade(1));
+        completed.FadeOperation.Complete();
+        await completed.FadeOperation.Completion;
         Assert(completed.Playback.State == AudioPlaybackState.Playing &&
                 audio.BgmTracks.Single().ClipId == "calm",
             "M9 complete did not force the BGM crossfade target state.");
