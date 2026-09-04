@@ -44,7 +44,6 @@ public sealed class PlayVoiceCommandHandler : IRuntimeCommandHandler<PlayVoiceCo
             fade: AudioCommandExecution.Fade(
                 arguments.Duration),
             cancellationToken: context.CancellationToken);
-        context.Track(result.FadeOperation);
         if (arguments.Wait)
         {
             await result.Playback.Completion.WaitAsync(context.CancellationToken);
@@ -69,11 +68,6 @@ public sealed class StopVoiceCommandHandler : IRuntimeCommandHandler<StopVoiceCo
         RuntimeCommandContext context)
     {
         _ = arguments;
-        var operation = await audio.StopVoiceAsync(
-            cancellationToken: context.CancellationToken);
-        if (operation is not null)
-        {
-            await AudioCommandExecution.TrackAndWaitAsync(operation, true, context);
-        }
+        await audio.StopVoiceAsync(cancellationToken: context.CancellationToken);
     }
 }

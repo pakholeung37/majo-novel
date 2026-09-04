@@ -1,9 +1,9 @@
 #nullable enable
 
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using Majo.Runtime.Audio;
-using Majo.Runtime.Operations;
 
 namespace Majo.Runtime.Dialogue.Commands.Audio;
 
@@ -33,15 +33,15 @@ internal static class AudioCommandExecution
 {
     public static AudioFade Fade(double duration) => new(duration);
 
-    public static async Task TrackAndWaitAsync(
-        IOperationHandle operation,
+    public static async Task WaitSettlementAsync(
+        Task settlement,
         bool wait,
-        RuntimeCommandContext context)
+        CancellationToken cancellationToken)
     {
-        context.Track(operation);
         if (wait)
         {
-            await operation.Completion.WaitAsync(context.CancellationToken);
+            await settlement.WaitAsync(cancellationToken);
         }
     }
 }
+

@@ -504,7 +504,7 @@ public sealed class AudioStateContributor : IStateContributor
                 looping: track.Loop,
                 volume: track.Volume,
                 cancellationToken: cancellationToken);
-            await result.FadeOperation.Completion.WaitAsync(cancellationToken);
+            await result.Settlement.WaitAsync(cancellationToken);
         }
     }
 

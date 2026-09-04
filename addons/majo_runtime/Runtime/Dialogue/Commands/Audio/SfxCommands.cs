@@ -54,8 +54,8 @@ public sealed class PlaySfxCommandHandler : IRuntimeCommandHandler<PlaySfxComman
             AudioCommandExecution.Fade(
                 arguments.Duration),
             context.CancellationToken);
-        await AudioCommandExecution.TrackAndWaitAsync(
-            result.FadeOperation, arguments.Wait, context);
+        await AudioCommandExecution.WaitSettlementAsync(
+            result.Settlement, arguments.Wait, context.CancellationToken);
         if (arguments.WaitPlayback && !arguments.Loop)
         {
             await result.Playback.Completion.WaitAsync(context.CancellationToken);
@@ -91,11 +91,11 @@ public sealed class StopSfxCommandHandler : IRuntimeCommandHandler<StopSfxComman
         StopSfxCommandArguments arguments,
         RuntimeCommandContext context)
     {
-        var operation = await audio.StopSfxAsync(
+        var stopTask = audio.StopSfxAsync(
             arguments.Instance,
             AudioCommandExecution.Fade(
                 arguments.Duration),
-            context.CancellationToken);
-        await AudioCommandExecution.TrackAndWaitAsync(operation, arguments.Wait, context);
+            arguments.Wait ? context.CancellationToken : System.Threading.CancellationToken.None);
+        await AudioCommandExecution.WaitSettlementAsync(stopTask, arguments.Wait, context.CancellationToken);
     }
 }

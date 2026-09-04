@@ -7,7 +7,7 @@ using Godot;
 using Majo.Runtime.Audio;
 using Majo.Runtime.Audio.Godot;
 using Majo.Runtime.Configuration;
-using Majo.Runtime.Operations;
+using Majo.Runtime.Core;
 
 namespace Majo.Runtime.HeadlessTests;
 
@@ -30,17 +30,15 @@ public partial class HeadlessTestRunner
         bootstrap.ConfigureServices = services => services.ReplaceSingleton<IAudioManager>(
             resolver => new AudioManager(
                 new GodotAudioBackend(bootstrap),
-                resolver.Get<IOperationRunner>(),
                 loader,
                 loader,
                 loader,
-                new AudioSettings()),
-            typeof(IOperationRunner));
+                new AudioSettings()));
         AddChild(bootstrap);
         await bootstrap.InitializationCompletion;
 
         var audio = bootstrap.Host!.Services.Get<IAudioManager>();
-        var operations = bootstrap.Host.Services.Get<IOperationRunner>();
+        var activities = bootstrap.Host.Services.Get<IRuntimeActivityRegistry>();
         var audioHost = bootstrap.GetNode("MajoAudioHost");
         await audio.PlayBgmAsync("calm", "music");
         var crossfade = await audio.PlayBgmAsync(
@@ -49,7 +47,7 @@ public partial class HeadlessTestRunner
             fade: new AudioFade(0.08));
         Assert(audioHost.GetChildCount() == 2,
             "M9 BGM crossfade did not keep old and new Godot players concurrently.");
-        await crossfade.FadeOperation.Completion;
+        await crossfade.Settlement;
         await WaitForConditionAsync(() => audioHost.GetChildCount() == 1, 2);
         Assert(audioHost.GetChildCount() == 1 &&
                 audio.BgmTracks.Single().ClipId == "battle",
@@ -70,8 +68,8 @@ public partial class HeadlessTestRunner
             "calm",
             "music",
             fade: new AudioFade(1));
-        cancelled.FadeOperation.Cancel();
-        try { await cancelled.FadeOperation.Completion; } catch (OperationCanceledException) { }
+        await audio.CancelTransitionsAsync("music");
+        try { await cancelled.Settlement; } catch (OperationCanceledException) { }
         Assert(cancelled.Playback.State == AudioPlaybackState.Stopped &&
                 audio.BgmTracks.Single().ClipId == "battle",
             "M9 cancel did not restore the pre-crossfade BGM terminal state.");
@@ -80,8 +78,8 @@ public partial class HeadlessTestRunner
             "calm",
             "music",
             fade: new AudioFade(1));
-        completed.FadeOperation.Finish();
-        await completed.FadeOperation.Completion;
+        await audio.FinishTransitionsAsync("music");
+        await completed.Settlement;
         Assert(completed.Playback.State == AudioPlaybackState.Playing &&
                 audio.BgmTracks.Single().ClipId == "calm",
             "M9 complete did not force the BGM crossfade target state.");
@@ -92,11 +90,11 @@ public partial class HeadlessTestRunner
                 audio.BgmTracks.Count == 0 &&
                 audio.SfxInstances.Count == 0 &&
                 audio.CurrentVoice is null &&
-                operations.ActiveOperations.Count == 0,
-            $"M9 Reset left audio players or Operations alive: nodes=" +
+                !activities.HasActiveActivities(RuntimeActivityOwner.Audio),
+            $"M9 Reset left audio players or Activities alive: nodes=" +
             $"{audioHost.GetChildCount()}, bgm={audio.BgmTracks.Count}, " +
             $"sfx={audio.SfxInstances.Count}, voice={audio.CurrentVoice is not null}, " +
-            $"operations={operations.ActiveOperations.Count}.");
+            $"activities={activities.HasActiveActivities(RuntimeActivityOwner.Audio)}.");
 
         await bootstrap.RequestShutdownAsync();
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);

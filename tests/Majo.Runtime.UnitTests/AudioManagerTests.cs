@@ -24,14 +24,14 @@ public sealed class AudioManagerTests
         Assert.Equal(2, harness.Backend.ActivePlayers.Count);
         Assert.Equal("battle", Assert.Single(harness.Audio.BgmTracks).ClipId);
         Assert.Equal(0, result.Playback.Volume);
-        Assert.False(result.FadeOperation.Completion.IsCompleted);
+        Assert.False(result.Settlement.IsCompleted);
 
         harness.Backend.CompleteFades();
-        await result.FadeOperation.Completion.WaitAsync(TimeSpan.FromSeconds(1));
+        await result.Settlement.WaitAsync(TimeSpan.FromSeconds(1));
 
         Assert.Single(harness.Backend.ActivePlayers);
         Assert.Equal(1, result.Playback.Volume);
-        Assert.Equal(OperationState.Completed, result.FadeOperation.State);
+        Assert.True(result.Settlement.IsCompletedSuccessfully);
         await harness.Host.ShutdownAsync();
     }
 
@@ -43,9 +43,9 @@ public sealed class AudioManagerTests
         var cancelled = await harness.Audio.PlayBgmAsync(
             "battle", "music", fade: new AudioFade(1));
 
-        cancelled.FadeOperation.Cancel();
+        await harness.Audio.CancelTransitionsAsync("music");
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => cancelled.FadeOperation.Completion);
+            () => cancelled.Settlement);
 
         Assert.Equal(AudioPlaybackState.Stopped, cancelled.Playback.State);
         Assert.Same(original, Assert.Single(harness.Audio.BgmTracks));
@@ -53,8 +53,8 @@ public sealed class AudioManagerTests
 
         var completed = await harness.Audio.PlayBgmAsync(
             "battle", "music", fade: new AudioFade(1));
-        completed.FadeOperation.Finish();
-        await completed.FadeOperation.Completion;
+        await harness.Audio.FinishTransitionsAsync("music");
+        await completed.Settlement;
 
         Assert.Equal(AudioPlaybackState.Stopped, original.State);
         Assert.Same(completed.Playback, Assert.Single(harness.Audio.BgmTracks));
@@ -73,8 +73,7 @@ public sealed class AudioManagerTests
         await Assert.ThrowsAsync<DuplicateAudioInstanceException>(() =>
             harness.Audio.PlaySfxAsync("hit", "left"));
 
-        var stop = await harness.Audio.StopSfxAsync("left");
-        await stop.Completion;
+        await harness.Audio.StopSfxAsync("left");
 
         Assert.Equal(AudioPlaybackState.Stopped, first.Playback.State);
         Assert.Equal(AudioPlaybackState.Playing, second.Playback.State);
@@ -92,12 +91,12 @@ public sealed class AudioManagerTests
             player => player.InstanceId == "short");
 
         backendPlayer.CompletePlayback();
-        await result.FadeOperation.Completion.WaitAsync(TimeSpan.FromSeconds(1));
+        await result.Settlement.WaitAsync(TimeSpan.FromSeconds(1));
         await result.Playback.Completion.WaitAsync(TimeSpan.FromSeconds(1));
 
         Assert.Equal(AudioPlaybackState.Finished, result.Playback.State);
         Assert.Empty(harness.Audio.SfxInstances);
-        Assert.Equal(OperationState.Completed, result.FadeOperation.State);
+        Assert.True(result.Settlement.IsCompletedSuccessfully);
         await harness.Host.ShutdownAsync();
     }
 
@@ -164,18 +163,18 @@ public sealed class AudioManagerTests
             "calm", "music", fade: new AudioFade(10));
 
         harness.Audio.MasterVolume = 0.5f;
-        await result.FadeOperation.Completion.WaitAsync(TimeSpan.FromSeconds(1));
+        await result.Settlement.WaitAsync(TimeSpan.FromSeconds(1));
 
         Assert.Equal(0.5f, result.Playback.Volume, 3);
         var modified = await harness.Audio.PlayBgmAsync(
             "calm", "music", looping: false, fade: new AudioFade());
-        await modified.FadeOperation.Completion;
+        await modified.Settlement;
         Assert.False(modified.Playback.IsLooping);
         await harness.Host.ShutdownAsync();
     }
 
     [Fact(Timeout = 5_000)]
-    public async Task RuntimeResetClearsPlayersAfterSchedulerCancelsFades()
+    public async Task RuntimeResetFinishesTransitionsAndClearsPlayersAccordingToAudioPolicy()
     {
         var harness = await AudioHarness.CreateAsync(autoCompleteFades: false);
         var bgm = await harness.Audio.PlayBgmAsync(
@@ -185,9 +184,8 @@ public sealed class AudioManagerTests
 
         await harness.Host.ResetAsync();
 
-        Assert.Equal(OperationState.Cancelled, bgm.FadeOperation.State);
-        Assert.Equal(OperationState.Cancelled, sfx.FadeOperation.State);
-        Assert.Empty(harness.Operations.ActiveOperations);
+        Assert.True(bgm.Settlement.IsCompleted);
+        Assert.True(sfx.Settlement.IsCompleted);
         Assert.Empty(harness.Backend.ActivePlayers);
         Assert.Empty(harness.Audio.BgmTracks);
         Assert.Empty(harness.Audio.SfxInstances);
@@ -242,24 +240,16 @@ public sealed class AudioManagerTests
         var host = new RuntimeServiceRegistry()
             .AddSingleton<IFrameClock>(_ => frameClock)
             .AddSingleton<IMissingResourceReporter>(_ => missingResources)
-            .AddSingleton<IOperationRunner>(
-                resolver => new OperationRunner(
-                    resolver.Get<IFrameClock>(),
-                    resolver.Get<IRuntimeLifetime>()),
-                typeof(IFrameClock),
-                typeof(IRuntimeLifetime))
             .AddSingleton<IAudioManager>(
-                resolver => new AudioManager(
+                _ => new AudioManager(
                     backend,
-                    resolver.Get<IOperationRunner>(),
                     bgm,
                     sfx,
                     voice,
                     new AudioSettings(VoiceLocale: "zh-CN"),
                     missingResources: missingResources,
                     locales: localeManager,
-                    localizedResources: localizedResolver),
-                typeof(IOperationRunner))
+                    localizedResources: localizedResolver))
             .Build();
         await host.InitializeAsync();
         var audio = host.Services.Get<IAudioManager>();
@@ -296,24 +286,16 @@ public sealed class AudioManagerTests
         var host = new RuntimeServiceRegistry()
             .AddSingleton<IFrameClock>(_ => frameClock)
             .AddSingleton<IMissingResourceReporter>(_ => missingResources)
-            .AddSingleton<IOperationRunner>(
-                resolver => new OperationRunner(
-                    resolver.Get<IFrameClock>(),
-                    resolver.Get<IRuntimeLifetime>()),
-                typeof(IFrameClock),
-                typeof(IRuntimeLifetime))
             .AddSingleton<IAudioManager>(
-                resolver => new AudioManager(
+                _ => new AudioManager(
                     backend,
-                    resolver.Get<IOperationRunner>(),
                     bgm,
                     sfx,
                     voice,
                     new AudioSettings(),
                     missingResources: missingResources,
                     locales: localeManager,
-                    localizedResources: localizedResolver),
-                typeof(IOperationRunner))
+                    localizedResources: localizedResolver))
             .Build();
         await host.InitializeAsync();
         var audio = host.Services.Get<IAudioManager>();
@@ -328,15 +310,43 @@ public sealed class AudioManagerTests
         await host.ShutdownAsync();
     }
 
+    [Fact(Timeout = 5_000)]
+    public async Task AudioTransitionsAreAutonomousAndDoNotLeakActivities()
+    {
+        var registry = new RuntimeActivityRegistry();
+        var backend = new FakeAudioBackend { AutoCompleteFades = false };
+        var loader = new FakeAudioClipLoader("audio").Register("clip1");
+        var audio = new AudioManager(
+            backend,
+            loader,
+            loader,
+            loader,
+            new AudioSettings(),
+            activities: registry);
+        await audio.InitializeAsync(CancellationToken.None);
+
+        var bgm = await audio.PlayBgmAsync("clip1", "track1", fade: new AudioFade(10));
+        Assert.True(audio.IsFading("track1"));
+        Assert.True(registry.HasActiveActivities(RuntimeActivityOwner.Audio));
+
+        await audio.FinishTransitionsAsync("track1");
+        await bgm.Settlement;
+
+        Assert.False(audio.IsFading("track1"));
+        Assert.False(registry.HasActiveActivities(RuntimeActivityOwner.Audio));
+
+        await audio.ShutdownAsync(CancellationToken.None);
+        Assert.False(registry.HasActiveActivities(RuntimeActivityOwner.Audio));
+    }
+
     [Fact]
     public void AudioCommandModuleRegistersTypedCommandsAndAudioFadeDefault()
     {
         var registry = new RuntimeCommandRegistry();
         var backend = new FakeAudioBackend();
         var loader = new FakeAudioClipLoader("audio").Register("unused");
-        var operations = new StubOperationRunner();
         var audio = new AudioManager(
-            backend, operations, loader, loader, loader, new AudioSettings());
+            backend, loader, loader, loader, new AudioSettings());
         registry.RegisterModule(new AudioCommandModule(audio));
         var catalog = registry.BuildCatalog();
         var descriptor = catalog.Get("bgm").Descriptor;
@@ -369,13 +379,11 @@ public sealed class AudioManagerTests
             RuntimeHost host,
             FakeAudioBackend backend,
             IAudioManager audio,
-            IOperationRunner operations,
             IMissingResourceReporter missingResources)
         {
             Host = host;
             Backend = backend;
             Audio = audio;
-            Operations = operations;
             MissingResources = missingResources;
         }
 
@@ -384,8 +392,6 @@ public sealed class AudioManagerTests
         public FakeAudioBackend Backend { get; }
 
         public IAudioManager Audio { get; }
-
-        public IOperationRunner Operations { get; }
 
         public IMissingResourceReporter MissingResources { get; }
 
@@ -406,22 +412,14 @@ public sealed class AudioManagerTests
             var registry = new RuntimeServiceRegistry()
                 .AddSingleton<IFrameClock>(_ => frameClock)
                 .AddSingleton<IMissingResourceReporter>(_ => missingResources)
-                .AddSingleton<IOperationRunner>(
-                    resolver => new OperationRunner(
-                        resolver.Get<IFrameClock>(),
-                        resolver.Get<IRuntimeLifetime>()),
-                    typeof(IFrameClock),
-                    typeof(IRuntimeLifetime))
                 .AddSingleton<IAudioManager>(
                     resolver => new AudioManager(
                         backend,
-                        resolver.Get<IOperationRunner>(),
                         bgm,
                         sfx,
                         voice,
                         new AudioSettings(FailOnMissingClips: failOnMissingClips),
                         missingResources: resolver.Get<IMissingResourceReporter>()),
-                    typeof(IOperationRunner),
                     typeof(IMissingResourceReporter));
             var host = registry.Build();
             await host.InitializeAsync();
@@ -429,7 +427,6 @@ public sealed class AudioManagerTests
                 host,
                 backend,
                 host.Services.Get<IAudioManager>(),
-                host.Services.Get<IOperationRunner>(),
                 host.Services.Get<IMissingResourceReporter>());
         }
     }
@@ -450,19 +447,6 @@ public sealed class AudioManagerTests
             CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
-    private sealed class StubOperationRunner : IOperationRunner
-    {
-        public IReadOnlyCollection<IOperationHandle> ActiveOperations => [];
-
-        public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public IOperationHandle Start(OperationDefinition definition) =>
-            throw new NotSupportedException();
-    }
 
     private sealed class ResolverOnlyResourceManager : IResourceManager
     {

@@ -7,7 +7,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Majo.Runtime.Core;
 using Majo.Runtime.Localization;
-using Majo.Runtime.Operations;
 using Majo.Runtime.Resources;
 
 namespace Majo.Runtime.Audio;
@@ -17,12 +16,11 @@ public sealed class AudioManager : IAudioManager, IDisposable
     private readonly object gate = new();
     private readonly SemaphoreSlim mutations = new(1, 1);
     private readonly IAudioBackend backend;
-    private readonly IOperationRunner operations;
     private readonly Dictionary<string, AudioPlayback> bgm = new(StringComparer.Ordinal);
     private readonly Dictionary<string, AudioPlayback> sfx = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, IOperationHandle> bgmTransitions =
+    private readonly Dictionary<string, AudioTransition> bgmTransitions =
         new(StringComparer.Ordinal);
-    private readonly Dictionary<string, IOperationHandle> sfxTransitions =
+    private readonly Dictionary<string, AudioTransition> sfxTransitions =
         new(StringComparer.Ordinal);
     private readonly IRuntimeLogger logger;
     private readonly IMissingResourceReporter? missingResources;
@@ -32,7 +30,7 @@ public sealed class AudioManager : IAudioManager, IDisposable
     private readonly IRuntimeActivityRegistry? activities;
     private AudioPlayback? voice;
     private IDisposable? voiceActivityLease;
-    private IOperationHandle? voiceTransition;
+    private AudioTransition? voiceTransition;
     private long generatedSfxId;
     private bool isInitialized;
     private bool backendInitializationAttempted;
@@ -48,7 +46,6 @@ public sealed class AudioManager : IAudioManager, IDisposable
 
     public AudioManager(
         IAudioBackend backend,
-        IOperationRunner operations,
         IAudioClipLoader bgmLoader,
         IAudioClipLoader sfxLoader,
         IAudioClipLoader voiceLoader,
@@ -60,7 +57,6 @@ public sealed class AudioManager : IAudioManager, IDisposable
         IRuntimeActivityRegistry? activities = null)
     {
         this.backend = backend ?? throw new ArgumentNullException(nameof(backend));
-        this.operations = operations ?? throw new ArgumentNullException(nameof(operations));
         BgmLoader = bgmLoader ?? throw new ArgumentNullException(nameof(bgmLoader));
         SfxLoader = sfxLoader ?? throw new ArgumentNullException(nameof(sfxLoader));
         VoiceLoader = voiceLoader ?? throw new ArgumentNullException(nameof(voiceLoader));
@@ -165,9 +161,19 @@ public sealed class AudioManager : IAudioManager, IDisposable
     {
         lock (gate)
         {
-            return bgmTransitions.ContainsKey(instanceId) ||
-                sfxTransitions.ContainsKey(instanceId) ||
-                (instanceId == "voice" && voiceTransition is not null);
+            if (bgmTransitions.TryGetValue(instanceId, out var bgm) && !bgm.Settlement.IsCompleted)
+            {
+                return true;
+            }
+            if (sfxTransitions.TryGetValue(instanceId, out var sfx) && !sfx.Settlement.IsCompleted)
+            {
+                return true;
+            }
+            if (instanceId == "voice" && voiceTransition is not null && !voiceTransition.Settlement.IsCompleted)
+            {
+                return true;
+            }
+            return false;
         }
     }
 
@@ -264,8 +270,8 @@ public sealed class AudioManager : IAudioManager, IDisposable
                 previous.BaseVolume = volume;
                 previous.Backend.IsLooping = looping;
                 previous.IsLooping = looping;
-                var modifyOperation = StartFade(
-                    [new FadeTarget(previous, EffectiveVolume(previous))],
+                var modifyTransition = StartFade(
+                    [new AudioFadeTarget(previous, EffectiveVolume(previous))],
                     fade,
                     complete: () => ApplyVolume(previous),
                     cancel: () =>
@@ -275,8 +281,8 @@ public sealed class AudioManager : IAudioManager, IDisposable
                         previous.IsLooping = previousLoop;
                         ApplyVolume(previous);
                     });
-                TrackTransition(bgmTransitions, trackId, modifyOperation);
-                return new AudioPlaybackResult(previous, modifyOperation);
+                TrackTransition(bgmTransitions, trackId, modifyTransition);
+                return new AudioPlaybackResult(previous, modifyTransition.Settlement);
             }
 
             var current = CreatePlayback(
@@ -287,13 +293,13 @@ public sealed class AudioManager : IAudioManager, IDisposable
                 bgm[trackId] = current;
             }
 
-            var targets = new List<FadeTarget> { new(current, EffectiveVolume(current)) };
+            var targets = new List<AudioFadeTarget> { new(current, EffectiveVolume(current)) };
             if (previous is not null)
             {
-                targets.Add(new FadeTarget(previous, 0));
+                targets.Add(new AudioFadeTarget(previous, 0));
             }
 
-            var operation = StartFade(
+            var transition = StartFade(
                 targets,
                 fade,
                 complete: () =>
@@ -318,8 +324,8 @@ public sealed class AudioManager : IAudioManager, IDisposable
                         lock (gate) { bgm.Remove(trackId); }
                     }
                 });
-            TrackTransition(bgmTransitions, trackId, operation);
-            return new AudioPlaybackResult(current, operation);
+            TrackTransition(bgmTransitions, trackId, transition);
+            return new AudioPlaybackResult(current, transition.Settlement);
         }
         finally
         {
@@ -327,13 +333,14 @@ public sealed class AudioManager : IAudioManager, IDisposable
         }
     }
 
-    public async Task<IOperationHandle> StopBgmAsync(
+    public async Task StopBgmAsync(
         string? trackId = null,
         AudioFade fade = default,
         CancellationToken cancellationToken = default)
     {
         EnsureInitialized();
         fade = fade.Validate();
+        AudioTransition? transition;
         await mutations.WaitAsync(cancellationToken);
         try
         {
@@ -342,8 +349,13 @@ public sealed class AudioManager : IAudioManager, IDisposable
                 GetTransitions(bgmTransitions, entries),
                 cancellationToken);
             entries = SelectBgm(trackId);
-            var operation = StartFade(
-                entries.Select(entry => new FadeTarget(entry, 0)).ToArray(),
+            if (entries.Length == 0)
+            {
+                return;
+            }
+
+            transition = StartFade(
+                entries.Select(entry => new AudioFadeTarget(entry, 0)).ToArray(),
                 fade,
                 complete: () =>
                 {
@@ -355,14 +367,17 @@ public sealed class AudioManager : IAudioManager, IDisposable
                 });
             foreach (var entry in entries)
             {
-                TrackTransition(bgmTransitions, entry.InstanceId, operation);
+                TrackTransition(bgmTransitions, entry.InstanceId, transition);
             }
-
-            return operation;
         }
         finally
         {
             mutations.Release();
+        }
+
+        if (transition is not null)
+        {
+            await transition.Settlement.WaitAsync(cancellationToken);
         }
     }
 
@@ -403,13 +418,13 @@ public sealed class AudioManager : IAudioManager, IDisposable
                 AudioCategory.Sfx, clipId, instanceId, clip, looping, volume,
                 fade.DurationSeconds > 0 ? 0 : EffectiveVolume(AudioCategory.Sfx, volume));
             lock (gate) { sfx.Add(instanceId, playback); }
-            var operation = StartFade(
-                [new FadeTarget(playback, EffectiveVolume(playback))],
+            var transition = StartFade(
+                [new AudioFadeTarget(playback, EffectiveVolume(playback))],
                 fade,
                 complete: () => ApplyVolume(playback),
                 cancel: () => StopPlayback(playback));
-            TrackTransition(sfxTransitions, instanceId, operation);
-            return new AudioPlaybackResult(playback, operation);
+            TrackTransition(sfxTransitions, instanceId, transition);
+            return new AudioPlaybackResult(playback, transition.Settlement);
         }
         finally
         {
@@ -417,13 +432,14 @@ public sealed class AudioManager : IAudioManager, IDisposable
         }
     }
 
-    public async Task<IOperationHandle> StopSfxAsync(
+    public async Task StopSfxAsync(
         string? instanceId = null,
         AudioFade fade = default,
         CancellationToken cancellationToken = default)
     {
         EnsureInitialized();
         fade = fade.Validate();
+        AudioTransition? transition;
         await mutations.WaitAsync(cancellationToken);
         try
         {
@@ -432,8 +448,13 @@ public sealed class AudioManager : IAudioManager, IDisposable
                 GetTransitions(sfxTransitions, entries),
                 cancellationToken);
             entries = SelectSfx(instanceId);
-            var operation = StartFade(
-                entries.Select(entry => new FadeTarget(entry, 0)).ToArray(),
+            if (entries.Length == 0)
+            {
+                return;
+            }
+
+            transition = StartFade(
+                entries.Select(entry => new AudioFadeTarget(entry, 0)).ToArray(),
                 fade,
                 complete: () =>
                 {
@@ -445,14 +466,17 @@ public sealed class AudioManager : IAudioManager, IDisposable
                 });
             foreach (var entry in entries)
             {
-                TrackTransition(sfxTransitions, entry.InstanceId, operation);
+                TrackTransition(sfxTransitions, entry.InstanceId, transition);
             }
-
-            return operation;
         }
         finally
         {
             mutations.Release();
+        }
+
+        if (transition is not null)
+        {
+            await transition.Settlement.WaitAsync(cancellationToken);
         }
     }
 
@@ -516,14 +540,13 @@ public sealed class AudioManager : IAudioManager, IDisposable
                     isCancelable: true,
                     isFinishable: true);
             }
-            var operation = StartFade(
-                [new FadeTarget(playback, EffectiveVolume(playback))],
+            var transition = StartFade(
+                [new AudioFadeTarget(playback, EffectiveVolume(playback))],
                 fade,
                 complete: () => ApplyVolume(playback),
                 cancel: () => StopPlayback(playback));
-            lock (gate) { voiceTransition = operation; }
-            _ = ClearVoiceTransitionAsync(operation);
-            return new AudioPlaybackResult(playback, operation);
+            TrackVoiceTransition(transition);
+            return new AudioPlaybackResult(playback, transition.Settlement);
         }
         finally
         {
@@ -531,12 +554,13 @@ public sealed class AudioManager : IAudioManager, IDisposable
         }
     }
 
-    public async Task<IOperationHandle?> StopVoiceAsync(
+    public async Task StopVoiceAsync(
         AudioFade fade = default,
         CancellationToken cancellationToken = default)
     {
         EnsureInitialized();
         fade = fade.Validate();
+        AudioTransition? transition;
         await mutations.WaitAsync(cancellationToken);
         try
         {
@@ -545,22 +569,87 @@ public sealed class AudioManager : IAudioManager, IDisposable
             lock (gate) { current = voice; }
             if (current is null)
             {
-                return null;
+                return;
             }
 
-            var operation = StartFade(
-                [new FadeTarget(current, 0)],
+            transition = StartFade(
+                [new AudioFadeTarget(current, 0)],
                 fade,
                 complete: () => StopPlayback(current),
                 cancel: () => ApplyVolume(current));
-            lock (gate) { voiceTransition = operation; }
-            _ = ClearVoiceTransitionAsync(operation);
-            return operation;
+            TrackVoiceTransition(transition);
         }
         finally
         {
             mutations.Release();
         }
+
+        if (transition is not null)
+        {
+            await transition.Settlement.WaitAsync(cancellationToken);
+        }
+    }
+
+    public async Task FinishTransitionsAsync(
+        string? targetId = null,
+        CancellationToken cancellationToken = default)
+    {
+        AudioTransition[] snapshot;
+        lock (gate)
+        {
+            snapshot = SelectTransitions(targetId);
+        }
+
+        foreach (var transition in snapshot)
+        {
+            await transition.FinishAsync(cancellationToken);
+        }
+    }
+
+    public async Task CancelTransitionsAsync(
+        string? targetId = null,
+        CancellationToken cancellationToken = default)
+    {
+        AudioTransition[] snapshot;
+        lock (gate)
+        {
+            snapshot = SelectTransitions(targetId);
+        }
+
+        foreach (var transition in snapshot)
+        {
+            await transition.CancelAsync(cancellationToken);
+        }
+    }
+
+    private AudioTransition[] SelectTransitions(string? targetId)
+    {
+        if (string.IsNullOrWhiteSpace(targetId))
+        {
+            return bgmTransitions.Values
+                .Concat(sfxTransitions.Values)
+                .Append(voiceTransition)
+                .Where(t => t is not null && !t.Settlement.IsCompleted)
+                .Cast<AudioTransition>()
+                .Distinct()
+                .ToArray();
+        }
+
+        var trimmed = targetId.Trim();
+        var list = new List<AudioTransition>();
+        if (bgmTransitions.TryGetValue(trimmed, out var bgmTransition) && !bgmTransition.Settlement.IsCompleted)
+        {
+            list.Add(bgmTransition);
+        }
+        if (sfxTransitions.TryGetValue(trimmed, out var sfxTransition) && !sfxTransition.Settlement.IsCompleted)
+        {
+            list.Add(sfxTransition);
+        }
+        if (trimmed == "voice" && voiceTransition is not null && !voiceTransition.Settlement.IsCompleted)
+        {
+            list.Add(voiceTransition);
+        }
+        return list.ToArray();
     }
 
     private bool ShouldSkipMissing(
@@ -585,70 +674,13 @@ public sealed class AudioManager : IAudioManager, IDisposable
             requestedPath);
     }
 
-    private IOperationHandle StartFade(
-        IReadOnlyList<FadeTarget> targets,
+    private AudioTransition StartFade(
+        IReadOnlyList<AudioFadeTarget> targets,
         AudioFade fade,
         Action? complete,
         Action? cancel)
     {
-        var lease = activities?.BeginActivity(
-            RuntimeActivityOwner.Audio,
-            "Fade",
-            targets.Count > 0 ? targets[0].Playback.ClipId : null,
-            isCancelable: true,
-            isFinishable: true);
-        var finalized = 0;
-        void CompleteOnce()
-        {
-            if (Interlocked.Exchange(ref finalized, 1) == 0)
-            {
-                lease?.Dispose();
-                complete?.Invoke();
-            }
-        }
-
-        void CancelOnce()
-        {
-            if (Interlocked.Exchange(ref finalized, 1) == 0)
-            {
-                lease?.Dispose();
-                cancel?.Invoke();
-            }
-        }
-
-        return operations.Start(new OperationDefinition(
-            async context =>
-            {
-                try
-                {
-                    await Task.WhenAll(targets.Select(target =>
-                        target.Playback.Backend.FadeVolumeAsync(
-                            target.Volume,
-                            TimeSpan.FromSeconds(fade.DurationSeconds),
-                            context.CancellationToken)));
-                    CompleteOnce();
-                }
-                catch
-                {
-                    lease?.Dispose();
-                    throw;
-                }
-            },
-            onFinish: _ =>
-            {
-                foreach (var target in targets)
-                {
-                    target.Playback.Backend.Volume = target.Volume;
-                }
-
-                CompleteOnce();
-                return Task.CompletedTask;
-            },
-            onCancel: _ =>
-            {
-                CancelOnce();
-                return Task.CompletedTask;
-            }));
+        return new AudioTransition(targets, fade, activities, complete, cancel);
     }
 
     private AudioPlayback CreatePlayback(
@@ -692,6 +724,7 @@ public sealed class AudioManager : IAudioManager, IDisposable
             return;
         }
 
+        AudioTransition? activeTransition = null;
         lock (gate)
         {
             if (playback.State == AudioPlaybackState.Playing)
@@ -703,20 +736,24 @@ public sealed class AudioManager : IAudioManager, IDisposable
                 bgm.GetValueOrDefault(playback.InstanceId) == playback)
             {
                 bgm.Remove(playback.InstanceId);
+                bgmTransitions.TryGetValue(playback.InstanceId, out activeTransition);
             }
             else if (playback.Category == AudioCategory.Sfx &&
                 sfx.GetValueOrDefault(playback.InstanceId) == playback)
             {
                 sfx.Remove(playback.InstanceId);
+                sfxTransitions.TryGetValue(playback.InstanceId, out activeTransition);
             }
             else if (playback.Category == AudioCategory.Voice && voice == playback)
             {
                 voice = null;
                 voiceActivityLease?.Dispose();
                 voiceActivityLease = null;
+                activeTransition = voiceTransition;
             }
         }
 
+        activeTransition?.Finish();
         playback.Complete();
         logger.Debug(
             "audio",
@@ -819,19 +856,48 @@ public sealed class AudioManager : IAudioManager, IDisposable
     }
 
     private void TrackTransition(
-        Dictionary<string, IOperationHandle> transitions,
+        Dictionary<string, AudioTransition> transitions,
         string key,
-        IOperationHandle operation)
+        AudioTransition transition)
     {
         lock (gate)
         {
-            transitions[key] = operation;
+            transitions[key] = transition;
         }
-        _ = ClearTransitionAsync(transitions, key, operation);
+        transition.Settled += () =>
+        {
+            lock (gate)
+            {
+                if (transitions.GetValueOrDefault(key) == transition)
+                {
+                    transitions.Remove(key);
+                }
+            }
+        };
+        _ = ClearTransitionAsync(transitions, key, transition);
     }
 
-    private IOperationHandle?[] GetTransitions(
-        Dictionary<string, IOperationHandle> transitions,
+    private void TrackVoiceTransition(AudioTransition transition)
+    {
+        lock (gate)
+        {
+            voiceTransition = transition;
+        }
+        transition.Settled += () =>
+        {
+            lock (gate)
+            {
+                if (voiceTransition == transition)
+                {
+                    voiceTransition = null;
+                }
+            }
+        };
+        _ = ClearVoiceTransitionAsync(transition);
+    }
+
+    private AudioTransition?[] GetTransitions(
+        Dictionary<string, AudioTransition> transitions,
         IEnumerable<AudioPlayback> entries)
     {
         lock (gate)
@@ -843,26 +909,26 @@ public sealed class AudioManager : IAudioManager, IDisposable
     }
 
     private async Task ClearTransitionAsync(
-        Dictionary<string, IOperationHandle> transitions,
+        Dictionary<string, AudioTransition> transitions,
         string key,
-        IOperationHandle operation)
+        AudioTransition transition)
     {
-        try { await operation.Completion; } catch { }
+        try { await transition.Settlement; } catch { }
         lock (gate)
         {
-            if (transitions.GetValueOrDefault(key) == operation)
+            if (transitions.GetValueOrDefault(key) == transition)
             {
                 transitions.Remove(key);
             }
         }
     }
 
-    private async Task ClearVoiceTransitionAsync(IOperationHandle operation)
+    private async Task ClearVoiceTransitionAsync(AudioTransition transition)
     {
-        try { await operation.Completion; } catch { }
+        try { await transition.Settlement; } catch { }
         lock (gate)
         {
-            if (voiceTransition == operation)
+            if (voiceTransition == transition)
             {
                 voiceTransition = null;
             }
@@ -871,7 +937,7 @@ public sealed class AudioManager : IAudioManager, IDisposable
 
     private Task CompleteVoiceTransitionAsync(CancellationToken cancellationToken)
     {
-        IOperationHandle? transition;
+        AudioTransition? transition;
         lock (gate)
         {
             transition = voiceTransition;
@@ -882,7 +948,7 @@ public sealed class AudioManager : IAudioManager, IDisposable
 
     private async Task CompleteTransitionsAsync(CancellationToken cancellationToken)
     {
-        IOperationHandle?[] snapshot;
+        AudioTransition?[] snapshot;
         lock (gate)
         {
             snapshot = bgmTransitions.Values
@@ -895,22 +961,22 @@ public sealed class AudioManager : IAudioManager, IDisposable
     }
 
     private static async Task CompleteTransitionsAsync(
-        IEnumerable<IOperationHandle?> transitions,
+        IEnumerable<AudioTransition?> transitions,
         CancellationToken cancellationToken)
     {
         foreach (var transition in transitions.Where(value => value is not null)
-                     .Cast<IOperationHandle>().Distinct())
+                     .Cast<AudioTransition>().Distinct())
         {
             await CompleteTransitionAsync(transition, cancellationToken);
         }
     }
 
     private Task CompleteTransitionAsync(
-        Dictionary<string, IOperationHandle> transitions,
+        Dictionary<string, AudioTransition> transitions,
         string key,
         CancellationToken cancellationToken)
     {
-        IOperationHandle? transition;
+        AudioTransition? transition;
         lock (gate)
         {
             transition = transitions.GetValueOrDefault(key);
@@ -920,7 +986,7 @@ public sealed class AudioManager : IAudioManager, IDisposable
     }
 
     private static async Task CompleteTransitionAsync(
-        IOperationHandle? transition,
+        AudioTransition? transition,
         CancellationToken cancellationToken)
     {
         if (transition is null)
@@ -928,15 +994,7 @@ public sealed class AudioManager : IAudioManager, IDisposable
             return;
         }
 
-        transition.Finish();
-        try
-        {
-            await transition.Completion.WaitAsync(cancellationToken);
-        }
-        catch (OperationCanceledException) when (
-            transition.State == OperationState.Cancelled)
-        {
-        }
+        await transition.FinishAsync(cancellationToken);
     }
 
     private void ApplyAllVolumes()
@@ -948,7 +1006,7 @@ public sealed class AudioManager : IAudioManager, IDisposable
 
     private void ApplyCategoryVolumes(AudioCategory category)
     {
-        IOperationHandle[] transitions;
+        AudioTransition[] transitions;
         lock (gate)
         {
             transitions = category switch
@@ -990,17 +1048,16 @@ public sealed class AudioManager : IAudioManager, IDisposable
 
     private async Task ReapplyCategoryAfterTransitionsAsync(
         AudioCategory category,
-        IReadOnlyCollection<IOperationHandle> transitions)
+        IReadOnlyCollection<AudioTransition> transitions)
     {
         foreach (var transition in transitions)
         {
             try
             {
-                await transition.Completion;
+                await transition.Settlement;
             }
             catch
             {
-                // OperationRunner owns reporting; volume projection still runs.
             }
         }
 
@@ -1099,56 +1156,27 @@ public sealed class AudioManager : IAudioManager, IDisposable
         return value.Trim();
     }
 
-    private sealed class AudioPlayback : IAudioPlayback
-    {
-        private readonly TaskCompletionSource completion = new(
-            TaskCreationOptions.RunContinuationsAsynchronously);
-
-        public AudioPlayback(
-            AudioCategory category,
-            string clipId,
-            string instanceId,
-            bool looping,
-            float baseVolume,
-            IAudioBackendPlayer backend)
-        {
-            Category = category;
-            ClipId = clipId;
-            InstanceId = instanceId;
-            IsLooping = looping;
-            BaseVolume = baseVolume;
-            Backend = backend;
-        }
-
-        public AudioCategory Category { get; }
-
-        public string ClipId { get; }
-
-        public string InstanceId { get; }
-
-        public bool IsLooping { get; set; }
-
-        public float Volume => Backend.Volume;
-
-        public AudioPlaybackState State { get; set; } = AudioPlaybackState.Playing;
-
-        public Task Completion => completion.Task;
-
-        public float BaseVolume { get; set; }
-
-        public IAudioBackendPlayer Backend { get; }
-
-        public void Complete() => completion.TrySetResult();
-
-        public void Fail(Exception exception) => completion.TrySetException(exception);
-    }
-
-    private sealed record FadeTarget(AudioPlayback Playback, float Volume);
-
     public void Dispose()
     {
         voiceActivityLease?.Dispose();
         voiceActivityLease = null;
+        lock (gate)
+        {
+            foreach (var transition in bgmTransitions.Values)
+            {
+                transition.Dispose();
+            }
+            bgmTransitions.Clear();
+
+            foreach (var transition in sfxTransitions.Values)
+            {
+                transition.Dispose();
+            }
+            sfxTransitions.Clear();
+
+            voiceTransition?.Dispose();
+            voiceTransition = null;
+        }
         mutations.Dispose();
     }
 }

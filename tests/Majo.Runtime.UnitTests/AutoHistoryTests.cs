@@ -597,29 +597,33 @@ public sealed class AutoHistoryTests
         {
             LastPlayedVoiceId = clipId;
             voice = new FakePlayback(clipId);
-            return Task.FromResult(new AudioPlaybackResult(voice, CompletedOperation.Instance));
+            return Task.FromResult(new AudioPlaybackResult(voice, Task.CompletedTask));
         }
         public Task<AudioPlaybackResult> PlayBgmAsync(
             string clipId, string? trackId = null, bool loop = true, float volume = 1,
             AudioFade fade = default, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
-        public Task<IOperationHandle> StopBgmAsync(
+        public Task StopBgmAsync(
             string? trackId = null, AudioFade fade = default,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<AudioPlaybackResult> PlaySfxAsync(
             string clipId, string? instanceId = null, bool loop = false, float volume = 1,
             AudioFade fade = default, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
-        public Task<IOperationHandle> StopSfxAsync(
+        public Task StopSfxAsync(
             string? instanceId = null, AudioFade fade = default,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<IOperationHandle?> StopVoiceAsync(
+        public Task StopVoiceAsync(
             AudioFade fade = default, CancellationToken cancellationToken = default)
         {
             voice?.Complete();
             voice = null;
-            return Task.FromResult<IOperationHandle?>(CompletedOperation.Instance);
+            return Task.CompletedTask;
         }
+        public Task FinishTransitionsAsync(string? targetId = null, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+        public Task CancelTransitionsAsync(string? targetId = null, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 
     private sealed class FakePlayback(string id) : IAudioPlayback

@@ -176,14 +176,12 @@ public sealed class Phase1ActivityObserverTests
 
         var audio = new AudioManager(
             backend,
-            scheduler,
             bgmLoader,
             sfxLoader,
             voiceLoader,
             new AudioSettings(),
             activities: registry);
 
-        await scheduler.InitializeAsync(CancellationToken.None);
         await audio.InitializeAsync(CancellationToken.None);
 
         var result = await audio.PlayVoiceAsync("v_hello", cancellationToken: CancellationToken.None);

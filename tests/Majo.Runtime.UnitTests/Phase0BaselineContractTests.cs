@@ -216,7 +216,7 @@ public sealed class Phase0BaselineContractTests
 
         // Natural completion
         harness.Backend.CompleteFades();
-        await track1.FadeOperation.Completion;
+        await track1.Settlement;
         Assert.Equal(AudioPlaybackState.Playing, track1.Playback.State);
 
         // Preempt with second track
@@ -225,7 +225,7 @@ public sealed class Phase0BaselineContractTests
 
         // Finish second fade
         harness.Backend.CompleteFades();
-        await track2.FadeOperation.Completion;
+        await track2.Settlement;
 
         Assert.Single(harness.Backend.ActivePlayers);
         Assert.Equal(AudioPlaybackState.Stopped, track1.Playback.State);
@@ -649,13 +649,11 @@ public sealed class Phase0BaselineContractTests
                 .AddSingleton<IAudioManager>(
                     resolver => new AudioManager(
                         backend,
-                        resolver.Get<IOperationRunner>(),
                         bgm,
                         sfx,
                         voice,
                         new AudioSettings(),
                         missingResources: resolver.Get<IMissingResourceReporter>()),
-                    typeof(IOperationRunner),
                     typeof(IMissingResourceReporter));
 
             var host = registry.Build();

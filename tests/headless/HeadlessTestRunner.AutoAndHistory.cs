@@ -42,12 +42,10 @@ public partial class HeadlessTestRunner
         bootstrap.ConfigureServices = services => services.ReplaceSingleton<IAudioManager>(
             resolver => new AudioManager(
                 audioBackend,
-                resolver.Get<IOperationRunner>(),
                 audioLoader,
                 audioLoader,
                 audioLoader,
-                new AudioSettings()),
-            typeof(IOperationRunner));
+                new AudioSettings()));
         AddChild(bootstrap);
         await bootstrap.InitializationCompletion;
 

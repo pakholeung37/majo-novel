@@ -1,18 +1,26 @@
 #nullable enable
 
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Majo.Runtime.Core;
-using Majo.Runtime.Operations;
 
 namespace Majo.Runtime.Audio;
 
+/// <summary>
+/// Manages audio playback, volume mixing, and autonomous transitions for BGM, SFX, and Voice.
+/// <para>
+/// Domain Lifecycle Policy: On ResetAsync and ShutdownAsync, active audio transitions are
+/// finished (applying target terminal volumes) before all playbacks are stopped and backend
+/// players are disposed.
+/// </para>
+/// </summary>
 public interface IAudioManager : IRuntimeService
 {
-    event System.Action<IAudioPlayback>? PlaybackStarted;
+    event Action<IAudioPlayback>? PlaybackStarted;
 
-    event System.Action<IAudioPlayback>? PlaybackStopped;
+    event Action<IAudioPlayback>? PlaybackStopped;
 
     float MasterVolume { get; set; }
 
@@ -54,7 +62,7 @@ public interface IAudioManager : IRuntimeService
         AudioFade fade = default,
         CancellationToken cancellationToken = default);
 
-    Task<IOperationHandle> StopBgmAsync(
+    Task StopBgmAsync(
         string? trackId = null,
         AudioFade fade = default,
         CancellationToken cancellationToken = default);
@@ -67,7 +75,7 @@ public interface IAudioManager : IRuntimeService
         AudioFade fade = default,
         CancellationToken cancellationToken = default);
 
-    Task<IOperationHandle> StopSfxAsync(
+    Task StopSfxAsync(
         string? instanceId = null,
         AudioFade fade = default,
         CancellationToken cancellationToken = default);
@@ -80,7 +88,24 @@ public interface IAudioManager : IRuntimeService
         string? overridePath = null,
         CancellationToken cancellationToken = default);
 
-    Task<IOperationHandle?> StopVoiceAsync(
+    Task StopVoiceAsync(
         AudioFade fade = default,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Finishes active transitions immediately applying their target volumes.
+    /// If <paramref name="targetId"/> is null, all active transitions are finished.
+    /// </summary>
+    Task FinishTransitionsAsync(
+        string? targetId = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Cancels active transitions immediately restoring or stopping according to cancellation policy.
+    /// If <paramref name="targetId"/> is null, all active transitions are cancelled.
+    /// </summary>
+    Task CancelTransitionsAsync(
+        string? targetId = null,
+        CancellationToken cancellationToken = default);
 }
+

@@ -72,12 +72,10 @@ public partial class HeadlessTestRunner
         bootstrap.ConfigureServices = services => services.ReplaceSingleton<IAudioManager>(
             resolver => new AudioManager(
                 new GodotAudioBackend(bootstrap),
-                resolver.Get<IOperationRunner>(),
                 loader,
                 loader,
                 loader,
-                new AudioSettings()),
-            typeof(IOperationRunner));
+                new AudioSettings()));
         AddChild(bootstrap);
         await bootstrap.InitializationCompletion;
 

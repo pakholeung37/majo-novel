@@ -3,7 +3,6 @@
 using System;
 using Majo.Runtime.Configuration;
 using System.Threading.Tasks;
-using Majo.Runtime.Operations;
 
 namespace Majo.Runtime.Audio;
 
@@ -50,7 +49,7 @@ public readonly record struct AudioFade(
 
 public sealed record AudioPlaybackResult(
     IAudioPlayback Playback,
-    IOperationHandle FadeOperation,
+    Task Settlement,
     bool IsSkipped = false)
 {
     internal static AudioPlaybackResult Skipped(
@@ -58,7 +57,7 @@ public sealed record AudioPlaybackResult(
         string clipId,
         string instanceId) => new(
             new SkippedAudioPlayback(category, clipId, instanceId),
-            CompletedAudioOperation.Instance,
+            Task.CompletedTask,
             true);
 }
 
@@ -84,23 +83,6 @@ internal sealed class SkippedAudioPlayback : IAudioPlayback
     public AudioPlaybackState State => AudioPlaybackState.Finished;
 
     public Task Completion => Task.CompletedTask;
-}
-
-internal sealed class CompletedAudioOperation : IOperationHandle
-{
-    public static CompletedAudioOperation Instance { get; } = new();
-
-    public OperationState State => OperationState.Completed;
-
-    public Task Completion => Task.CompletedTask;
-
-    public void Cancel()
-    {
-    }
-
-    public void Finish()
-    {
-    }
 }
 
 public interface IAudioPlayback

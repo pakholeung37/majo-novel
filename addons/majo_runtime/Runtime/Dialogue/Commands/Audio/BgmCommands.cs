@@ -51,8 +51,8 @@ public sealed class PlayBgmCommandHandler : IRuntimeCommandHandler<PlayBgmComman
             AudioCommandExecution.Fade(
                 arguments.Duration),
             context.CancellationToken);
-        await AudioCommandExecution.TrackAndWaitAsync(
-            result.FadeOperation, arguments.Wait, context);
+        await AudioCommandExecution.WaitSettlementAsync(
+            result.Settlement, arguments.Wait, context.CancellationToken);
     }
 }
 
@@ -84,11 +84,11 @@ public sealed class StopBgmCommandHandler : IRuntimeCommandHandler<StopBgmComman
         StopBgmCommandArguments arguments,
         RuntimeCommandContext context)
     {
-        var operation = await audio.StopBgmAsync(
+        var stopTask = audio.StopBgmAsync(
             arguments.Track,
             AudioCommandExecution.Fade(
                 arguments.Duration),
-            context.CancellationToken);
-        await AudioCommandExecution.TrackAndWaitAsync(operation, arguments.Wait, context);
+            arguments.Wait ? context.CancellationToken : System.Threading.CancellationToken.None);
+        await AudioCommandExecution.WaitSettlementAsync(stopTask, arguments.Wait, context.CancellationToken);
     }
 }
