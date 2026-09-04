@@ -317,7 +317,7 @@ public sealed class DirectionRuntimeTests
     {
         var backend = new FakeDirectionBackend { AutoSettle = true };
         var cueExecutor = new RecordingCueExecutor();
-        var coordinator = CreateCoordinator(backend);
+        var coordinator = CreateCoordinator(backend, cueExecutor);
         var beats = new DirectionBeatRuntime(coordinator, cueExecutor);
         beats.Begin("cue-beat", "Opening");
         await beats.SubmitAsync(new DirectionCue(
@@ -613,8 +613,9 @@ public sealed class DirectionRuntimeTests
     }
 
     private static DirectionTransactionCoordinator CreateCoordinator(
-        IDirectionPreparationBackend backend) =>
-        new(new DirectionPlanner(), backend);
+        IDirectionPreparationBackend backend,
+        ITransientDirectionCueExecutor? cueExecutor = null) =>
+        new(new DirectionPlanner(), backend, cues: cueExecutor);
 
     private static StateRecord CreateDirectionRecord(string stages, string views)
     {

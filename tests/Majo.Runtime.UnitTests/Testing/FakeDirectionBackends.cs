@@ -18,11 +18,16 @@ public sealed class FakeDirectionBackend : IDirectionPreparationBackend
 {
     public Exception? PrepareException { get; init; }
     public Exception? SettlementException { get; init; }
+    public Exception? FinishException { get; init; }
+    public Exception? DisposeException { get; init; }
     public bool AutoSettle { get; init; }
     public int CommitCount { get; private set; }
     public int FinishCount { get; private set; }
+    public int RollbackCount { get; private set; }
+    public int DisposeCount { get; private set; }
     public DirectionState? VisibleState { get; private set; }
     public DirectionCommitToken? LastToken { get; private set; }
+    public TaskCompletionSource? LastSettlementTcs { get; private set; }
 
     public Task<IPreparedDirectionTransaction> PrepareAsync(
         DirectionPlan plan,
@@ -30,14 +35,16 @@ public sealed class FakeDirectionBackend : IDirectionPreparationBackend
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (PrepareException is not null) throw PrepareException;
-        return Task.FromResult<IPreparedDirectionTransaction>(new Prepared(this, plan));
+        var prep = new Prepared(this, plan);
+        LastSettlementTcs = prep.SettlementTcs;
+        return Task.FromResult<IPreparedDirectionTransaction>(prep);
     }
 
-    private sealed class Prepared : IPreparedDirectionTransaction
+    public sealed class Prepared : IPreparedDirectionTransaction
     {
         private readonly FakeDirectionBackend owner;
         private readonly DirectionPlan plan;
-        private readonly TaskCompletionSource settlement = new(
+        public TaskCompletionSource SettlementTcs { get; } = new(
             TaskCreationOptions.RunContinuationsAsynchronously);
         private bool committed;
 
@@ -47,7 +54,7 @@ public sealed class FakeDirectionBackend : IDirectionPreparationBackend
             this.plan = plan;
         }
 
-        public Task Settlement => settlement.Task;
+        public Task Settlement => SettlementTcs.Task;
 
         public void Commit(DirectionCommitToken token)
         {
@@ -57,8 +64,13 @@ public sealed class FakeDirectionBackend : IDirectionPreparationBackend
             owner.LastToken = token;
             owner.VisibleState = plan.TargetState;
             if (owner.SettlementException is not null)
-                settlement.TrySetException(owner.SettlementException);
-            else if (owner.AutoSettle) settlement.TrySetResult();
+                SettlementTcs.TrySetException(owner.SettlementException);
+            else if (owner.AutoSettle) SettlementTcs.TrySetResult();
+        }
+
+        public void Rollback(DirectionCommitToken token)
+        {
+            owner.RollbackCount++;
         }
 
         public ValueTask FinishAsync(CancellationToken cancellationToken)
@@ -66,13 +78,21 @@ public sealed class FakeDirectionBackend : IDirectionPreparationBackend
             cancellationToken.ThrowIfCancellationRequested();
             if (!committed) throw new InvalidOperationException("Not committed.");
             owner.FinishCount++;
-            settlement.TrySetResult();
+            if (owner.FinishException is not null)
+            {
+                SettlementTcs.TrySetException(owner.FinishException);
+                return ValueTask.FromException(owner.FinishException);
+            }
+            SettlementTcs.TrySetResult();
             return ValueTask.CompletedTask;
         }
 
         public ValueTask DisposeAsync()
         {
-            if (!committed) settlement.TrySetCanceled();
+            owner.DisposeCount++;
+            if (!committed) SettlementTcs.TrySetCanceled();
+            if (owner.DisposeException is not null)
+                return ValueTask.FromException(owner.DisposeException);
             return ValueTask.CompletedTask;
         }
     }
@@ -225,27 +245,100 @@ public sealed class VersionStoreResourceLoader<TResource> : IResourceLoader<TRes
         Task.FromException<TResource>(new NotSupportedException());
 }
 
+public sealed class FakeCueActivity : ITransientCueActivity
+{
+    private readonly TaskCompletionSource settlementTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public Task Settlement => settlementTcs.Task;
+    public bool IsSkippable { get; set; } = true;
+    public bool WasFinished { get; private set; }
+    public bool WasCancelled { get; private set; }
+    public bool WasDisposed { get; private set; }
+    public Exception? FinishException { get; set; }
+    public Exception? CancelException { get; set; }
+    public Exception? DisposeException { get; set; }
+
+    public void CompleteSettlement() => settlementTcs.TrySetResult();
+    public void FailSettlement(Exception ex) => settlementTcs.TrySetException(ex);
+
+    public Task FinishAsync(CancellationToken cancellationToken = default)
+    {
+        WasFinished = true;
+        if (FinishException is not null)
+        {
+            settlementTcs.TrySetException(FinishException);
+            return Task.FromException(FinishException);
+        }
+        settlementTcs.TrySetResult();
+        return Task.CompletedTask;
+    }
+
+    public Task CancelAsync(CancellationToken cancellationToken = default)
+    {
+        WasCancelled = true;
+        if (CancelException is not null)
+        {
+            settlementTcs.TrySetException(CancelException);
+            return Task.FromException(CancelException);
+        }
+        settlementTcs.TrySetCanceled(cancellationToken);
+        return Task.CompletedTask;
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        WasDisposed = true;
+        if (DisposeException is not null)
+            return ValueTask.FromException(DisposeException);
+        return ValueTask.CompletedTask;
+    }
+}
+
 public sealed class RecordingCueExecutor : ITransientDirectionCueExecutor
 {
     public List<ITransientDirectionCue> Cues { get; } = new();
     public DirectionCommitToken? Token { get; private set; }
+    public FakeCueActivity? LastActivity { get; private set; }
+    public Func<IEnumerable<ITransientDirectionCue>, ITransientCueActivity?>? ActivityFactory { get; set; }
+    public Exception? StartException { get; set; }
+    public Exception? ValidateException { get; set; }
 
-    public Task ExecuteAsync(
-        IEnumerable<ITransientDirectionCue> cues,
-        DirectionCompletionBarrier completion,
-        CancellationToken cancellationToken)
+    public void Validate(IEnumerable<ITransientDirectionCue> cues)
     {
-        Cues.AddRange(cues);
-        return Task.CompletedTask;
+        ArgumentNullException.ThrowIfNull(cues);
+        if (ValidateException is not null)
+            throw ValidateException;
     }
 
-    public Task ExecuteCommittedAsync(
+    public Task<ITransientCueActivity?> StartCommittedAsync(
         IEnumerable<ITransientDirectionCue> cues,
         DirectionCommitToken token,
         DirectionCompletionBarrier completion,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(cues);
         Token = token;
-        return ExecuteAsync(cues, completion, cancellationToken);
+        var captured = cues.ToList();
+        Cues.AddRange(captured);
+
+        if (StartException is not null)
+            return Task.FromException<ITransientCueActivity?>(StartException);
+
+        ITransientCueActivity? activity;
+        if (ActivityFactory is not null)
+        {
+            activity = ActivityFactory(captured);
+        }
+        else
+        {
+            var fake = new FakeCueActivity();
+            fake.CompleteSettlement();
+            activity = fake;
+        }
+
+        if (activity is FakeCueActivity fakeAct)
+            LastActivity = fakeAct;
+
+        return Task.FromResult<ITransientCueActivity?>(activity);
     }
 }

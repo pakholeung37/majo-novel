@@ -18,10 +18,11 @@ public enum DirectionTransactionStatus
     Faulted,
 }
 
-public sealed class CommittedDirectionTransaction : IDisposable
+public sealed class CommittedDirectionTransaction : IDisposable, IAsyncDisposable
 {
     private readonly object owner;
     private readonly IPreparedDirectionTransaction prepared;
+    private readonly ITransientCueActivity? cueActivity;
     private readonly IDisposable? activityLease;
     private readonly SemaphoreSlim lifecycleGate = new(1, 1);
     private int status = (int)DirectionTransactionStatus.Committed;
@@ -32,13 +33,15 @@ public sealed class CommittedDirectionTransaction : IDisposable
         DirectionPlan plan,
         DirectionCommitToken token,
         IPreparedDirectionTransaction prepared,
-        IDisposable? activityLease = null)
+        IDisposable? activityLease = null,
+        ITransientCueActivity? cueActivity = null)
     {
         this.owner = owner ?? throw new ArgumentNullException(nameof(owner));
         Plan = plan;
         Token = token;
         this.prepared = prepared;
         this.activityLease = activityLease;
+        this.cueActivity = cueActivity;
         Settlement = ObserveSettlementAsync();
     }
 
@@ -48,14 +51,30 @@ public sealed class CommittedDirectionTransaction : IDisposable
     public DirectionTransactionStatus Status =>
         (DirectionTransactionStatus)Volatile.Read(ref status);
 
-    public bool IsSkippable =>
-        Plan.Transitions.Count > 0 && Plan.Transitions.All(transition => transition.Spec.Skippable);
+    internal ITransientCueActivity? CueActivity => cueActivity;
+
+    public bool IsSkippable
+    {
+        get
+        {
+            var hasTransitions = Plan.Transitions.Count > 0;
+            var hasCues = cueActivity is not null || Plan.Cues.Count > 0;
+            if (!hasTransitions && !hasCues)
+                return false;
+
+            var transitionsSkippable = !hasTransitions ||
+                Plan.Transitions.All(transition => transition.Spec.Skippable);
+            var cuesSkippable = cueActivity is null || cueActivity.IsSkippable;
+            return transitionsSkippable && cuesSkippable;
+        }
+    }
 
     internal bool IsOwnedBy(object candidate) => ReferenceEquals(owner, candidate);
 
     internal async Task FinishAsync(CancellationToken cancellationToken)
     {
         await lifecycleGate.WaitAsync(cancellationToken);
+        List<Exception>? failures = null;
         try
         {
             if (Volatile.Read(ref disposed) != 0 &&
@@ -69,14 +88,49 @@ public sealed class CommittedDirectionTransaction : IDisposable
             }
 
             if (!prepared.Settlement.IsCompleted)
-                await prepared.FinishAsync(cancellationToken);
+            {
+                try
+                {
+                    await prepared.FinishAsync(cancellationToken);
+                }
+                catch (Exception exception)
+                {
+                    (failures ??= new List<Exception>()).Add(exception);
+                }
+            }
+
+            if (cueActivity is not null && !cueActivity.Settlement.IsCompleted)
+            {
+                try
+                {
+                    await cueActivity.FinishAsync(cancellationToken);
+                }
+                catch (Exception exception)
+                {
+                    (failures ??= new List<Exception>()).Add(exception);
+                }
+            }
         }
         finally
         {
             lifecycleGate.Release();
         }
 
-        await Settlement.WaitAsync(cancellationToken);
+        try
+        {
+            await Settlement.WaitAsync(cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            (failures ??= new List<Exception>()).Add(exception);
+        }
+
+        if (failures is not null)
+        {
+            throw failures.Count == 1
+                ? failures[0]
+                : new AggregateException("Direction transaction finish failed.", failures);
+        }
     }
 
     internal async Task CleanupAsync(CancellationToken cancellationToken)
@@ -107,35 +161,68 @@ public sealed class CommittedDirectionTransaction : IDisposable
             throw new AggregateException("Direction transaction cleanup failed.", failures);
     }
 
-    private async Task DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
         await lifecycleGate.WaitAsync(CancellationToken.None);
+        List<Exception>? failures = null;
         try
         {
             if (Interlocked.Exchange(ref disposed, 1) == 0)
             {
                 activityLease?.Dispose();
-                await prepared.DisposeAsync();
+
+                if (cueActivity is not null)
+                {
+                    try
+                    {
+                        await cueActivity.DisposeAsync();
+                    }
+                    catch (Exception exception)
+                    {
+                        (failures ??= new List<Exception>()).Add(exception);
+                    }
+                }
+
+                try
+                {
+                    await prepared.DisposeAsync();
+                }
+                catch (Exception exception)
+                {
+                    (failures ??= new List<Exception>()).Add(exception);
+                }
             }
         }
         finally
         {
             lifecycleGate.Release();
         }
+
+        if (failures is not null)
+        {
+            throw failures.Count == 1
+                ? failures[0]
+                : new AggregateException("Direction transaction disposal failed.", failures);
+        }
     }
 
     private async Task ObserveSettlementAsync()
     {
-        Exception? settlementException = null;
+        List<Exception>? settlementExceptions = null;
+        var task = cueActivity is not null
+            ? Task.WhenAll(prepared.Settlement, cueActivity.Settlement)
+            : prepared.Settlement;
         try
         {
-            await prepared.Settlement;
+            await task;
             Interlocked.Exchange(ref status, (int)DirectionTransactionStatus.Settled);
         }
         catch (Exception exception)
         {
             Interlocked.Exchange(ref status, (int)DirectionTransactionStatus.Faulted);
-            settlementException = exception;
+            settlementExceptions = task.Exception is not null
+                ? task.Exception.Flatten().InnerExceptions.ToList()
+                : new List<Exception> { exception };
         }
 
         Exception? disposeException = null;
@@ -148,15 +235,23 @@ public sealed class CommittedDirectionTransaction : IDisposable
             disposeException = exception;
         }
 
-        if (settlementException is not null && disposeException is not null)
+        if (settlementExceptions is not null && disposeException is not null)
+        {
+            settlementExceptions.Add(disposeException);
             throw new AggregateException(
                 "Direction settlement and cleanup both failed.",
-                settlementException,
-                disposeException);
-        if (settlementException is not null)
-            System.Runtime.ExceptionServices.ExceptionDispatchInfo
-                .Capture(settlementException)
-                .Throw();
+                settlementExceptions);
+        }
+        if (settlementExceptions is not null)
+        {
+            if (settlementExceptions.Count == 1)
+            {
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo
+                    .Capture(settlementExceptions[0])
+                    .Throw();
+            }
+            throw new AggregateException("Direction settlement failed.", settlementExceptions);
+        }
         if (disposeException is not null)
             throw disposeException;
     }
@@ -201,6 +296,7 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
     private readonly IDirectionPlanner planner;
     private readonly IDirectionPreparationBackend backend;
     private readonly IRuntimeActivityRegistry? activities;
+    private readonly ITransientDirectionCueExecutor? cues;
     private readonly SemaphoreSlim commitGate = new(1, 1);
     private readonly object stateGate = new();
     private readonly List<CommittedDirectionTransaction> transactions = new();
@@ -210,11 +306,13 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
         IDirectionPlanner planner,
         IDirectionPreparationBackend backend,
         DirectionState? initialState = null,
-        IRuntimeActivityRegistry? activities = null)
+        IRuntimeActivityRegistry? activities = null,
+        ITransientDirectionCueExecutor? cues = null)
     {
         this.planner = planner ?? throw new ArgumentNullException(nameof(planner));
         this.backend = backend ?? throw new ArgumentNullException(nameof(backend));
         this.activities = activities;
+        this.cues = cues;
         state = initialState ?? DirectionState.CreateDefault();
         state.Validate();
     }
@@ -233,7 +331,7 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
         return Task.CompletedTask;
     }
 
-    public async Task ResetAsync(CancellationToken cancellationToken)
+    public async Task ResetAsync(CancellationToken cancellationToken = default)
     {
         await commitGate.WaitAsync(cancellationToken);
         try
@@ -275,7 +373,7 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
             throw new AggregateException("One or more Direction transactions failed to reset.", failures);
     }
 
-    public Task ShutdownAsync(CancellationToken cancellationToken) =>
+    public Task ShutdownAsync(CancellationToken cancellationToken = default) =>
         ResetAsync(cancellationToken);
 
     public async Task<CommittedDirectionTransaction> ExecuteAsync(
@@ -321,6 +419,12 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
                 throw new DirectionRevisionException(
                     transaction.Plan.TargetState.Revision,
                     current.Revision);
+            }
+
+            if (transaction.CueActivity is not null &&
+                !transaction.CueActivity.Settlement.IsCompleted)
+            {
+                await transaction.CueActivity.CancelAsync(cancellationToken);
             }
 
             var restored = transaction.Plan.BeforeState with
@@ -435,7 +539,16 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
         DirectionPlan plan,
         CancellationToken cancellationToken)
     {
+        if (plan.Cues.Count > 0)
+        {
+            if (cues is null)
+                throw new DirectionException(
+                    $"Direction plan contains {plan.Cues.Count} transient cues, but no cue executor is configured.");
+            cues.Validate(plan.Cues);
+        }
+
         IPreparedDirectionTransaction? prepared = null;
+        ITransientCueActivity? cueActivity = null;
         var commitStarted = false;
         var ownershipTransferred = false;
         DirectionCommitToken token = default;
@@ -479,7 +592,17 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
                 state = plan.TargetState;
             }
 
-            var committed = new CommittedDirectionTransaction(this, plan, token, prepared, activityLease);
+            if (plan.Cues.Count > 0 && cues is not null)
+            {
+                cueActivity = await cues.StartCommittedAsync(
+                    plan.Cues,
+                    token,
+                    plan.Completion,
+                    cancellationToken);
+            }
+
+            var committed = new CommittedDirectionTransaction(
+                this, plan, token, prepared, activityLease, cueActivity);
             ownershipTransferred = true;
             lock (stateGate)
             {
@@ -498,12 +621,25 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
             activityLease?.Dispose();
 
             List<Exception>? cleanupFailures = null;
+            if (cueActivity is not null)
+            {
+                try
+                {
+                    await cueActivity.CancelAsync(cancellationToken);
+                    await cueActivity.DisposeAsync();
+                }
+                catch (Exception cueCancelException)
+                {
+                    (cleanupFailures ??= new List<Exception>()).Add(cueCancelException);
+                }
+            }
+
             if (commitStarted)
             {
                 try { prepared.Rollback(token); }
                 catch (Exception rollbackException)
                 {
-                    cleanupFailures = new List<Exception> { rollbackException };
+                    (cleanupFailures ??= new List<Exception>()).Add(rollbackException);
                 }
             }
             try

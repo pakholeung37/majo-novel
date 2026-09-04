@@ -49,28 +49,6 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(IFrameClock),
                 typeof(ILocaleManager),
                 typeof(ITransitionDriverRegistry))
-            .AddSingleton<IDirectionTransactionCoordinator>(
-                resolver =>
-                {
-                    var host = resolver.Get<GodotDirectionRenderHost>();
-                    var drivers = resolver.Get<ITransitionDriverRegistry>();
-                    var textures = new DirectionTextureLoader(
-                        resolver.Get<IResourceManager>());
-                    var backend = new CompositeDirectionPreparationBackend(
-                        resolver.Get<GodotDirectionStageBackend>(),
-                        new GodotDirectionViewBackend(host, drivers),
-                        new GodotDirectionScreenBackend(host),
-                        new GodotDirectionEffectBackend(host));
-                    return new DirectionTransactionCoordinator(
-                        new DirectionPlanner(),
-                        backend,
-                        activities: resolver.Get<IRuntimeActivityRegistry>());
-                },
-                typeof(GodotDirectionRenderHost),
-                typeof(GodotDirectionStageBackend),
-                typeof(ITransitionDriverRegistry),
-                typeof(IResourceManager),
-                typeof(IRuntimeActivityRegistry))
             .AddSingleton<ICameraModifierManager>(
                 resolver =>
                 {
@@ -89,20 +67,49 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(IStageAccessibility),
                 typeof(IFrameClock))
             .AddSingleton<ITransientCueHandlerRegistry>(_ => transientCueHandlers)
+            .AddSingleton<ITransientDirectionCueExecutor>(
+                resolver => new TransientDirectionCueExecutor(
+                    resolver.Get<ITransientCueHandlerRegistry>(),
+                    resolver.Get<ICameraModifierManager>(),
+                    resolver.Get<IScreenEffectManager>(),
+                    resolver.Get<IStageCurtainManager>(),
+                    resolver,
+                    resolver.Get<IRuntimeActivityRegistry>()),
+                typeof(ITransientCueHandlerRegistry),
+                typeof(ICameraModifierManager),
+                typeof(IScreenEffectManager),
+                typeof(IStageCurtainManager),
+                typeof(IRuntimeActivityRegistry))
+            .AddSingleton<IDirectionTransactionCoordinator>(
+                resolver =>
+                {
+                    var host = resolver.Get<GodotDirectionRenderHost>();
+                    var drivers = resolver.Get<ITransitionDriverRegistry>();
+                    var textures = new DirectionTextureLoader(
+                        resolver.Get<IResourceManager>());
+                    var backend = new CompositeDirectionPreparationBackend(
+                        resolver.Get<GodotDirectionStageBackend>(),
+                        new GodotDirectionViewBackend(host, drivers),
+                        new GodotDirectionScreenBackend(host),
+                        new GodotDirectionEffectBackend(host));
+                    return new DirectionTransactionCoordinator(
+                        new DirectionPlanner(),
+                        backend,
+                        activities: resolver.Get<IRuntimeActivityRegistry>(),
+                        cues: resolver.Get<ITransientDirectionCueExecutor>());
+                },
+                typeof(GodotDirectionRenderHost),
+                typeof(GodotDirectionStageBackend),
+                typeof(ITransitionDriverRegistry),
+                typeof(IResourceManager),
+                typeof(IRuntimeActivityRegistry),
+                typeof(ITransientDirectionCueExecutor))
             .AddSingleton<IDirectionBeatRuntime>(
                 resolver => new DirectionBeatRuntime(
                     resolver.Get<IDirectionTransactionCoordinator>(),
-                    new TransientDirectionCueExecutor(
-                        resolver.Get<ITransientCueHandlerRegistry>(),
-                        resolver.Get<ICameraModifierManager>(),
-                        resolver.Get<IScreenEffectManager>(),
-                        resolver.Get<IStageCurtainManager>(),
-                        resolver)),
+                    resolver.Get<ITransientDirectionCueExecutor>()),
                 typeof(IDirectionTransactionCoordinator),
-                typeof(IScreenEffectManager),
-                typeof(IStageCurtainManager),
-                typeof(ICameraModifierManager),
-                typeof(ITransientCueHandlerRegistry))
+                typeof(ITransientDirectionCueExecutor))
             .AddSingleton<IDirectionScopeResolver>(_ => new DirectionScopeResolver())
             .AddSingleton<DirectionBeatNodeBoundaryService>(
                 resolver => new DirectionBeatNodeBoundaryService(

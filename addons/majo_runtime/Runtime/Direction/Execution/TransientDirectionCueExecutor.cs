@@ -13,38 +13,43 @@ using Majo.Runtime.Stage;
 
 namespace Majo.Runtime.Direction.Execution;
 
-public interface ITransientDirectionCueExecutor
+public interface ITransientDirectionCueExecutor : IRuntimeService
 {
-    void Validate(IEnumerable<ITransientDirectionCue> cues)
-    {
-        ArgumentNullException.ThrowIfNull(cues);
-    }
+    void Validate(IEnumerable<ITransientDirectionCue> cues);
 
-    Task ExecuteAsync(IEnumerable<ITransientDirectionCue> cues,
-        DirectionCompletionBarrier completion, CancellationToken cancellationToken);
-
-    Task ExecuteCommittedAsync(
+    Task<ITransientCueActivity?> StartCommittedAsync(
         IEnumerable<ITransientDirectionCue> cues,
         DirectionCommitToken token,
         DirectionCompletionBarrier completion,
-        CancellationToken cancellationToken) =>
-        ExecuteAsync(cues, completion, cancellationToken);
+        CancellationToken cancellationToken);
+
+    Task IRuntimeService.InitializeAsync(CancellationToken cancellationToken) =>
+        Task.CompletedTask;
+
+    Task IRuntimeService.ResetAsync(CancellationToken cancellationToken) =>
+        Task.CompletedTask;
+
+    Task IRuntimeService.ShutdownAsync(CancellationToken cancellationToken) =>
+        Task.CompletedTask;
 }
 
 public sealed class TransientDirectionCueExecutor : ITransientDirectionCueExecutor
 {
     private readonly ITransientCueHandlerRegistry handlers;
     private readonly TransientCueExecutionContext context;
+    private readonly IRuntimeActivityRegistry? activities;
 
     public TransientDirectionCueExecutor(
         ITransientCueHandlerRegistry handlers,
         ICameraModifierManager modifiers,
         IScreenEffectManager effects,
         IStageCurtainManager curtain,
-        IServiceResolver? services = null)
+        IServiceResolver? services = null,
+        IRuntimeActivityRegistry? activities = null)
     {
         this.handlers = handlers ?? throw new ArgumentNullException(nameof(handlers));
         context = new TransientCueExecutionContext(modifiers, effects, curtain, services);
+        this.activities = activities;
     }
 
     public void Validate(IEnumerable<ITransientDirectionCue> cues)
@@ -57,31 +62,60 @@ public sealed class TransientDirectionCueExecutor : ITransientDirectionCueExecut
         }
     }
 
-    public async Task ExecuteAsync(IEnumerable<ITransientDirectionCue> cues,
-        DirectionCompletionBarrier completion, CancellationToken cancellationToken)
+    public Task<ITransientCueActivity?> StartCommittedAsync(
+        IEnumerable<ITransientDirectionCue> cues,
+        DirectionCommitToken token,
+        DirectionCompletionBarrier completion,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(cues);
-        if (!Enum.IsDefined(completion))
-            throw new ArgumentOutOfRangeException(nameof(completion));
+        var capturedCues = cues.ToArray();
+        if (capturedCues.Length == 0)
+        {
+            return Task.FromResult<ITransientCueActivity?>(null);
+        }
+
         var operations = new List<IOperationHandle>();
+        IDisposable? activityLease = null;
         try
         {
-            foreach (var cue in cues)
+            foreach (var cue in capturedCues)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var handler = handlers.Resolve(cue);
                 handler.Validate(cue);
-                operations.Add(handler.Execute(cue, context));
+                var handle = handler.Execute(cue, context);
+                operations.Add(handle);
             }
-            if (completion == DirectionCompletionBarrier.Settle)
-                await Task.WhenAll(operations.Select(operation => operation.Completion)).WaitAsync(cancellationToken);
+
+            activityLease = activities?.BeginActivity(
+                RuntimeActivityOwner.Direction,
+                "TransientCue",
+                token.TransactionId.Value.ToString(),
+                isCancelable: true,
+                isFinishable: true);
+
+            ITransientCueActivity activity = new TransientCueActivity(
+                operations,
+                isSkippable: true,
+                activityLease);
+            return Task.FromResult<ITransientCueActivity?>(activity);
         }
         catch
         {
+            activityLease?.Dispose();
             foreach (var operation in operations)
-                operation.Cancel();
+            {
+                try
+                {
+                    operation.Cancel();
+                }
+                catch
+                {
+                    // Ignore error during cancellation cleanup on start fault
+                }
+            }
             throw;
         }
     }
-
 }

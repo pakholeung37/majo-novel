@@ -157,9 +157,6 @@ public sealed class DirectionBeatRuntime : IDirectionBeatRuntime, IDisposable
                 PrepareDirectives(new[] { directive }),
                 completion,
                 cancellationToken);
-            if (directive is ITransientDirectionCue cue && cues is not null)
-                await cues.ExecuteCommittedAsync(
-                    new[] { cue }, committed.Token, completion, cancellationToken);
             return committed;
         }
         finally
@@ -194,12 +191,6 @@ public sealed class DirectionBeatRuntime : IDirectionBeatRuntime, IDisposable
                 completion,
                 cancellationToken);
             lock (sync) committed[ending.Id] = transaction;
-            if (cues is not null && ending.Directives.OfType<ITransientDirectionCue>().Any())
-                await cues.ExecuteCommittedAsync(
-                    ending.Directives.OfType<ITransientDirectionCue>(),
-                    transaction.Token,
-                    completion,
-                    cancellationToken);
             return transaction;
         }
         finally
