@@ -10,20 +10,17 @@ public readonly record struct RuntimeLogCorrelation
     public string? SessionId { get; init; }
     public string? DialogueSessionId { get; init; }
     public string? CommandId { get; init; }
-    public string? OperationId { get; init; }
 
     public RuntimeLogCorrelation(
         string runtimeId,
         string? sessionId = null,
         string? dialogueSessionId = null,
-        string? commandId = null,
-        string? operationId = null)
+        string? commandId = null)
     {
         RuntimeId = runtimeId;
         SessionId = sessionId;
         DialogueSessionId = dialogueSessionId;
         CommandId = commandId;
-        OperationId = operationId;
     }
 
     public static RuntimeLogCorrelation Empty { get; } = new(string.Empty);
@@ -40,6 +37,4 @@ public readonly record struct RuntimeLogCorrelation
     public RuntimeLogCorrelation WithCommandId(string? commandId) =>
         this with { CommandId = commandId };
 
-    public RuntimeLogCorrelation WithOperationId(string? operationId) =>
-        this with { OperationId = operationId };
 }

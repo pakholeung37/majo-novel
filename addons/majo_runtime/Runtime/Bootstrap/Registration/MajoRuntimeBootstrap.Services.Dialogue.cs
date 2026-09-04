@@ -138,12 +138,10 @@ public partial class MajoRuntimeBootstrap : Node
                 resolver => CreateYarnCommandAdapter(
                     resolver.Get<IYarnDialogueBackend>(),
                     resolver.Get<IActorManager>(),
-                    resolver.Get<IOperationRunner>(),
                     resolver.Get<IAudioManager>(),
                     resolver.Get<IDirectionBeatRuntime>()),
                 typeof(IYarnDialogueBackend),
                 typeof(IActorManager),
-                typeof(IOperationRunner),
                 typeof(IAudioManager),
                 typeof(IDirectionBeatRuntime),
                 typeof(DirectionBeatNodeBoundaryService))
@@ -295,7 +293,6 @@ public partial class MajoRuntimeBootstrap : Node
     private YarnCommandAdapter CreateYarnCommandAdapter(
         IYarnDialogueBackend backend,
         IActorManager actors,
-        IOperationRunner operations,
         IAudioManager audio,
         IDirectionBeatRuntime direction)
     {
@@ -322,7 +319,6 @@ public partial class MajoRuntimeBootstrap : Node
         var dispatcher = new RuntimeCommandDispatcher(
             binder,
             actors,
-            operations,
             Host!.Services,
             Logger,
             Configuration.Dialogue!.AbortOnCommandError);

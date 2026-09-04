@@ -6,9 +6,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Majo.Runtime.Core;
-using Majo.Runtime.Dialogue;
 using Majo.Runtime.Input;
-using Majo.Runtime.Operations;
 
 namespace Majo.Runtime.State;
 
@@ -16,9 +14,8 @@ public sealed class StateManager : IStateManager, IStateRestoreTransaction, IDis
 {
     private readonly SemaphoreSlim transactions = new(1, 1);
     private readonly IReadOnlyList<IStateContributor> contributors;
-    private readonly IDialoguePlayer dialogue;
     private readonly IInputManager input;
-    private readonly IOperationRunner operations;
+    private readonly IRuntimeRestoreBoundary restoreBoundary;
     private readonly IStateEligibility eligibility;
     private readonly StateMigrationRegistry migrations;
     private readonly IRuntimeLogger logger;
@@ -28,17 +25,15 @@ public sealed class StateManager : IStateManager, IStateRestoreTransaction, IDis
 
     public StateManager(
         IReadOnlyList<IStateContributor> contributors,
-        IDialoguePlayer dialogue,
         IInputManager input,
-        IOperationRunner operations,
+        IRuntimeRestoreBoundary restoreBoundary,
         IStateEligibility? eligibility = null,
         StateMigrationRegistry? migrations = null,
         IRuntimeLogger? logger = null)
     {
         this.contributors = contributors ?? throw new ArgumentNullException(nameof(contributors));
-        this.dialogue = dialogue ?? throw new ArgumentNullException(nameof(dialogue));
         this.input = input ?? throw new ArgumentNullException(nameof(input));
-        this.operations = operations ?? throw new ArgumentNullException(nameof(operations));
+        this.restoreBoundary = restoreBoundary ?? throw new ArgumentNullException(nameof(restoreBoundary));
         this.eligibility = eligibility ?? new PermissiveStateEligibility();
         this.migrations = migrations ?? new StateMigrationRegistry();
         this.logger = logger ?? NullRuntimeLogger.Instance;
@@ -293,8 +288,7 @@ public sealed class StateManager : IStateManager, IStateRestoreTransaction, IDis
             SetStatus(StateManagerStatus.Restoring);
             inputMuter = input.AcquireMuter(this, new InputMuteOptions(name: "state-reset"));
             mutationStarted = true;
-            await dialogue.StopAsync(cancellationToken);
-            await CancelActiveOperationsAsync(cancellationToken);
+            await restoreBoundary.CancelForRestoreAsync(cancellationToken);
             foreach (var contributor in PersistentContributors(scope).Reverse())
             {
                 await contributor.ResetAsync(cancellationToken);
@@ -422,8 +416,7 @@ public sealed class StateManager : IStateManager, IStateRestoreTransaction, IDis
                 $"Destructive state restore started for scope '{plan.Scope}'.");
             inputMuter = input.AcquireMuter(this, new InputMuteOptions(name: "state-restore"));
             mutationStarted = true;
-            await dialogue.StopAsync(cancellationToken);
-            await CancelActiveOperationsAsync(cancellationToken);
+            await restoreBoundary.CancelForRestoreAsync(cancellationToken);
 
             var durable = PersistentContributors(plan.Scope);
             foreach (var contributor in durable.Reverse())
@@ -505,42 +498,6 @@ public sealed class StateManager : IStateManager, IStateRestoreTransaction, IDis
             throw new StateCompatibilityException(
                 $"State record '{record.Key}' does not match contributor " +
                 $"'{contributor.Key}' scope/schema.");
-        }
-    }
-
-    private async Task CancelActiveOperationsAsync(CancellationToken cancellationToken)
-    {
-        var active = operations.ActiveOperations.ToArray();
-        foreach (var operation in active)
-        {
-            operation.Cancel();
-        }
-
-        var failures = new List<Exception>();
-        foreach (var operation in active)
-        {
-            try
-            {
-                await operation.Completion.WaitAsync(cancellationToken);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (OperationCanceledException) when (operation.State == OperationState.Cancelled)
-            {
-            }
-            catch (Exception exception)
-            {
-                failures.Add(exception);
-            }
-        }
-
-        if (failures.Count > 0)
-        {
-            throw new AggregateException(
-                "One or more active operations failed during state restore.",
-                failures);
         }
     }
 

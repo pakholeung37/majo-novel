@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Majo.Runtime.Core;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Input;
@@ -350,9 +351,8 @@ public sealed class StateManagerTests
         StateMigrationRegistry? migrations = null,
         IStateEligibility? eligibility = null) => new(
         contributors,
-        new StubDialoguePlayer(events),
         new StubInputManager(events),
-        new StubOperationRunner(),
+        new StubRestoreBoundary(events),
         eligibility,
         migrations: migrations);
 
@@ -545,14 +545,20 @@ public sealed class StateManagerTests
         }
     }
 
-    private sealed class StubOperationRunner : IOperationRunner
+    private sealed class StubRestoreBoundary : IRuntimeRestoreBoundary
     {
-        public IReadOnlyCollection<IOperationHandle> ActiveOperations => [];
-        public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public IOperationHandle Start(OperationDefinition definition) =>
-            throw new NotSupportedException();
+        private readonly IList<string> events;
+
+        public StubRestoreBoundary(IList<string> events) => this.events = events;
+
+        public Task CancelForRestoreAsync(CancellationToken cancellationToken = default)
+        {
+            events.Add("dialogue:stop");
+            return Task.CompletedTask;
+        }
+
+        public Task WaitForQuiescenceAsync(CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 
     private sealed class RecordingEligibility : IStateEligibility

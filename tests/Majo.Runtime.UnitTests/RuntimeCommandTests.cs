@@ -371,7 +371,6 @@ public sealed class RuntimeCommandTests
             {
                 received = arguments;
                 Assert.Same(actorManager, context.Actors);
-                Assert.Same(scheduler, context.Operations);
                 return Task.CompletedTask;
             }));
 
@@ -516,7 +515,6 @@ public sealed class RuntimeCommandTests
         var dispatcher = new RuntimeCommandDispatcher(
             new CommandBinder(new CommandBindingContext(0.35)),
             actors,
-            operations,
             logger: logger,
             abortOnRecoverableFailure: abortOnRecoverableFailure);
         return new YarnCommandAdapter(
@@ -772,7 +770,6 @@ public sealed class RuntimeCommandTests
 
     private sealed class FakeOperationRunner : IOperationRunner
     {
-        public IReadOnlyCollection<IOperationHandle> ActiveOperations => [];
 
         public IOperationHandle Start(OperationDefinition definition) =>
             throw new NotSupportedException();

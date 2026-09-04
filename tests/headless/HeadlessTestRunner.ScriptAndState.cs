@@ -96,6 +96,7 @@ public partial class HeadlessTestRunner
         var direction = services.Get<IDirectionTransactionCoordinator>();
         var input = services.Get<IInputManager>();
         var operations = services.Get<IOperationRunner>();
+        var activities = services.Get<IRuntimeActivityObserver>();
         var serializer = services.Get<IStateSerializer>();
         var storage = services.Get<IStateStorage>();
         var sessions = services.Get<IGameSessionCoordinator>();
@@ -459,7 +460,7 @@ public partial class HeadlessTestRunner
                     audio.BgmTracks.Single().ClipId == "calm" &&
                     audio.SfxInstances.Count == 0 &&
                     audio.CurrentVoice is null &&
-                    operations.ActiveOperations.Count == 0,
+                    !activities.HasActiveActivities(RuntimeActivityOwner.Other),
                 $"M13 Save -> mutate -> Load round {round} did not restore durable state cleanly.");
         }
 
@@ -473,7 +474,7 @@ public partial class HeadlessTestRunner
             Colors.Black,
             0.5f,
             new StageOperationSpec(10.0));
-        Assert(operations.ActiveOperations.Count > 0,
+        Assert(activities.HasActiveActivities(RuntimeActivityOwner.Other),
             "Failed to start active background operation for rapid load regression test.");
         var loadTask = slots.LoadAsync(new SaveSlotId(SaveSlotKind.Manual, 1));
         var completedLoad = await Task.WhenAny(
@@ -486,7 +487,7 @@ public partial class HeadlessTestRunner
         await dialogue.StopAsync();
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        Assert(operations.ActiveOperations.Count == 0 &&
+        Assert(!activities.HasActiveActivities(RuntimeActivityOwner.Other) &&
                 input.ActiveHandleCount == baseInputHandles,
             "M13 headless cycles left active Operations or transient input ownership.");
 

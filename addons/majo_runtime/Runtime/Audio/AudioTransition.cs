@@ -56,7 +56,7 @@ internal sealed class AudioTransition : IDisposable
         {
             await Settlement.WaitAsync(cancellationToken);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
         }
     }
@@ -68,7 +68,7 @@ internal sealed class AudioTransition : IDisposable
         {
             await Settlement.WaitAsync(cancellationToken);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
         }
     }
@@ -252,4 +252,3 @@ internal sealed class AudioPlayback : IAudioPlayback
 
     public void Fail(Exception exception) => completion.TrySetException(exception);
 }
-

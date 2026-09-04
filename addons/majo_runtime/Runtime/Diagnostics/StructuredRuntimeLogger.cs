@@ -109,8 +109,7 @@ public sealed class StructuredRuntimeLogger : IRuntimeLogger, IRuntimeLogScopePr
             string.IsNullOrWhiteSpace(child.RuntimeId) ? parent.RuntimeId : child.RuntimeId,
             child.SessionId ?? parent.SessionId,
             child.DialogueSessionId ?? parent.DialogueSessionId,
-            child.CommandId ?? parent.CommandId,
-            child.OperationId ?? parent.OperationId);
+            child.CommandId ?? parent.CommandId);
 
     private static IReadOnlyDictionary<string, object?> SanitizeProperties(
         IReadOnlyDictionary<string, object?> properties)

@@ -15,6 +15,7 @@ public sealed class OperationRunner : IOperationRunner
     private readonly IFrameClock frameClock;
     private readonly IRuntimeLifetime lifetime;
     private readonly IRuntimeLogger logger;
+    private readonly IRuntimeActivityRegistry? activities;
     private readonly HashSet<OperationHandle> activeOperations = new();
     private bool isInitialized;
     private bool acceptsOperations;
@@ -22,22 +23,13 @@ public sealed class OperationRunner : IOperationRunner
     public OperationRunner(
         IFrameClock frameClock,
         IRuntimeLifetime lifetime,
-        IRuntimeLogger? logger = null)
+        IRuntimeLogger? logger = null,
+        IRuntimeActivityRegistry? activities = null)
     {
         this.frameClock = frameClock ?? throw new ArgumentNullException(nameof(frameClock));
         this.lifetime = lifetime ?? throw new ArgumentNullException(nameof(lifetime));
         this.logger = logger ?? NullRuntimeLogger.Instance;
-    }
-
-    public IReadOnlyCollection<IOperationHandle> ActiveOperations
-    {
-        get
-        {
-            lock (gate)
-            {
-                return activeOperations.Cast<IOperationHandle>().ToArray();
-            }
-        }
+        this.activities = activities;
     }
 
     public Task InitializeAsync(CancellationToken cancellationToken)
@@ -103,6 +95,7 @@ public sealed class OperationRunner : IOperationRunner
     {
         ArgumentNullException.ThrowIfNull(definition);
         OperationHandle handle;
+        IDisposable? activityLease = null;
         lock (gate)
         {
             EnsureInitialized();
@@ -112,20 +105,33 @@ public sealed class OperationRunner : IOperationRunner
                     "OperationRunner is resetting or shutting down.");
             }
 
+            activityLease = activities?.BeginActivity(
+                RuntimeActivityOwner.Other,
+                "Operation",
+                isCancelable: true,
+                isFinishable: true);
             handle = new OperationHandle(
                 definition,
                 frameClock,
-                RemoveFromActiveOperations,
+                terminated =>
+                {
+                    activityLease?.Dispose();
+                    RemoveFromActiveOperations(terminated);
+                },
                 lifetime.SessionCancellationToken);
             activeOperations.Add(handle);
         }
-
-        handle.Start();
-        logger.Debug(
-            "operation",
-            "operation.started",
-            "Operation started.",
-            new RuntimeLogCorrelation(string.Empty, operationId: handle.DiagnosticId));
+        try
+        {
+            handle.Start();
+        }
+        catch
+        {
+            activityLease?.Dispose();
+            RemoveFromActiveOperations(handle);
+            throw;
+        }
+        logger.Debug("operation", "operation.started", "Operation started.");
         _ = ObserveCompletionAsync(handle);
         return handle;
     }
@@ -176,7 +182,7 @@ public sealed class OperationRunner : IOperationRunner
                 "operation",
                 "operation.completed",
                 $"Operation completed with state '{handle.State}'.",
-                new RuntimeLogCorrelation(string.Empty, operationId: handle.DiagnosticId));
+                RuntimeLogCorrelation.Empty);
         }
         catch (OperationCanceledException)
         {
@@ -184,7 +190,7 @@ public sealed class OperationRunner : IOperationRunner
                 "operation",
                 "operation.cancelled",
                 "Operation cancelled.",
-                new RuntimeLogCorrelation(string.Empty, operationId: handle.DiagnosticId));
+                RuntimeLogCorrelation.Empty);
         }
         catch (Exception exception)
         {
@@ -193,7 +199,7 @@ public sealed class OperationRunner : IOperationRunner
                 "operation.faulted",
                 "Operation faulted.",
                 exception,
-                new RuntimeLogCorrelation(string.Empty, operationId: handle.DiagnosticId));
+                RuntimeLogCorrelation.Empty);
         }
     }
 

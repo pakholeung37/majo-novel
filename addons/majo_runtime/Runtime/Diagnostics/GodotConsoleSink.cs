@@ -72,10 +72,6 @@ public sealed class GodotConsoleSink : IRuntimeLogSink
             {
                 builder.Append(", cmd=").Append(logEvent.Correlation.CommandId);
             }
-            if (!string.IsNullOrEmpty(logEvent.Correlation.OperationId))
-            {
-                builder.Append(", op=").Append(logEvent.Correlation.OperationId);
-            }
             builder.Append(']');
         }
 

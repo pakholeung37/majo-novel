@@ -6,12 +6,16 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Majo.Runtime.Auto;
+using Majo.Runtime.Audio;
+using Majo.Runtime.Dialogue;
 using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Direction.Godot;
+using Majo.Runtime.Operations;
 
 namespace Majo.Runtime.Core;
 
-public sealed class RuntimeHost : IRuntimeLifetime, IRuntimeSessionController, IAsyncDisposable
+public sealed class RuntimeHost : IRuntimeLifetime, IRuntimeSessionController,
+    IRuntimeRestoreBoundary, IAsyncDisposable
 {
     private readonly RuntimeServiceGraph graph;
     private readonly IRuntimeLogger logger;
@@ -226,20 +230,6 @@ public sealed class RuntimeHost : IRuntimeLifetime, IRuntimeSessionController, I
                 }
             }
 
-            if (resolver.TryGet<IRuntimeActivityObserver>(out var activities) && activities is not null)
-            {
-                try
-                {
-                    await activities.WaitForQuiescenceAsync(cancellationToken);
-                }
-                catch (Exception exception)
-                {
-                    exceptions.Add(new RuntimeLifecycleException(
-                        "Timed out or failed waiting for activity quiescence during reset.",
-                        exception));
-                }
-            }
-
             foreach (var descriptor in initializedServices)
             {
                 if ((directionReset &&
@@ -247,7 +237,8 @@ public sealed class RuntimeHost : IRuntimeLifetime, IRuntimeSessionController, I
                     (directionStageBackendReset &&
                      descriptor.ServiceType == typeof(GodotDirectionStageBackend)) ||
                     (directionRenderHostReset &&
-                     descriptor.ServiceType == typeof(GodotDirectionRenderHost)))
+                     descriptor.ServiceType == typeof(GodotDirectionRenderHost)) ||
+                    descriptor.ServiceType == typeof(IRuntimeActivityRegistry))
                     continue;
                 try
                 {
@@ -262,6 +253,8 @@ public sealed class RuntimeHost : IRuntimeLifetime, IRuntimeSessionController, I
                         exception));
                 }
             }
+
+            await AddQuiescenceFailureAsync(exceptions, "reset", cancellationToken);
 
             if (exceptions.Count == 0)
             {
@@ -320,21 +313,8 @@ public sealed class RuntimeHost : IRuntimeLifetime, IRuntimeSessionController, I
                 catch (Exception exception) { exceptions.Add(exception); }
             }
 
-            if (resolver.TryGet<IRuntimeActivityObserver>(out var activities) && activities is not null)
-            {
-                try
-                {
-                    await activities.WaitForQuiescenceAsync(cancellationToken);
-                }
-                catch (Exception exception)
-                {
-                    exceptions.Add(new RuntimeLifecycleException(
-                        "Timed out or failed waiting for activity quiescence during shutdown.",
-                        exception));
-                }
-            }
-
             exceptions.AddRange(await ShutdownInitializedServicesAsync(cancellationToken));
+            await AddQuiescenceFailureAsync(exceptions, "shutdown", cancellationToken);
             State = exceptions.Count == 0
                 ? RuntimeHostState.Shutdown
                 : RuntimeHostState.Faulted;
@@ -398,6 +378,74 @@ public sealed class RuntimeHost : IRuntimeLifetime, IRuntimeSessionController, I
     {
         TryCancel(sessionCancellation, "session", exceptions);
         TryCancel(runtimeCancellation, "runtime", exceptions);
+    }
+
+    public async Task CancelForRestoreAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var failures = new List<Exception>();
+
+        if (resolver.TryGet<IDialoguePlayer>(out var dialogue) && dialogue is not null)
+        {
+            try { await dialogue.StopAsync(cancellationToken); }
+            catch (Exception exception) { failures.Add(exception); }
+        }
+        if (resolver.TryGet<IDirectionTransactionCoordinator>(out var direction) && direction is not null)
+        {
+            try { await direction.ResetAsync(cancellationToken); }
+            catch (Exception exception) { failures.Add(exception); }
+        }
+        if (resolver.TryGet<IAudioManager>(out var audio) && audio is not null)
+        {
+            try { await audio.ResetAsync(cancellationToken); }
+            catch (Exception exception) { failures.Add(exception); }
+        }
+        if (resolver.TryGet<IOperationRunner>(out var operations) && operations is not null)
+        {
+            try { await operations.ResetAsync(cancellationToken); }
+            catch (Exception exception) { failures.Add(exception); }
+        }
+
+        await AddQuiescenceFailureAsync(failures, "restore", cancellationToken);
+        if (failures.Count > 0)
+        {
+            throw new RuntimeLifecycleException(
+                "One or more runtime domains failed to quiesce for restore.",
+                new AggregateException(failures));
+        }
+    }
+
+    public async Task WaitForQuiescenceAsync(CancellationToken cancellationToken = default)
+    {
+        var failures = new List<Exception>();
+        await AddQuiescenceFailureAsync(failures, "runtime", cancellationToken);
+        if (failures.Count > 0)
+            throw new AggregateException("Runtime activity did not quiesce.", failures);
+    }
+
+    private async Task AddQuiescenceFailureAsync(
+        List<Exception> failures,
+        string phase,
+        CancellationToken cancellationToken)
+    {
+        if (!resolver.TryGet<IRuntimeActivityObserver>(out var activities) || activities is null)
+            return;
+        try
+        {
+            await activities.WaitForQuiescenceAsync(cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            var snapshot = string.Join(
+                ", ",
+                activities.Snapshot().Select(activity =>
+                    $"{activity.Owner}/{activity.Type}/{activity.DiagnosticId} " +
+                    $"source={activity.Source ?? "<none>"}"));
+            failures.Add(new RuntimeLifecycleException(
+                $"Timed out or failed waiting for activity quiescence during {phase}. " +
+                $"Active: {snapshot}",
+                exception));
+        }
     }
 
     private void SubscribeDirectionSkip()
@@ -541,6 +589,10 @@ public sealed class RuntimeHost : IRuntimeLifetime, IRuntimeSessionController, I
             if (lifetime is IRuntimeSessionController sessionController)
             {
                 instances.Add(typeof(IRuntimeSessionController), sessionController);
+            }
+            if (lifetime is IRuntimeRestoreBoundary restoreBoundary)
+            {
+                instances.Add(typeof(IRuntimeRestoreBoundary), restoreBoundary);
             }
         }
 

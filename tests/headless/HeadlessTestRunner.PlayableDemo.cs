@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Godot;
 using Majo.Demo;
 using Majo.Runtime.Diagnostics;
+using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Yarn;
 using Majo.Runtime.Direction.Core;
@@ -94,6 +95,7 @@ public partial class HeadlessTestRunner
             mayaVoice.GetLength() > 5,
             "Runtime Demo audio assets were missing, invalid, or configured with unsafe loops.");
         var scheduler = bootstrap.Host.Services.Get<IOperationRunner>();
+        var activities = bootstrap.Host.Services.Get<IRuntimeActivityObserver>();
         var caseService = bootstrap.Host.Services.Get<DemoSessionService>();
         var dialogue = bootstrap.Host.Services.Get<IDialoguePlayer>();
         var variables = bootstrap.Host.Services.Get<IDialogueVariables>();
@@ -116,7 +118,7 @@ public partial class HeadlessTestRunner
                     hero.Position.X < 50 &&
                     stage.Backdrop?.Resource.ToString().EndsWith(
                         "courtroom", StringComparison.Ordinal) == true &&
-                    scheduler.ActiveOperations.Count == 0;
+                    !activities.HasActiveActivities(RuntimeActivityOwner.Other);
             }
             else if (line.Id == "line:demo-operation-wait")
             {
@@ -171,7 +173,7 @@ public partial class HeadlessTestRunner
             "Demo Presenter probe did not observe the complete dialogue lifecycle.");
         Assert(presenter.Events.Any(entry => entry.Kind == "option"),
             "Demo Presenter probe did not observe an option selection.");
-        Assert(scheduler.ActiveOperations.Count == 0,
+        Assert(!activities.HasActiveActivities(RuntimeActivityOwner.Other),
             "Runtime Demo ended with active operations.");
 
         var diagnostics = bootstrap.Host.Services.Get<IRuntimeDiagnostics>();
@@ -212,7 +214,8 @@ public partial class HeadlessTestRunner
             "Dialogue project failure did not retain its logical project ID.");
         Assert(dialogue.State == DialogueSessionState.Faulted,
             "Dialogue project load failure did not enter Faulted.");
-        Assert(!ownedRunner.IsDialogueRunning && scheduler.ActiveOperations.Count == 0,
+        Assert(!ownedRunner.IsDialogueRunning &&
+                !activities.HasActiveActivities(RuntimeActivityOwner.Other),
             "Dialogue project load failure leaked Runner or Operation work.");
 
         var lineCountBeforeStop = presenter.Lines.Count;
@@ -236,8 +239,9 @@ public partial class HeadlessTestRunner
             "M6 stopped dialogue session events were out of order.");
         Assert(presenter.Lines.Count == lineCountBeforeStop + 1,
             "M6 stop allowed a line after the expected welcome boundary to escape.");
-        await WaitForConditionAsync(() => scheduler.ActiveOperations.Count == 0, 2);
-        Assert(scheduler.ActiveOperations.Count == 0,
+        await WaitForConditionAsync(
+            () => !activities.HasActiveActivities(RuntimeActivityOwner.Other), 2);
+        Assert(!activities.HasActiveActivities(RuntimeActivityOwner.Other),
             "M6 stop left dialogue-owned operations active.");
 
         Assert(resources.LoadedResourceCount >= 3,

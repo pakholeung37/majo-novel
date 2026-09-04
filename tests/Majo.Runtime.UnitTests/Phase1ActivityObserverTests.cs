@@ -96,7 +96,7 @@ public sealed class Phase1ActivityObserverTests
     }
 
     [Fact(Timeout = 5_000)]
-    public async Task Registry_ResetAndShutdown_ClearsActivitiesAndSignalsQuiescence()
+    public async Task Registry_ResetAndShutdown_WaitsForActivitiesAndPreservesLeaseOwnership()
     {
         var registry = new RuntimeActivityRegistry();
 
@@ -107,22 +107,24 @@ public sealed class Phase1ActivityObserverTests
         var waitTask = registry.WaitForQuiescenceAsync();
         Assert.False(waitTask.IsCompleted);
 
-        await registry.ResetAsync(CancellationToken.None);
+        var resetTask = registry.ResetAsync(CancellationToken.None);
+        Assert.False(resetTask.IsCompleted);
+        lease1.Dispose();
+        lease2.Dispose();
+        await resetTask;
 
         Assert.Empty(registry.Snapshot());
         await waitTask;
-
-        // Ensure calling dispose on old leases after reset doesn't throw or corrupt
-        lease1.Dispose();
-        lease2.Dispose();
-        Assert.Empty(registry.Snapshot());
 
         // Now test ShutdownAsync
         var lease3 = registry.BeginActivity(RuntimeActivityOwner.Dialogue, "D1");
         var shutdownWait = registry.WaitForQuiescenceAsync();
         Assert.False(shutdownWait.IsCompleted);
 
-        await registry.ShutdownAsync(CancellationToken.None);
+        var shutdownTask = registry.ShutdownAsync(CancellationToken.None);
+        Assert.False(shutdownTask.IsCompleted);
+        lease3.Dispose();
+        await shutdownTask;
 
         Assert.Empty(registry.Snapshot());
         await shutdownWait;

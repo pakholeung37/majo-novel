@@ -171,7 +171,6 @@ public sealed class JsonLinesFileSink : IRuntimeLogSink
                     SessionId = logEvent.Correlation.SessionId,
                     DialogueSessionId = logEvent.Correlation.DialogueSessionId,
                     CommandId = logEvent.Correlation.CommandId,
-                    OperationId = logEvent.Correlation.OperationId,
                 },
                 Properties = logEvent.Properties.Count == 0 ? null : SerializeProperties(logEvent.Properties),
             };
@@ -294,6 +293,5 @@ public sealed class JsonLinesFileSink : IRuntimeLogSink
         public string? SessionId { get; set; }
         public string? DialogueSessionId { get; set; }
         public string? CommandId { get; set; }
-        public string? OperationId { get; set; }
     }
 }

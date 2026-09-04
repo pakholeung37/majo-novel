@@ -72,7 +72,7 @@ public partial class RuntimeDemoController : Node
             await runtime.InitializationCompletion;
             var services = runtime.Host!.Services;
             var dialogue = services.Get<IDialoguePlayer>();
-            var scheduler = services.Get<IOperationRunner>();
+            var activities = services.Get<IRuntimeActivityObserver>();
             var state = services.Get<IStateManager>();
             if (!automatic)
             {
@@ -84,7 +84,7 @@ public partial class RuntimeDemoController : Node
                     state,
                     services.Get<IScriptPlayback>(),
                     dialogue,
-                    scheduler,
+                    activities,
                     services.Get<IInputManager>(),
                     services.Get<IFrameClock>(),
                     services.Get<IRuntimeDiagnostics>(),
@@ -106,7 +106,7 @@ public partial class RuntimeDemoController : Node
 
             var caseService = services.Get<DemoSessionService>();
             var route = caseService.SelectedRoute;
-            if (route is null || scheduler.ActiveOperations.Count != 0)
+            if (route is null || activities.HasActiveActivities(RuntimeActivityOwner.Other))
             {
                 throw new InvalidOperationException(
                     "Runtime demo did not finish with a selected route and zero active operations.");

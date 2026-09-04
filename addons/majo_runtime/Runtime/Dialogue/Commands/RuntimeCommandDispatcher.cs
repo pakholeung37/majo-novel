@@ -7,7 +7,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Core;
-using Majo.Runtime.Operations;
 
 namespace Majo.Runtime.Dialogue.Commands;
 
@@ -16,7 +15,6 @@ public sealed class RuntimeCommandDispatcher : IDisposable
     private readonly object operationGate = new();
     private readonly CommandBinder binder;
     private readonly IActorManager? actors;
-    private readonly IOperationRunner? operations;
     private readonly IServiceResolver? services;
     private readonly IRuntimeLogger logger;
     private readonly bool abortOnRecoverableFailure;
@@ -29,7 +27,6 @@ public sealed class RuntimeCommandDispatcher : IDisposable
     public RuntimeCommandDispatcher(
         CommandBinder binder,
         IActorManager? actors = null,
-        IOperationRunner? operations = null,
         IServiceResolver? services = null,
         IRuntimeLogger? logger = null,
         bool abortOnRecoverableFailure = false,
@@ -37,7 +34,6 @@ public sealed class RuntimeCommandDispatcher : IDisposable
     {
         this.binder = binder ?? throw new ArgumentNullException(nameof(binder));
         this.actors = actors;
-        this.operations = operations;
         this.services = services;
         this.logger = logger ?? NullRuntimeLogger.Instance;
         this.abortOnRecoverableFailure = abortOnRecoverableFailure;
@@ -128,7 +124,6 @@ public sealed class RuntimeCommandDispatcher : IDisposable
             properties);
         var context = new RuntimeCommandContext(
             actors,
-            operations,
             services,
             cancellationToken,
             binder.Context);

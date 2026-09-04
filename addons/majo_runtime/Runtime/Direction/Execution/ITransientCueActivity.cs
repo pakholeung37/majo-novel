@@ -105,7 +105,7 @@ public sealed class TransientCueActivity : ITransientCueActivity
         {
             await Settlement.WaitAsync(cancellationToken);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             // Expected on cancellation
         }

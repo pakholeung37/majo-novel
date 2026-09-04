@@ -150,7 +150,8 @@ public partial class HeadlessTestRunner
                 playback.Mode == PlaybackMode.Manual &&
                 !playback.IsPaused &&
                 input.ActiveHandleCount == 3 &&
-                operations.ActiveOperations.Count == 0,
+                !services.Get<IRuntimeActivityObserver>()
+                    .HasActiveActivities(RuntimeActivityOwner.Other),
             "M10 Reset did not clear Session History, restore Manual mode, or rebind input.");
 
         var overlayNode = historyOverlay;

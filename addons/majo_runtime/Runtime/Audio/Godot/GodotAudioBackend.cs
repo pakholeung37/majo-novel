@@ -195,15 +195,17 @@ internal sealed class GodotAudioBackendPlayer : IAudioBackendPlayer
 
         KillFade();
         var targetDb = targetVolume <= 0 ? -80 : Mathf.LinearToDb(targetVolume);
-        fadeTween = player.CreateTween();
-        fadeTween.SetTrans(Tween.TransitionType.Linear);
-        fadeTween.SetEase(Tween.EaseType.InOut);
-        fadeTween.TweenProperty(player, "volume_db", targetDb, duration.TotalSeconds);
+        var tween = player.CreateTween();
+        fadeTween = tween;
+        tween.SetTrans(Tween.TransitionType.Linear);
+        tween.SetEase(Tween.EaseType.InOut);
+        tween.TweenProperty(player, "volume_db", targetDb, duration.TotalSeconds);
         var finished = new TaskCompletionSource(
             TaskCreationOptions.RunContinuationsAsynchronously);
         fadeCompletion = finished;
         void OnFinished() => finished.TrySetResult();
-        fadeTween.Finished += OnFinished;
+        var finishedCallable = Callable.From(OnFinished);
+        tween.Finished += OnFinished;
         using var registration = cancellationToken.Register(() =>
         {
             KillFade();
@@ -216,9 +218,10 @@ internal sealed class GodotAudioBackendPlayer : IAudioBackendPlayer
         }
         finally
         {
-            if (GodotObject.IsInstanceValid(fadeTween))
+            if (GodotObject.IsInstanceValid(tween) &&
+                tween.IsConnected(Tween.SignalName.Finished, finishedCallable))
             {
-                fadeTween!.Finished -= OnFinished;
+                tween.Disconnect(Tween.SignalName.Finished, finishedCallable);
             }
 
             if (ReferenceEquals(fadeCompletion, finished))

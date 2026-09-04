@@ -20,34 +20,11 @@ public sealed class RuntimeActivityRegistry : IRuntimeActivityRegistry
         return Task.CompletedTask;
     }
 
-    public Task ResetAsync(CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        lock (gate)
-        {
-            activities.Clear();
-            if (!quiescenceTcs.Task.IsCompleted)
-            {
-                quiescenceTcs.TrySetResult();
-            }
-            quiescenceTcs = CreateCompletedTcs();
-        }
-        return Task.CompletedTask;
-    }
+    public Task ResetAsync(CancellationToken cancellationToken) =>
+        WaitForQuiescenceAsync(cancellationToken);
 
-    public Task ShutdownAsync(CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        lock (gate)
-        {
-            activities.Clear();
-            if (!quiescenceTcs.Task.IsCompleted)
-            {
-                quiescenceTcs.TrySetResult();
-            }
-        }
-        return Task.CompletedTask;
-    }
+    public Task ShutdownAsync(CancellationToken cancellationToken) =>
+        WaitForQuiescenceAsync(cancellationToken);
 
     public IReadOnlyList<RuntimeActivityInfo> Snapshot()
     {
@@ -86,6 +63,7 @@ public sealed class RuntimeActivityRegistry : IRuntimeActivityRegistry
 
     public async Task WaitForQuiescenceAsync(CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         Task task;
         lock (gate)
         {

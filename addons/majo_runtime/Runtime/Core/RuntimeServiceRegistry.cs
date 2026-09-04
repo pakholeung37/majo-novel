@@ -119,7 +119,8 @@ public sealed class RuntimeServiceRegistry
         foreach (var dependencyType in descriptor.Dependencies)
         {
             if (dependencyType == typeof(IRuntimeLifetime) ||
-                dependencyType == typeof(IRuntimeSessionController))
+                dependencyType == typeof(IRuntimeSessionController) ||
+                dependencyType == typeof(IRuntimeRestoreBoundary))
             {
                 continue;
             }

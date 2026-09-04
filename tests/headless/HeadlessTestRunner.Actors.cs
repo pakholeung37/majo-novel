@@ -5,6 +5,7 @@ using Godot;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Actors.Godot;
 using Majo.Runtime.Configuration;
+using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Resources;
@@ -56,6 +57,7 @@ public partial class HeadlessTestRunner
         var characterLayer = actorRoot.GetNode<Node2D>("Characters");
         var manager = bootstrap.Host!.Services.Get<IActorManager>();
         var scheduler = bootstrap.Host.Services.Get<IOperationRunner>();
+        var activities = bootstrap.Host.Services.Get<IRuntimeActivityObserver>();
         var character = (CharacterActor)manager.GetActor<ICharacterActor>(
             manager.Create("hero").Id);
         var background = manager.GetActor<IBackgroundActor>(
@@ -174,7 +176,7 @@ public partial class HeadlessTestRunner
         Assert(resetOperation.State == OperationState.Cancelled,
             "Runtime Reset did not cancel the Actor operation.");
         Assert(manager.Actors.Count == 0, "Runtime Reset did not clear ActorManager state.");
-        Assert(scheduler.ActiveOperations.Count == 0,
+        Assert(!activities.HasActiveActivities(RuntimeActivityOwner.Other),
             "Runtime Reset left an active Actor operation.");
         Assert(characterLayer.GetChildCount() == 0,
             "Runtime Reset left Character nodes in the scene.");

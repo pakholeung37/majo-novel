@@ -156,9 +156,8 @@ public partial class MajoRuntimeBootstrap : Node
                 resolver.Get<IAudioManager>(),
                 resolver.Get<IHistoryManager>(),
                 resolver.Get<IScriptPlayback>(),
-                resolver.Get<IDialoguePlayer>(),
                 resolver.Get<IInputManager>(),
-                resolver.Get<IOperationRunner>(),
+                resolver.Get<IRuntimeRestoreBoundary>(),
                 resolver.Get<IStateEligibility>(),
                 resolver.Get<IDirectionTransactionCoordinator>(),
                 stateMigrations,
@@ -168,9 +167,8 @@ public partial class MajoRuntimeBootstrap : Node
             typeof(IAudioManager),
             typeof(IHistoryManager),
             typeof(IScriptPlayback),
-            typeof(IDialoguePlayer),
             typeof(IInputManager),
-            typeof(IOperationRunner),
+            typeof(IRuntimeRestoreBoundary),
             typeof(IStateEligibility),
             typeof(IDirectionTransactionCoordinator));
 
@@ -304,9 +302,8 @@ public partial class MajoRuntimeBootstrap : Node
         IAudioManager audio,
         IHistoryManager history,
         IScriptPlayback scriptPlayback,
-        IDialoguePlayer dialogue,
         IInputManager input,
-        IOperationRunner operations,
+        IRuntimeRestoreBoundary restoreBoundary,
         IStateEligibility eligibility,
         IDirectionTransactionCoordinator direction,
         StateMigrationRegistry migrations,
@@ -325,9 +322,8 @@ public partial class MajoRuntimeBootstrap : Node
         contributors.Register(new ScriptStateContributor(scriptPlayback));
         return new StateManager(
             contributors.Build(),
-            dialogue,
             input,
-            operations,
+            restoreBoundary,
             eligibility,
             migrations,
             Logger);

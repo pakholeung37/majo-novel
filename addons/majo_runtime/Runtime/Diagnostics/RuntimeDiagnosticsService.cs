@@ -140,19 +140,6 @@ public sealed class RuntimeDiagnosticsService : IRuntimeDiagnostics
             var snapshot = activities.Snapshot();
             activityDiag = new RuntimeActivityDiagnostics(snapshot.Count, snapshot);
         }
-        else if (services.TryGet<IOperationRunner>(out var operations) && operations is not null)
-        {
-            initializedServicesList.Add(nameof(IOperationRunner));
-            var activeActivities = operations.ActiveOperations.Select(op => new RuntimeActivityInfo(
-                $"op-{op.GetHashCode():x8}",
-                RuntimeActivityOwner.Other,
-                "Operation",
-                IsCancelable: true,
-                IsFinishable: true,
-                Elapsed: TimeSpan.Zero)).ToArray();
-            activityDiag = new RuntimeActivityDiagnostics(activeActivities.Length, activeActivities);
-        }
-
         InputDiagnostics? inputDiag = null;
         if (services.TryGet<IInputManager>(out var input) && input is not null)
         {

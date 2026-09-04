@@ -25,7 +25,7 @@ public sealed class OperationRunnerTests
         await handle.Completion.WaitAsync(TimeSpan.FromSeconds(1));
 
         Assert.Equal(OperationState.Completed, handle.State);
-        Assert.Empty(harness.Runner.ActiveOperations);
+        Assert.Empty(harness.Activities.Snapshot());
         await harness.Host.ShutdownAsync();
     }
 
@@ -48,7 +48,7 @@ public sealed class OperationRunnerTests
         Assert.Equal(OperationState.Completed, handle.State);
         Assert.Equal(100, completedValue);
         Assert.True(handle.Completion.IsCompletedSuccessfully);
-        Assert.Empty(harness.Runner.ActiveOperations);
+        Assert.Empty(harness.Activities.Snapshot());
         await harness.Host.ShutdownAsync();
     }
 
@@ -78,7 +78,7 @@ public sealed class OperationRunnerTests
         Assert.Equal(OperationState.Cancelled, handle.State);
         Assert.Equal(25, cancelledValue);
         Assert.True(cancelCleanupRan);
-        Assert.Empty(harness.Runner.ActiveOperations);
+        Assert.Empty(harness.Activities.Snapshot());
         await harness.Host.ShutdownAsync();
     }
 
@@ -109,7 +109,7 @@ public sealed class OperationRunnerTests
         Assert.Equal(OperationState.Completed, handle.State);
         Assert.Equal(1, finishCalls);
         Assert.Equal(0, cancelCalls);
-        Assert.Empty(harness.Runner.ActiveOperations);
+        Assert.Empty(harness.Activities.Snapshot());
         await harness.Host.ShutdownAsync();
     }
 
@@ -123,13 +123,13 @@ public sealed class OperationRunnerTests
 
         await Assert.ThrowsAsync<ExpectedException>(() => handle.Completion);
         await WaitUntilAsync(
-            () => !harness.Runner.ActiveOperations.Any() &&
+            () => harness.Activities.Snapshot().Count == 0 &&
                 logger.Exceptions.Count == 1,
             TimeSpan.FromSeconds(1));
 
         Assert.Equal(OperationState.Faulted, handle.State);
         Assert.Single(logger.Exceptions);
-        Assert.Empty(harness.Runner.ActiveOperations);
+        Assert.Empty(harness.Activities.Snapshot());
         await harness.Host.ShutdownAsync();
     }
 
@@ -145,13 +145,13 @@ public sealed class OperationRunnerTests
 
         await harness.Host.ResetAsync();
         await WaitUntilAsync(
-            () => !harness.Runner.ActiveOperations.Any(),
+            () => harness.Activities.Snapshot().Count == 0,
             TimeSpan.FromSeconds(1));
 
         Assert.True(previousSession.IsCancellationRequested);
         Assert.Equal(OperationState.Cancelled, first.State);
         Assert.Equal(OperationState.Cancelled, second.State);
-        Assert.Empty(harness.Runner.ActiveOperations);
+        Assert.Empty(harness.Activities.Snapshot());
 
         var nextSession = harness.Runner.Start(new OperationDefinition(
             context => context.FrameClock.NextFrameAsync(context.CancellationToken)));
@@ -187,7 +187,7 @@ public sealed class OperationRunnerTests
         cleanupGate.SetResult();
         await harness.Host.ShutdownAsync();
         Assert.Equal(RuntimeHostState.Shutdown, harness.Host.State);
-        Assert.Empty(harness.Runner.ActiveOperations);
+        Assert.Empty(harness.Activities.Snapshot());
     }
 
     private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan timeout)
@@ -209,11 +209,13 @@ public sealed class OperationRunnerTests
         private OperationHarness(
             RuntimeHost host,
             ManualFrameClock clock,
-            IOperationRunner runner)
+            IOperationRunner runner,
+            IRuntimeActivityObserver activities)
         {
             Host = host;
             Clock = clock;
             Runner = runner;
+            Activities = activities;
         }
 
         public RuntimeHost Host { get; }
@@ -222,24 +224,32 @@ public sealed class OperationRunnerTests
 
         public IOperationRunner Runner { get; }
 
+        public IRuntimeActivityObserver Activities { get; }
+
         public static async Task<OperationHarness> CreateAsync(IRuntimeLogger? logger = null)
         {
             var clock = new ManualFrameClock();
+            var activities = new RuntimeActivityRegistry();
             var registry = new RuntimeServiceRegistry()
                 .AddSingleton<IFrameClock>(_ => clock)
+                .AddSingleton<IRuntimeActivityRegistry>(_ => activities)
+                .AddSingleton<IRuntimeActivityObserver>(_ => activities)
                 .AddSingleton<IOperationRunner>(
                     resolver => new OperationRunner(
                         resolver.Get<IFrameClock>(),
-                        resolver.Get<IRuntimeLifetime>(),
-                        logger),
+                    resolver.Get<IRuntimeLifetime>(),
+                        logger,
+                        resolver.Get<IRuntimeActivityRegistry>()),
                     typeof(IFrameClock),
-                    typeof(IRuntimeLifetime));
+                    typeof(IRuntimeLifetime),
+                    typeof(IRuntimeActivityRegistry));
             var host = registry.Build(logger);
             await host.InitializeAsync();
             return new OperationHarness(
                 host,
                 clock,
-                host.Services.Get<IOperationRunner>());
+                host.Services.Get<IOperationRunner>(),
+                host.Services.Get<IRuntimeActivityObserver>());
         }
     }
 

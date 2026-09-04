@@ -29,6 +29,7 @@ public partial class HeadlessTestRunner
         await bootstrap.InitializationCompletion;
 
         var scheduler = bootstrap.Host!.Services.Get<IOperationRunner>();
+        var activities = bootstrap.Host.Services.Get<IRuntimeActivityObserver>();
         var shutdownStarter = bootstrap.Host.Services.Get<ShutdownStartsOperationService>();
         var advancedFrames = 0;
         var frameOperation = scheduler.Start(new OperationDefinition(
@@ -135,7 +136,7 @@ public partial class HeadlessTestRunner
         bootstrap.QueueFree();
         await bootstrap.ShutdownCompletion;
         await WaitForConditionAsync(
-            () => scheduler.ActiveOperations.Count == 0,
+            () => !activities.HasActiveActivities(RuntimeActivityOwner.Other),
             2);
 
         Assert(shutdownTween.State == OperationState.Cancelled,

@@ -71,9 +71,11 @@ public partial class MajoRuntimeBootstrap : Node
                 resolver => new OperationRunner(
                     resolver.Get<IFrameClock>(),
                     resolver.Get<IRuntimeLifetime>(),
-                    Logger),
+                    Logger,
+                    resolver.Get<IRuntimeActivityRegistry>()),
                 typeof(IFrameClock),
-                typeof(IRuntimeLifetime))
+                typeof(IRuntimeLifetime),
+                typeof(IRuntimeActivityRegistry))
             .AddSingleton<IScriptPreloadManager>(
                 resolver => new ScriptPreloadManager(
                     resolver.Get<IResourceManager>(),

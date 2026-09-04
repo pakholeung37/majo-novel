@@ -9,6 +9,7 @@ using Majo.Runtime.Diagnostics;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.History;
 using Majo.Runtime.Input;
+using Majo.Runtime.Core;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Played;
 using Majo.Runtime.Save;
@@ -31,7 +32,7 @@ public partial class RuntimeDemoHud : CanvasLayer
     private IStateManager? state;
     private IScriptPlayback? script;
     private IDialoguePlayer? dialogue;
-    private IOperationRunner? operations;
+    private IRuntimeActivityObserver? activities;
     private IInputManager? input;
     private IFrameClock? frameClock;
     private IRuntimeDiagnostics? diagnostics;
@@ -77,7 +78,7 @@ public partial class RuntimeDemoHud : CanvasLayer
         IStateManager stateManager,
         IScriptPlayback scriptPlayback,
         IDialoguePlayer dialoguePlayer,
-        IOperationRunner operationScheduler,
+        IRuntimeActivityObserver activityObserver,
         IInputManager inputManager,
         IFrameClock runtimeFrameClock,
         IRuntimeDiagnostics runtimeDiagnostics,
@@ -98,7 +99,7 @@ public partial class RuntimeDemoHud : CanvasLayer
         ArgumentNullException.ThrowIfNull(stateManager);
         ArgumentNullException.ThrowIfNull(scriptPlayback);
         ArgumentNullException.ThrowIfNull(dialoguePlayer);
-        ArgumentNullException.ThrowIfNull(operationScheduler);
+        ArgumentNullException.ThrowIfNull(activityObserver);
         ArgumentNullException.ThrowIfNull(inputManager);
         ArgumentNullException.ThrowIfNull(runtimeFrameClock);
         ArgumentNullException.ThrowIfNull(runtimeDiagnostics);
@@ -119,7 +120,7 @@ public partial class RuntimeDemoHud : CanvasLayer
         state = stateManager;
         script = scriptPlayback;
         dialogue = dialoguePlayer;
-        operations = operationScheduler;
+        activities = activityObserver;
         input = inputManager;
         frameClock = runtimeFrameClock;
         diagnostics = runtimeDiagnostics;
@@ -293,7 +294,7 @@ public partial class RuntimeDemoHud : CanvasLayer
         state = null;
         script = null;
         dialogue = null;
-        operations = null;
+        activities = null;
         input = null;
         frameClock = null;
         diagnostics = null;
@@ -390,7 +391,7 @@ public partial class RuntimeDemoHud : CanvasLayer
         runtimeState.Text =
             $"Session {ShortId(sessionId?.Invoke())} · {script?.Phase ?? ScriptPlaybackPhase.Idle} · " +
             $"{spot?.LineId ?? dialogue?.CurrentLineId ?? "<none>"} · " +
-            $"Ops {operations?.ActiveOperations.Count ?? 0} · Logs {diagnostics?.RecentEvents.Count ?? 0}";
+            $"Activities {activities?.Snapshot().Count ?? 0} · Logs {diagnostics?.RecentEvents.Count ?? 0}";
 
         var saveCheck = eligibility?.Check(StateOperationKind.Save);
         eligibilityState.Text = saveCheck?.IsAllowed == true

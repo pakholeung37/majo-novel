@@ -73,13 +73,10 @@ public sealed class DiagnosticsLoggingTests
         var sessionScope = root.WithSessionId("session-1");
         var dialogueScope = sessionScope.WithDialogueSessionId("proj:start");
         var commandScope = dialogueScope.WithCommandId("actor.move");
-        var opScope = commandScope.WithOperationId("op-42");
-
-        Assert.Equal("test-runtime", opScope.RuntimeId);
-        Assert.Equal("session-1", opScope.SessionId);
-        Assert.Equal("proj:start", opScope.DialogueSessionId);
-        Assert.Equal("actor.move", opScope.CommandId);
-        Assert.Equal("op-42", opScope.OperationId);
+        Assert.Equal("test-runtime", commandScope.RuntimeId);
+        Assert.Equal("session-1", commandScope.SessionId);
+        Assert.Equal("proj:start", commandScope.DialogueSessionId);
+        Assert.Equal("actor.move", commandScope.CommandId);
     }
 
     [Fact]
@@ -97,8 +94,7 @@ public sealed class DiagnosticsLoggingTests
             logger.Debug(
                 "operation",
                 "operation.started",
-                "Started",
-                new RuntimeLogCorrelation(string.Empty, operationId: "operation-1"));
+                "Started");
         }
 
         var correlation = Assert.Single(recording.Events).Correlation;
@@ -106,7 +102,6 @@ public sealed class DiagnosticsLoggingTests
         Assert.Equal("session-1", correlation.SessionId);
         Assert.Equal("dialogue-1", correlation.DialogueSessionId);
         Assert.Equal("command-1", correlation.CommandId);
-        Assert.Equal("operation-1", correlation.OperationId);
     }
 
     [Fact]
@@ -182,7 +177,7 @@ public sealed class DiagnosticsLoggingTests
                         $"event.{i}",
                         $"Longer message string for payload testing number {i} with metadata",
                         null,
-                        new RuntimeLogCorrelation("rt-1", "s-1", "d-1", "c-1", "o-1"),
+                        new RuntimeLogCorrelation("rt-1", "s-1", "d-1", "c-1"),
                         new Dictionary<string, object?> { ["index"] = i }));
                 }
 
@@ -299,7 +294,7 @@ public sealed class DiagnosticsLoggingTests
             "init.start",
             "Majo Runtime started.",
             null,
-            new RuntimeLogCorrelation("runtime-123", "session-456", "dialogue-789", "cmd-1", "op-2"));
+            new RuntimeLogCorrelation("runtime-123", "session-456", "dialogue-789", "cmd-1"));
 
         var formattedDefault = GodotConsoleSink.FormatEvent(logEvent);
         Assert.DoesNotContain("Correlation:", formattedDefault);
@@ -319,10 +314,10 @@ public sealed class DiagnosticsLoggingTests
             "init.start",
             "Majo Runtime started.",
             null,
-            new RuntimeLogCorrelation("runtime-123", "session-456", "dialogue-789", "cmd-1", "op-2"));
+            new RuntimeLogCorrelation("runtime-123", "session-456", "dialogue-789", "cmd-1"));
 
         var formattedExplicit = GodotConsoleSink.FormatEvent(logEvent, includeCorrelation: true);
-        Assert.Contains("[Correlation: runtime=runtime-123, session=session-456, dialogue=dialogue-789, cmd=cmd-1, op=op-2]", formattedExplicit);
+        Assert.Contains("[Correlation: runtime=runtime-123, session=session-456, dialogue=dialogue-789, cmd=cmd-1]", formattedExplicit);
 
         var configuredSink = new GodotConsoleSink(includeCorrelation: true);
         Assert.True(configuredSink.IncludeCorrelation);
