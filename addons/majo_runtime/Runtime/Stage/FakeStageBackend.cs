@@ -11,8 +11,6 @@ public sealed class FakeStageBackend : IStageBackend
 {
     public CameraState Camera { get; private set; } = CameraState.Default;
     public CameraState RenderedCamera => Camera;
-    public StageCurtainState Curtain { get; private set; } = StageCurtainState.Default;
-    public ScreenEffectState ScreenEffect { get; private set; } = ScreenEffectState.Default;
     public bool IsShaking { get; private set; }
     public CameraShakeSpec? LastShake { get; private set; }
     public bool IsTransitioning { get; private set; }
@@ -27,8 +25,6 @@ public sealed class FakeStageBackend : IStageBackend
     public Task ResetAsync(CancellationToken cancellationToken)
     {
         Camera = CameraState.Default;
-        Curtain = StageCurtainState.Default;
-        ScreenEffect = ScreenEffectState.Default;
         IsShaking = IsTransitioning = false;
         LastShake = null;
         LastCameraOperation = null;
@@ -98,28 +94,4 @@ public sealed class FakeStageBackend : IStageBackend
         return Task.CompletedTask;
     }
     public void ClearTransition() => IsTransitioning = false;
-    public void ApplyCurtain(StageCurtainState state) => Curtain = state.Validate();
-    public Task AnimateCurtainAsync(
-        StageCurtainState from,
-        StageCurtainState target,
-        double duration,
-        CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        Curtain = target.Validate();
-        return Task.CompletedTask;
-    }
-    public void ApplyScreenEffect(ScreenEffectState state) => ScreenEffect = state.Validate();
-    public Task AnimateOverlayAsync(ScreenEffectState from, ScreenEffectState target, double duration, CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        ScreenEffect = ScreenEffect with { OverlayColor = target.OverlayColor, OverlayOpacity = target.OverlayOpacity };
-        return Task.CompletedTask;
-    }
-    public Task AnimateLetterboxAsync(float from, float target, double duration, CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        ScreenEffect = ScreenEffect with { LetterboxRatio = target };
-        return Task.CompletedTask;
-    }
 }

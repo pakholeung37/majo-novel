@@ -42,13 +42,11 @@ public sealed class TransientDirectionCueExecutor : ITransientDirectionCueExecut
     public TransientDirectionCueExecutor(
         ITransientCueHandlerRegistry handlers,
         ICameraModifierManager modifiers,
-        IScreenEffectManager effects,
-        IStageCurtainManager curtain,
         IServiceResolver? services = null,
         IRuntimeActivityRegistry? activities = null)
     {
         this.handlers = handlers ?? throw new ArgumentNullException(nameof(handlers));
-        context = new TransientCueExecutionContext(modifiers, effects, curtain, services);
+        context = new TransientCueExecutionContext(modifiers, services);
         this.activities = activities;
     }
 

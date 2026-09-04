@@ -14,54 +14,32 @@ internal sealed class GodotStageBackend : IStageBackend, IDisposable
 {
     private readonly Node owner;
     private readonly GodotActorHost actors;
-    private readonly CanvasLayer curtainLayer;
     private readonly CanvasLayer effectLayer;
-    private readonly ColorRect curtain;
     private readonly ColorRect transition;
-    private readonly ColorRect overlay;
-    private readonly ColorRect letterboxTop;
-    private readonly ColorRect letterboxBottom;
     private CameraState camera = CameraState.Default;
-    private StageCurtainState curtainState = StageCurtainState.Default;
-    private ScreenEffectState screen = ScreenEffectState.Default;
     private readonly HashSet<Tween> cameraTweens = new();
     private Tween? cameraViewTransitionTween;
     private ImageTexture? cameraViewTransitionTexture;
     private Tween? shakeTween;
     private Tween? transitionTween;
-    private Tween? curtainTween;
-    private Tween? overlayTween;
-    private Tween? letterboxTween;
     private bool isInitialized;
 
     public GodotStageBackend(Node owner, GodotActorHost actors)
     {
         this.owner = owner ?? throw new ArgumentNullException(nameof(owner));
         this.actors = actors ?? throw new ArgumentNullException(nameof(actors));
-        curtainLayer = new CanvasLayer { Name = "MajoStageCurtain", Layer = 10 };
         effectLayer = new CanvasLayer { Name = "MajoStageEffects", Layer = 90 };
-        curtain = CreateFullRect("Curtain");
         transition = CreateFullRect("Transition");
-        overlay = CreateFullRect("Overlay");
-        letterboxTop = CreateLetterbox("LetterboxTop", top: true);
-        letterboxBottom = CreateLetterbox("LetterboxBottom", top: false);
-        curtainLayer.AddChild(curtain);
         effectLayer.AddChild(transition);
-        effectLayer.AddChild(overlay);
-        effectLayer.AddChild(letterboxTop);
-        effectLayer.AddChild(letterboxBottom);
     }
 
     public Task InitializeAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (isInitialized) return Task.CompletedTask;
-        owner.AddChild(curtainLayer);
         owner.AddChild(effectLayer);
         owner.GetViewport().SizeChanged += HandleViewportSizeChanged;
         ApplyCamera(camera);
-        ApplyCurtain(curtainState);
-        ApplyScreenEffect(screen);
         ClearTransition();
         ClearCameraViewTransition();
         isInitialized = true;
@@ -73,11 +51,7 @@ internal sealed class GodotStageBackend : IStageBackend, IDisposable
         cancellationToken.ThrowIfCancellationRequested();
         KillAllTweens();
         camera = CameraState.Default;
-        curtainState = StageCurtainState.Default;
-        screen = ScreenEffectState.Default;
         ApplyCamera(camera);
-        ApplyCurtain(curtainState);
-        ApplyScreenEffect(screen);
         ClearTransition();
         ClearCameraViewTransition();
         return Task.CompletedTask;
@@ -98,7 +72,6 @@ internal sealed class GodotStageBackend : IStageBackend, IDisposable
         catch (ObjectDisposedException) { }
         try
         {
-            if (GodotObject.IsInstanceValid(curtainLayer)) curtainLayer.QueueFree();
             if (GodotObject.IsInstanceValid(effectLayer)) effectLayer.QueueFree();
         }
         catch (ObjectDisposedException) { }
@@ -347,75 +320,6 @@ internal sealed class GodotStageBackend : IStageBackend, IDisposable
         catch (ObjectDisposedException) { }
     }
 
-    public void ApplyCurtain(StageCurtainState state)
-    {
-        curtainState = state.Validate();
-        try
-        {
-            if (!GodotObject.IsInstanceValid(curtain)) return;
-            curtain.Color = new Color(
-                curtainState.Color.R,
-                curtainState.Color.G,
-                curtainState.Color.B,
-                curtainState.Opacity);
-            curtain.Visible = curtainState.Opacity > 0;
-        }
-        catch (ObjectDisposedException) { }
-    }
-
-    public Task AnimateCurtainAsync(
-        StageCurtainState from,
-        StageCurtainState target,
-        double duration,
-        CancellationToken cancellationToken) => AnimateAsync(
-            curtainTween,
-            value => curtainTween = value,
-            duration,
-            progress => ApplyCurtain(new StageCurtainState(
-                from.Color.Lerp(target.Color, progress),
-                Mathf.Lerp(from.Opacity, target.Opacity, progress))),
-            cancellationToken);
-
-    public void ApplyScreenEffect(ScreenEffectState state)
-    {
-        screen = state.Validate();
-        overlay.Color = new Color(
-            screen.OverlayColor.R,
-            screen.OverlayColor.G,
-            screen.OverlayColor.B,
-            screen.OverlayOpacity);
-        ApplyLetterbox(screen.LetterboxRatio);
-    }
-
-    public Task AnimateOverlayAsync(
-        ScreenEffectState from,
-        ScreenEffectState target,
-        double duration,
-        CancellationToken cancellationToken) => AnimateAsync(
-            overlayTween,
-            value => overlayTween = value,
-            duration,
-            progress => ApplyScreenEffect(screen with
-            {
-                OverlayColor = from.OverlayColor.Lerp(target.OverlayColor, progress),
-                OverlayOpacity = Mathf.Lerp(from.OverlayOpacity, target.OverlayOpacity, progress),
-            }),
-            cancellationToken);
-
-    public Task AnimateLetterboxAsync(
-        float from,
-        float target,
-        double duration,
-        CancellationToken cancellationToken) => AnimateAsync(
-            letterboxTween,
-            value => letterboxTween = value,
-            duration,
-            progress => ApplyScreenEffect(screen with
-            {
-                LetterboxRatio = Mathf.Lerp(from, target, progress),
-            }),
-            cancellationToken);
-
     private async Task AnimateAsync(
         Tween? existing,
         Action<Tween?> setSlot,
@@ -456,20 +360,6 @@ internal sealed class GodotStageBackend : IStageBackend, IDisposable
         }
     }
 
-    private void ApplyLetterbox(float ratio)
-    {
-        var height = owner.GetViewport().GetVisibleRect().Size.Y * ratio;
-        letterboxTop.OffsetBottom = height;
-        letterboxBottom.OffsetTop = -height;
-        letterboxTop.Visible = letterboxBottom.Visible = height > 0;
-    }
-
-    private void HandleViewportSizeChanged()
-    {
-        ApplyLetterbox(screen.LetterboxRatio);
-        ApplyCamera(camera);
-    }
-
     private void KillAllTweens()
     {
         foreach (var tween in cameraTweens.ToArray()) KillTween(tween);
@@ -477,11 +367,7 @@ internal sealed class GodotStageBackend : IStageBackend, IDisposable
         KillTween(cameraViewTransitionTween);
         KillTween(shakeTween);
         KillTween(transitionTween);
-        KillTween(curtainTween);
-        KillTween(overlayTween);
-        KillTween(letterboxTween);
-        cameraViewTransitionTween = shakeTween = transitionTween = curtainTween = overlayTween =
-            letterboxTween = null;
+        cameraViewTransitionTween = shakeTween = transitionTween = null;
     }
 
     private static void KillTween(Tween? tween)
@@ -525,6 +411,8 @@ internal sealed class GodotStageBackend : IStageBackend, IDisposable
             _ => throw new ArgumentOutOfRangeException(nameof(curve)),
         };
 
+    private void HandleViewportSizeChanged() => ApplyCamera(camera);
+
     private static ColorRect CreateFullRect(string name)
     {
         var result = new ColorRect
@@ -536,29 +424,9 @@ internal sealed class GodotStageBackend : IStageBackend, IDisposable
         return result;
     }
 
-    private static ColorRect CreateLetterbox(string name, bool top)
-    {
-        var result = new ColorRect
-        {
-            Name = name,
-            Color = Colors.Black,
-            MouseFilter = Control.MouseFilterEnum.Ignore,
-            AnchorRight = 1,
-            AnchorTop = top ? 0 : 1,
-            AnchorBottom = top ? 0 : 1,
-        };
-        return result;
-    }
-
     public void Dispose()
     {
         ClearCameraViewTransition();
-        if (GodotObject.IsInstanceValid(curtainLayer))
-        {
-            curtainLayer.QueueFree();
-            curtainLayer.Dispose();
-        }
-
         if (GodotObject.IsInstanceValid(effectLayer))
         {
             effectLayer.QueueFree();

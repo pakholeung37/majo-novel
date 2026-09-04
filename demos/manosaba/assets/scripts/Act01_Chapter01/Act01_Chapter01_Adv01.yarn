@@ -18,8 +18,8 @@ title: Act01_Chapter01_Adv01
 <<beat begin>>
 <<curtain closed duration:0>>
 <<backdrop Still_140_001>>
-<<curtain open duration:1.2>>
 <<beat end wait:true>>
+<<curtain open duration:1.2>>
 <<wait 1.2>>
 
 <<bgm Ambient_011_001>>
@@ -82,7 +82,7 @@ title: Act01_Chapter01_Adv01
 
 大家都去死就好了。 #line:0101Adv01_Narrative024
 
-<<curtain closed duration:1.5>>
+<<curtain closed duration:1.5 wait:true>>
 <<detour EndAdv>>
 <<jump Act01_Chapter01_Adv02>>
 

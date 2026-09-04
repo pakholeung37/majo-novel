@@ -110,6 +110,9 @@ public sealed class DirectionPlanner : IDirectionPlanner
                 case ScreenPatch patch:
                     screen = ApplyScreen(patch, views, writes, transitions, claims);
                     break;
+                case CurtainPatch patch:
+                    effects = ApplyCurtain(patch, effects, writes, transitions);
+                    break;
                 case ITransientDirectionCue cue:
                     cues.Add(cue);
                     break;
@@ -501,6 +504,20 @@ public sealed class DirectionPlanner : IDirectionPlanner
         AddTransition(patch.Transition, paths, transitions, patch.SourceLocation);
         return new ScreenState(patch.Layout, DirectionCollections.Freeze(
             patch.Bindings.ToDictionary(pair => pair.Key, pair => pair.Value)));
+    }
+
+    private static StableEffectState ApplyCurtain(
+        CurtainPatch patch,
+        StableEffectState effects,
+        Dictionary<string, DirectionSourceLocation?> writes,
+        List<DirectionTransition> transitions)
+    {
+        ArgumentNullException.ThrowIfNull(patch.Curtain);
+        patch.Curtain.Validate();
+        var paths = new List<string>();
+        RegisterWrite("effect/curtain", patch.SourceLocation, writes, paths);
+        AddTransition(patch.Transition, paths, transitions, patch.SourceLocation);
+        return new StableEffectState(patch.Curtain);
     }
 
     private static void ValidateReferences(

@@ -325,11 +325,17 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
 	private Task CurtainAsync(CurtainDirectionCommandArguments a, RuntimeCommandContext c) =>
 		ExecuteAsync("curtain", async () =>
 		{
+			var transition = new DirectionTransitionSpec(
+				DirectionTransitionKind.Fade,
+				a.Duration,
+				DirectionEase.Linear).Validate();
+			var opacity = a.Position == CurtainPosition.Open ? 0f : 1f;
 			await beats.SubmitAsync(
-				new CurtainCue(
-					a.Position == StageCurtainPosition.Open,
-					new DirectionColor((float)a.R, (float)a.G, (float)a.B),
-					a.Duration,
+				new CurtainPatch(
+					new CurtainState(
+						new DirectionColor((float)a.R, (float)a.G, (float)a.B),
+						opacity),
+					transition,
 					new DirectionSourceLocation(RequireNode(), 0, 0)),
 				Barrier(a.Wait),
 				c.CancellationToken);
@@ -585,7 +591,7 @@ public sealed class CameraFxDirectionCommandArguments
 [RuntimeCommand("curtain", Category = "Direction", Usage = "curtain <open|closed> [duration:<seconds>] [r:<0..1>] [g:<0..1>] [b:<0..1>] [wait:<bool>]")]
 public sealed class CurtainDirectionCommandArguments
 {
-	[CommandParameter("state", 0, Primary = true, Required = true)] public StageCurtainPosition Position { get; set; }
+	[CommandParameter("state", 0, Primary = true, Required = true)] public CurtainPosition Position { get; set; }
 	[CommandParameter("duration", 1, DefaultSource = CommandDefaultSource.CurtainDuration, Minimum = 0)] public double Duration { get; set; }
 	[CommandParameter("r", 2, DefaultValue = "0", Minimum = 0)] public double R { get; set; }
 	[CommandParameter("g", 3, DefaultValue = "0", Minimum = 0)] public double G { get; set; }

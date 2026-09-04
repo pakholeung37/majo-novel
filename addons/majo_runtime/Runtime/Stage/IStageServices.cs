@@ -37,29 +37,6 @@ public interface IStageTransitionManager : IRuntimeService
     void ApplyStableAppearance(string? appearance);
 }
 
-public interface IStageCurtainManager : IRuntimeService
-{
-    StageCurtainState State { get; }
-    StageCurtainState TargetState { get; }
-    IOperationHandle SetCurtain(
-        Color color,
-        float opacity,
-        StageOperationSpec? operation = null);
-    void ApplyStableState(StageCurtainState state);
-}
-
-public interface IScreenEffectManager : IRuntimeService
-{
-    ScreenEffectState State { get; }
-    ScreenEffectState TargetState { get; }
-    IOperationHandle SetOverlay(
-        Color color,
-        float opacity,
-        StageOperationSpec? operation = null);
-    IOperationHandle SetLetterbox(float ratio, StageOperationSpec? operation = null);
-    void ApplyStableState(ScreenEffectState state);
-}
-
 public interface IStageTransitionProvider
 {
     string Id { get; }
@@ -92,17 +69,4 @@ public interface IStageBackend : IRuntimeService
     void ClearShake();
     Task RunTransitionAsync(StageTransitionRequest request, CancellationToken cancellationToken);
     void ClearTransition();
-    void ApplyCurtain(StageCurtainState state);
-    Task AnimateCurtainAsync(
-        StageCurtainState from,
-        StageCurtainState target,
-        double duration,
-        CancellationToken cancellationToken);
-    void ApplyScreenEffect(ScreenEffectState state);
-    Task AnimateOverlayAsync(
-        ScreenEffectState from,
-        ScreenEffectState target,
-        double duration,
-        CancellationToken cancellationToken);
-    Task AnimateLetterboxAsync(float from, float target, double duration, CancellationToken cancellationToken);
 }

@@ -264,6 +264,24 @@ public sealed class DirectionRuntimeTests
         Assert.Equal(2, backend.CommitCount);
     }
 
+    [Fact]
+    public void CurtainPatchIsDurableAndUsesEffectTransition()
+    {
+        var planner = new DirectionPlanner();
+        var plan = planner.Plan(DirectionState.CreateDefault(), new IDirectionDirective[]
+        {
+            new CurtainPatch(
+                new CurtainState(new DirectionColor(0.1f, 0.2f, 0.3f), 1),
+                new DirectionTransitionSpec(DirectionTransitionKind.Fade, 0.5)),
+        });
+
+        Assert.Equal(1, plan.TargetState.Effects.Curtain.Opacity);
+        var transition = Assert.Single(plan.Transitions);
+        Assert.Contains("effect/curtain", transition.StablePaths);
+        Assert.Equal(DirectionTransitionKind.Fade, transition.Spec.Kind);
+        Assert.Empty(plan.Cues);
+    }
+
     [Fact(Timeout = 5_000)]
     public async Task RollbackRejectsStaleTransactionRevision()
     {

@@ -2,16 +2,13 @@
 
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Godot;
 using Majo.Runtime.Core;
 using Majo.Runtime.Direction.Camera;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Operations;
-using Majo.Runtime.Stage;
 
 namespace Majo.Runtime.Direction.Execution;
 
@@ -19,19 +16,13 @@ public sealed class TransientCueExecutionContext
 {
     public TransientCueExecutionContext(
         ICameraModifierManager cameraModifiers,
-        IScreenEffectManager screenEffects,
-        IStageCurtainManager curtain,
         IServiceResolver? services = null)
     {
         CameraModifiers = cameraModifiers ?? throw new ArgumentNullException(nameof(cameraModifiers));
-        ScreenEffects = screenEffects ?? throw new ArgumentNullException(nameof(screenEffects));
-        Curtain = curtain ?? throw new ArgumentNullException(nameof(curtain));
         Services = services;
     }
 
     public ICameraModifierManager CameraModifiers { get; }
-    public IScreenEffectManager ScreenEffects { get; }
-    public IStageCurtainManager Curtain { get; }
     public IServiceResolver? Services { get; }
 }
 
@@ -63,8 +54,6 @@ public sealed class TransientCueHandlerRegistry : ITransientCueHandlerRegistry
     {
         if (!registerDefaults) return;
         Register(new CameraFxCueHandler());
-        Register(new CurtainCueHandler());
-        Register(new GenericCurtainCueHandler());
     }
 
     public IReadOnlyCollection<ITransientCueHandler> Handlers
@@ -136,54 +125,4 @@ internal sealed class CameraFxCueHandler : ITransientCueHandler
         if (!double.IsFinite(duration) || duration < 0)
             throw new DirectionException("Transient cue duration must be finite and non-negative.");
     }
-}
-
-internal sealed class CurtainCueHandler : ITransientCueHandler
-{
-    public string Id => "curtain";
-    public bool CanHandle(ITransientDirectionCue cue) => cue is CurtainCue;
-    public void Validate(ITransientDirectionCue cue)
-    {
-        var value = (CurtainCue)cue;
-        value.Color.Validate();
-        if (!double.IsFinite(value.DurationSeconds) || value.DurationSeconds < 0)
-            throw new DirectionException("Transient cue duration must be finite and non-negative.");
-    }
-    public IOperationHandle Execute(ITransientDirectionCue cue, TransientCueExecutionContext context)
-    {
-        var value = (CurtainCue)cue;
-        return context.Curtain.SetCurtain(
-            new Color(value.Color.R, value.Color.G, value.Color.B, value.Color.A),
-            value.Open ? 0 : 1,
-            new StageOperationSpec(value.DurationSeconds));
-    }
-}
-
-internal sealed class GenericCurtainCueHandler : ITransientCueHandler
-{
-    public string Id => "generic-curtain";
-    public bool CanHandle(ITransientDirectionCue cue) =>
-        cue is DirectionCue value && value.Name.Equals("curtain", StringComparison.OrdinalIgnoreCase);
-    public void Validate(ITransientDirectionCue cue)
-    {
-        var value = (DirectionCue)cue;
-        var duration = Read(value, "over", 0.4);
-        if (!double.IsFinite(duration) || duration < 0)
-            throw new DirectionException("Transient cue duration must be finite and non-negative.");
-    }
-    public IOperationHandle Execute(ITransientDirectionCue cue, TransientCueExecutionContext context)
-    {
-        var value = (DirectionCue)cue;
-        var open = value.Arguments.TryGetValue("state", out var state) &&
-            state.Equals("open", StringComparison.OrdinalIgnoreCase);
-        return context.Curtain.SetCurtain(
-            Colors.Black,
-            open ? 0 : 1,
-            new StageOperationSpec(Read(value, "over", 0.4)));
-    }
-
-    private static double Read(DirectionCue cue, string name, double fallback) =>
-        cue.Arguments.TryGetValue(name, out var value) &&
-        double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var result)
-            ? result : fallback;
 }

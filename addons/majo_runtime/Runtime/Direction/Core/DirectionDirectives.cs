@@ -221,6 +221,12 @@ public interface IDurableDirectionPatch : IDirectionDirective
 
 public interface ITransientDirectionCue : IDirectionDirective;
 
+public enum CurtainPosition
+{
+    Open,
+    Closed,
+}
+
 public sealed record BackdropPatch(
     StageId StageId,
     BackdropState Backdrop,
@@ -304,9 +310,10 @@ public sealed record DirectionCue(
     IReadOnlyDictionary<string, string> Arguments,
     DirectionSourceLocation? SourceLocation = null) : ITransientDirectionCue;
 
-public sealed record CurtainCue(
-    bool Open, DirectionColor Color, double DurationSeconds,
-    DirectionSourceLocation? SourceLocation = null) : ITransientDirectionCue;
+public sealed record CurtainPatch(
+    CurtainState Curtain,
+    DirectionTransitionSpec Transition,
+    DirectionSourceLocation? SourceLocation = null) : IDurableDirectionPatch;
 
 public sealed record CameraFxCue(
     ViewId ViewId,

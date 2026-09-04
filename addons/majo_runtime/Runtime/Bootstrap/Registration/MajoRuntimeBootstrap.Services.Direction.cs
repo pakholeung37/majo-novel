@@ -71,14 +71,10 @@ public partial class MajoRuntimeBootstrap : Node
                 resolver => new TransientDirectionCueExecutor(
                     resolver.Get<ITransientCueHandlerRegistry>(),
                     resolver.Get<ICameraModifierManager>(),
-                    resolver.Get<IScreenEffectManager>(),
-                    resolver.Get<IStageCurtainManager>(),
                     resolver,
                     resolver.Get<IRuntimeActivityRegistry>()),
                 typeof(ITransientCueHandlerRegistry),
                 typeof(ICameraModifierManager),
-                typeof(IScreenEffectManager),
-                typeof(IStageCurtainManager),
                 typeof(IRuntimeActivityRegistry))
             .AddSingleton<IDirectionTransactionCoordinator>(
                 resolver =>

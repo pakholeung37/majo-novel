@@ -126,9 +126,7 @@ public sealed class Phase0BaselineContractTests
     {
         var mockModifiers = new MockCameraModifierManager();
         var context = new TransientCueExecutionContext(
-            mockModifiers,
-            new MockScreenEffectManager(),
-            new MockStageCurtainManager());
+            mockModifiers);
 
         var cueRegistry = new TransientCueHandlerRegistry();
         var cue = new CameraFxCue(ViewId.Main, "shake", new Dictionary<string, string>(), 0.5);
@@ -146,32 +144,6 @@ public sealed class Phase0BaselineContractTests
         Assert.Equal(OperationState.Completed, handle.State);
 
         // Test cancellation on another instance
-        var handle2 = handler.Execute(cue, context);
-        handle2.Cancel();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => handle2.Completion);
-        Assert.Equal(OperationState.Cancelled, handle2.State);
-    }
-
-    [Fact(Timeout = 5_000)]
-    public async Task CurtainCueHandler_Settlement_Cancel_Finish_Contracts()
-    {
-        var mockCurtain = new MockStageCurtainManager();
-        var context = new TransientCueExecutionContext(
-            new MockCameraModifierManager(),
-            new MockScreenEffectManager(),
-            mockCurtain);
-
-        var cueRegistry = new TransientCueHandlerRegistry();
-        var cue = new CurtainCue(true, new DirectionColor(0, 0, 0, 1), 0.5);
-        var handler = cueRegistry.Resolve(cue);
-        handler.Validate(cue);
-
-        var handle = handler.Execute(cue, context);
-        Assert.NotNull(handle);
-        handle.Finish();
-        await handle.Completion;
-        Assert.Equal(OperationState.Completed, handle.State);
-
         var handle2 = handler.Execute(cue, context);
         handle2.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => handle2.Completion);
@@ -396,39 +368,6 @@ public sealed class Phase0BaselineContractTests
         {
             return new MockOperationHandle(cue.DurationSeconds);
         }
-
-        public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-    }
-
-    private sealed class MockScreenEffectManager : IScreenEffectManager
-    {
-        public ScreenEffectState State => ScreenEffectState.Default;
-        public ScreenEffectState TargetState => ScreenEffectState.Default;
-
-        public IOperationHandle SetOverlay(Color color, float opacity, StageOperationSpec? operation = null) =>
-            new MockOperationHandle(operation?.DurationSeconds ?? 0);
-
-        public IOperationHandle SetLetterbox(float ratio, StageOperationSpec? operation = null) =>
-            new MockOperationHandle(operation?.DurationSeconds ?? 0);
-
-        public void ApplyStableState(ScreenEffectState state) { }
-
-        public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-    }
-
-    private sealed class MockStageCurtainManager : IStageCurtainManager
-    {
-        public StageCurtainState State => StageCurtainState.Default;
-        public StageCurtainState TargetState => StageCurtainState.Default;
-
-        public IOperationHandle SetCurtain(Color color, float opacity, StageOperationSpec? operation = null) =>
-            new MockOperationHandle(operation?.DurationSeconds ?? 0);
-
-        public void ApplyStableState(StageCurtainState state) { }
 
         public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;

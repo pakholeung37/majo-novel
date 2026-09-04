@@ -90,8 +90,6 @@ public partial class HeadlessTestRunner
         var actors = services.Get<IActorManager>();
         var audio = services.Get<IAudioManager>();
         var camera = services.Get<ICameraManager>();
-        var curtain = services.Get<IStageCurtainManager>();
-        var effects = services.Get<IScreenEffectManager>();
         var transitions = services.Get<IStageTransitionManager>();
         var direction = services.Get<IDirectionTransactionCoordinator>();
         var input = services.Get<IInputManager>();
@@ -113,10 +111,6 @@ public partial class HeadlessTestRunner
 
         var baseInputHandles = input.ActiveHandleCount;
         Assert(bootstrap.FindChild(
-                    "MajoStageCurtain",
-                    recursive: true,
-                    owned: false) is CanvasLayer { Layer: 10 } &&
-                bootstrap.FindChild(
                     "MajoDialoguePresentationLayer",
                     recursive: true,
                     owned: false) is CanvasLayer { Layer: 20 } &&
@@ -124,31 +118,12 @@ public partial class HeadlessTestRunner
                     "MajoStageEffects",
                     recursive: true,
                     owned: false) is CanvasLayer { Layer: 90 },
-            "Stage curtain must render above actors and below dialogue/full-screen effects.");
+            "Dialogue and stage effect layers were not created.");
         Assert(bootstrap.FindChild(
                     "MajoDialogueTravelOverlay",
                     recursive: true,
                     owned: false) is Control { Visible: false },
             "Dialogue Travel did not create its editor-only default overlay.");
-        var curtainRect = bootstrap.FindChild(
-            "Curtain",
-            recursive: true,
-            owned: false) as ColorRect;
-        Assert(curtainRect is not null,
-            "Stage curtain did not create its full-screen ColorRect.");
-        curtain.ApplyStableState(new StageCurtainState(Colors.Black, 1));
-        var curtainFade = curtain.SetCurtain(
-            Colors.Black,
-            0,
-            new StageOperationSpec(0.2));
-        await WaitForConditionAsync(
-            () => curtainRect.Color.A is > 0.05f and < 0.95f,
-            1);
-        Assert(curtainRect.Color.A is > 0.05f and < 0.95f,
-            "Stage curtain fade did not render an intermediate alpha value.");
-        await curtainFade.Completion;
-        Assert(Mathf.IsZeroApprox(curtainRect.Color.A),
-            "Stage curtain fade did not finish transparent.");
         Assert(bootstrap.FindChild(
                 "MajoSaveLoadOverlay",
                 recursive: true,
@@ -219,8 +194,6 @@ public partial class HeadlessTestRunner
         room.SetAppearance("dark");
         await audio.PlayBgmAsync("calm", "music", volume: 0.7f);
         camera.ApplyStableState(new CameraState(new Vector2(123, 234), 1.25f, 7));
-        curtain.ApplyStableState(new StageCurtainState(Colors.Black, 0.75f));
-        effects.ApplyStableState(new ScreenEffectState(new Color(0.1f, 0.2f, 0.3f, 1), 0.4f, 0.15f));
         transitions.ApplyStableAppearance("courtroom");
 
         var snapshot = await state.CaptureGameAsync();
@@ -260,8 +233,6 @@ public partial class HeadlessTestRunner
         await audio.PlaySfxAsync("hit", "transient-sfx");
         await audio.PlayVoiceAsync("voice");
         camera.ApplyStableState(CameraState.Default);
-        curtain.ApplyStableState(StageCurtainState.Default);
-        effects.ApplyStableState(ScreenEffectState.Default);
         transitions.ApplyStableAppearance(null);
 
         var previousSessionId = bootstrap.Host.SessionId;
@@ -470,12 +441,6 @@ public partial class HeadlessTestRunner
             "M13 did not list the three committed Manual slots deterministically.");
 
         // Regression: Rapidly loading a save while a background operation is running must not deadlock in StopAsync
-        var longFadeCurtain = curtain.SetCurtain(
-            Colors.Black,
-            0.5f,
-            new StageOperationSpec(10.0));
-        Assert(activities.HasActiveActivities(RuntimeActivityOwner.Other),
-            "Failed to start active background operation for rapid load regression test.");
         var loadTask = slots.LoadAsync(new SaveSlotId(SaveSlotKind.Manual, 1));
         var completedLoad = await Task.WhenAny(
             loadTask,

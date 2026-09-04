@@ -111,48 +111,6 @@ public enum MotionCurve
     BackInOut,
 }
 
-public sealed record ScreenEffectState(
-    Color OverlayColor,
-    float OverlayOpacity,
-    float LetterboxRatio)
-{
-    public static ScreenEffectState Default { get; } = new(Colors.Black, 0, 0);
-
-    public ScreenEffectState Validate()
-    {
-        if (!float.IsFinite(OverlayOpacity) || OverlayOpacity is < 0 or > 1 ||
-            !float.IsFinite(LetterboxRatio) || LetterboxRatio is < 0 or > 0.5f)
-        {
-            throw new ArgumentException("Screen effect opacity and letterbox ratio are out of range.");
-        }
-        return this;
-    }
-}
-
-public enum StageCurtainPosition
-{
-    Open,
-    Closed,
-}
-
-public sealed record StageCurtainState(
-    Color Color,
-    float Opacity)
-{
-    public static StageCurtainState Default { get; } = new(Colors.Black, 0);
-
-    public StageCurtainState Validate()
-    {
-        if (!float.IsFinite(Color.R) || !float.IsFinite(Color.G) ||
-            !float.IsFinite(Color.B) || !float.IsFinite(Color.A) ||
-            !float.IsFinite(Opacity) || Opacity is < 0 or > 1)
-        {
-            throw new ArgumentException("Curtain color or opacity is out of range.");
-        }
-        return this;
-    }
-}
-
 public enum StageTransitionKind
 {
     Fade,
@@ -221,20 +179,5 @@ public sealed record StageTransitionRequest(
         if (Kind == StageTransitionKind.Custom)
             ArgumentException.ThrowIfNullOrWhiteSpace(ProviderId);
         return this;
-    }
-}
-
-public sealed record StageStableState(
-    CameraState Camera,
-    ScreenEffectState ScreenEffect,
-    StageCurtainState Curtain,
-    string? Appearance)
-{
-    public StageStableState(
-        CameraState camera,
-        ScreenEffectState screenEffect,
-        string? appearance)
-        : this(camera, screenEffect, StageCurtainState.Default, appearance)
-    {
     }
 }

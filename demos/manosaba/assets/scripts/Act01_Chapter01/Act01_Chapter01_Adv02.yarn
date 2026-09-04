@@ -85,7 +85,7 @@ Ema: （这是噩梦的后续……？） #line:0101Adv02_Ema007
 // Main stage and its dedicated camera stay alive while the broadcast stage is shown later.
 <<backdrop Background_001_001 via:cut>>
 <<character Ema at:center appearance:Surprised1 via:cut>>
-<<stage show main via:dissolve duration:1>>
+<<stage show main via:dissolve duration:0.5>>
 <<stage release illustration>>
 <<beat end wait:false>>
 

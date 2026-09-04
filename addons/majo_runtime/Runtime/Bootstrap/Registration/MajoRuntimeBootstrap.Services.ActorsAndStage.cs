@@ -55,21 +55,7 @@ public partial class MajoRuntimeBootstrap : Node
                         registry.Providers);
                 },
                 typeof(IStageBackend),
-                typeof(IOperationRunner))
-            .AddSingleton<IStageCurtainManager>(
-                resolver => new StageCurtainManager(
-                    resolver.Get<IStageBackend>(),
-                    resolver.Get<IOperationRunner>()),
-                typeof(IStageBackend),
-                typeof(IOperationRunner))
-            .AddSingleton<IScreenEffectManager>(
-                resolver => new ScreenEffectManager(
-                    resolver.Get<IStageBackend>(),
-                    resolver.Get<IOperationRunner>(),
-                    resolver.Get<IStageAccessibility>()),
-                typeof(IStageBackend),
-                typeof(IOperationRunner),
-                typeof(IStageAccessibility));
+                typeof(IOperationRunner));
     }
 
     private ActorManager CreateActorManager(
