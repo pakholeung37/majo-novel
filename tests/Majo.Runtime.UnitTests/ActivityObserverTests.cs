@@ -26,7 +26,7 @@ using Xunit;
 
 namespace Majo.Runtime.UnitTests;
 
-public sealed class Phase1ActivityObserverTests
+public sealed class ActivityObserverTests
 {
     [Fact]
     public void Registry_TracksLeases_AndCalculatesSnapshotsAccurately()
@@ -70,6 +70,24 @@ public sealed class Phase1ActivityObserverTests
         lease3.Dispose();
         Assert.Empty(registry.Snapshot());
         Assert.False(registry.HasActiveActivities(includeIgnorable: true));
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task ActivityObserver_TracksAndClearsActivities_DetectsLeaks()
+    {
+        var observer = new RuntimeActivityRegistry();
+        Assert.False(observer.HasActiveActivities(RuntimeActivityOwner.Direction));
+
+        var lease = observer.BeginActivity(RuntimeActivityOwner.Direction, "CameraFx", "cue-1");
+        Assert.True(observer.HasActiveActivities(RuntimeActivityOwner.Direction));
+        Assert.Single(observer.Snapshot());
+
+        lease.Dispose();
+        Assert.False(observer.HasActiveActivities(RuntimeActivityOwner.Direction));
+        Assert.Empty(observer.Snapshot());
+
+        // Test quiescence wait
+        await observer.WaitForQuiescenceAsync(CancellationToken.None);
     }
 
     [Fact(Timeout = 5_000)]
@@ -205,8 +223,8 @@ public sealed class Phase1ActivityObserverTests
         Assert.Empty(registry.Snapshot());
     }
 
-    [RuntimeCommand("p1_test_cmd")]
-    private sealed class P1TestCmdArgs
+    [RuntimeCommand("activity_test_cmd")]
+    private sealed class ActivityTestCmdArgs
     {
     }
 
@@ -217,7 +235,7 @@ public sealed class Phase1ActivityObserverTests
         var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         var cmdRegistry = new RuntimeCommandRegistry();
-        cmdRegistry.Register<P1TestCmdArgs>((_, _) => tcs.Task);
+        cmdRegistry.Register<ActivityTestCmdArgs>((_, _) => tcs.Task);
         var catalog = cmdRegistry.BuildCatalog();
 
         var binder = new CommandBinder(new CommandBindingContext(0.35));
@@ -233,7 +251,7 @@ public sealed class Phase1ActivityObserverTests
         var snap = registry.Snapshot();
         Assert.Single(snap);
         Assert.Equal("Command", snap[0].Type);
-        Assert.Equal("p1_test_cmd", snap[0].Source);
+        Assert.Equal("activity_test_cmd", snap[0].Source);
 
         // Complete command
         tcs.SetResult();

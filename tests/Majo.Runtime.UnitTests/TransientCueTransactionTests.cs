@@ -15,7 +15,7 @@ using Xunit;
 
 namespace Majo.Runtime.UnitTests;
 
-public sealed class Phase2TransientCueTransactionTests
+public sealed class TransientCueTransactionTests
 {
     private static readonly DirectionCue DummyCue = new("test-cue", new Dictionary<string, string>());
     private static readonly StageCreatePatch DummyVisual = new(

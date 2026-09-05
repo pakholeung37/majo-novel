@@ -37,6 +37,7 @@ public partial class HeadlessTestRunner
         configuration.Dialogue!.DefaultProjectId = "M95State";
         configuration.Dialogue.HotReload.Enabled = false;
         configuration.Presentation!.Enabled = true;
+        configuration.Diagnostics!.MinimumLevel = RuntimeLogLevel.Debug;
         configuration.Presentation.LettersPerSecond = 10_000;
         configuration.Presentation.UseFadeEffect = false;
         configuration.Save!.Enabled = true;
