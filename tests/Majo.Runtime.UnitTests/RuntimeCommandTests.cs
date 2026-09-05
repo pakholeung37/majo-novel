@@ -604,6 +604,45 @@ public sealed class RuntimeCommandTests
         Assert.Equal(3, merged.Commands.Count);
         Assert.Contains(merged.Commands, c => c.Name == "save");
         Assert.Contains(merged.Commands, c => c.Name == "probe");
+        Assert.Equal("provider2", manifest2.Commands.Single(c => c.Name == "probe").ProviderId);
+        Assert.Equal("2.0", manifest2.Commands.Single(c => c.Name == "probe").Version);
+    }
+
+    [Fact]
+    public void SchemaRejectsDuplicateParametersAndMultiplePrimaryParameters()
+    {
+        Assert.Throws<RuntimeCommandException>(() =>
+            CommandSchema<WaitArguments>
+                .Create("duplicate")
+                .Optional<bool>("value")
+                .Optional<bool>("VALUE")
+                .Build(static values => new WaitArguments(values.Optional<bool>("value"))));
+
+        Assert.Throws<RuntimeCommandException>(() =>
+            CommandSchema<WaitArguments>
+                .Create("multiple-primary")
+                .Primary<string>("first")
+                .Primary<string>("second")
+                .Build(static values => new WaitArguments(CommandValue<bool>.Unspecified())));
+
+        Assert.Throws<RuntimeCommandException>(() =>
+            CommandSchema<WaitArguments>
+                .Create("unknown-set")
+                .Optional<bool>("value")
+                .ParameterSet(CommandParameterSetRule.ExactlyOne, "value", "missing")
+                .Build(static values => new WaitArguments(values.Optional<bool>("value"))));
+    }
+
+    [Fact]
+    public async Task CommandCannotExecuteBeforeCatalogAttachment()
+    {
+        var command = new ProbeCommand();
+        var exception = await Assert.ThrowsAsync<RuntimeCommandException>(() =>
+            command.ExecuteAsync(
+                new CommandInput("probe"),
+                new CommandExecutionContext("unattached" )).AsTask());
+
+        Assert.Equal(CommandFailurePhase.Schema, exception.FailurePhase);
     }
 
     [Fact]
@@ -632,6 +671,46 @@ public sealed class RuntimeCommandTests
         Assert.Equal(CommandValueOrigin.Explicit, res2.Wait.Origin);
     }
 
+    [Fact]
+    public void RegisteredParameterGroupAndManifestMetadataArePreserved()
+    {
+        var groups = new CommandParameterGroupRegistry();
+        groups.Add("plugin-target", new DelegateCommandParameterGroup<WaitArguments>(
+            "plugin-target",
+            new[]
+            {
+                new CommandParameterSpec(
+                    "target",
+                    0,
+                    Primary: false,
+                    Required: true,
+                    typeof(string),
+                    "id"),
+            },
+            (raw, _) => new WaitArguments(
+                raw.Named.ContainsKey("target")
+                    ? CommandValue<bool>.Explicit(true)
+                    : CommandValue<bool>.Unspecified())));
+
+        var schema = CommandSchema<WaitArguments>
+            .Create("plugin command")
+            .Optional<string>("other")
+            .Use("plugin-target", groups)
+            .ParameterSet(CommandParameterSetRule.AtLeastOne, "target", "other")
+            .Build(static values => values.Group<WaitArguments>("plugin-target"));
+
+        var registry = new RuntimeCommandRegistry();
+        registry.Add("plugin command", _ => new TestSchemaCommand(schema), "plugin", "9.0");
+        var catalog = registry.BuildCatalog();
+        var manifest = RuntimeCommandManifest.FromCatalog(catalog, "fallback", "1.0");
+        var entry = Assert.Single(manifest.Commands);
+
+        Assert.Equal("plugin", entry.ProviderId);
+        Assert.Equal("9.0", entry.Version);
+        Assert.Contains(entry.ParameterGroups, group => group.Id == "plugin-target");
+        Assert.Contains(entry.ParameterSets, set => set.Rule == CommandParameterSetRule.AtLeastOne);
+    }
+
     private static YarnCommandAdapter CreateAdapter(
         FakeCommandRegistry yarnRegistry,
         out RuntimeCommandCatalog catalog,
@@ -655,6 +734,16 @@ public sealed class RuntimeCommandTests
             yarnRegistry,
             catalog,
             dispatcher);
+    }
+
+    private sealed class TestSchemaCommand : RuntimeCommand<WaitArguments>
+    {
+        public TestSchemaCommand(CommandSchema<WaitArguments> schema) => Schema = schema;
+
+        public override CommandSchema<WaitArguments> Schema { get; }
+
+        protected override ValueTask ExecuteAsync(WaitArguments arguments, CommandExecutionContext context) =>
+            ValueTask.CompletedTask;
     }
 
     private sealed class ProbeCommand : RuntimeCommand<ProbeCommand.Arguments>

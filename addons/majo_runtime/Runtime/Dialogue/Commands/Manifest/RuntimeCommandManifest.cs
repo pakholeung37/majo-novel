@@ -28,6 +28,20 @@ public sealed class CommandParameterManifestEntry
     public double Minimum { get; init; } = double.NaN;
 }
 
+public sealed class CommandParameterGroupManifestEntry
+{
+    public string Id { get; init; } = string.Empty;
+
+    public IReadOnlyList<string> Parameters { get; init; } = Array.Empty<string>();
+}
+
+public sealed class CommandParameterSetManifestEntry
+{
+    public CommandParameterSetRule Rule { get; init; }
+
+    public IReadOnlyList<string> Parameters { get; init; } = Array.Empty<string>();
+}
+
 public sealed class CommandManifestEntry
 {
     public string Name { get; init; } = string.Empty;
@@ -44,6 +58,12 @@ public sealed class CommandManifestEntry
 
     public IReadOnlyList<CommandParameterManifestEntry> Parameters { get; init; } =
         Array.Empty<CommandParameterManifestEntry>();
+
+    public IReadOnlyList<CommandParameterGroupManifestEntry> ParameterGroups { get; init; } =
+        Array.Empty<CommandParameterGroupManifestEntry>();
+
+    public IReadOnlyList<CommandParameterSetManifestEntry> ParameterSets { get; init; } =
+        Array.Empty<CommandParameterSetManifestEntry>();
 }
 
 public sealed class RuntimeCommandManifest
@@ -87,6 +107,21 @@ public sealed class RuntimeCommandManifest
                         Minimum = param.Minimum,
                     })
                     .ToArray(),
+                ParameterGroups = command.Schema.Groups
+                    .Select(group => new CommandParameterGroupManifestEntry
+                    {
+                        Id = group.Key,
+                        Parameters = group.Value.Parameters.Select(parameter => parameter.Name).ToArray(),
+                    })
+                    .OrderBy(group => group.Id, StringComparer.OrdinalIgnoreCase)
+                    .ToArray(),
+                ParameterSets = command.Schema.ParameterSets
+                    .Select(set => new CommandParameterSetManifestEntry
+                    {
+                        Rule = set.Rule,
+                        Parameters = set.Parameters.ToArray(),
+                    })
+                    .ToArray(),
             })
             .ToArray();
 
@@ -104,7 +139,54 @@ public sealed class RuntimeCommandManifest
         string? version = null)
     {
         ArgumentNullException.ThrowIfNull(catalog);
-        return Create(providerId, version, catalog.Commands);
+        var entries = catalog.Entries
+            .Select(entry => new CommandManifestEntry
+            {
+                Name = entry.Command.Schema.Name,
+                Path = entry.Command.Schema.Path,
+                Category = entry.Command.Schema.Category,
+                Usage = entry.Command.Schema.Usage,
+                ProviderId = string.IsNullOrWhiteSpace(entry.ProviderId) ? providerId : entry.ProviderId,
+                Version = entry.Version ?? version,
+                Parameters = entry.Command.Schema.Parameters
+                    .OrderBy(parameter => parameter.Order)
+                    .Select(parameter => new CommandParameterManifestEntry
+                    {
+                        Name = parameter.Name,
+                        Order = parameter.Order,
+                        Primary = parameter.Primary,
+                        Required = parameter.Required,
+                        ValueType = parameter.ValueType.Name,
+                        ValueHint = parameter.ValueHint,
+                        ContractDefault = parameter.ContractDefault?.ToString(),
+                        Minimum = parameter.Minimum,
+                    })
+                    .ToArray(),
+                ParameterGroups = entry.Command.Schema.Groups
+                    .Select(group => new CommandParameterGroupManifestEntry
+                    {
+                        Id = group.Key,
+                        Parameters = group.Value.Parameters.Select(parameter => parameter.Name).ToArray(),
+                    })
+                    .OrderBy(group => group.Id, StringComparer.OrdinalIgnoreCase)
+                    .ToArray(),
+                ParameterSets = entry.Command.Schema.ParameterSets
+                    .Select(set => new CommandParameterSetManifestEntry
+                    {
+                        Rule = set.Rule,
+                        Parameters = set.Parameters.ToArray(),
+                    })
+                    .ToArray(),
+            })
+            .OrderBy(command => command.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return new RuntimeCommandManifest
+        {
+            ProviderId = providerId,
+            Version = version,
+            Commands = new ReadOnlyCollection<CommandManifestEntry>(entries),
+        };
     }
 
     private static readonly JsonSerializerOptions IndentedJsonOptions = new()

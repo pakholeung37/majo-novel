@@ -165,14 +165,10 @@ public sealed class RuntimeCommandRegistry : IRuntimeCommandRegistrar
         IServiceResolver? services = null,
         CommandBindingEnvironment? environment = null)
     {
-        isRegistrationSealed = true;
-        isSealed = true;
-
         var resolver = services ?? EmptyServiceResolver.Instance;
         var env = environment ?? new CommandBindingEnvironment(new CommandValueConverterRegistry());
-        env.Converters.Seal();
 
-        var commands = new List<IRuntimeCommand>(registrations.Count);
+        var entries = new List<RuntimeCommandCatalogEntry>(registrations.Count);
 
         foreach (var registration in registrations.Values)
         {
@@ -211,10 +207,16 @@ public sealed class RuntimeCommandRegistry : IRuntimeCommandRegistrar
 
             command.Schema.Validate(env);
             command.Schema.AttachEnvironment(env);
-            commands.Add(command);
+            entries.Add(new RuntimeCommandCatalogEntry(
+                command,
+                registration.ProviderId,
+                registration.Version));
         }
 
-        return new RuntimeCommandCatalog(commands);
+        env.Converters.Seal();
+        isRegistrationSealed = true;
+        isSealed = true;
+        return new RuntimeCommandCatalog(entries);
     }
 
     private void EnsureMutable()
@@ -251,11 +253,18 @@ public sealed class RuntimeCommandCatalog
     private readonly ReadOnlyDictionary<string, IRuntimeCommand> commandsByName;
 
     public RuntimeCommandCatalog(IReadOnlyList<IRuntimeCommand> commands)
+        : this(commands.Select(command => new RuntimeCommandCatalogEntry(command, string.Empty, null)).ToArray())
     {
-        Commands = commands ?? throw new ArgumentNullException(nameof(commands));
+    }
+
+    internal RuntimeCommandCatalog(IReadOnlyList<RuntimeCommandCatalogEntry> entries)
+    {
+        Entries = entries ?? throw new ArgumentNullException(nameof(entries));
+        Commands = new ReadOnlyCollection<IRuntimeCommand>(entries.Select(entry => entry.Command).ToArray());
         var dict = new Dictionary<string, IRuntimeCommand>(StringComparer.OrdinalIgnoreCase);
-        foreach (var command in commands)
+        foreach (var entry in entries)
         {
+            var command = entry.Command;
             if (!dict.TryAdd(command.Schema.Name, command))
             {
                 throw new RuntimeCommandException(
@@ -271,6 +280,8 @@ public sealed class RuntimeCommandCatalog
 
     public IReadOnlyList<IRuntimeCommand> Commands { get; }
 
+    public IReadOnlyList<RuntimeCommandCatalogEntry> Entries { get; }
+
     public IRuntimeCommand Get(string commandName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(commandName);
@@ -285,4 +296,18 @@ public sealed class RuntimeCommandCatalog
 
     public bool TryGet(string commandName, out IRuntimeCommand? command) =>
         commandsByName.TryGetValue(commandName, out command);
+}
+
+public sealed class RuntimeCommandCatalogEntry
+{
+    public RuntimeCommandCatalogEntry(IRuntimeCommand command, string providerId, string? version)
+    {
+        Command = command ?? throw new ArgumentNullException(nameof(command));
+        ProviderId = providerId ?? string.Empty;
+        Version = version;
+    }
+
+    public IRuntimeCommand Command { get; }
+    public string ProviderId { get; }
+    public string? Version { get; }
 }

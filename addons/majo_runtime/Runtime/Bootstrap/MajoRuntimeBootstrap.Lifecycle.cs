@@ -15,8 +15,6 @@ public partial class MajoRuntimeBootstrap : Node
     {
         try
         {
-            yarnCommandAdapter.CommandFailed -= HandleCommandFailed;
-            yarnCommandAdapter.Detach();
             yarnDialogueBackend = null;
             dialoguePlayer = null;
             dialoguePresentation = null;
@@ -41,6 +39,9 @@ public partial class MajoRuntimeBootstrap : Node
                         cancellationToken);
                 }
             }
+
+            yarnCommandAdapter.CommandFailed -= HandleCommandFailed;
+            yarnCommandAdapter.Detach();
 
             TeardownDiagnosticsAndOverlays();
 

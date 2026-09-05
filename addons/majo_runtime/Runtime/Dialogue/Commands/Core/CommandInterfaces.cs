@@ -36,6 +36,15 @@ public abstract class RuntimeCommand<TArguments> : IRuntimeCommand
         ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(context);
 
+        if (!Schema.IsEnvironmentAttached)
+        {
+            throw new RuntimeCommandException(
+                input.CommandName,
+                "Command schema has not been attached to a catalog binding environment.",
+                recoverable: false,
+                phase: CommandFailurePhase.Schema);
+        }
+
         TArguments arguments;
         try
         {

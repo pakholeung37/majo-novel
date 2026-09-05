@@ -163,6 +163,8 @@ public interface ICommandSchema
 
     IReadOnlyDictionary<string, ICommandParameterGroup> Groups { get; }
 
+    bool IsEnvironmentAttached { get; }
+
     void Validate(CommandBindingEnvironment environment);
 
     void AttachEnvironment(CommandBindingEnvironment environment);
@@ -217,6 +219,8 @@ public sealed class CommandSchema<TArguments> : ICommandSchema
 
     public IReadOnlyDictionary<string, ICommandParameterGroup> Groups => groups;
 
+    public bool IsEnvironmentAttached => attachedEnvironment is not null;
+
     public static CommandSchemaBuilder<TArguments> Create(
         string name,
         string? category = null,
@@ -262,21 +266,21 @@ public sealed class CommandSchema<TArguments> : ICommandSchema
     public void AttachEnvironment(CommandBindingEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(environment);
+        if (attachedEnvironment is not null && !ReferenceEquals(attachedEnvironment, environment))
+        {
+            throw new InvalidOperationException($"Command schema '{Name}' is already attached to a binding environment.");
+        }
         attachedEnvironment = environment;
     }
 
-    public TArguments Bind(
-        RawCommandArguments arguments,
-        CommandBindingEnvironment? environment = null)
+    public TArguments Bind(RawCommandArguments arguments)
     {
         ArgumentNullException.ThrowIfNull(arguments);
-        var env = environment ?? attachedEnvironment ?? CommandBindingEnvironment.Default;
+        var env = attachedEnvironment ?? CommandBindingEnvironment.Default;
         return BindInternal(arguments, env);
     }
 
-    public TArguments Bind(
-        CommandInput input,
-        CommandBindingEnvironment? environment = null)
+    public TArguments Bind(CommandInput input)
     {
         ArgumentNullException.ThrowIfNull(input);
         if (!string.Equals(input.CommandName, Name, StringComparison.OrdinalIgnoreCase))
@@ -287,7 +291,7 @@ public sealed class CommandSchema<TArguments> : ICommandSchema
                 phase: CommandFailurePhase.Binding);
         }
 
-        var env = environment ?? attachedEnvironment ?? CommandBindingEnvironment.Default;
+        var env = attachedEnvironment ?? CommandBindingEnvironment.Default;
         var raw = ParseRaw(input.RawArguments);
         return BindInternal(raw, env);
     }
@@ -610,6 +614,14 @@ public sealed class CommandSchemaBuilder<TArguments>
         ICommandParameterGroup<TGroup> group) =>
         Use(groupId, (ICommandParameterGroup)group);
 
+    public CommandSchemaBuilder<TArguments> Use(
+        string groupId,
+        CommandParameterGroupRegistry registry)
+    {
+        ArgumentNullException.ThrowIfNull(registry);
+        return Use(groupId, registry.Get(groupId));
+    }
+
     public CommandSchemaBuilder<TArguments> ParameterSet(
         CommandParameterSetRule rule,
         params string[] parameters)
@@ -631,6 +643,43 @@ public sealed class CommandSchemaBuilder<TArguments>
         Func<CommandArgumentValues, TArguments> factory)
     {
         ArgumentNullException.ThrowIfNull(factory);
+
+        var duplicateCommandParameter = commandParameters
+            .GroupBy(parameter => parameter.Name, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(group => group.Count() > 1);
+        if (duplicateCommandParameter is not null)
+        {
+            throw new RuntimeCommandException(
+                name,
+                $"Parameter '{duplicateCommandParameter.Key}' is declared more than once.",
+                phase: CommandFailurePhase.Schema);
+        }
+
+        if (commandParameters.Count(parameter => parameter.Primary) > 1)
+        {
+            throw new RuntimeCommandException(
+                name,
+                "A command can declare at most one primary parameter.",
+                phase: CommandFailurePhase.Schema);
+        }
+
+        var parameterNames = new HashSet<string>(
+            commandParameters.Select(parameter => parameter.Name)
+                .Concat(groups.Values.SelectMany(group => group.Parameters).Select(parameter => parameter.Name)),
+            StringComparer.OrdinalIgnoreCase);
+        foreach (var parameterSet in parameterSets)
+        {
+            foreach (var parameterName in parameterSet.Parameters)
+            {
+                if (!parameterNames.Contains(parameterName))
+                {
+                    throw new RuntimeCommandException(
+                        name,
+                        $"Parameter set references unknown parameter '{parameterName}'.",
+                        phase: CommandFailurePhase.Schema);
+                }
+            }
+        }
 
         var allParameters = new List<CommandParameterSpec>(commandParameters);
         var existingNames = new HashSet<string>(
