@@ -15,11 +15,8 @@ public partial class MajoRuntimeBootstrap : Node
     {
         try
         {
-            if (yarnCommandAdapter is not null)
-            {
-                yarnCommandAdapter.CommandFailed -= HandleCommandFailed;
-                yarnCommandAdapter = null;
-            }
+            yarnCommandAdapter.CommandFailed -= HandleCommandFailed;
+            yarnCommandAdapter.Detach();
             yarnDialogueBackend = null;
             dialoguePlayer = null;
             dialoguePresentation = null;

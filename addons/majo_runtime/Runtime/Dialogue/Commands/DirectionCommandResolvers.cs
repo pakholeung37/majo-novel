@@ -1,16 +1,19 @@
 #nullable enable
 
 using System;
+using System.Threading;
+using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Actors.Godot;
 using Majo.Runtime.Configuration;
+using Majo.Runtime.Core;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Resources;
 
 namespace Majo.Runtime.Dialogue.Commands;
 
-public interface IDirectionResourceKeyResolver
+public interface IDirectionResourceKeyResolver : IRuntimeService
 {
     ResourceKey ResolveBackdrop(string semanticId);
 }
@@ -27,6 +30,10 @@ public sealed class DirectionResourceKeyResolver : IDirectionResourceKeyResolver
 
     public ResourceKey ResolveBackdrop(string semanticId) => Resolve(semanticId);
 
+    public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
     private ResourceKey Resolve(string semanticId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(semanticId);
@@ -38,7 +45,7 @@ public sealed class DirectionResourceKeyResolver : IDirectionResourceKeyResolver
     }
 }
 
-public interface IDirectionPositionResolver
+public interface IDirectionPositionResolver : IRuntimeService
 {
     DirectionPoint Resolve(string value);
 }
@@ -52,6 +59,10 @@ public sealed class DirectionPositionResolver : IDirectionPositionResolver
         this.configuration = configuration ??
             throw new ArgumentNullException(nameof(configuration));
     }
+
+    public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     public DirectionPoint Resolve(string value)
     {

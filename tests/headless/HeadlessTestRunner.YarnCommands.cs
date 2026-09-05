@@ -54,19 +54,13 @@ public partial class HeadlessTestRunner
             Configuration = configuration,
             ConfigureServices = services => services.AddSingleton<HeadlessLifecycleService>(
                 _ => customCommandService),
-            ConfigureCommands = commands => commands.Register<HeadlessProbeCommandArguments>(
-                (arguments, context) =>
-                {
-                    Assert(arguments.Value == "alpha",
-                        "Custom command received incorrect arguments.");
-                    Assert(context.Actors is not null,
-                        "Custom command did not receive ActorManager context.");
-                    Assert(context.Services?.Get<HeadlessLifecycleService>() ==
-                        customCommandService,
-                        "Custom command could not resolve a game extension service.");
-                    customCommandRan = true;
-                    return Task.CompletedTask;
-                }),
+            ConfigureCommands = commands => commands.Add(
+                "majo_probe",
+                services => new HeadlessProbeCommand(
+                    services.Get<HeadlessLifecycleService>(),
+                    () => customCommandRan = true),
+                "test",
+                "1.0"),
         };
         bootstrap.ConfigureDialoguePresenters += presenters =>
             presenters.Register(presenter);
@@ -239,13 +233,31 @@ public partial class HeadlessTestRunner
         Assert(!IsInstanceValid(runner), "M4 DialogueRunner leaked after cleanup.");
     }
 
-    [RuntimeCommand(
-        "majo_probe",
-        Category = "Test",
-        Usage = "majo_probe <value>")]
-    private sealed class HeadlessProbeCommandArguments
+    private sealed class HeadlessProbeCommand : RuntimeCommand<HeadlessProbeCommand.Arguments>
     {
-        [CommandParameter("value", 0, Primary = true, Required = true)]
-        public string Value { get; set; } = string.Empty;
+        private readonly HeadlessLifecycleService service;
+        private readonly Action onRan;
+
+        public HeadlessProbeCommand(HeadlessLifecycleService service, Action onRan)
+        {
+            this.service = service ?? throw new ArgumentNullException(nameof(service));
+            this.onRan = onRan ?? throw new ArgumentNullException(nameof(onRan));
+        }
+
+        public override CommandSchema<Arguments> Schema { get; } =
+            CommandSchema<Arguments>
+                .Create("majo_probe", category: "Test", usage: "majo_probe <value>")
+                .Primary<string>("value")
+                .Build(static values => new Arguments(values.Required<string>("value")));
+
+        protected override ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
+        {
+            Assert(arguments.Value == "alpha", "Custom command received incorrect arguments.");
+            Assert(service is not null, "Custom command could not resolve a game extension service.");
+            onRan();
+            return ValueTask.CompletedTask;
+        }
+
+        public sealed record Arguments(string Value = "");
     }
 }

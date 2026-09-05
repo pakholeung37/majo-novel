@@ -1,785 +1,134 @@
 #nullable enable
 
 using System;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
-using Godot;
-using Majo.Runtime.Direction.Core;
+using Majo.Runtime.Core;
 using Majo.Runtime.Direction.Execution;
-using Majo.Runtime.Direction.Transitions;
-using Majo.Runtime.Stage;
 
 namespace Majo.Runtime.Dialogue.Commands;
 
 public sealed class DirectionCommandModule : IRuntimeCommandModule
 {
-	private readonly IDirectionBeatRuntime beats;
-	private readonly IDirectionResourceKeyResolver resources;
-	private readonly IDirectionPositionResolver positions;
-	private readonly IDirectionScopeResolver scopes;
-	private readonly Func<string?> currentNode;
-	private long anonymousBeatSequence;
-
-	public DirectionCommandModule(
-		IDirectionBeatRuntime beats,
-		IDirectionResourceKeyResolver resources,
-		IDirectionPositionResolver positions,
-		IDirectionScopeResolver scopes,
-		Func<string?> currentNode)
-	{
-		this.beats = beats ?? throw new ArgumentNullException(nameof(beats));
-		this.resources = resources ?? throw new ArgumentNullException(nameof(resources));
-		this.positions = positions ?? throw new ArgumentNullException(nameof(positions));
-		this.scopes = scopes ?? throw new ArgumentNullException(nameof(scopes));
-		this.currentNode = currentNode ?? throw new ArgumentNullException(nameof(currentNode));
-	}
-
 	public void Register(IRuntimeCommandRegistrar commands)
 	{
 		ArgumentNullException.ThrowIfNull(commands);
-		commands
-			.Register<StageDefineDirectionCommandArguments>(StageDefineAsync)
-			.Register<StageShowDirectionCommandArguments>(StageShowAsync)
-			.Register<StageClearDirectionCommandArguments>(StageClearAsync)
-			.Register<StageReleaseDirectionCommandArguments>(StageReleaseAsync)
-			.Register<BackdropDirectionCommandArguments>(BackdropAsync)
-			.Register<CharacterDirectionCommandArguments>(CharacterAsync)
-			.Register<LeaveDirectionCommandArguments>(LeaveAsync)
-			.Register<ViewDefineDirectionCommandArguments>(ViewDefineAsync)
-			.Register<ViewReleaseDirectionCommandArguments>(ViewReleaseAsync)
-			.Register<CameraPoseDirectionCommandArguments>(CameraPoseAsync)
-			.Register<CameraMoveDirectionCommandArguments>(CameraMoveAsync)
-			.Register<CameraResetDirectionCommandArguments>(CameraResetAsync)
-			.Register<CameraFxDirectionCommandArguments>(CameraFxAsync)
-			.Register<ShotUseDirectionCommandArguments>(ShotUseAsync)
-			.Register<LayoutDirectionCommandArguments>(LayoutAsync)
-			.Register<DirectionImportCommandArguments>(ImportAsync)
-			.Register<DirectionMarkCommandArguments>(MarkAsync)
-			.Register<CurtainDirectionCommandArguments>(CurtainAsync)
-			.Register<BeatBeginDirectionCommandArguments>(BeatBeginAsync)
-			.Register<BeatEndDirectionCommandArguments>(BeatEndAsync)
-			.Register<BeatJoinDirectionCommandArguments>(BeatJoinAsync)
-			.Register<BeatFinishDirectionCommandArguments>(BeatFinishAsync)
-			.Register<BeatAbortDirectionCommandArguments>(BeatAbortAsync);
-	}
 
-	private Task StageDefineAsync(
-		StageDefineDirectionCommandArguments a,
-		RuntimeCommandContext c) => ExecuteAsync("stage define", async () =>
-	{
-		await beats.SubmitAsync(
-			new StageCreatePatch(
-				Stage(a.Stage),
-				DefaultView(a.Stage),
-				DirectionTransitionSpec.Cut),
-			DirectionCompletionBarrier.Commit,
-			c.CancellationToken);
-	});
+		const string providerId = "majo.direction";
+		const string version = "1.0";
 
-	private Task StageShowAsync(
-		StageShowDirectionCommandArguments a,
-		RuntimeCommandContext c) => ExecuteAsync("stage show", async () =>
-	{
-		await beats.SubmitAsync(
-			new ScreenPatch(
-				LayoutId.SingleLayout,
-				new Dictionary<LayoutSlotId, ViewId>
-				{
-					[LayoutSlotId.Main] = DefaultView(a.Stage),
-				},
-				Transition(a, c, DirectionTransitionKind.Cut, DirectionTransitionKind.Dissolve)),
-			Barrier(a.Wait),
-			c.CancellationToken);
-	});
+		commands.Add("stage define", services => new StageDefineCommand(
+			services.Get<IDirectionBeatRuntime>(),
+			services.Get<IDirectionScopeResolver>(),
+			services.Get<IDialogueNodeAccessor>()), providerId, version);
 
-	private Task StageClearAsync(
-		StageClearDirectionCommandArguments a,
-		RuntimeCommandContext c) => ExecuteAsync("stage clear", async () =>
-	{
-		await beats.SubmitAsync(
-			new StageClearPatch(
-				Stage(a.Stage),
-				Transition(
-					a,
-					c,
-					DirectionTransitionKind.Cut,
-					DirectionTransitionKind.Fade,
-					DirectionTransitionKind.Dissolve)),
-			Barrier(a.Wait),
-			c.CancellationToken);
-	});
+		commands.Add("stage show", services => new StageShowCommand(
+			services.Get<IDirectionBeatRuntime>(),
+			services.Get<IDirectionScopeResolver>(),
+			services.Get<IDialogueNodeAccessor>(),
+			services.Get<IDirectionCommandPolicy>()), providerId, version);
 
-	private Task StageReleaseAsync(
-		StageReleaseDirectionCommandArguments a,
-		RuntimeCommandContext c) => ExecuteAsync("stage release", async () =>
-	{
-		await beats.SubmitAsync(
-			new StageReleasePatch(
-				Stage(a.Stage),
-				DirectionTransitionSpec.Cut),
-			DirectionCompletionBarrier.Commit,
-			c.CancellationToken);
-	});
+		commands.Add("stage clear", services => new StageClearCommand(
+			services.Get<IDirectionBeatRuntime>(),
+			services.Get<IDirectionScopeResolver>(),
+			services.Get<IDialogueNodeAccessor>(),
+			services.Get<IDirectionCommandPolicy>()), providerId, version);
 
-	private Task BackdropAsync(
-		BackdropDirectionCommandArguments a,
-		RuntimeCommandContext c) => ExecuteAsync("backdrop", async () =>
-	{
-		await beats.SubmitAsync(
-			new BackdropPatch(
-				Stage(a.Stage),
-				new BackdropState(resources.ResolveBackdrop(a.Resource)),
-				Transition(
-					a,
-					c,
-					DirectionTransitionKind.Cut,
-					DirectionTransitionKind.Fade,
-					DirectionTransitionKind.Dissolve)),
-			Barrier(a.Wait),
-			c.CancellationToken);
-	});
+		commands.Add("stage release", services => new StageReleaseCommand(
+			services.Get<IDirectionBeatRuntime>(),
+			services.Get<IDirectionScopeResolver>(),
+			services.Get<IDialogueNodeAccessor>()), providerId, version);
 
-	private Task CharacterAsync(
-		CharacterDirectionCommandArguments a,
-		RuntimeCommandContext c) => ExecuteAsync("character", async () =>
-	{
-		await beats.SubmitAsync(
-			new ActorPatch(
-				Stage(a.Stage),
-				new ActorId(a.Actor),
-				a.At is null
-					? default
-					: DirectionValue.From(ResolvePosition(a.At)),
-				a.Appearance is null
-					? default
-					: DirectionValue.From<string?>(a.Appearance),
-				a.Scale is null
-					? default
-					: DirectionValue.From((float)a.Scale.Value),
-				a.Z is null ? default : DirectionValue.From(a.Z.Value),
-				Transition(
-					a,
-					c,
-					DirectionTransitionKind.Cut,
-					DirectionTransitionKind.Move,
-					DirectionTransitionKind.Fade,
-					DirectionTransitionKind.Dissolve)),
-			Barrier(a.Wait),
-			c.CancellationToken);
-	});
+		commands.Add("backdrop", services => new BackdropCommand(
+			services.Get<IDirectionBeatRuntime>(),
+			services.Get<IDirectionResourceKeyResolver>(),
+			services.Get<IDirectionScopeResolver>(),
+			services.Get<IDialogueNodeAccessor>(),
+			services.Get<IDirectionCommandPolicy>()), providerId, version);
 
-	private Task LeaveAsync(
-		LeaveDirectionCommandArguments a,
-		RuntimeCommandContext c) => ExecuteAsync("leave", async () =>
-	{
-		await beats.SubmitAsync(
-			new ActorLeavePatch(
-				Stage(a.Stage),
-				new ActorId(a.Actor),
-				Transition(
-					a,
-					c,
-					DirectionTransitionKind.Cut,
-					DirectionTransitionKind.Fade,
-					DirectionTransitionKind.Dissolve)),
-			Barrier(a.Wait),
-			c.CancellationToken);
-	});
+		commands.Add("character", services => new CharacterCommand(
+			services.Get<IDirectionBeatRuntime>(),
+			services.Get<IDirectionPositionResolver>(),
+			services.Get<IDirectionScopeResolver>(),
+			services.Get<IDialogueNodeAccessor>(),
+			services.Get<IDirectionCommandPolicy>()), providerId, version);
 
-	private Task ViewDefineAsync(
-		ViewDefineDirectionCommandArguments a,
-		RuntimeCommandContext c) => ExecuteAsync("view define", async () =>
-	{
-		await beats.SubmitAsync(
-			new ViewCreatePatch(
-				View(a.View),
-				Stage(a.Stage),
-				DirectionTransitionSpec.Cut),
-			DirectionCompletionBarrier.Commit,
-			c.CancellationToken);
-	});
+		commands.Add("leave", services => new LeaveCommand(
+			services.Get<IDirectionBeatRuntime>(),
+			services.Get<IDirectionScopeResolver>(),
+			services.Get<IDialogueNodeAccessor>(),
+			services.Get<IDirectionCommandPolicy>()), providerId, version);
 
-	private Task ViewReleaseAsync(
-		ViewReleaseDirectionCommandArguments a,
-		RuntimeCommandContext c) => ExecuteAsync("view release", async () =>
-	{
-		await beats.SubmitAsync(
-			new ViewReleasePatch(
-				View(a.View),
-				DirectionTransitionSpec.Cut),
-			DirectionCompletionBarrier.Commit,
-			c.CancellationToken);
-	});
+		commands.Add("view define", services => new ViewDefineCommand(
+			services.Get<IDirectionBeatRuntime>(),
+			services.Get<IDirectionScopeResolver>(),
+			services.Get<IDialogueNodeAccessor>()), providerId, version);
 
-	private Task CameraPoseAsync(
-		CameraPoseDirectionCommandArguments a,
-		RuntimeCommandContext c) => ExecuteAsync("camera pose", async () =>
-	{
-		var patch = CameraPatch(a, CameraPoseTransition(a, a.Via, c));
-		if (a.As is not null)
-			scopes.DefineShot(RequireNode(), a.As, patch);
-		await beats.SubmitAsync(patch, Barrier(a.Wait), c.CancellationToken);
-	});
+		commands.Add("view release", services => new ViewReleaseCommand(
+			services.Get<IDirectionBeatRuntime>(),
+			services.Get<IDirectionScopeResolver>(),
+			services.Get<IDialogueNodeAccessor>()), providerId, version);
 
-	private Task CameraMoveAsync(
-		CameraMoveDirectionCommandArguments a,
-		RuntimeCommandContext c) => ExecuteAsync("camera move", async () =>
-	{
-		var transition = MotionTransition(a, c, DirectionTransitionKind.Move);
-		await beats.SubmitAsync(
-			CameraPatch(a, transition),
-			Barrier(a.Wait),
-			c.CancellationToken);
-	});
+		commands.Add("camera pose", services => new CameraPoseCommand(
+			services.Get<IDirectionBeatRuntime>(),
+			services.Get<IDirectionScopeResolver>(),
+			services.Get<IDialogueNodeAccessor>(),
+			services.Get<IDirectionCommandPolicy>()), providerId, version);
 
-	private Task CameraResetAsync(
-		CameraResetDirectionCommandArguments a,
-		RuntimeCommandContext c) => ExecuteAsync("camera reset", async () =>
-	{
-		var patch = new ViewPosePatch(
-			CameraTarget(a.Stage, a.View),
-			DirectionValue.From(new DirectionPoint(50, 50)),
-			DirectionValue.From(1f),
-			DirectionValue.From(0f),
-			CameraPoseTransition(a, a.Via, c, true));
-		await beats.SubmitAsync(patch, Barrier(a.Wait), c.CancellationToken);
-	});
+		commands.Add("camera move", services => new CameraMoveCommand(
+			services.Get<IDirectionBeatRuntime>(),
+			services.Get<IDirectionScopeResolver>(),
+			services.Get<IDialogueNodeAccessor>(),
+			services.Get<IDirectionCommandPolicy>()), providerId, version);
 
-	private Task CameraFxAsync(
-		CameraFxDirectionCommandArguments a,
-		RuntimeCommandContext c) => ExecuteAsync("camera fx", async () =>
-	{
-		var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-		if (a.Strength.HasValue) parameters["strength"] = a.Strength.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
-		if (a.Axis.HasValue) parameters["axis"] = a.Axis.Value.ToString().ToLowerInvariant();
-		if (a.Frequency.HasValue) parameters["frequency"] = a.Frequency.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
-		if (a.Zoom.HasValue) parameters["zoom"] = a.Zoom.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
-		var duration = a.Duration ?? 0.4;
+		commands.Add("camera reset", services => new CameraResetCommand(
+			services.Get<IDirectionBeatRuntime>(),
+			services.Get<IDirectionScopeResolver>(),
+			services.Get<IDialogueNodeAccessor>(),
+			services.Get<IDirectionCommandPolicy>()), providerId, version);
 
-		await beats.SubmitAsync(
-			new CameraFxCue(
-				CameraTarget(a.Stage, a.View),
-				a.Effect,
-				parameters,
-				duration,
-				new DirectionSourceLocation(RequireNode(), 0, 0)),
-			Barrier(a.Wait),
-			c.CancellationToken);
-	});
+		commands.Add("camera fx", services => new CameraFxCommand(
+			services.Get<IDirectionBeatRuntime>(),
+			services.Get<IDirectionScopeResolver>(),
+			services.Get<IDialogueNodeAccessor>()), providerId, version);
 
-	private Task ShotUseAsync(
-		ShotUseDirectionCommandArguments a,
-		RuntimeCommandContext c) => ExecuteAsync("shot use", async () =>
-	{
-		var patch = scopes.ResolveShot(RequireNode(), a.Alias);
-		if (a.Stage is not null || a.View is not null)
-			patch = patch with { ViewId = CameraTarget(a.Stage, a.View) };
-		patch = patch with { Transition = Transition(a, c, DirectionTransitionId.Cut, DirectionTransitionId.Move, DirectionTransitionId.Fade, DirectionTransitionId.Dissolve) };
-		await beats.SubmitAsync(patch, Barrier(a.Wait), c.CancellationToken);
-	});
+		commands.Add("shot use", services => new ShotUseCommand(
+			services.Get<IDirectionBeatRuntime>(),
+			services.Get<IDirectionScopeResolver>(),
+			services.Get<IDialogueNodeAccessor>(),
+			services.Get<IDirectionCommandPolicy>()), providerId, version);
 
-	private Task LayoutAsync(
-		LayoutDirectionCommandArguments a,
-		RuntimeCommandContext c) => ExecuteAsync("layout", async () =>
-	{
-		var bindings = new Dictionary<LayoutSlotId, ViewId>();
-		foreach (var pair in a.Bindings)
-			bindings.Add(new LayoutSlotId(pair.Key), View(pair.Value));
-		await beats.SubmitAsync(
-			new ScreenPatch(
-				new LayoutId(a.Layout),
-				bindings,
-				Transition(a, c, DirectionTransitionKind.Cut, DirectionTransitionKind.Dissolve)),
-			Barrier(a.Wait),
-			c.CancellationToken);
-	});
+		commands.Add("layout", services => new LayoutCommand(
+			services.Get<IDirectionBeatRuntime>(),
+			services.Get<IDirectionScopeResolver>(),
+			services.Get<IDialogueNodeAccessor>(),
+			services.Get<IDirectionCommandPolicy>()), providerId, version);
 
-	private Task ImportAsync(DirectionImportCommandArguments a, RuntimeCommandContext _) => ExecuteAsync("import", () =>
-	{
-		var node = RequireNode();
-		if (a.Kind.Equals("stage", StringComparison.OrdinalIgnoreCase))
-			scopes.ImportStage(node, a.Alias, a.SourceNode, a.SourceSymbol);
-		else if (a.Kind.Equals("view", StringComparison.OrdinalIgnoreCase))
-			scopes.ImportView(node, a.Alias, a.SourceNode, a.SourceSymbol);
-		else throw new DirectionReferenceException($"Unsupported import kind '{a.Kind}'.");
-		return Task.CompletedTask;
-	});
+		commands.Add("import", services => new DirectionImportCommand(
+			services.Get<IDirectionScopeResolver>(),
+			services.Get<IDialogueNodeAccessor>()), providerId, version);
 
-	private Task MarkAsync(DirectionMarkCommandArguments a, RuntimeCommandContext _) => ExecuteAsync("mark", () =>
-	{
-		var node = RequireNode();
-		var position = positions.Resolve(a.At);
-		try
-		{
-			scopes.DefineMark(node, a.Name, position);
-		}
-		catch (DirectionReferenceException)
-		{
-			if (!scopes.ResolveMark(node, a.Name).Equals(position))
-				throw;
-		}
-		return Task.CompletedTask;
-	});
+		commands.Add("mark", services => new DirectionMarkCommand(
+			services.Get<IDirectionPositionResolver>(),
+			services.Get<IDirectionScopeResolver>(),
+			services.Get<IDialogueNodeAccessor>()), providerId, version);
 
-	private Task CurtainAsync(CurtainDirectionCommandArguments a, RuntimeCommandContext c) =>
-		ExecuteAsync("curtain", async () =>
-		{
-			var transition = new DirectionTransitionSpec(
-				DirectionTransitionKind.Fade,
-				a.Duration,
-				DirectionEase.Linear).Validate();
-			var opacity = a.Position == CurtainPosition.Open ? 0f : 1f;
-			await beats.SubmitAsync(
-				new CurtainPatch(
-					new CurtainState(
-						new DirectionColor((float)a.R, (float)a.G, (float)a.B),
-						opacity),
-					transition,
-					new DirectionSourceLocation(RequireNode(), 0, 0)),
-				Barrier(a.Wait),
-				c.CancellationToken);
-		});
+		commands.Add("curtain", services => new CurtainCommand(
+			services.Get<IDirectionBeatRuntime>(),
+			services.Get<IDialogueNodeAccessor>()), providerId, version);
 
-	private DirectionPoint ResolvePosition(string value)
-	{
-		try { return scopes.ResolveMark(RequireNode(), value); }
-		catch (DirectionReferenceException) { return positions.Resolve(value); }
-	}
+		commands.Add("beat begin", services => new BeatBeginCommand(
+			services.Get<IDirectionBeatRuntime>(),
+			services.Get<IDialogueNodeAccessor>()), providerId, version);
 
-	private Task BeatBeginAsync(
-		BeatBeginDirectionCommandArguments a,
-		RuntimeCommandContext _) => ExecuteAsync("beat begin", () =>
-	{
-		var node = currentNode();
-		if (string.IsNullOrWhiteSpace(node))
-			throw new DirectionBeatException("Cannot begin a Beat outside a Yarn Node.");
-		var beatId = string.IsNullOrWhiteSpace(a.Id)
-			? $"{node.Trim()}#anonymous-{Interlocked.Increment(ref anonymousBeatSequence)}"
-			: a.Id;
-		beats.Begin(
-			beatId,
-			node,
-			new DirectionBeatDefaults(a.Duration, ParseEase(a.Ease)));
-		return Task.CompletedTask;
-	});
+		commands.Add("beat end", services => new BeatEndCommand(
+			services.Get<IDirectionBeatRuntime>()), providerId, version);
 
-	private Task BeatEndAsync(
-		BeatEndDirectionCommandArguments a,
-		RuntimeCommandContext c) => ExecuteAsync("beat end", async () =>
-	{
-		await beats.EndAsync(Barrier(a.Wait), c.CancellationToken);
-	});
+		commands.Add("beat join", services => new BeatJoinCommand(
+			services.Get<IDirectionBeatRuntime>()), providerId, version);
 
-	private Task BeatJoinAsync(
-		BeatJoinDirectionCommandArguments a,
-		RuntimeCommandContext c) => ExecuteAsync("beat join", () =>
-		beats.JoinAsync(a.Id, c.CancellationToken));
+		commands.Add("beat finish", services => new BeatFinishCommand(
+			services.Get<IDirectionBeatRuntime>()), providerId, version);
 
-	private Task BeatFinishAsync(
-		BeatFinishDirectionCommandArguments a,
-		RuntimeCommandContext c) => ExecuteAsync("beat finish", () =>
-		beats.FinishAsync(a.Id, c.CancellationToken));
-
-	private Task BeatAbortAsync(
-		BeatAbortDirectionCommandArguments _,
-		RuntimeCommandContext __) => ExecuteAsync("beat abort", () =>
-	{
-		beats.AbortOpen();
-		return Task.CompletedTask;
-	});
-
-	private DirectionTransitionSpec Transition(
-		DirectionTransitionCommandArguments a,
-		RuntimeCommandContext context,
-		params DirectionTransitionId[] allowed)
-	{
-		var isCharacterCommand = a is CharacterDirectionCommandArguments or LeaveDirectionCommandArguments;
-		var kind = a.Via ?? (context.Binding?.ResolveAnimation(
-			isCharacterCommand && a is LeaveDirectionCommandArguments ? "leave" :
-			a switch
-			{
-				StageShowDirectionCommandArguments => "stage show",
-				StageClearDirectionCommandArguments => "stage clear",
-				BackdropDirectionCommandArguments => "backdrop",
-				CharacterDirectionCommandArguments => "character",
-				LeaveDirectionCommandArguments => "leave",
-				_ => string.Empty,
-			}) ?? (isCharacterCommand ? DirectionTransitionId.Fade : DirectionTransitionId.Cut));
-
-		var isRegistered = !isCharacterCommand && context.Services is not null &&
-			context.Services.TryGet<ITransitionDriverRegistry>(out var registry) &&
-			registry is not null &&
-			registry.Supports(
-				kind,
-				TransitionDomains.Stage);
-
-		if (Array.IndexOf(allowed, kind) < 0 && !isRegistered)
-		{
-			throw new DirectionException(
-				$"Transition '{kind.ToString().ToLowerInvariant()}' is not supported by this command.");
-		}
-		var defaults = beats.OpenBeatDefaults;
-		var duration = a.Duration ?? (kind == DirectionTransitionId.Cut
-			? 0
-			: isCharacterCommand
-				? context.Binding?.DefaultCharacterAnimationDurationSeconds ??
-					defaults?.DurationSeconds ?? 0
-				: defaults?.DurationSeconds ??
-					context.Binding?.DefaultAnimationDurationSeconds ?? 0);
-		var ease = ParseEase(a.Ease) ?? defaults?.Ease ?? DirectionEase.Linear;
-		return new DirectionTransitionSpec(kind, duration, ease).Validate();
-	}
-
-	private DirectionTransitionSpec MotionTransition(
-		DirectionTimingCommandArguments a,
-		RuntimeCommandContext context,
-		DirectionTransitionId kind)
-	{
-		var defaults = beats.OpenBeatDefaults;
-		var duration = a.Duration ?? defaults?.DurationSeconds ??
-			context.Binding?.DefaultAnimationDurationSeconds ?? 0;
-		var ease = ParseEase(a.Ease) ?? defaults?.Ease ?? DirectionEase.Linear;
-		return new DirectionTransitionSpec(kind, duration, ease).Validate();
-	}
-
-	private DirectionTransitionSpec CameraPoseTransition(
-		DirectionTimingCommandArguments a,
-		DirectionTransitionId? via,
-		RuntimeCommandContext context,
-		bool reset = false)
-	{
-		// A pose command with an explicit duration but no `via` is the common
-		// camera-pan shorthand. The cut remains the default when no duration
-		// is supplied, while `via:cut` still requires duration:0.
-		var kind = via ?? (a.Duration.HasValue
-			? DirectionTransitionId.Move
-			: context.Binding?.ResolveAnimation(reset ? "camera reset" : "camera pose") ?? DirectionTransitionId.Cut);
-		var isRegistered = context.Services is not null &&
-			context.Services.TryGet<ITransitionDriverRegistry>(out var registry) &&
-			registry is not null &&
-			registry.Supports(kind, TransitionDomains.View);
-		if (!kind.TryToKind(out _) && !isRegistered)
-			throw new DirectionException(
-				$"Transition '{kind.ToString().ToLowerInvariant()}' is not supported by this command.");
-		var defaults = beats.OpenBeatDefaults;
-		var duration = a.Duration ?? (kind == DirectionTransitionId.Cut
-			? 0
-			: defaults?.DurationSeconds ??
-				context.Binding?.DefaultAnimationDurationSeconds ?? 0);
-		var ease = ParseEase(a.Ease) ?? defaults?.Ease ?? DirectionEase.Linear;
-		return new DirectionTransitionSpec(kind, duration, ease).Validate();
-	}
-
-	private ViewPosePatch CameraPatch(
-		CameraPatchDirectionCommandArguments a,
-		DirectionTransitionSpec transition)
-	{
-		return new ViewPosePatch(
-			CameraTarget(a.Stage, a.View),
-			a.Center is null
-				? default
-				: DirectionValue.From(
-					new DirectionPoint(a.Center.Value.X, a.Center.Value.Y)),
-			a.Zoom is null
-				? default
-				: DirectionValue.From((float)a.Zoom.Value),
-			a.Rotation is null
-				? default
-				: DirectionValue.From((float)a.Rotation.Value),
-			transition);
-	}
-
-	private static DirectionEase? ParseEase(string? value)
-	{
-		if (value is null) return null;
-		return value.Trim().ToLowerInvariant() switch
-		{
-			"linear" => DirectionEase.Linear,
-			"sine-in" or "sinein" => DirectionEase.SineIn,
-			"sine-out" or "sineout" => DirectionEase.SineOut,
-			"sine-in-out" or "sineinout" => DirectionEase.SineInOut,
-			"cubic-in" or "cubicin" => DirectionEase.CubicIn,
-			"cubic-out" or "cubicout" => DirectionEase.CubicOut,
-			"cubic-in-out" or "cubicinout" => DirectionEase.CubicInOut,
-			"back-out" or "backout" => DirectionEase.BackOut,
-			"back-in" or "backin" => DirectionEase.BackIn,
-			"back-in-out" or "backinout" => DirectionEase.BackInOut,
-			_ => throw new ArgumentException(
-				$"Unsupported Direction ease '{value}'."),
-		};
-	}
-
-	private static DirectionCompletionBarrier Barrier(bool wait) => wait
-		? DirectionCompletionBarrier.Settle
-		: DirectionCompletionBarrier.Commit;
-
-	private StageId Stage(string value) => scopes.ResolveStage(RequireNode(), value);
-
-	private ViewId View(string value) => scopes.ResolveView(RequireNode(), value);
-
-	private ViewId DefaultView(string stage) =>
-		scopes.ResolveDefaultView(RequireNode(), stage);
-
-	private ViewId CameraTarget(string? stage, string? view) => stage is not null
-		? DefaultView(stage)
-		: View(view ?? "main");
-
-	private string RequireNode()
-	{
-		var node = currentNode();
-		if (string.IsNullOrWhiteSpace(node))
-			throw new DirectionReferenceException(
-				"Direction symbols cannot be resolved outside a Yarn Node.");
-		return node;
-	}
-
-	private static async Task ExecuteAsync(string command, Func<Task> action)
-	{
-		try
-		{
-			await action();
-		}
-		catch (RuntimeCommandException)
-		{
-			throw;
-		}
-		catch (OperationCanceledException)
-		{
-			throw;
-		}
-		catch (Exception exception) when (
-			exception is DirectionException or ArgumentException)
-		{
-			throw new RuntimeCommandException(command, exception.Message, exception);
-		}
+		commands.Add("beat abort", services => new BeatAbortCommand(
+			services.Get<IDirectionBeatRuntime>()), providerId, version);
 	}
 }
-
-[RuntimeCommand("import", Category = "Direction", Usage = "import <stage> alias:<alias> source:<node:symbol>")]
-public sealed class DirectionImportCommandArguments
-{
-	[CommandParameter("kind", 0, Primary = true, Required = true)] public string Kind { get; set; } = "stage";
-	[CommandParameter("alias", 1, Primary = false, Required = true)] public string Alias { get; set; } = string.Empty;
-	[CommandParameter("source", 2, Required = true)] public string Source { get; set; } = string.Empty;
-	public string SourceNode => Source.Split(':', 2)[0];
-	public string SourceSymbol => Source.Split(':', 2).Length == 2 ? Source.Split(':', 2)[1] : string.Empty;
-}
-
-[RuntimeCommand("mark", Category = "Direction", Usage = "mark <name> at:<mark>")]
-public sealed class DirectionMarkCommandArguments
-{
-	[CommandParameter("name", 0, Primary = true, Required = true)] public string Name { get; set; } = string.Empty;
-	[CommandParameter("at", 1, Required = true)] public string At { get; set; } = string.Empty;
-}
-
-[RuntimeCommand("camera", "fx", Category = "Direction", Usage = "camera fx <effect> [stage:<id>|view:<id>] [duration:<seconds>] [strength:<number>] [axis:<all|x|y|diagonal>] [frequency:<number>] [zoom:<number>] [wait:<bool>]")]
-[CommandParameterSet(CommandParameterSetRule.AtMostOne, "stage", "view")]
-public sealed class CameraFxDirectionCommandArguments
-{
-	[CommandParameter("effect", 0, Primary = true, Required = true)] public string Effect { get; set; } = string.Empty;
-	[CommandParameter("stage", 1)] public string? Stage { get; set; }
-	[CommandParameter("view", 2)] public string? View { get; set; }
-	[CommandParameter("duration", 3, Minimum = 0)] public double? Duration { get; set; }
-	[CommandParameter("strength", 4, Minimum = 0)] public double? Strength { get; set; }
-	[CommandParameter("axis", 5)] public CameraShakeAxis? Axis { get; set; }
-	[CommandParameter("frequency", 6)] public int? Frequency { get; set; }
-	[CommandParameter("zoom", 7)] public double? Zoom { get; set; }
-	[CommandParameter("wait", 20, DefaultValue = "false")] public bool Wait { get; set; }
-}
-
-[RuntimeCommand("curtain", Category = "Direction", Usage = "curtain <open|closed> [duration:<seconds>] [r:<0..1>] [g:<0..1>] [b:<0..1>] [wait:<bool>]")]
-public sealed class CurtainDirectionCommandArguments
-{
-	[CommandParameter("state", 0, Primary = true, Required = true)] public CurtainPosition Position { get; set; }
-	[CommandParameter("duration", 1, DefaultSource = CommandDefaultSource.CurtainDuration, Minimum = 0)] public double Duration { get; set; }
-	[CommandParameter("r", 2, DefaultValue = "0", Minimum = 0)] public double R { get; set; }
-	[CommandParameter("g", 3, DefaultValue = "0", Minimum = 0)] public double G { get; set; }
-	[CommandParameter("b", 4, DefaultValue = "0", Minimum = 0)] public double B { get; set; }
-	[CommandParameter("wait", 5, DefaultValue = "false")] public bool Wait { get; set; }
-}
-
-public abstract class DirectionTimingCommandArguments
-{
-	[CommandParameter("duration", 21, Minimum = 0)] public double? Duration { get; set; }
-	[CommandParameter("ease", 22)] public string? Ease { get; set; }
-	[CommandParameter("wait", 23, DefaultValue = "false")]
-	public bool Wait { get; set; }
-}
-
-public abstract class DirectionTransitionCommandArguments : DirectionTimingCommandArguments
-{
-	[CommandParameter("via", 20)] public DirectionTransitionId? Via { get; set; }
-}
-
-[RuntimeCommand("stage", "define", Category = "Direction", Usage = "stage define <id>")]
-public sealed class StageDefineDirectionCommandArguments
-{
-	[CommandParameter("stage", 0, Primary = true, Required = true)]
-	public string Stage { get; set; } = string.Empty;
-}
-
-[RuntimeCommand("stage", "show", Category = "Direction", Usage = "stage show <id> [via:<cut|dissolve>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]
-public sealed class StageShowDirectionCommandArguments : DirectionTransitionCommandArguments
-{
-	[CommandParameter("stage", 0, Primary = true, Required = true)]
-	public string Stage { get; set; } = string.Empty;
-}
-
-[RuntimeCommand("stage", "clear", Category = "Direction", Usage = "stage clear <id> [via:<cut|fade|dissolve>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]
-public sealed class StageClearDirectionCommandArguments : DirectionTransitionCommandArguments
-{
-	[CommandParameter("stage", 0, Primary = true, Required = true)]
-	public string Stage { get; set; } = string.Empty;
-}
-
-[RuntimeCommand("stage", "release", Category = "Direction", Usage = "stage release <id>")]
-public sealed class StageReleaseDirectionCommandArguments
-{
-	[CommandParameter("stage", 0, Primary = true, Required = true)]
-	public string Stage { get; set; } = string.Empty;
-}
-
-[RuntimeCommand("backdrop", Category = "Direction", Usage = "backdrop <resource> [stage:<id>] [via:<kind>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]
-public sealed class BackdropDirectionCommandArguments : DirectionTransitionCommandArguments
-{
-	[CommandParameter("resource", 0, Primary = true, Required = true)]
-	public string Resource { get; set; } = string.Empty;
-	[CommandParameter("stage", 1, DefaultValue = "main")]
-	public string Stage { get; set; } = "main";
-}
-
-[RuntimeCommand("character", Category = "Direction", Usage = "character <id> [stage:<id>] [appearance:<id>] [at:<mark|x,y>] [scale:<number>] [z:<integer>] [via:<kind>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]
-[CommandParameterSet(CommandParameterSetRule.AtLeastOne, "appearance", "at", "scale", "z")]
-public sealed class CharacterDirectionCommandArguments : DirectionTransitionCommandArguments
-{
-	[CommandParameter("actor", 0, Primary = true, Required = true)]
-	public string Actor { get; set; } = string.Empty;
-	[CommandParameter("stage", 1, DefaultValue = "main")]
-	public string Stage { get; set; } = "main";
-	[CommandParameter("appearance", 2)] public string? Appearance { get; set; }
-	[CommandParameter("at", 3)] public string? At { get; set; }
-	[CommandParameter("scale", 4, Minimum = 0.001)] public double? Scale { get; set; }
-	[CommandParameter("z", 5)] public int? Z { get; set; }
-}
-
-[RuntimeCommand("leave", Category = "Direction", Usage = "leave <character> [stage:<id>] [via:<cut|fade|dissolve>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]
-public sealed class LeaveDirectionCommandArguments : DirectionTransitionCommandArguments
-{
-	[CommandParameter("actor", 0, Primary = true, Required = true)]
-	public string Actor { get; set; } = string.Empty;
-	[CommandParameter("stage", 1, DefaultValue = "main")]
-	public string Stage { get; set; } = "main";
-}
-
-[RuntimeCommand("view", "define", Category = "Direction", Usage = "view define <id> stage:<id>")]
-public sealed class ViewDefineDirectionCommandArguments
-{
-	[CommandParameter("view", 0, Primary = true, Required = true)]
-	public string View { get; set; } = string.Empty;
-	[CommandParameter("stage", 1, Required = true)]
-	public string Stage { get; set; } = string.Empty;
-}
-
-[RuntimeCommand("view", "release", Category = "Direction", Usage = "view release <id>")]
-public sealed class ViewReleaseDirectionCommandArguments
-{
-	[CommandParameter("view", 0, Primary = true, Required = true)]
-	public string View { get; set; } = string.Empty;
-}
-
-public abstract class CameraPatchDirectionCommandArguments : DirectionTimingCommandArguments
-{
-	[CommandParameter("stage", 0)] public string? Stage { get; set; }
-	[CommandParameter("view", 1)] public string? View { get; set; }
-	[CommandParameter("center", 2)] public Vector2? Center { get; set; }
-	[CommandParameter("zoom", 3, Minimum = 0.001)] public double? Zoom { get; set; }
-	[CommandParameter("rotation", 4)] public double? Rotation { get; set; }
-}
-
-[RuntimeCommand("camera", "pose", Category = "Direction", Usage = "camera pose [stage:<id>|view:<id>] [center:<x,y>] [zoom:<number>] [rotation:<degrees>] [as:<shot>] [via:<kind>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]
-[CommandParameterSet(CommandParameterSetRule.AtMostOne, "stage", "view")]
-[CommandParameterSet(CommandParameterSetRule.AtLeastOne, "center", "zoom", "rotation", "as")]
-public sealed class CameraPoseDirectionCommandArguments : CameraPatchDirectionCommandArguments
-{
-	[CommandParameter("as", 5)] public string? As { get; set; }
-	[CommandParameter("via", 20)] public DirectionTransitionId? Via { get; set; }
-}
-
-[RuntimeCommand("camera", "move", Category = "Direction", Usage = "camera move [stage:<id>|view:<id>] [center:<x,y>] [zoom:<number>] [rotation:<degrees>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]
-[CommandParameterSet(CommandParameterSetRule.AtMostOne, "stage", "view")]
-[CommandParameterSet(CommandParameterSetRule.AtLeastOne, "center", "zoom", "rotation")]
-public sealed class CameraMoveDirectionCommandArguments : CameraPatchDirectionCommandArguments;
-
-[RuntimeCommand("camera", "reset", Category = "Direction", Usage = "camera reset [stage:<id>|view:<id>] [via:<kind>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]
-[CommandParameterSet(CommandParameterSetRule.AtMostOne, "stage", "view")]
-public sealed class CameraResetDirectionCommandArguments : DirectionTransitionCommandArguments
-{
-	[CommandParameter("stage", 0)] public string? Stage { get; set; }
-	[CommandParameter("view", 1)] public string? View { get; set; }
-}
-
-[RuntimeCommand("shot", "use", Category = "Direction", Usage = "shot use <alias> [stage:<id>|view:<id>] [via:<kind>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]
-[CommandParameterSet(CommandParameterSetRule.AtMostOne, "stage", "view")]
-public sealed class ShotUseDirectionCommandArguments : DirectionTransitionCommandArguments
-{
-	[CommandParameter("alias", 0, Primary = true, Required = true)]
-	public string Alias { get; set; } = string.Empty;
-	[CommandParameter("stage", 1)] public string? Stage { get; set; }
-	[CommandParameter("view", 2)] public string? View { get; set; }
-}
-
-[RuntimeCommand("layout", Category = "Direction", Usage = "layout <single|split|pip> <slot:view> ... [via:<kind>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")]
-public sealed class LayoutDirectionCommandArguments : DirectionTransitionCommandArguments
-{
-	[CommandParameter("layout", 0, Primary = true, Required = true)]
-	public string Layout { get; set; } = "single";
-
-	[CommandParameter("main", 1)] public string? Main { get; set; }
-	[CommandParameter("inset", 2)] public string? Inset { get; set; }
-
-	public IReadOnlyDictionary<string, string> Bindings
-	{
-		get
-		{
-			var bindings = new Dictionary<string, string>(StringComparer.Ordinal)
-			{
-				["main"] = Main ?? "main",
-			};
-			if (Inset is not null) bindings["inset"] = Inset;
-			return bindings;
-		}
-	}
-}
-
-[RuntimeCommand("beat", "begin", Category = "Direction", Usage = "beat begin [id:<id>] [duration:<seconds>] [ease:<curve>]")]
-public sealed class BeatBeginDirectionCommandArguments
-{
-	[CommandParameter("id", 0)] public string? Id { get; set; }
-	[CommandParameter("duration", 1, Minimum = 0)] public double? Duration { get; set; }
-	[CommandParameter("ease", 2)] public string? Ease { get; set; }
-}
-
-[RuntimeCommand("beat", "end", Category = "Direction", Usage = "beat end [wait:<bool>]")]
-public sealed class BeatEndDirectionCommandArguments
-{
-	[CommandParameter("wait", 0, DefaultValue = "true")]
-	public bool Wait { get; set; }
-}
-
-[RuntimeCommand("beat", "join", Category = "Direction", Usage = "beat join <id>")]
-public sealed class BeatJoinDirectionCommandArguments
-{
-	[CommandParameter("id", 0, Primary = true, Required = true)]
-	public string Id { get; set; } = string.Empty;
-}
-
-[RuntimeCommand("beat", "finish", Category = "Direction", Usage = "beat finish <id>")]
-public sealed class BeatFinishDirectionCommandArguments
-{
-	[CommandParameter("id", 0, Primary = true, Required = true)]
-	public string Id { get; set; } = string.Empty;
-}
-
-[RuntimeCommand("beat", "abort", Category = "Direction", Usage = "beat abort")]
-public sealed class BeatAbortDirectionCommandArguments;

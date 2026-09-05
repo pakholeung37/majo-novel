@@ -223,9 +223,24 @@ public sealed class ActivityObserverTests
         Assert.Empty(registry.Snapshot());
     }
 
-    [RuntimeCommand("activity_test_cmd")]
-    private sealed class ActivityTestCmdArgs
+    private sealed class ActivityTestCommand : RuntimeCommand<ActivityTestCommand.Arguments>
     {
+        private readonly Task task;
+
+        public ActivityTestCommand(Task task)
+        {
+            this.task = task;
+        }
+
+        public override CommandSchema<Arguments> Schema { get; } =
+            CommandSchema<Arguments>.Create("activity_test_cmd").Build(static _ => new Arguments());
+
+        protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
+        {
+            await task;
+        }
+
+        public sealed record Arguments;
     }
 
     [Fact(Timeout = 5_000)]
@@ -235,16 +250,17 @@ public sealed class ActivityObserverTests
         var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         var cmdRegistry = new RuntimeCommandRegistry();
-        cmdRegistry.Register<ActivityTestCmdArgs>((_, _) => tcs.Task);
+        cmdRegistry.Add("activity_test_cmd", _ => new ActivityTestCommand(tcs.Task), "test");
+        cmdRegistry.SealRegistrations();
         var catalog = cmdRegistry.BuildCatalog();
 
-        var binder = new CommandBinder(new CommandBindingContext(0.35));
-        var dispatcher = new RuntimeCommandDispatcher(
-            binder,
-            activities: registry);
+        var dispatcher = new RuntimeCommandDispatcher(activities: registry);
 
         var reg = catalog.Commands.First();
-        var execTask = dispatcher.ExecuteAsync(reg, Array.Empty<string>(), CancellationToken.None);
+        var execTask = dispatcher.ExecuteAsync(
+            reg,
+            new CommandInput("activity_test_cmd", Array.Empty<string>()),
+            CancellationToken.None);
 
         // While executing, Dialogue activity is present
         Assert.True(registry.HasActiveActivities(RuntimeActivityOwner.Dialogue));

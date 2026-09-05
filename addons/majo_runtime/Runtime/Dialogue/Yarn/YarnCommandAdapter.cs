@@ -54,11 +54,10 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
 
         try
         {
-            dispatcher.Validate(catalog);
             dispatcher.CommandFailed += HandleCommandFailed;
             registry.UnhandledCommand += HandleUnhandledCommand;
             foreach (var group in catalog.Commands.GroupBy(
-                         command => command.RootName,
+                         command => command.Schema.RootName,
                          StringComparer.OrdinalIgnoreCase))
             {
                 var handler = new CatalogCommandHandler(
@@ -171,14 +170,14 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
     private sealed class CatalogCommandHandler
     {
         private readonly string rootName;
-        private readonly IReadOnlyList<RuntimeCommandRegistration> commands;
+        private readonly IReadOnlyList<IRuntimeCommand> commands;
         private readonly RuntimeCommandDispatcher dispatcher;
         private readonly IYarnCommandRegistry registry;
         private readonly bool abortOnRecoverableFailure;
 
         public CatalogCommandHandler(
             string rootName,
-            IReadOnlyList<RuntimeCommandRegistration> commands,
+            IReadOnlyList<IRuntimeCommand> commands,
             RuntimeCommandDispatcher dispatcher,
             IYarnCommandRegistry registry,
             bool abortOnRecoverableFailure)
@@ -202,9 +201,13 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
                     return;
                 }
 
+                var input = new CommandInput(
+                    command.Schema.Name,
+                    arguments.Skip(consumedSegments).ToArray());
+
                 await dispatcher.ExecuteAsync(
                     command,
-                    arguments.Skip(consumedSegments).ToArray(),
+                    input,
                     registry.DialogueCancellationToken);
             }
             catch (RuntimeCommandException exception) when (
@@ -215,15 +218,15 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
             }
         }
 
-        private RuntimeCommandRegistration? Resolve(
+        private IRuntimeCommand? Resolve(
             string[] arguments,
             out int consumedSegments)
         {
-            RuntimeCommandRegistration? result = null;
+            IRuntimeCommand? result = null;
             consumedSegments = 0;
             foreach (var candidate in commands)
             {
-                var childSegments = candidate.Descriptor.Path.Skip(1).ToArray();
+                var childSegments = candidate.Schema.Path.Skip(1).ToArray();
                 if (childSegments.Length > arguments.Length ||
                     !childSegments.Select((segment, index) => segment.Equals(
                         arguments[index], StringComparison.OrdinalIgnoreCase)).All(value => value))

@@ -347,15 +347,24 @@ public sealed class AudioManagerTests
         var loader = new FakeAudioClipLoader("audio").Register("unused");
         var audio = new AudioManager(
             backend, loader, loader, loader, new AudioSettings());
-        registry.RegisterModule(new AudioCommandModule(audio));
-        var catalog = registry.BuildCatalog();
-        var descriptor = catalog.Get("bgm").Descriptor;
-        var binder = new CommandBinder(new CommandBindingContext(0.5, 1.25));
+        var policy = new AudioCommandPolicy(new AudioFadeDefaults(1.25, 0.0));
+        var services = new ServiceResolverBuilder()
+            .Add<IAudioManager>(audio)
+            .Add<IAudioCommandPolicy>(policy)
+            .Build();
 
-        var arguments = binder.Bind<PlayBgmCommandArguments>(descriptor, ["theme"]);
+        new Majo.Runtime.Dialogue.Commands.Audio.AudioCommandModule().Register(registry);
+        registry.SealRegistrations();
+        var catalog = registry.BuildCatalog(services);
+        var bgmCommand = (Majo.Runtime.Dialogue.Commands.Audio.PlayBgmCommand)catalog.Get("bgm");
+        var arguments = bgmCommand.Schema.Bind(
+            new RawCommandArguments("theme", new Dictionary<string, string>()));
 
-        Assert.Equal(1.25, arguments.Duration);
+        Assert.Equal("theme", arguments.Clip);
         Assert.True(arguments.Loop);
+        Assert.False(arguments.Fade.Duration.WasProvided);
+        var resolvedDuration = policy.ResolveFadeDuration(arguments.Fade, AudioCommandKind.Bgm, new CommandExecutionContext("exec"));
+        Assert.Equal(1.25, resolvedDuration);
         Assert.Equal(
             ["bgm", "stopBgm", "sfx", "stopSfx", "voice", "stopVoice"],
             catalog.Commands.Select(command => command.Name));

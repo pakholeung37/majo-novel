@@ -5,7 +5,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Majo.Runtime.Actors;
 using Majo.Runtime.Core;
 
 namespace Majo.Runtime.Dialogue.Commands;
@@ -13,8 +12,6 @@ namespace Majo.Runtime.Dialogue.Commands;
 public sealed class RuntimeCommandDispatcher : IDisposable
 {
     private readonly object operationGate = new();
-    private readonly CommandBinder binder;
-    private readonly IActorManager? actors;
     private readonly IServiceResolver? services;
     private readonly IRuntimeLogger logger;
     private readonly bool abortOnRecoverableFailure;
@@ -25,15 +22,11 @@ public sealed class RuntimeCommandDispatcher : IDisposable
     private int activeCommandCount;
 
     public RuntimeCommandDispatcher(
-        CommandBinder binder,
-        IActorManager? actors = null,
         IServiceResolver? services = null,
         IRuntimeLogger? logger = null,
         bool abortOnRecoverableFailure = false,
         IRuntimeActivityRegistry? activities = null)
     {
-        this.binder = binder ?? throw new ArgumentNullException(nameof(binder));
-        this.actors = actors;
         this.services = services;
         this.logger = logger ?? NullRuntimeLogger.Instance;
         this.abortOnRecoverableFailure = abortOnRecoverableFailure;
@@ -72,69 +65,69 @@ public sealed class RuntimeCommandDispatcher : IDisposable
         }
     }
 
-    public void Validate(RuntimeCommandCatalog catalog)
-    {
-        ArgumentNullException.ThrowIfNull(catalog);
-        foreach (var command in catalog.Commands)
-        {
-            binder.Validate(command.Descriptor);
-        }
-    }
-
     public async Task ExecuteAsync(
-        RuntimeCommandRegistration registration,
-        IReadOnlyList<string> arguments,
+        IRuntimeCommand command,
+        CommandInput input,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(registration);
-        ArgumentNullException.ThrowIfNull(arguments);
+        ArgumentNullException.ThrowIfNull(command);
+        ArgumentNullException.ThrowIfNull(input);
+
         IRuntimeLifetime? lifetime = null;
         IDialoguePlayer? dialogue = null;
         services?.TryGet(out lifetime);
         services?.TryGet(out dialogue);
         var host = lifetime as RuntimeHost;
         var executionId = Guid.NewGuid().ToString("N");
+
         using var activityLease = activities?.BeginActivity(
             RuntimeActivityOwner.Dialogue,
             "Command",
-            registration.Name,
+            command.Schema.Name,
             isCancelable: true,
             isFinishable: false);
+
         BeginCommand(new RuntimeCommandActivity(
-            registration.Name,
+            command.Schema.Name,
             executionId,
             dialogue?.CurrentLineId,
             DateTimeOffset.UtcNow));
+
         var correlation = new RuntimeLogCorrelation(
             host?.RuntimeId ?? string.Empty,
             host?.SessionId,
             (dialogue as DialoguePlayer)?.CurrentDialogueSessionId,
             executionId);
+
         using var correlationScope = logger.BeginCorrelationScope(correlation);
+
         var properties = new Dictionary<string, object?>
         {
-            ["commandName"] = registration.Name,
+            ["commandName"] = command.Schema.Name,
             ["sourceLineId"] = dialogue?.CurrentLineId,
         };
+
         logger.Debug(
             "command",
             "command.started",
-            $"Command '{registration.Name}' started with {arguments.Count} arguments.",
+            $"Command '{command.Schema.Name}' started with {input.RawArguments.Count} arguments.",
             correlation,
             properties);
-        var context = new RuntimeCommandContext(
-            actors,
-            services,
-            cancellationToken,
-            binder.Context);
+
+        var context = new CommandExecutionContext(
+            executionId,
+            dialogue?.CurrentLineId,
+            (dialogue as DialoguePlayer)?.CurrentDialogueSessionId,
+            cancellationToken: cancellationToken);
+
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await registration.BindAndExecuteAsync(binder, arguments, context);
+            await command.ExecuteAsync(input, context);
             logger.Debug(
                 "command",
                 "command.completed",
-                $"Command '{registration.Name}' completed successfully.",
+                $"Command '{command.Schema.Name}' completed successfully.",
                 correlation);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -142,32 +135,34 @@ public sealed class RuntimeCommandDispatcher : IDisposable
             logger.Debug(
                 "command",
                 "command.cancelled",
-                $"Command '{registration.Name}' cancelled.",
+                $"Command '{command.Schema.Name}' cancelled.",
                 correlation);
             // DialogueRunner owns dialogue cancellation; it is not a command failure.
         }
         catch (RuntimeCommandException exception)
         {
-            LogCommandFailure(registration.Name, exception, correlation, properties);
+            LogCommandFailure(command.Schema.Name, exception, correlation, properties);
             ReportFailure(exception);
             throw;
         }
         catch (Exception exception)
         {
             var failure = new RuntimeCommandException(
-                registration.Name,
+                command.Schema.Name,
                 exception.Message,
                 exception,
-                recoverable: false);
+                recoverable: false,
+                phase: CommandFailurePhase.Execution);
             var failureProperties = new Dictionary<string, object?>(properties)
             {
                 ["recoverable"] = false,
                 ["disposition"] = "abort",
+                ["failurePhase"] = "execution",
             };
             logger.Error(
                 "command",
                 "command.faulted",
-                $"Command '{registration.Name}' failed: {exception.Message}",
+                $"Command '{command.Schema.Name}' failed: {exception.Message}",
                 exception,
                 correlation,
                 failureProperties);
@@ -211,13 +206,15 @@ public sealed class RuntimeCommandDispatcher : IDisposable
             Guid.NewGuid().ToString("N"));
         var failure = new RuntimeCommandException(
             commandName,
-            "Command is not registered.");
+            "Command is not registered.",
+            phase: CommandFailurePhase.Execution);
         var properties = new Dictionary<string, object?>
         {
             ["commandName"] = commandName,
             ["commandText"] = commandText,
             ["sourceLineId"] = dialogue?.CurrentLineId,
             ["disposition"] = abortOnRecoverableFailure ? "abort" : "skip",
+            ["failurePhase"] = "execution",
         };
         if (abortOnRecoverableFailure)
         {
@@ -252,6 +249,7 @@ public sealed class RuntimeCommandDispatcher : IDisposable
         {
             ["recoverable"] = failure.IsRecoverable,
             ["disposition"] = abort ? "abort" : "skip",
+            ["failurePhase"] = failure.FailurePhase.ToString().ToLowerInvariant(),
         };
         if (abort)
         {

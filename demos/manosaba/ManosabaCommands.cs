@@ -7,37 +7,49 @@ using Majo.Runtime.Dialogue.Commands;
 
 namespace Majo.Demos.Manosaba;
 
-[RuntimeCommand(
-    "stream_frame",
-    Category = "Manosaba",
-    Usage = "stream_frame <enabled:bool> [duration:<seconds>]")]
-public sealed class ManosabaStreamFrameCommandArguments
+public sealed class ManosabaStreamFrameCommand : RuntimeCommand<ManosabaStreamFrameCommand.Arguments>
 {
-    [CommandParameter("enabled", 0, Primary = true, Required = true, ValueHint = "bool")]
-    public bool Enabled { get; set; } = true;
+    private readonly IManosabaUiService ui;
 
-    [CommandParameter("duration", 1, ValueHint = "seconds", Minimum = 0)]
-    public double Duration { get; set; }
+    public ManosabaStreamFrameCommand(IManosabaUiService ui)
+    {
+        this.ui = ui ?? throw new ArgumentNullException(nameof(ui));
+    }
+
+    public override CommandSchema<Arguments> Schema { get; } =
+        CommandSchema<Arguments>
+            .Create(
+                "stream_frame",
+                category: "Manosaba",
+                usage: "stream_frame <enabled:bool> [duration:<seconds>]")
+            .Primary<bool>("enabled", valueHint: "bool")
+            .Optional<double>("duration", valueHint: "seconds", minimum: 0)
+            .Build(static values => new Arguments(
+                values.Required<bool>("enabled"),
+                values.Optional<double>("duration").GetValueOrDefault(0.0)));
+
+    protected override ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
+    {
+        var mode = arguments.Enabled ? ManosabaFrameMode.Stream : ManosabaFrameMode.Default;
+        ui.SetFrameMode(mode, arguments.Duration);
+        return ValueTask.CompletedTask;
+    }
+
+    public sealed record Arguments(
+        bool Enabled,
+        double Duration);
 }
 
 public static class ManosabaCommands
 {
-    public static RuntimeCommandRegistry Register(RuntimeCommandRegistry commands)
+    public static IRuntimeCommandRegistrar Register(IRuntimeCommandRegistrar commands)
     {
         ArgumentNullException.ThrowIfNull(commands);
-        commands.Register<ManosabaStreamFrameCommandArguments>(HandleStreamFrameAsync);
+        commands.Add(
+            "stream_frame",
+            services => new ManosabaStreamFrameCommand(services.Get<IManosabaUiService>()),
+            "manosaba",
+            "1.0");
         return commands;
     }
-
-    private static Task HandleStreamFrameAsync(
-        ManosabaStreamFrameCommandArguments arguments,
-        RuntimeCommandContext context)
-    {
-        var services = RuntimeCommandContext.Require(context.Services, "ServiceResolver");
-        var ui = services.Get<IManosabaUiService>();
-        var mode = arguments.Enabled ? ManosabaFrameMode.Stream : ManosabaFrameMode.Default;
-        ui.SetFrameMode(mode, arguments.Duration);
-        return Task.CompletedTask;
-    }
-
 }

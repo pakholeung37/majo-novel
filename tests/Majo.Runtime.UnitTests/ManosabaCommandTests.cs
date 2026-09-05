@@ -24,20 +24,19 @@ public sealed class ManosabaCommandTests
 
         var registry = new RuntimeCommandRegistry();
         ManosabaCommands.Register(registry);
-        var catalog = registry.BuildCatalog();
+        registry.SealRegistrations();
+        var catalog = registry.BuildCatalog(services);
 
-        var dispatcher = new RuntimeCommandDispatcher(
-            new CommandBinder(new CommandBindingContext(0.35)),
-            services: services);
+        var dispatcher = new RuntimeCommandDispatcher(services: services);
 
         var streamFrame = catalog.Get("stream_frame");
 
         // stream_frame true -> Stream
-        await dispatcher.ExecuteAsync(streamFrame, ["true"], CancellationToken.None);
+        await dispatcher.ExecuteAsync(streamFrame, new CommandInput("stream_frame", ["true"]), CancellationToken.None);
         Assert.Equal(ManosabaFrameMode.Stream, uiService.CurrentFrameMode);
 
         // stream_frame false -> Default
-        await dispatcher.ExecuteAsync(streamFrame, ["false"], CancellationToken.None);
+        await dispatcher.ExecuteAsync(streamFrame, new CommandInput("stream_frame", ["false"]), CancellationToken.None);
         Assert.Equal(ManosabaFrameMode.Default, uiService.CurrentFrameMode);
     }
 

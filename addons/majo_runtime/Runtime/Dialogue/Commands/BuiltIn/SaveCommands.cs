@@ -5,46 +5,74 @@ using Majo.Runtime.Save;
 
 namespace Majo.Runtime.Dialogue.Commands;
 
-[RuntimeCommand("save", Category = "Save", Usage = "save")]
-public sealed class SaveCommandArguments
+public sealed class SaveCommand : RuntimeCommand<SaveCommand.Arguments>
 {
-}
+    private readonly ISaveProductAccessor? saveAccessor;
 
-public sealed class SaveCommandHandler : IRuntimeCommandHandler<SaveCommandArguments>
-{
-    public Task ExecuteAsync(SaveCommandArguments arguments, RuntimeCommandContext context)
+    public SaveCommand(ISaveProductAccessor? saveAccessor)
     {
-        RequireSaveProduct(context, "save").RequestQuickSaveCandidate("command:save");
-        return Task.CompletedTask;
+        this.saveAccessor = saveAccessor;
     }
 
-    internal static ISaveProductManager RequireSaveProduct(
-        RuntimeCommandContext context,
-        string commandName)
+    public SaveCommand(ISaveProductManager? saveProduct)
+        : this(saveProduct is not null ? new DelegateSaveProductAccessor(() => saveProduct) : null)
     {
-        if (context.Services?.TryGet<ISaveProductManager>(out var saveProduct) == true &&
-            saveProduct is not null)
+    }
+
+    public override CommandSchema<Arguments> Schema { get; } =
+        CommandSchema<Arguments>
+            .Create("save", category: "Save", usage: "save")
+            .Build(static _ => new Arguments());
+
+    protected override ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
+    {
+        var saveProduct = saveAccessor?.SaveProduct;
+        if (saveProduct is null)
         {
-            return saveProduct;
+            throw new RuntimeCommandException(
+                "save",
+                "Save support is disabled or unavailable.");
         }
 
-        throw new RuntimeCommandException(
-            commandName,
-            "Save support is disabled or unavailable.");
+        saveProduct.RequestQuickSaveCandidate("command:save");
+        return ValueTask.CompletedTask;
     }
+
+    public sealed record Arguments;
 }
 
-[RuntimeCommand("autoSave", Category = "Save", Usage = "autoSave")]
-public sealed class AutoSaveCommandArguments
+public sealed class AutoSaveCommand : RuntimeCommand<AutoSaveCommand.Arguments>
 {
-}
+    private readonly ISaveProductAccessor? saveAccessor;
 
-public sealed class AutoSaveCommandHandler : IRuntimeCommandHandler<AutoSaveCommandArguments>
-{
-    public Task ExecuteAsync(AutoSaveCommandArguments arguments, RuntimeCommandContext context)
+    public AutoSaveCommand(ISaveProductAccessor? saveAccessor)
     {
-        SaveCommandHandler.RequireSaveProduct(context, "autoSave")
-            .RequestAutoSaveCandidate("command:autoSave");
-        return Task.CompletedTask;
+        this.saveAccessor = saveAccessor;
     }
+
+    public AutoSaveCommand(ISaveProductManager? saveProduct)
+        : this(saveProduct is not null ? new DelegateSaveProductAccessor(() => saveProduct) : null)
+    {
+    }
+
+    public override CommandSchema<Arguments> Schema { get; } =
+        CommandSchema<Arguments>
+            .Create("autoSave", category: "Save", usage: "autoSave")
+            .Build(static _ => new Arguments());
+
+    protected override ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
+    {
+        var saveProduct = saveAccessor?.SaveProduct;
+        if (saveProduct is null)
+        {
+            throw new RuntimeCommandException(
+                "autoSave",
+                "Save support is disabled or unavailable.");
+        }
+
+        saveProduct.RequestAutoSaveCandidate("command:autoSave");
+        return ValueTask.CompletedTask;
+    }
+
+    public sealed record Arguments;
 }

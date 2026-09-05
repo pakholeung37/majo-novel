@@ -260,16 +260,20 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(ISaveThumbnailProvider));
 
             services.AddSingleton<ISaveProductManager>(
-                resolver => new SaveProductManager(
-                    resolver.Get<ISaveSlotManager>(),
-                    resolver.Get<IDialoguePlayer>(),
-                    resolver.Get<IDialoguePresentation>(),
-                    resolver.Get<IScriptPlayback>(),
-                    resolver.Get<IInputManager>(),
-                    Configuration.Save.AutoSaveNodeIds,
-                    Configuration.Save.AutoSaveLineIds,
-                    Configuration.Save.AutoSaveMetadata,
-                    Logger),
+                resolver =>
+                {
+                    saveProductManager = new SaveProductManager(
+                        resolver.Get<ISaveSlotManager>(),
+                        resolver.Get<IDialoguePlayer>(),
+                        resolver.Get<IDialoguePresentation>(),
+                        resolver.Get<IScriptPlayback>(),
+                        resolver.Get<IInputManager>(),
+                        Configuration.Save.AutoSaveNodeIds,
+                        Configuration.Save.AutoSaveLineIds,
+                        Configuration.Save.AutoSaveMetadata,
+                        Logger);
+                    return saveProductManager;
+                },
                 typeof(ISaveSlotManager),
                 typeof(IDialoguePlayer),
                 typeof(IDialoguePresentation),

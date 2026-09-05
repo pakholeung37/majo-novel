@@ -42,15 +42,21 @@ public sealed class PluginRegistrationContext
         RuntimeCommandRegistry commands,
         ITransitionDriverRegistry transitions,
         ICameraModifierRegistry cameraModifiers,
-        ITransientCueHandlerRegistry? transientCueHandlers = null)
+        ITransientCueHandlerRegistry? transientCueHandlers = null,
+        CommandValueConverterRegistry? commandConverters = null,
+        CommandParameterGroupRegistry? commandParameterGroups = null)
     {
-        Commands = commands;
-        Transitions = transitions;
-        CameraModifiers = cameraModifiers;
+        Commands = commands ?? throw new ArgumentNullException(nameof(commands));
+        Transitions = transitions ?? throw new ArgumentNullException(nameof(transitions));
+        CameraModifiers = cameraModifiers ?? throw new ArgumentNullException(nameof(cameraModifiers));
         TransientCueHandlers = transientCueHandlers ?? new TransientCueHandlerRegistry();
+        CommandConverters = commandConverters ?? new CommandValueConverterRegistry();
+        CommandParameterGroups = commandParameterGroups ?? new CommandParameterGroupRegistry();
     }
 
     public RuntimeCommandRegistry Commands { get; }
+    public CommandValueConverterRegistry CommandConverters { get; }
+    public CommandParameterGroupRegistry CommandParameterGroups { get; }
     public ITransitionDriverRegistry Transitions { get; }
     public ICameraModifierRegistry CameraModifiers { get; }
     public ITransientCueHandlerRegistry TransientCueHandlers { get; }

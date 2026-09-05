@@ -2,72 +2,79 @@
 
 using System;
 using System.Threading.Tasks;
-using Majo.Runtime.Configuration;
 using Majo.Runtime.Audio;
 
 namespace Majo.Runtime.Dialogue.Commands.Audio;
 
-[RuntimeCommand(
-    "voice",
-    Category = "Audio",
-    Usage = "voice <clip> [volume:<0..1>] [duration:<seconds>] [wait:<bool>]")]
-public sealed class PlayVoiceCommandArguments
-{
-    [CommandParameter("clip", 0, Primary = true, Required = true)]
-    public string Clip { get; set; } = string.Empty;
-
-    [CommandParameter("volume", 1, DefaultValue = "1", Minimum = 0)]
-    public double Volume { get; set; }
-
-    [CommandParameter("duration", 2, DefaultSource = CommandDefaultSource.VoiceFadeDuration, Minimum = 0)]
-    public double Duration { get; set; }
-
-    [CommandParameter("wait", 3)]
-    public bool Wait { get; set; }
-
-}
-
-public sealed class PlayVoiceCommandHandler : IRuntimeCommandHandler<PlayVoiceCommandArguments>
+public sealed class PlayVoiceCommand : RuntimeCommand<PlayVoiceCommand.Arguments>
 {
     private readonly IAudioManager audio;
+    private readonly IAudioCommandPolicy policy;
 
-    public PlayVoiceCommandHandler(IAudioManager audio) =>
-        this.audio = audio ?? throw new ArgumentNullException(nameof(audio));
-
-    public async Task ExecuteAsync(
-        PlayVoiceCommandArguments arguments,
-        RuntimeCommandContext context)
+    public PlayVoiceCommand(IAudioManager audio, IAudioCommandPolicy policy)
     {
+        this.audio = audio ?? throw new ArgumentNullException(nameof(audio));
+        this.policy = policy ?? throw new ArgumentNullException(nameof(policy));
+    }
+
+    public override CommandSchema<Arguments> Schema { get; } =
+        CommandSchema<Arguments>
+            .Create(
+                "voice",
+                category: "Audio",
+                usage: "voice <clip> [volume:<0..1>] [duration:<seconds>] [wait:<bool>]")
+            .Primary<string>("clip")
+            .Optional<double>("volume", contractDefault: 1.0, hasContractDefault: true, minimum: 0)
+            .Use("fade", CommandParameterGroups.AudioFade())
+            .Use("wait", CommandParameterGroups.Wait(contractDefault: false))
+            .Build(static values => new Arguments(
+                values.Required<string>("clip"),
+                values.Optional<double>("volume").GetValueOrDefault(1.0),
+                values.Group<AudioFadeArguments>("fade"),
+                values.Group<WaitArguments>("wait")));
+
+    protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
+    {
+        var fadeDuration = policy.ResolveFadeDuration(arguments.Fade, AudioCommandKind.Voice, context);
+        var wait = arguments.Wait.Wait.GetValueOrDefault(false);
+
         var result = await audio.PlayVoiceAsync(
             arguments.Clip,
             volume: (float)arguments.Volume,
-            fade: AudioCommandExecution.Fade(
-                arguments.Duration),
+            fade: AudioCommandExecution.Fade(fadeDuration),
             cancellationToken: context.CancellationToken);
-        if (arguments.Wait)
+
+        if (wait)
         {
             await result.Playback.Completion.WaitAsync(context.CancellationToken);
         }
     }
+
+    public sealed record Arguments(
+        string Clip,
+        double Volume,
+        AudioFadeArguments Fade,
+        WaitArguments Wait);
 }
 
-[RuntimeCommand("stopVoice", Category = "Audio", Usage = "stopVoice")]
-public sealed class StopVoiceCommandArguments
-{
-}
-
-public sealed class StopVoiceCommandHandler : IRuntimeCommandHandler<StopVoiceCommandArguments>
+public sealed class StopVoiceCommand : RuntimeCommand<StopVoiceCommand.Arguments>
 {
     private readonly IAudioManager audio;
 
-    public StopVoiceCommandHandler(IAudioManager audio) =>
-        this.audio = audio ?? throw new ArgumentNullException(nameof(audio));
-
-    public async Task ExecuteAsync(
-        StopVoiceCommandArguments arguments,
-        RuntimeCommandContext context)
+    public StopVoiceCommand(IAudioManager audio)
     {
-        _ = arguments;
+        this.audio = audio ?? throw new ArgumentNullException(nameof(audio));
+    }
+
+    public override CommandSchema<Arguments> Schema { get; } =
+        CommandSchema<Arguments>
+            .Create("stopVoice", category: "Audio", usage: "stopVoice")
+            .Build(static _ => new Arguments());
+
+    protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
+    {
         await audio.StopVoiceAsync(cancellationToken: context.CancellationToken);
     }
+
+    public sealed record Arguments;
 }

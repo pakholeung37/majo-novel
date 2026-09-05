@@ -11,6 +11,7 @@ using Majo.Runtime.Core;
 using Majo.Runtime.Diagnostics;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Commands;
+using Majo.Runtime.Dialogue.Commands.Audio;
 using Majo.Runtime.Dialogue.Presentation;
 using Majo.Runtime.Dialogue.Yarn;
 using Majo.Runtime.Dialogue.Yarn.Presentation;
@@ -20,6 +21,7 @@ using Majo.Runtime.Direction.Transitions;
 using Majo.Runtime.Localization;
 using Majo.Runtime.Plugins;
 using Majo.Runtime.Resources;
+using Majo.Runtime.Save;
 using Majo.Runtime.Stage;
 using Majo.Runtime.State;
 using Majo.Runtime.UI.Diagnostics;
@@ -47,15 +49,18 @@ public partial class MajoRuntimeBootstrap : Node
         new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly CancellationTokenSource bootstrapLifetime = new();
     private Task? shutdownTask;
-    private IYarnCommandAdapter? yarnCommandAdapter;
+    private readonly DelegatingYarnCommandAdapter yarnCommandAdapter = new();
     private YarnDialogueBackend? yarnDialogueBackend;
     private DialoguePlayer? dialoguePlayer;
     private YarnDefaultDialoguePresentation? dialoguePresentation;
+    private ISaveProductManager? saveProductManager;
     private bool isExitingTree;
     private bool isBootstrapLifetimeDisposed;
     private bool isRuntimeShutdownSignalEmitted;
     private readonly PluginManager pluginManager = new();
     private readonly RuntimeCommandRegistry commandRegistry = new();
+    private readonly CommandValueConverterRegistry commandConverters = new();
+    private readonly CommandParameterGroupRegistry commandParameterGroups = new();
     private readonly TransitionDriverRegistry transitionDrivers = new();
     private readonly CameraModifierRegistry cameraModifiers = new();
     private readonly TransientCueHandlerRegistry transientCueHandlers = new();
@@ -64,7 +69,12 @@ public partial class MajoRuntimeBootstrap : Node
     public MajoRuntimeBootstrap()
     {
         pluginRegistration = new PluginRegistrationContext(
-            commandRegistry, transitionDrivers, cameraModifiers, transientCueHandlers);
+            commandRegistry,
+            transitionDrivers,
+            cameraModifiers,
+            transientCueHandlers,
+            commandConverters,
+            commandParameterGroups);
     }
 
     public IPluginManager Plugins => pluginManager;
@@ -91,6 +101,8 @@ public partial class MajoRuntimeBootstrap : Node
     public Action<RuntimeCommandRegistry>? ConfigureCommands { get; set; }
 
     public Action<CommandValueConverterRegistry>? ConfigureCommandConverters { get; set; }
+
+    public Action<CommandParameterGroupRegistry>? ConfigureCommandParameterGroups { get; set; }
 
     public Action<ResourceProviderRegistry>? ConfigureResourceProviders { get; set; }
 
@@ -227,17 +239,19 @@ public partial class MajoRuntimeBootstrap : Node
                 "initialization",
                 bootstrapLifetime.Token);
 
+            var backend = Host.Services.Get<IYarnDialogueBackend>();
+            var innerAdapter = CreateYarnCommandAdapter(
+                backend,
+                Host.Services);
+            await innerAdapter.InitializeAsync(bootstrapLifetime.Token);
+            yarnCommandAdapter.Attach(innerAdapter);
+            yarnCommandAdapter.CommandFailed += HandleCommandFailed;
+
             var pluginContext = new PluginContext(
                 Host.Services,
                 Configuration,
                 Logger!);
             await pluginManager.InitializeAllAsync(pluginContext, bootstrapLifetime.Token);
-
-            if (Host.Services.TryGet<IYarnCommandAdapter>(out var adapter))
-            {
-                yarnCommandAdapter = adapter!;
-                adapter!.CommandFailed += HandleCommandFailed;
-            }
 
             InitializeOverlays();
 
@@ -266,9 +280,21 @@ public partial class MajoRuntimeBootstrap : Node
 
     private void ConfigureAndSealPlugins()
     {
+        BuiltInRuntimeCommands.Register(commandRegistry);
+        new AudioCommandModule().Register(commandRegistry);
+        new DirectionCommandModule().Register(commandRegistry);
+
         ConfigureTransitionDrivers?.Invoke(transitionDrivers);
         ConfigureCameraModifiers?.Invoke(cameraModifiers);
+        ConfigureCommands?.Invoke(commandRegistry);
+        ConfigureCommandConverters?.Invoke(commandConverters);
+        ConfigureCommandParameterGroups?.Invoke(commandParameterGroups);
+
         pluginManager.Configure(pluginRegistration);
+
+        commandRegistry.SealRegistrations();
+        commandConverters.Seal();
+        commandParameterGroups.Seal();
         transitionDrivers.Seal();
         cameraModifiers.Seal();
         transientCueHandlers.Seal();

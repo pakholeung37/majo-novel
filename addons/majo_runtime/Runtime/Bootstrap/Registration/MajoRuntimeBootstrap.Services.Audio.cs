@@ -7,24 +7,29 @@ using Majo.Runtime.Core;
 using Majo.Runtime.Localization;
 using Majo.Runtime.Resources;
 
+using Majo.Runtime.Dialogue.Commands;
+
 namespace Majo.Runtime;
 
 public partial class MajoRuntimeBootstrap : Node
 {
     private void RegisterAudioServices(RuntimeServiceRegistry services)
     {
-        services.AddSingleton<IAudioManager>(
-            resolver => CreateAudioManager(
-                resolver.Get<IResourceManager>(),
-                resolver.Get<IMissingResourceReporter>(),
-                resolver.Get<ILocaleManager>(),
-                resolver.Get<ILocalizedResourceResolver>(),
-                resolver.Get<IRuntimeActivityRegistry>()),
-            typeof(IResourceManager),
-            typeof(IMissingResourceReporter),
-            typeof(ILocaleManager),
-            typeof(ILocalizedResourceResolver),
-            typeof(IRuntimeActivityRegistry));
+        services
+            .AddSingleton<IAudioCommandPolicy>(_ =>
+                new AudioCommandPolicy(AudioFadeDefaults.FromConfiguration(Configuration?.Animation)))
+            .AddSingleton<IAudioManager>(
+                resolver => CreateAudioManager(
+                    resolver.Get<IResourceManager>(),
+                    resolver.Get<IMissingResourceReporter>(),
+                    resolver.Get<ILocaleManager>(),
+                    resolver.Get<ILocalizedResourceResolver>(),
+                    resolver.Get<IRuntimeActivityRegistry>()),
+                typeof(IResourceManager),
+                typeof(IMissingResourceReporter),
+                typeof(ILocaleManager),
+                typeof(ILocalizedResourceResolver),
+                typeof(IRuntimeActivityRegistry));
     }
 
     private AudioManager CreateAudioManager(

@@ -1,8 +1,13 @@
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using Majo.Runtime.Core;
 using Majo.Runtime.Direction.Core;
+using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Stage;
+using Majo.Runtime.UnitTests.Testing;
 using Xunit;
 
 namespace Majo.Runtime.UnitTests;
@@ -12,79 +17,112 @@ public sealed class StageCommandTests
     [Fact]
     public void DirectionCameraCommandsBuildAValidatedCatalog()
     {
+        var beats = new FakeDirectionBeatRuntime();
+        var scopes = new DirectionScopeResolver();
+        var nodeAccessor = new DelegateDialogueNodeAccessor(() => "node");
+        var policy = new DirectionCommandPolicy(beats, DirectionAnimationDefaults.FromConfiguration(null));
+        var services = new ServiceResolverBuilder()
+            .Add<IDirectionBeatRuntime>(beats)
+            .Add<IDirectionScopeResolver>(scopes)
+            .Add<IDialogueNodeAccessor>(nodeAccessor)
+            .Add<IDirectionCommandPolicy>(policy)
+            .Add<IDirectionResourceKeyResolver>(new CatalogResourceResolver())
+            .Add<IDirectionPositionResolver>(new CatalogPositionResolver())
+            .Build();
+
         var registry = new RuntimeCommandRegistry();
-        registry
-            .Register<CameraMoveDirectionCommandArguments>((_, _) => Task.CompletedTask)
-            .Register<CameraPoseDirectionCommandArguments>((_, _) => Task.CompletedTask)
-            .Register<CameraResetDirectionCommandArguments>((_, _) => Task.CompletedTask)
-            .Register<CameraFxDirectionCommandArguments>((_, _) => Task.CompletedTask);
-        var catalog = registry.BuildCatalog();
+        new DirectionCommandModule().Register(registry);
+        registry.SealRegistrations();
+        var catalog = registry.BuildCatalog(services);
 
         Assert.Contains(catalog.Commands, command => command.Name == "camera move");
         Assert.Contains(catalog.Commands, command => command.Name == "camera pose");
         Assert.Contains(catalog.Commands, command => command.Name == "camera reset");
         Assert.Contains(catalog.Commands, command => command.Name == "camera fx");
 
-        var binder = new CommandBinder(new CommandBindingContext(0.35));
-        foreach (var command in catalog.Commands) binder.Validate(command.Descriptor);
+        var move = (CameraMoveCommand)catalog.Get("camera move");
+        var moveArgs = move.Schema.Bind(new RawCommandArguments(null, new Dictionary<string, string>
+        {
+            ["center"] = "12,-4",
+            ["ease"] = "back-out",
+            ["wait"] = "true"
+        }));
+        Assert.Equal(12, moveArgs.Center.Value.X);
+        Assert.Equal(-4, moveArgs.Center.Value.Y);
+        Assert.Equal(DirectionEase.BackOut, moveArgs.Timing.Ease.Value);
+        Assert.True(moveArgs.Timing.Wait.Value);
 
-        var move = catalog.Get("camera move");
-        var arguments = binder.Bind<CameraMoveDirectionCommandArguments>(
-            move.Descriptor, new[] { "center:12,-4", "ease:back-out", "wait:true" });
-        Assert.Equal(12, arguments.Center?.X);
-        Assert.Equal(-4, arguments.Center?.Y);
-        Assert.Equal("back-out", arguments.Ease);
-        Assert.True(arguments.Wait);
+        var pose = (CameraPoseCommand)catalog.Get("camera pose");
+        var poseArguments = pose.Schema.Bind(new RawCommandArguments(null, new Dictionary<string, string>
+        {
+            ["center"] = "80,-35",
+            ["zoom"] = "3",
+            ["rotation"] = "-10"
+        }));
+        Assert.Equal(80, poseArguments.Center.Value.X);
+        Assert.Equal(-35, poseArguments.Center.Value.Y);
+        Assert.Equal(3, poseArguments.Zoom.Value);
+        Assert.Equal(-10, poseArguments.Rotation.Value);
+        Assert.False(poseArguments.Via.WasProvided);
+        Assert.False(poseArguments.Timing.Duration.WasProvided);
 
-        var pose = catalog.Get("camera pose");
-        var poseArguments = binder.Bind<CameraPoseDirectionCommandArguments>(
-            pose.Descriptor, new[] { "center:80,-35", "zoom:3", "rotation:-10" });
-        Assert.Equal(80, poseArguments.Center?.X);
-        Assert.Equal(-35, poseArguments.Center?.Y);
-        Assert.Equal(3, poseArguments.Zoom);
-        Assert.Equal(-10, poseArguments.Rotation);
-        Assert.Null(poseArguments.Via);
-        Assert.Null(poseArguments.Duration);
+        var dissolveArguments = pose.Schema.Bind(new RawCommandArguments(null, new Dictionary<string, string>
+        {
+            ["zoom"] = "1",
+            ["via"] = "dissolve",
+            ["duration"] = "0.6",
+            ["ease"] = "sine-in-out"
+        }));
+        Assert.Equal(DirectionTransitionId.Dissolve, dissolveArguments.Via.Value);
+        Assert.Equal(0.6, dissolveArguments.Timing.Duration.Value);
+        Assert.Equal(DirectionEase.SineInOut, dissolveArguments.Timing.Ease.Value);
 
-        var dissolveArguments = binder.Bind<CameraPoseDirectionCommandArguments>(
-            pose.Descriptor,
-            new[] { "zoom:1", "via:dissolve", "duration:0.6", "ease:sine-in-out" });
-        Assert.Equal(DirectionTransitionKind.Dissolve, dissolveArguments.Via);
-        Assert.Equal(0.6, dissolveArguments.Duration);
-        Assert.Equal("sine-in-out", dissolveArguments.Ease);
+        var reset = (CameraResetCommand)catalog.Get("camera reset");
+        var resetArguments = reset.Schema.Bind(new RawCommandArguments(null, new Dictionary<string, string>
+        {
+            ["via"] = "dissolve",
+            ["duration"] = "0.6",
+            ["wait"] = "true"
+        }));
+        Assert.False(resetArguments.Stage.WasProvided);
+        Assert.False(resetArguments.View.WasProvided);
+        Assert.Equal(DirectionTransitionId.Dissolve, resetArguments.Transition.Via.Value);
+        Assert.Equal(0.6, resetArguments.Transition.Timing.Duration.Value);
+        Assert.True(resetArguments.Transition.Wait.Value);
 
-        var reset = catalog.Get("camera reset");
-        var resetArguments = binder.Bind<CameraResetDirectionCommandArguments>(
-            reset.Descriptor,
-            new[] { "via:dissolve", "duration:0.6", "wait:true" });
-        Assert.Null(resetArguments.Stage);
-        Assert.Null(resetArguments.View);
-        Assert.Equal(DirectionTransitionKind.Dissolve, resetArguments.Via);
-        Assert.Equal(0.6, resetArguments.Duration);
-        Assert.True(resetArguments.Wait);
-        var resetStage = binder.Bind<CameraResetDirectionCommandArguments>(
-            reset.Descriptor,
-            new[] { "stage:main" });
-        Assert.Equal("main", resetStage.Stage);
-        Assert.Null(resetStage.View);
+        var resetStage = reset.Schema.Bind(new RawCommandArguments(null, new Dictionary<string, string>
+        {
+            ["stage"] = "main"
+        }));
+        Assert.Equal("main", resetStage.Stage.Value);
+        Assert.False(resetStage.View.WasProvided);
+
         var resetAmbiguous = Assert.Throws<RuntimeCommandException>(() =>
-            binder.Bind<CameraResetDirectionCommandArguments>(
-                reset.Descriptor,
-                new[] { "stage:main", "view:main" }));
+            reset.Schema.Bind(new RawCommandArguments(null, new Dictionary<string, string>
+            {
+                ["stage"] = "main",
+                ["view"] = "main"
+            })));
         Assert.Contains("stage", resetAmbiguous.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("view", resetAmbiguous.Message, StringComparison.OrdinalIgnoreCase);
 
-        var fx = catalog.Get("camera fx");
-        var fxArguments = binder.Bind<CameraFxDirectionCommandArguments>(
-            fx.Descriptor,
-            new[] { "shake", "stage:illustration", "strength:15", "axis:diagonal", "frequency:30", "duration:0.8", "wait:true" });
+        var fx = (CameraFxCommand)catalog.Get("camera fx");
+        var fxArguments = fx.Schema.Bind(new RawCommandArguments("shake", new Dictionary<string, string>
+        {
+            ["stage"] = "illustration",
+            ["strength"] = "15",
+            ["axis"] = "diagonal",
+            ["frequency"] = "30",
+            ["duration"] = "0.8",
+            ["wait"] = "true"
+        }));
         Assert.Equal("shake", fxArguments.Effect);
-        Assert.Equal("illustration", fxArguments.Stage);
-        Assert.Equal(15, fxArguments.Strength);
-        Assert.Equal(CameraShakeAxis.Diagonal, fxArguments.Axis);
-        Assert.Equal(30, fxArguments.Frequency);
-        Assert.Equal(0.8, fxArguments.Duration);
-        Assert.True(fxArguments.Wait);
+        Assert.Equal("illustration", fxArguments.Stage.Value);
+        Assert.Equal(15, fxArguments.Strength.Value);
+        Assert.Equal(CameraShakeAxis.Diagonal, fxArguments.Axis.Value);
+        Assert.Equal(30, fxArguments.Frequency.Value);
+        Assert.Equal(0.8, fxArguments.Duration.Value);
+        Assert.True(fxArguments.Wait.Wait.Value);
     }
 
     [Fact]

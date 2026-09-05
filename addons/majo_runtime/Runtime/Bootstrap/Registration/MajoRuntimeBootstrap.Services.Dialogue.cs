@@ -24,6 +24,7 @@ using Majo.Runtime.Localization;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Played;
 using Majo.Runtime.Resources;
+using Majo.Runtime.Save;
 using Majo.Runtime.Script;
 using Majo.Runtime.Settings;
 using Majo.Runtime.UI.History;
@@ -134,17 +135,12 @@ public partial class MajoRuntimeBootstrap : Node
                 resolver => new DialogueVariables(
                     resolver.Get<IYarnDialogueBackend>().VariableStore),
                 typeof(IYarnDialogueBackend))
+            .AddSingleton<IDialogueNodeAccessor>(
+                _ => new DelegateDialogueNodeAccessor(() => dialoguePlayer?.CurrentNode))
+            .AddSingleton<ISaveProductAccessor>(
+                _ => new DelegateSaveProductAccessor(() => saveProductManager))
             .AddSingleton<IYarnCommandAdapter>(
-                resolver => CreateYarnCommandAdapter(
-                    resolver.Get<IYarnDialogueBackend>(),
-                    resolver.Get<IActorManager>(),
-                    resolver.Get<IAudioManager>(),
-                    resolver.Get<IDirectionBeatRuntime>()),
-                typeof(IYarnDialogueBackend),
-                typeof(IActorManager),
-                typeof(IAudioManager),
-                typeof(IDirectionBeatRuntime),
-                typeof(DirectionBeatNodeBoundaryService))
+                _ => yarnCommandAdapter)
             .AddSingleton<IDialoguePlayer>(
                 resolver =>
                 {
@@ -156,7 +152,6 @@ public partial class MajoRuntimeBootstrap : Node
                     return dialoguePlayer;
                 },
                 typeof(IYarnDialogueBackend),
-                typeof(IYarnCommandAdapter),
                 typeof(IDialoguePresentation))
             .AddSingleton<IScriptManager>(
                 resolver => new ScriptManager(resolver.Get<IYarnDialogueBackend>()),
@@ -292,36 +287,14 @@ public partial class MajoRuntimeBootstrap : Node
 
     private YarnCommandAdapter CreateYarnCommandAdapter(
         IYarnDialogueBackend backend,
-        IActorManager actors,
-        IAudioManager audio,
-        IDirectionBeatRuntime direction)
+        IServiceResolver services)
     {
-        var commands = commandRegistry;
-        BuiltInRuntimeCommands.Register(commands);
-        commands.RegisterModule(new AudioCommandModule(audio));
-        commands.RegisterModule(new DirectionCommandModule(
-            direction,
-            DirectionResourceResolver ??
-                new DirectionResourceKeyResolver(Configuration!.Resources!),
-            DirectionPositionResolver ??
-                new Majo.Runtime.Dialogue.Commands.DirectionPositionResolver(
-                    Configuration!.Actors!),
-            Host!.Services.Get<IDirectionScopeResolver>(),
-            () => dialoguePlayer?.CurrentNode));
-        ConfigureCommands?.Invoke(commands);
-        var catalog = commands.BuildCatalog();
-        var converters = new CommandValueConverterRegistry();
-        ConfigureCommandConverters?.Invoke(converters);
-        var animation = Configuration!.Animation ?? new AnimationConfiguration();
-        var binder = new CommandBinder(
-            new CommandBindingContext(animation),
-            converters);
+        var environment = new CommandBindingEnvironment(commandConverters, commandParameterGroups);
+        var catalog = commandRegistry.BuildCatalog(services, environment);
         var dispatcher = new RuntimeCommandDispatcher(
-            binder,
-            actors,
-            Host!.Services,
+            services,
             Logger,
-            Configuration.Dialogue!.AbortOnCommandError);
+            Configuration?.Dialogue?.AbortOnCommandError ?? true);
         var adapter = new YarnCommandAdapter(
             new DialogueRunnerCommandRegistry(backend.Runner),
             catalog,

@@ -1,12 +1,20 @@
+#nullable enable
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
-using Godot;
+using System.Threading;
+using System.Threading.Tasks;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Core;
-using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Dialogue.Yarn;
 using Majo.Runtime.Diagnostics;
+using Majo.Runtime.Direction.Core;
+using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Operations;
+using Majo.Runtime.Stage;
 using Majo.Runtime.UnitTests.Testing;
 using Xunit;
 
@@ -17,40 +25,76 @@ public sealed class RuntimeCommandTests
     [Fact]
     public void BinderConvertsTypedArgumentsAndIgnoresNamedArgumentOrder()
     {
-        var character = Bind<CharacterDirectionCommandArguments>(
-            [
-                "maya",
-                "wait:true",
-                "at:right",
-                "duration:0.5",
-                "appearance:happy",
-                "scale:0.75",
-                "z:12",
-            ]);
+        var beats = new FakeDirectionBeatRuntime();
+        var nodeAccessor = new DelegateDialogueNodeAccessor(() => "node");
+        var command = new CharacterCommand(
+            beats,
+            new CatalogPositionResolver(),
+            new DirectionScopeResolver(),
+            nodeAccessor,
+            new DirectionCommandPolicy(beats, DirectionAnimationDefaults.FromConfiguration(null)));
+
+        var character = command.Schema.Bind(
+            new RawCommandArguments("maya", new Dictionary<string, string>
+            {
+                ["wait"] = "true",
+                ["at"] = "right",
+                ["duration"] = "0.5",
+                ["appearance"] = "happy",
+                ["scale"] = "0.75",
+                ["z"] = "12",
+            }));
 
         Assert.Equal("maya", character.Actor);
-        Assert.Equal("happy", character.Appearance);
-        Assert.Equal("right", character.At);
-        Assert.Equal(0.5, character.Duration);
-        Assert.True(character.Wait);
-        Assert.Equal(0.75, character.Scale);
-        Assert.Equal(12, character.Z);
+        Assert.Equal("happy", character.Appearance.Value);
+        Assert.Equal("right", character.At.Value);
+        Assert.Equal(0.5, character.Transition.Duration.Value);
+        Assert.True(character.Transition.Wait.Value);
+        Assert.Equal(0.75f, character.Scale.Value);
+        Assert.Equal(12, character.Z.Value);
     }
 
     [Fact]
     public void BinderUsesConfiguredAndLanguageDefaults()
     {
-        var backdrop = Bind<BackdropDirectionCommandArguments>(["courtroom"]);
-        var character = Bind<CharacterDirectionCommandArguments>(
-            ["maya", "appearance:happy", "at:center"]);
+        var beats = new FakeDirectionBeatRuntime();
+        var nodeAccessor = new DelegateDialogueNodeAccessor(() => "node");
+        var policy = new DirectionCommandPolicy(beats, DirectionAnimationDefaults.FromConfiguration(null));
+        var backdropCommand = new BackdropCommand(
+            beats,
+            new CatalogResourceResolver(),
+            new DirectionScopeResolver(),
+            nodeAccessor,
+            policy);
+
+        var backdrop = backdropCommand.Schema.Bind(
+            new RawCommandArguments("courtroom", new Dictionary<string, string>()));
+
+        var characterCommand = new CharacterCommand(
+            beats,
+            new CatalogPositionResolver(),
+            new DirectionScopeResolver(),
+            nodeAccessor,
+            policy);
+
+        var character = characterCommand.Schema.Bind(
+            new RawCommandArguments("maya", new Dictionary<string, string>
+            {
+                ["appearance"] = "happy",
+                ["at"] = "center",
+            }));
 
         Assert.Equal("courtroom", backdrop.Resource);
-        Assert.False(backdrop.Wait);
-        Assert.Equal("center", character.At);
-        Assert.False(character.Wait);
+        Assert.False(backdrop.Transition.Wait.Value);
+        Assert.Equal("center", character.At.Value);
+        Assert.False(character.Transition.Wait.Value);
 
-        var constant = Bind<ConstantDefaultCommandArguments>([]);
-        Assert.True(constant.Enabled);
+        var constantCommand = new ConstantDefaultCommand();
+        var constant = constantCommand.Schema.Bind(
+            new RawCommandArguments(null, new Dictionary<string, string>()));
+        Assert.True(constant.Enabled.Value);
+        Assert.False(constant.Enabled.WasProvided);
+        Assert.Equal(CommandValueOrigin.ContractDefault, constant.Enabled.Origin);
     }
 
     [Theory]
@@ -67,17 +111,38 @@ public sealed class RuntimeCommandTests
         string commandText)
     {
         var pieces = commandText.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var beats = new FakeDirectionBeatRuntime();
+        var nodeAccessor = new DelegateDialogueNodeAccessor(() => "node");
+        var policy = new DirectionCommandPolicy(beats, DirectionAnimationDefaults.FromConfiguration(null));
 
         var exception = Assert.Throws<RuntimeCommandException>(() =>
         {
             switch (pieces[0])
             {
                 case "character":
-                    Bind<CharacterDirectionCommandArguments>(pieces[1..]);
+                {
+                    var cmd = new CharacterCommand(
+                        beats,
+                        new CatalogPositionResolver(),
+                        new DirectionScopeResolver(),
+                        nodeAccessor,
+                        policy);
+                    var input = new CommandInput("character", pieces[1..]);
+                    cmd.Schema.Bind(input);
                     break;
+                }
                 case "backdrop":
-                    Bind<BackdropDirectionCommandArguments>(pieces[1..]);
+                {
+                    var cmd = new BackdropCommand(
+                        beats,
+                        new CatalogResourceResolver(),
+                        new DirectionScopeResolver(),
+                        nodeAccessor,
+                        policy);
+                    var input = new CommandInput("backdrop", pieces[1..]);
+                    cmd.Schema.Bind(input);
                     break;
+                }
             }
         });
 
@@ -90,6 +155,7 @@ public sealed class RuntimeCommandTests
     {
         var commands = new RuntimeCommandRegistry();
         BuiltInRuntimeCommands.Register(commands);
+        commands.SealRegistrations();
         var catalog = commands.BuildCatalog();
 
         Assert.Equal(
@@ -108,32 +174,17 @@ public sealed class RuntimeCommandTests
         BuiltInRuntimeCommands.Register(commands);
 
         var duplicate = Assert.Throws<RuntimeCommandException>(() =>
-            commands.Register<DuplicateProbeArguments>((_, _) => Task.CompletedTask));
+            commands.Add("save", _ => new DuplicateCommand(), "test"));
         Assert.Contains("already registered", duplicate.Message, StringComparison.OrdinalIgnoreCase);
 
         var reserved = Assert.Throws<RuntimeCommandException>(() =>
-            new RuntimeCommandRegistry().Register<ReservedWaitArguments>(
-                (_, _) => Task.CompletedTask));
+            new RuntimeCommandRegistry().Add("WAIT", _ => new ReservedWaitCommand(), "test"));
         Assert.Contains("Yarn Spinner", reserved.Message, StringComparison.Ordinal);
 
-        _ = commands.BuildCatalog();
+        commands.SealRegistrations();
         var late = Assert.Throws<RuntimeCommandException>(() =>
-            commands.Register<ProbeCommandArguments>((_, _) => Task.CompletedTask));
+            commands.Add("probe", _ => new ProbeCommand(), "test"));
         Assert.Contains("before Runtime initialization", late.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void RegistryRejectsWritableArgumentsWithoutParameterMetadata()
-    {
-        var exception = Assert.Throws<InvalidOperationException>(() =>
-            new RuntimeCommandRegistry().Register<IncompleteMetadataArguments>(
-                (_, _) => Task.CompletedTask));
-
-        Assert.Contains(
-            nameof(CommandParameterAttribute),
-            exception.Message,
-            StringComparison.Ordinal);
-        Assert.Contains("MissingMetadata", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -154,14 +205,13 @@ public sealed class RuntimeCommandTests
     [Fact]
     public void BinderUsesRegisteredCustomValueConverter()
     {
-        var commands = new RuntimeCommandRegistry();
-        commands.Register<CustomValueCommandArguments>((_, _) => Task.CompletedTask);
-        var descriptor = Assert.Single(commands.Registrations).Descriptor;
         var converters = new CommandValueConverterRegistry()
             .Register(value => new CustomCommandValue(value.ToUpperInvariant()));
-        var binder = new CommandBinder(new CommandBindingContext(0.35), converters);
+        var env = new CommandBindingEnvironment(converters);
 
-        var arguments = binder.Bind<CustomValueCommandArguments>(descriptor, ["sample"]);
+        var command = new CustomValueCommand();
+        command.Schema.AttachEnvironment(env);
+        var arguments = command.Schema.Bind(new RawCommandArguments("sample", new Dictionary<string, string>()));
 
         Assert.Equal("SAMPLE", arguments.Value.Text);
     }
@@ -169,13 +219,11 @@ public sealed class RuntimeCommandTests
     [Fact]
     public void BinderValidationRejectsMissingConverterBeforeCommandExecution()
     {
-        var commands = new RuntimeCommandRegistry();
-        commands.Register<CustomValueCommandArguments>((_, _) => Task.CompletedTask);
-        var descriptor = Assert.Single(commands.Registrations).Descriptor;
-        var binder = new CommandBinder(new CommandBindingContext(0.35));
+        var env = new CommandBindingEnvironment(new CommandValueConverterRegistry());
+        var command = new CustomValueCommand();
 
         var exception = Assert.Throws<RuntimeCommandException>(() =>
-            binder.Validate(descriptor));
+            command.Schema.Validate(env));
 
         Assert.Contains("converter", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("value", exception.Message, StringComparison.OrdinalIgnoreCase);
@@ -212,16 +260,18 @@ public sealed class RuntimeCommandTests
     public async Task AdapterDispatchesHierarchicalCommandToItsOwnDescriptor()
     {
         var registry = new FakeCommandRegistry();
-        HierarchicalProbeArguments? received = null;
+        HierarchicalProbeCommand.Arguments? received = null;
         var adapter = CreateAdapter(
             registry,
             out var catalog,
-            configure: commands => commands.Register<HierarchicalProbeArguments>(
-                (arguments, _) =>
+            configure: commands => commands.Add(
+                "camera probe",
+                _ => new HierarchicalProbeCommand((arguments, _) =>
                 {
                     received = arguments;
                     return Task.CompletedTask;
-                }));
+                }),
+                "test"));
 
         await adapter.InitializeAsync(CancellationToken.None);
 
@@ -240,12 +290,32 @@ public sealed class RuntimeCommandTests
         var registry = new FakeCommandRegistry();
         var logs = new RecordingLogSink();
         var logger = new StructuredRuntimeLogger(logs, RuntimeLogLevel.Debug);
+        var beats = new FakeDirectionBeatRuntime();
+        var nodeAccessor = new DelegateDialogueNodeAccessor(() => "node");
+        var policy = new DirectionCommandPolicy(beats, DirectionAnimationDefaults.FromConfiguration(null));
+        var services = new ServiceResolverBuilder()
+            .Add<IDirectionBeatRuntime>(beats)
+            .Add<IDialogueNodeAccessor>(nodeAccessor)
+            .Add<IDirectionScopeResolver>(new DirectionScopeResolver())
+            .Add<IDirectionPositionResolver>(new CatalogPositionResolver())
+            .Add<IDirectionResourceKeyResolver>(new CatalogResourceResolver())
+            .Add<IDirectionCommandPolicy>(policy)
+            .Build();
+
         var adapter = CreateAdapter(
             registry,
             out var catalog,
             logger: logger,
-            configure: commands => commands.Register<CharacterDirectionCommandArguments>(
-                (_, _) => Task.CompletedTask));
+            services: services,
+            configure: commands => commands.Add(
+                "character",
+                s => new CharacterCommand(
+                    s.Get<IDirectionBeatRuntime>(),
+                    s.Get<IDirectionPositionResolver>(),
+                    s.Get<IDirectionScopeResolver>(),
+                    s.Get<IDialogueNodeAccessor>(),
+                    s.Get<IDirectionCommandPolicy>()),
+                "test"));
         await adapter.InitializeAsync(CancellationToken.None);
         var handler = Assert.IsType<Func<string[], Task>>(registry.Handlers["character"]);
 
@@ -255,7 +325,7 @@ public sealed class RuntimeCommandTests
         Assert.Same(exception, adapter.LastFailure);
         Assert.Contains("at least one", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(
-            catalog.Get("character").Descriptor.Usage,
+            catalog.Get("character").Schema.Usage,
             exception.Message,
             StringComparison.Ordinal);
         Assert.Equal(1, registry.AbortCount);
@@ -273,12 +343,32 @@ public sealed class RuntimeCommandTests
         var registry = new FakeCommandRegistry();
         var logs = new RecordingLogSink();
         var logger = new StructuredRuntimeLogger(logs, RuntimeLogLevel.Debug);
+        var beats = new FakeDirectionBeatRuntime();
+        var nodeAccessor = new DelegateDialogueNodeAccessor(() => "node");
+        var policy = new DirectionCommandPolicy(beats, DirectionAnimationDefaults.FromConfiguration(null));
+        var services = new ServiceResolverBuilder()
+            .Add<IDirectionBeatRuntime>(beats)
+            .Add<IDialogueNodeAccessor>(nodeAccessor)
+            .Add<IDirectionScopeResolver>(new DirectionScopeResolver())
+            .Add<IDirectionPositionResolver>(new CatalogPositionResolver())
+            .Add<IDirectionResourceKeyResolver>(new CatalogResourceResolver())
+            .Add<IDirectionCommandPolicy>(policy)
+            .Build();
+
         var adapter = CreateAdapter(
             registry,
             out _,
             logger: logger,
-            configure: commands => commands.Register<CharacterDirectionCommandArguments>(
-                (_, _) => Task.CompletedTask),
+            services: services,
+            configure: commands => commands.Add(
+                "character",
+                s => new CharacterCommand(
+                    s.Get<IDirectionBeatRuntime>(),
+                    s.Get<IDirectionPositionResolver>(),
+                    s.Get<IDirectionScopeResolver>(),
+                    s.Get<IDialogueNodeAccessor>(),
+                    s.Get<IDirectionCommandPolicy>()),
+                "test"),
             abortOnRecoverableFailure: false);
         await adapter.InitializeAsync(CancellationToken.None);
         var handler = Assert.IsType<Func<string[], Task>>(registry.Handlers["character"]);
@@ -332,8 +422,10 @@ public sealed class RuntimeCommandTests
             registry,
             out _,
             logger: logger,
-            configure: commands => commands.Register<ProbeCommandArguments>(
-                (_, _) => throw new InvalidOperationException("engine bug")),
+            configure: commands => commands.Add(
+                "probe",
+                _ => new ProbeCommand((_, _) => throw new InvalidOperationException("engine bug")),
+                "test"),
             abortOnRecoverableFailure: false);
         await adapter.InitializeAsync(CancellationToken.None);
         var handler = Assert.IsType<Func<string[], Task>>(registry.Handlers["probe"]);
@@ -351,28 +443,24 @@ public sealed class RuntimeCommandTests
         await adapter.ShutdownAsync(CancellationToken.None);
     }
 
-
-
-
-
     [Fact(Timeout = 5_000)]
     public async Task ExtensionCommandUsesPublicRegistryAndRuntimeContext()
     {
         var yarnRegistry = new FakeCommandRegistry();
-        var actorManager = new FakeActorManager();
-        var scheduler = new FakeOperationRunner();
-        ProbeCommandArguments? received = null;
+        ProbeCommand.Arguments? received = null;
         var adapter = CreateAdapter(
             yarnRegistry,
             out _,
-            actorManager,
-            scheduler,
-            commands => commands.Register<ProbeCommandArguments>((arguments, context) =>
-            {
-                received = arguments;
-                Assert.Same(actorManager, context.Actors);
-                return Task.CompletedTask;
-            }));
+            configure: commands => commands.Add(
+                "probe",
+                _ => new ProbeCommand((arguments, context) =>
+                {
+                    received = arguments;
+                    Assert.NotNull(context);
+                    Assert.False(string.IsNullOrEmpty(context.ExecutionId));
+                    return Task.CompletedTask;
+                }),
+                "test"));
 
         await adapter.InitializeAsync(CancellationToken.None);
         var handler = Assert.IsType<Func<string[], Task>>(yarnRegistry.Handlers["probe"]);
@@ -383,8 +471,6 @@ public sealed class RuntimeCommandTests
         await adapter.ShutdownAsync(CancellationToken.None);
     }
 
-
-
     [Fact(Timeout = 5_000)]
     public async Task CommandsDispatchedAfterDialogueCancellationAreIgnored()
     {
@@ -392,8 +478,10 @@ public sealed class RuntimeCommandTests
         var adapter = CreateAdapter(
             yarnRegistry,
             out _,
-            configure: commands => commands.Register<ProbeCommandArguments>((_, _) =>
-                Task.CompletedTask));
+            configure: commands => commands.Add(
+                "probe",
+                _ => new ProbeCommand(),
+                "test"));
         await adapter.InitializeAsync(CancellationToken.None);
 
         var handler = Assert.IsType<Func<string[], Task>>(yarnRegistry.Handlers["probe"]);
@@ -414,14 +502,14 @@ public sealed class RuntimeCommandTests
         var allowExitTcs = new TaskCompletionSource();
 
         var commands = new RuntimeCommandRegistry();
-        commands.Register<ProbeCommandArguments>(async (args, ctx) =>
+        commands.Add("probe", _ => new ProbeCommand(async (args, ctx) =>
         {
             cmdTcs.SetResult();
             await allowExitTcs.Task;
-        });
+        }), "test");
+        commands.SealRegistrations();
         var catalog = commands.BuildCatalog();
         var dispatcher = new RuntimeCommandDispatcher(
-            new CommandBinder(new CommandBindingContext(0.35)),
             activities: registry);
         var adapter = new YarnCommandAdapter(yarnRegistry, catalog, dispatcher);
 
@@ -453,7 +541,7 @@ public sealed class RuntimeCommandTests
         var cmdCancelledTcs = new TaskCompletionSource();
 
         var commands = new RuntimeCommandRegistry();
-        commands.Register<ProbeCommandArguments>(async (args, ctx) =>
+        commands.Add("probe", _ => new ProbeCommand(async (args, ctx) =>
         {
             cmdStartedTcs.SetResult();
             try
@@ -465,10 +553,10 @@ public sealed class RuntimeCommandTests
                 cmdCancelledTcs.SetResult();
                 throw;
             }
-        });
+        }), "test");
+        commands.SealRegistrations();
         var catalog = commands.BuildCatalog();
-        var dispatcher = new RuntimeCommandDispatcher(
-            new CommandBinder(new CommandBindingContext(0.35)));
+        var dispatcher = new RuntimeCommandDispatcher();
         var adapter = new YarnCommandAdapter(yarnRegistry, catalog, dispatcher);
 
         await adapter.InitializeAsync(CancellationToken.None);
@@ -487,16 +575,61 @@ public sealed class RuntimeCommandTests
         await adapter.ShutdownAsync(CancellationToken.None);
     }
 
-    private static TArguments Bind<TArguments>(
-        IReadOnlyList<string> arguments,
-        double defaultDuration = 0.35)
-        where TArguments : class, new()
+    [Fact]
+    public void Manifest_GeneratesAndMergesCleanly()
     {
         var commands = new RuntimeCommandRegistry();
-        commands.Register<TArguments>((_, _) => Task.CompletedTask);
-        var descriptor = Assert.Single(commands.Registrations).Descriptor;
-        return new CommandBinder(new CommandBindingContext(defaultDuration))
-            .Bind<TArguments>(descriptor, arguments);
+        BuiltInRuntimeCommands.Register(commands);
+        commands.SealRegistrations();
+        var catalog = commands.BuildCatalog();
+
+        var manifest1 = RuntimeCommandManifest.FromCatalog(catalog, "provider1", "1.0");
+        Assert.Equal("provider1", manifest1.ProviderId);
+        Assert.Equal("1.0", manifest1.Version);
+        Assert.Contains(manifest1.Commands, c => c.Name == "save");
+        Assert.Contains(manifest1.Commands, c => c.Name == "autoSave");
+
+        var json = manifest1.ToJson();
+        var roundTrip = RuntimeCommandManifest.FromJson(json);
+        Assert.Equal(manifest1.ProviderId, roundTrip.ProviderId);
+        Assert.Equal(manifest1.Commands.Count, roundTrip.Commands.Count);
+
+        var customCommands = new RuntimeCommandRegistry();
+        customCommands.Add("probe", _ => new ProbeCommand(), "provider2", "2.0");
+        customCommands.SealRegistrations();
+        var catalog2 = customCommands.BuildCatalog();
+        var manifest2 = RuntimeCommandManifest.FromCatalog(catalog2, "provider2", "2.0");
+
+        var merged = RuntimeCommandManifestMerger.Merge("merged_provider", "1.0", new[] { manifest1, manifest2 });
+        Assert.Equal(3, merged.Commands.Count);
+        Assert.Contains(merged.Commands, c => c.Name == "save");
+        Assert.Contains(merged.Commands, c => c.Name == "probe");
+    }
+
+    [Fact]
+    public void ParameterGroups_CanBeReusedAcrossSchemas()
+    {
+        var groups = new CommandParameterGroupRegistry();
+        groups.Register("sharedWait", CommandParameterGroups.Wait(contractDefault: true));
+        groups.Seal();
+
+        var env = new CommandBindingEnvironment(new CommandValueConverterRegistry(), groups);
+
+        var schema1 = CommandSchema<WaitArguments>
+            .Create("cmd1")
+            .Use("wait", groups.Get("sharedWait"))
+            .Build(static values => values.Group<WaitArguments>("wait"));
+        schema1.AttachEnvironment(env);
+
+        var res1 = schema1.Bind(new RawCommandArguments(null, new Dictionary<string, string>()));
+        Assert.True(res1.Wait.Value);
+        Assert.False(res1.Wait.WasProvided);
+        Assert.Equal(CommandValueOrigin.ContractDefault, res1.Wait.Origin);
+
+        var res2 = schema1.Bind(new RawCommandArguments(null, new Dictionary<string, string> { ["wait"] = "false" }));
+        Assert.False(res2.Wait.Value);
+        Assert.True(res2.Wait.WasProvided);
+        Assert.Equal(CommandValueOrigin.Explicit, res2.Wait.Origin);
     }
 
     private static YarnCommandAdapter CreateAdapter(
@@ -506,15 +639,16 @@ public sealed class RuntimeCommandTests
         IOperationRunner? operations = null,
         Action<RuntimeCommandRegistry>? configure = null,
         IRuntimeLogger? logger = null,
-        bool abortOnRecoverableFailure = true)
+        bool abortOnRecoverableFailure = true,
+        IServiceResolver? services = null)
     {
         var commands = new RuntimeCommandRegistry();
         BuiltInRuntimeCommands.Register(commands);
         configure?.Invoke(commands);
-        catalog = commands.BuildCatalog();
+        commands.SealRegistrations();
+        catalog = commands.BuildCatalog(services);
         var dispatcher = new RuntimeCommandDispatcher(
-            new CommandBinder(new CommandBindingContext(0.35)),
-            actors,
+            services,
             logger: logger,
             abortOnRecoverableFailure: abortOnRecoverableFailure);
         return new YarnCommandAdapter(
@@ -523,65 +657,123 @@ public sealed class RuntimeCommandTests
             dispatcher);
     }
 
-    [RuntimeCommand("probe", Category = "Test", Usage = "probe <value> detail:<value>")]
-    private sealed class ProbeCommandArguments
+    private sealed class ProbeCommand : RuntimeCommand<ProbeCommand.Arguments>
     {
-        [CommandParameter("value", 0, Primary = true, Required = true)]
-        public string Value { get; set; } = string.Empty;
+        private readonly Func<Arguments, CommandExecutionContext, Task>? execution;
 
-        [CommandParameter("detail", 1, Required = true)]
-        public string Detail { get; set; } = string.Empty;
+        public ProbeCommand(Func<Arguments, CommandExecutionContext, Task>? execution = null)
+        {
+            this.execution = execution;
+        }
+
+        public override CommandSchema<Arguments> Schema { get; } =
+            CommandSchema<Arguments>
+                .Create("probe", category: "Test", usage: "probe <value> detail:<value>")
+                .Primary<string>("value")
+                .Required<string>("detail")
+                .Build(static values => new Arguments(
+                    values.Required<string>("value"),
+                    values.Required<string>("detail")));
+
+        protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
+        {
+            if (execution is not null)
+            {
+                await execution(arguments, context);
+            }
+        }
+
+        public sealed record Arguments(string Value, string Detail);
     }
 
-    [RuntimeCommand("camera", "probe", Category = "Test")]
-    private sealed class HierarchicalProbeArguments
+    private sealed class HierarchicalProbeCommand : RuntimeCommand<HierarchicalProbeCommand.Arguments>
     {
-        [CommandParameter("value", 0, Primary = true, Required = true)]
-        public string Value { get; set; } = string.Empty;
+        private readonly Func<Arguments, CommandExecutionContext, Task>? execution;
 
-        [CommandParameter("detail", 1, Required = true)]
-        public string Detail { get; set; } = string.Empty;
+        public HierarchicalProbeCommand(Func<Arguments, CommandExecutionContext, Task>? execution = null)
+        {
+            this.execution = execution;
+        }
+
+        public override CommandSchema<Arguments> Schema { get; } =
+            CommandSchema<Arguments>
+                .Create("camera probe", category: "Test", usage: "camera probe <value> detail:<value>")
+                .Primary<string>("value")
+                .Required<string>("detail")
+                .Build(static values => new Arguments(
+                    values.Required<string>("value"),
+                    values.Required<string>("detail")));
+
+        protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
+        {
+            if (execution is not null)
+            {
+                await execution(arguments, context);
+            }
+        }
+
+        public sealed record Arguments(string Value, string Detail);
     }
 
-    [RuntimeCommand("save")]
-    private sealed class DuplicateProbeArguments
+    private sealed class DuplicateCommand : RuntimeCommand<DuplicateCommand.Arguments>
     {
+        public override CommandSchema<Arguments> Schema { get; } =
+            CommandSchema<Arguments>.Create("save").Build(static _ => new Arguments());
+
+        protected override ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context) =>
+            ValueTask.CompletedTask;
+
+        public sealed record Arguments;
     }
 
-    [RuntimeCommand("WAIT")]
-    private sealed class ReservedWaitArguments
+    private sealed class ReservedWaitCommand : RuntimeCommand<ReservedWaitCommand.Arguments>
     {
-    }
+        public override CommandSchema<Arguments> Schema { get; } =
+            CommandSchema<Arguments>.Create("WAIT").Build(static _ => new Arguments());
 
-    [RuntimeCommand("incomplete")]
-    private sealed class IncompleteMetadataArguments
-    {
-        public string MissingMetadata { get; set; } = string.Empty;
+        protected override ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context) =>
+            ValueTask.CompletedTask;
+
+        public sealed record Arguments;
     }
 
     private sealed class FailingCommandModule : IRuntimeCommandModule
     {
         public void Register(IRuntimeCommandRegistrar commands)
         {
-            commands.Register<ProbeCommandArguments>((_, _) => Task.CompletedTask);
-            commands.Register<DuplicateProbeArguments>((_, _) => Task.CompletedTask);
+            commands.Add("probe", _ => new ProbeCommand(), "test");
+            commands.Add("save", _ => new DuplicateCommand(), "test");
         }
     }
 
     private readonly record struct CustomCommandValue(string Text);
 
-    [RuntimeCommand("customValue")]
-    private sealed class CustomValueCommandArguments
+    private sealed class CustomValueCommand : RuntimeCommand<CustomValueCommand.Arguments>
     {
-        [CommandParameter("value", 0, Primary = true, Required = true)]
-        public CustomCommandValue Value { get; set; }
+        public override CommandSchema<Arguments> Schema { get; } =
+            CommandSchema<Arguments>
+                .Create("customValue")
+                .Primary<CustomCommandValue>("value")
+                .Build(static values => new Arguments(values.Required<CustomCommandValue>("value")));
+
+        protected override ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context) =>
+            ValueTask.CompletedTask;
+
+        public sealed record Arguments(CustomCommandValue Value);
     }
 
-    [RuntimeCommand("constantDefault")]
-    private sealed class ConstantDefaultCommandArguments
+    private sealed class ConstantDefaultCommand : RuntimeCommand<ConstantDefaultCommand.Arguments>
     {
-        [CommandParameter("enabled", 0, DefaultValue = "true")]
-        public bool Enabled { get; set; }
+        public override CommandSchema<Arguments> Schema { get; } =
+            CommandSchema<Arguments>
+                .Create("constantDefault")
+                .Optional<bool>("enabled", contractDefault: true)
+                .Build(static values => new Arguments(values.Optional<bool>("enabled")));
+
+        protected override ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context) =>
+            ValueTask.CompletedTask;
+
+        public sealed record Arguments(CommandValue<bool> Enabled);
     }
 
     private sealed class FakeCommandRegistry : IYarnCommandRegistry
@@ -625,159 +817,5 @@ public sealed class RuntimeCommandTests
             UnhandledCommand?.Invoke(commandText);
 
         public void Dispose() => dialogueCancellation.Dispose();
-    }
-
-    private sealed class FakeActorManager : IActorManager
-    {
-        private readonly Dictionary<string, IActor> actors = new(StringComparer.Ordinal);
-
-        public FakeActorManager(params IActor[] actors)
-        {
-            foreach (var actor in actors)
-            {
-                this.actors.Add(actor.Id, actor);
-            }
-        }
-
-        public IReadOnlyCollection<IActor> Actors => actors.Values;
-
-        public IActor Create(string actorId)
-        {
-            IActor actor = actorId switch
-            {
-                "backdrop" => new FakeBackgroundActor(actorId, "default"),
-                "broken" => new FailingAppearanceActor(actorId, "default"),
-                _ => new FakeCharacterActor(actorId, "default"),
-            };
-            actors.Add(actorId, actor);
-            return actor;
-        }
-
-        public IActor GetOrCreate(ActorSpawnRequest request)
-        {
-            if (actors.TryGetValue(request.ActorId, out var existing))
-            {
-                return existing;
-            }
-
-            IActor actor = request.ActorId == "broken"
-                ? new FailingAppearanceActor(request.ActorId, request.InitialAppearance)
-                : request.FallbackFactoryId switch
-                {
-                    ActorFactoryIds.Background =>
-                        new FakeBackgroundActor(request.ActorId, request.InitialAppearance),
-                    ActorFactoryIds.Character =>
-                        new FakeCharacterActor(request.ActorId, request.InitialAppearance),
-                    _ => throw new ActorFactoryNotFoundException(
-                        request.FallbackFactoryId,
-                        request.ActorId),
-                };
-            actors.Add(request.ActorId, actor);
-            return actor;
-        }
-
-        public TActor GetActor<TActor>(string actorId) where TActor : class, IActor =>
-            actors.TryGetValue(actorId, out var actor) && actor is TActor typed
-                ? typed
-                : throw new ActorException($"Actor '{actorId}' has the wrong type.");
-
-        public bool TryGet(string actorId, out IActor? actor) =>
-            actors.TryGetValue(actorId, out actor);
-
-        public bool Remove(string actorId) => actors.Remove(actorId);
-
-        public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-    }
-
-
-    private class FakeCharacterActor : FakeActor, ICharacterActor
-    {
-        public FakeCharacterActor(string id, string appearance)
-            : base(id, appearance)
-        {
-        }
-
-        public CanvasItem View => null!;
-
-        public Vector2 Scale { get; private set; } = Vector2.One;
-
-        public CharacterPositionPreset PositionPreset { get; private set; }
-
-        public void SetScale(Vector2 scale) => Scale = scale;
-
-        public void SetScenePosition(Vector2 scenePosition) => Position = scenePosition;
-
-        public void SetPosition(CharacterPositionPreset preset)
-        {
-            PositionPreset = preset;
-        }
-
-        public IOperationHandle ChangeAppearance(
-            string appearance,
-            double durationSeconds)
-        {
-            Appearance = appearance;
-            return LastOperation = new FakeOperationHandle(OperationState.Completed);
-        }
-
-        public IOperationHandle ChangePosition(
-            CharacterPositionPreset preset,
-            double durationSeconds)
-        {
-            PositionPreset = preset;
-            return LastOperation = new FakeOperationHandle(OperationState.Completed);
-        }
-    }
-
-    private sealed class FailingAppearanceActor : FakeCharacterActor
-    {
-        public FailingAppearanceActor(string id, string appearance)
-            : base(id, appearance)
-        {
-        }
-
-        public override void SetAppearance(string appearance) =>
-            throw new UnknownActorAppearanceException(Id, appearance);
-    }
-
-    private sealed class FakeBackgroundActor : FakeActor, IBackgroundActor
-    {
-        public FakeBackgroundActor(string id, string appearance)
-            : base(id, appearance)
-        {
-        }
-
-        public TextureRect CurrentView => null!;
-
-        public string Slot { get; private set; } = BackgroundSlotIds.Main;
-
-        public float StartOpacity { get; private set; } = 1;
-
-        public void SetSlot(string slot) => Slot = BackgroundSlotIds.Normalize(slot);
-
-        public override void SetOpacity(float opacity)
-        {
-            StartOpacity = opacity;
-            base.SetOpacity(opacity);
-        }
-
-    }
-
-
-    private sealed class FakeOperationRunner : IOperationRunner
-    {
-
-        public IOperationHandle Start(OperationDefinition definition) =>
-            throw new NotSupportedException();
-
-        public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }

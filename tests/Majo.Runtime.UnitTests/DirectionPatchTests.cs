@@ -8,6 +8,7 @@ using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Direction.Rendering;
 using Majo.Runtime.Resources;
+using Majo.Runtime.UnitTests.Testing;
 using Xunit;
 
 namespace Majo.Runtime.UnitTests;
@@ -30,27 +31,21 @@ public sealed class DirectionPatchTests
     [Fact]
     public void BeatBeginAllowsAnonymousBeats()
     {
-        var registry = new RuntimeCommandRegistry();
-        registry.Register<BeatBeginDirectionCommandArguments>((_, _) => Task.CompletedTask);
-        var descriptor = Assert.Single(registry.Registrations).Descriptor;
-        var arguments = new CommandBinder(new CommandBindingContext(0.35))
-            .Bind<BeatBeginDirectionCommandArguments>(descriptor, Array.Empty<string>());
+        var command = new BeatBeginCommand(
+            new FakeDirectionBeatRuntime(),
+            new DelegateDialogueNodeAccessor(() => "node"));
+        var arguments = command.Schema.Bind(new RawCommandArguments(null, new Dictionary<string, string>()));
 
-        Assert.Null(arguments.Id);
+        Assert.False(arguments.Id.WasProvided);
     }
 
     [Fact]
     public void DirectionEaseAcceptsLegacyBackCurves()
     {
-        var registry = new RuntimeCommandRegistry();
-        registry.Register<CameraPoseDirectionCommandArguments>((_, _) => Task.CompletedTask);
-        var descriptor = Assert.Single(registry.Registrations).Descriptor;
-        var arguments = new CommandBinder(new CommandBindingContext(0.35))
-            .Bind<CameraPoseDirectionCommandArguments>(
-                descriptor,
-                new[] { "center:44.438,71.950", "duration:0.4", "ease:back-out" });
+        var converters = new CommandValueConverterRegistry();
+        var ease = (DirectionEase)converters.Convert("back-out", typeof(DirectionEase));
 
-        Assert.Equal("back-out", arguments.Ease);
+        Assert.Equal(DirectionEase.BackOut, ease);
     }
 
     [Fact]

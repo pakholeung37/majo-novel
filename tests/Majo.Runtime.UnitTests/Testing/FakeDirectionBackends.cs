@@ -199,11 +199,19 @@ public sealed class ComponentBackendHarness :
 public sealed class CatalogResourceResolver : IDirectionResourceKeyResolver
 {
     public ResourceKey ResolveBackdrop(string semanticId) => new(semanticId);
+
+    public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }
 
 public sealed class CatalogPositionResolver : IDirectionPositionResolver
 {
     public DirectionPoint Resolve(string value) => new(50, 50);
+
+    public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }
 
 public sealed class VersionStoreResourceManager : IResourceManager
@@ -341,4 +349,57 @@ public sealed class RecordingCueExecutor : ITransientDirectionCueExecutor
 
         return Task.FromResult<ITransientCueActivity?>(activity);
     }
+}
+
+public sealed class FakeDirectionBeatRuntime : IDirectionBeatRuntime
+{
+    public bool HasOpenBeat => OpenBeatId is not null;
+    public string? OpenBeatId { get; set; }
+    public DirectionBeatDefaults? OpenBeatDefaults { get; set; }
+
+    public void Begin(string beatId, string nodeId, DirectionBeatDefaults? defaults = null)
+    {
+        OpenBeatId = beatId;
+        OpenBeatDefaults = defaults;
+    }
+
+    public Task<CommittedDirectionTransaction?> SubmitAsync(
+        IDirectionDirective directive,
+        DirectionCompletionBarrier completion = DirectionCompletionBarrier.Commit,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<CommittedDirectionTransaction?>(null);
+
+    public Task<CommittedDirectionTransaction> EndAsync(
+        DirectionCompletionBarrier completion = DirectionCompletionBarrier.Settle,
+        CancellationToken cancellationToken = default)
+    {
+        OpenBeatId = null;
+        OpenBeatDefaults = null;
+        return Task.FromResult<CommittedDirectionTransaction>(null!);
+    }
+
+    public void AbortOpen()
+    {
+        OpenBeatId = null;
+        OpenBeatDefaults = null;
+    }
+
+    public Task JoinAsync(string beatId, CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
+
+    public Task FinishAsync(string beatId, CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
+
+    public void ValidateNodeBoundary(string nodeId)
+    {
+    }
+
+    public Task InitializeAsync(CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
+
+    public Task ResetAsync(CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
+
+    public Task ShutdownAsync(CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
 }

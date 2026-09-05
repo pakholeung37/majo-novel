@@ -107,6 +107,17 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(IDirectionTransactionCoordinator),
                 typeof(ITransientDirectionCueExecutor))
             .AddSingleton<IDirectionScopeResolver>(_ => new DirectionScopeResolver())
+            .AddSingleton<IDirectionResourceKeyResolver>(_ =>
+                DirectionResourceResolver ?? new DirectionResourceKeyResolver(Configuration!.Resources!))
+            .AddSingleton<IDirectionPositionResolver>(_ =>
+                DirectionPositionResolver ?? new DirectionPositionResolver(Configuration!.Actors!))
+            .AddSingleton<IDirectionCommandPolicy>(
+                resolver => new DirectionCommandPolicy(
+                    resolver.Get<IDirectionBeatRuntime>(),
+                    DirectionAnimationDefaults.FromConfiguration(Configuration?.Animation),
+                    resolver.Get<ITransitionDriverRegistry>()),
+                typeof(IDirectionBeatRuntime),
+                typeof(ITransitionDriverRegistry))
             .AddSingleton<DirectionBeatNodeBoundaryService>(
                 resolver => new DirectionBeatNodeBoundaryService(
                     resolver.Get<IYarnDialogueBackend>(),

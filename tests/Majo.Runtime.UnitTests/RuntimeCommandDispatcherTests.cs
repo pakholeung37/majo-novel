@@ -10,27 +10,42 @@ namespace Majo.Runtime.UnitTests;
 
 public sealed class RuntimeCommandDispatcherTests
 {
-    [RuntimeCommand("test_cmd")]
-    private sealed class TestCmdArgs
+    private sealed class TestCommand : RuntimeCommand<TestCommand.Arguments>
     {
+        private readonly Action onExecute;
+
+        public TestCommand(Action onExecute)
+        {
+            this.onExecute = onExecute;
+        }
+
+        public override CommandSchema<Arguments> Schema { get; } =
+            CommandSchema<Arguments>.Create("test_cmd").Build(static _ => new Arguments());
+
+        protected override ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
+        {
+            onExecute();
+            return ValueTask.CompletedTask;
+        }
+
+        public sealed record Arguments;
     }
 
     [Fact(Timeout = 5_000)]
     public async Task DialogueCommand_ExecutesAndQuiesces()
     {
-        var binder = new CommandBinder(new CommandBindingContext(0.35));
-        var dispatcher = new RuntimeCommandDispatcher(binder);
+        var dispatcher = new RuntimeCommandDispatcher();
         var executed = false;
 
         var cmdRegistry = new RuntimeCommandRegistry();
-        cmdRegistry.Register<TestCmdArgs>((_, _) =>
-        {
-            executed = true;
-            return Task.CompletedTask;
-        });
+        cmdRegistry.Add("test_cmd", _ => new TestCommand(() => executed = true), "test");
+        cmdRegistry.SealRegistrations();
         var catalog = cmdRegistry.BuildCatalog();
 
-        await dispatcher.ExecuteAsync(catalog.Commands[0], Array.Empty<string>(), CancellationToken.None);
+        await dispatcher.ExecuteAsync(
+            catalog.Commands[0],
+            new CommandInput("test_cmd", Array.Empty<string>()),
+            CancellationToken.None);
         Assert.True(executed);
         Assert.False(dispatcher.HasActiveCommands);
 
@@ -38,59 +53,87 @@ public sealed class RuntimeCommandDispatcherTests
         await dispatcher.WaitForQuiescenceAsync(CancellationToken.None);
     }
 
-    [RuntimeCommand("fail_cmd")]
-    private sealed class FailCmdArgs
+    private sealed class FailCommand : RuntimeCommand<FailCommand.Arguments>
     {
+        public override CommandSchema<Arguments> Schema { get; } =
+            CommandSchema<Arguments>.Create("fail_cmd").Build(static _ => new Arguments());
+
+        protected override ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
+        {
+            throw new InvalidOperationException("boom");
+        }
+
+        public sealed record Arguments;
     }
 
     [Fact(Timeout = 5_000)]
     public async Task DialogueCommand_Fault_IsCapturedAndReported()
     {
-        var binder = new CommandBinder(new CommandBindingContext(0.35));
-        var dispatcher = new RuntimeCommandDispatcher(binder, abortOnRecoverableFailure: true);
+        var dispatcher = new RuntimeCommandDispatcher(abortOnRecoverableFailure: true);
 
         var cmdRegistry = new RuntimeCommandRegistry();
-        cmdRegistry.Register<FailCmdArgs>((_, _) => throw new InvalidOperationException("boom"));
+        cmdRegistry.Add("fail_cmd", _ => new FailCommand(), "test");
+        cmdRegistry.SealRegistrations();
         var catalog = cmdRegistry.BuildCatalog();
 
         await Assert.ThrowsAsync<RuntimeCommandException>(() =>
-            dispatcher.ExecuteAsync(catalog.Commands[0], Array.Empty<string>(), CancellationToken.None));
+            dispatcher.ExecuteAsync(
+                catalog.Commands[0],
+                new CommandInput("fail_cmd", Array.Empty<string>()),
+                CancellationToken.None));
 
         Assert.NotNull(dispatcher.LastFailure);
         Assert.False(dispatcher.HasActiveCommands);
     }
 
-    [RuntimeCommand("long_cmd")]
-    private sealed class LongCmdArgs
+    private sealed class LongCommand : RuntimeCommand<LongCommand.Arguments>
     {
-    }
+        private readonly TaskCompletionSource startedTcs;
+        private readonly TaskCompletionSource cancelledTcs;
 
-    [Fact(Timeout = 5_000)]
-    public async Task DialogueStop_CancelsActiveCommandsAndReachesQuiescence()
-    {
-        var binder = new CommandBinder(new CommandBindingContext(0.35));
-        var dispatcher = new RuntimeCommandDispatcher(binder);
-        var startedTcs = new TaskCompletionSource();
-        var cancelledTcs = new TaskCompletionSource();
+        public LongCommand(TaskCompletionSource startedTcs, TaskCompletionSource cancelledTcs)
+        {
+            this.startedTcs = startedTcs;
+            this.cancelledTcs = cancelledTcs;
+        }
 
-        var cmdRegistry = new RuntimeCommandRegistry();
-        cmdRegistry.Register<LongCmdArgs>(async (_, ctx) =>
+        public override CommandSchema<Arguments> Schema { get; } =
+            CommandSchema<Arguments>.Create("long_cmd").Build(static _ => new Arguments());
+
+        protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
         {
             startedTcs.SetResult();
             try
             {
-                await Task.Delay(10000, ctx.CancellationToken);
+                await Task.Delay(10000, context.CancellationToken);
             }
             catch (OperationCanceledException)
             {
                 cancelledTcs.SetResult();
                 throw;
             }
-        });
+        }
+
+        public sealed record Arguments;
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task DialogueStop_CancelsActiveCommandsAndReachesQuiescence()
+    {
+        var dispatcher = new RuntimeCommandDispatcher();
+        var startedTcs = new TaskCompletionSource();
+        var cancelledTcs = new TaskCompletionSource();
+
+        var cmdRegistry = new RuntimeCommandRegistry();
+        cmdRegistry.Add("long_cmd", _ => new LongCommand(startedTcs, cancelledTcs), "test");
+        cmdRegistry.SealRegistrations();
         var catalog = cmdRegistry.BuildCatalog();
 
         using var cts = new CancellationTokenSource();
-        var runTask = dispatcher.ExecuteAsync(catalog.Commands[0], Array.Empty<string>(), cts.Token);
+        var runTask = dispatcher.ExecuteAsync(
+            catalog.Commands[0],
+            new CommandInput("long_cmd", Array.Empty<string>()),
+            cts.Token);
 
         await startedTcs.Task;
         Assert.True(dispatcher.HasActiveCommands);
@@ -98,8 +141,6 @@ public sealed class RuntimeCommandDispatcherTests
         cts.Cancel();
         await runTask;
         await cancelledTcs.Task;
-
-        await dispatcher.WaitForQuiescenceAsync(CancellationToken.None);
         Assert.False(dispatcher.HasActiveCommands);
     }
 }

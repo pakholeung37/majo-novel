@@ -22,16 +22,21 @@ public sealed class DirectionRuntimeTests
     [Fact]
     public void DirectionCommandModuleRegistersOnlyTheFinalDslSurface()
     {
-        var commands = new RuntimeCommandRegistry();
-        commands.RegisterModule(new DirectionCommandModule(
-            new DirectionBeatRuntime(CreateCoordinator(
-                new FakeDirectionBackend { AutoSettle = true })),
-            new CatalogResourceResolver(),
-            new CatalogPositionResolver(),
-            new DirectionScopeResolver(),
-            () => "Opening"));
+        var services = new ServiceResolverBuilder()
+            .Add<IDirectionBeatRuntime>(new DirectionBeatRuntime(CreateCoordinator(
+                new FakeDirectionBackend { AutoSettle = true })))
+            .Add<IDirectionResourceKeyResolver>(new CatalogResourceResolver())
+            .Add<IDirectionPositionResolver>(new CatalogPositionResolver())
+            .Add<IDirectionScopeResolver>(new DirectionScopeResolver())
+            .Add<IDirectionCommandPolicy>(new DirectionCommandPolicy())
+            .Add<IDialogueNodeAccessor>(new DelegateDialogueNodeAccessor(() => "Opening"))
+            .Build();
 
-        var names = commands.BuildCatalog().Commands
+        var commands = new RuntimeCommandRegistry();
+        new DirectionCommandModule().Register(commands);
+        commands.SealRegistrations();
+
+        var names = commands.BuildCatalog(services).Commands
             .Select(command => command.Name)
             .ToArray();
 

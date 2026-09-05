@@ -236,50 +236,26 @@ public static class RuntimeDemoComposition
     public static void RegisterCommands(RuntimeCommandRegistry commands)
     {
         ArgumentNullException.ThrowIfNull(commands);
-        commands.Register<DemoRouteCommandArguments>(SelectRouteAsync);
-        commands.Register<DemoVoiceLocaleCommandArguments>(SwitchVoiceLocaleAsync);
-        commands.Register<DemoPreloadCommandArguments>(PreloadAsync);
-        commands.Register<DemoReleasePreloadCommandArguments>(ReleasePreloadAsync);
-    }
-
-    private static Task SelectRouteAsync(
-        DemoRouteCommandArguments arguments,
-        RuntimeCommandContext context)
-    {
-        if (arguments.Route is not "press" and not "evidence")
-        {
-            throw new RuntimeCommandException(
-                "demo_route", $"Unknown route '{arguments.Route}'.");
-        }
-
-        var services = RuntimeCommandContext.Require(context.Services, "ServiceResolver");
-        services.Get<DemoSessionService>().SelectRoute(arguments.Route);
-        return Task.CompletedTask;
-    }
-
-    private static Task SwitchVoiceLocaleAsync(
-        DemoVoiceLocaleCommandArguments arguments,
-        RuntimeCommandContext context) =>
-        RuntimeCommandContext.Require(context.Services, "ServiceResolver")
-            .Get<DemoSessionService>()
-            .SwitchVoiceLocaleAsync(arguments.Locale, context.CancellationToken);
-
-    private static Task PreloadAsync(
-        DemoPreloadCommandArguments arguments,
-        RuntimeCommandContext context) =>
-        RuntimeCommandContext.Require(context.Services, "ServiceResolver")
-            .Get<DemoSessionService>()
-            .PreloadDemoAssetsAsync(arguments.Group, context.CancellationToken);
-
-    private static Task ReleasePreloadAsync(
-        DemoReleasePreloadCommandArguments arguments,
-        RuntimeCommandContext context)
-    {
-        _ = arguments;
-        RuntimeCommandContext.Require(context.Services, "ServiceResolver")
-            .Get<DemoSessionService>()
-            .ReleasePreload();
-        return Task.CompletedTask;
+        commands.Add(
+            "demo_route",
+            services => new DemoRouteCommand(services.Get<DemoSessionService>()),
+            "demo",
+            "1.0");
+        commands.Add(
+            "demo_voice_locale",
+            services => new DemoVoiceLocaleCommand(services.Get<DemoSessionService>()),
+            "demo",
+            "1.0");
+        commands.Add(
+            "demo_preload",
+            services => new DemoPreloadCommand(services.Get<DemoSessionService>()),
+            "demo",
+            "1.0");
+        commands.Add(
+            "demo_release_preload",
+            services => new DemoReleasePreloadCommand(services.Get<DemoSessionService>()),
+            "demo",
+            "1.0");
     }
 
     private static ActorDefinitionConfiguration CreateActorDefinition(
@@ -301,40 +277,101 @@ public static class RuntimeDemoComposition
     }
 }
 
-[RuntimeCommand(
-    "demo_route",
-    Category = "Demo",
-    Usage = "demo_route <press|evidence>")]
-public sealed class DemoRouteCommandArguments
+public sealed class DemoRouteCommand : RuntimeCommand<DemoRouteCommand.Arguments>
 {
-    [CommandParameter("route", 0, Primary = true, Required = true)]
-    public string Route { get; set; } = string.Empty;
+    private readonly DemoSessionService demoService;
+
+    public DemoRouteCommand(DemoSessionService demoService)
+    {
+        this.demoService = demoService ?? throw new ArgumentNullException(nameof(demoService));
+    }
+
+    public override CommandSchema<Arguments> Schema { get; } =
+        CommandSchema<Arguments>
+            .Create("demo_route", category: "Demo", usage: "demo_route <press|evidence>")
+            .Primary<string>("route")
+            .Build(static values => new Arguments(values.Required<string>("route")));
+
+    protected override ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
+    {
+        if (arguments.Route is not "press" and not "evidence")
+        {
+            throw new RuntimeCommandException(
+                "demo_route", $"Unknown route '{arguments.Route}'.");
+        }
+
+        demoService.SelectRoute(arguments.Route);
+        return ValueTask.CompletedTask;
+    }
+
+    public sealed record Arguments(string Route);
 }
 
-[RuntimeCommand(
-    "demo_voice_locale",
-    Category = "M17 Demo",
-    Usage = "demo_voice_locale <locale>")]
-public sealed class DemoVoiceLocaleCommandArguments
+public sealed class DemoVoiceLocaleCommand : RuntimeCommand<DemoVoiceLocaleCommand.Arguments>
 {
-    [CommandParameter("locale", 0, Primary = true, Required = true)]
-    public string Locale { get; set; } = string.Empty;
+    private readonly DemoSessionService demoService;
+
+    public DemoVoiceLocaleCommand(DemoSessionService demoService)
+    {
+        this.demoService = demoService ?? throw new ArgumentNullException(nameof(demoService));
+    }
+
+    public override CommandSchema<Arguments> Schema { get; } =
+        CommandSchema<Arguments>
+            .Create("demo_voice_locale", category: "M17 Demo", usage: "demo_voice_locale <locale>")
+            .Primary<string>("locale")
+            .Build(static values => new Arguments(values.Required<string>("locale")));
+
+    protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
+    {
+        await demoService.SwitchVoiceLocaleAsync(arguments.Locale, context.CancellationToken);
+    }
+
+    public sealed record Arguments(string Locale);
 }
 
-[RuntimeCommand(
-    "demo_preload",
-    Category = "M18 Demo",
-    Usage = "demo_preload <group>")]
-public sealed class DemoPreloadCommandArguments
+public sealed class DemoPreloadCommand : RuntimeCommand<DemoPreloadCommand.Arguments>
 {
-    [CommandParameter("group", 0, Primary = true, Required = true)]
-    public string Group { get; set; } = string.Empty;
+    private readonly DemoSessionService demoService;
+
+    public DemoPreloadCommand(DemoSessionService demoService)
+    {
+        this.demoService = demoService ?? throw new ArgumentNullException(nameof(demoService));
+    }
+
+    public override CommandSchema<Arguments> Schema { get; } =
+        CommandSchema<Arguments>
+            .Create("demo_preload", category: "M18 Demo", usage: "demo_preload <group>")
+            .Primary<string>("group")
+            .Build(static values => new Arguments(values.Required<string>("group")));
+
+    protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
+    {
+        await demoService.PreloadDemoAssetsAsync(arguments.Group, context.CancellationToken);
+    }
+
+    public sealed record Arguments(string Group);
 }
 
-[RuntimeCommand(
-    "demo_release_preload",
-    Category = "M18 Demo",
-    Usage = "demo_release_preload")]
-public sealed class DemoReleasePreloadCommandArguments
+public sealed class DemoReleasePreloadCommand : RuntimeCommand<DemoReleasePreloadCommand.Arguments>
 {
+    private readonly DemoSessionService demoService;
+
+    public DemoReleasePreloadCommand(DemoSessionService demoService)
+    {
+        this.demoService = demoService ?? throw new ArgumentNullException(nameof(demoService));
+    }
+
+    public override CommandSchema<Arguments> Schema { get; } =
+        CommandSchema<Arguments>
+            .Create("demo_release_preload", category: "M18 Demo", usage: "demo_release_preload")
+            .Build(static _ => new Arguments());
+
+    protected override ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
+    {
+        demoService.ReleasePreload();
+        return ValueTask.CompletedTask;
+    }
+
+    public sealed record Arguments;
 }
