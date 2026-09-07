@@ -25,7 +25,13 @@ public sealed class CommandParameterManifestEntry
 
     public string? ContractDefault { get; init; }
 
-    public double Minimum { get; init; } = double.NaN;
+    public double? Minimum { get; init; }
+
+    public CommandValueDescription? Description { get; init; }
+
+    public bool HasContractDefault { get; init; }
+
+    public bool DefaultIsInputText { get; init; }
 }
 
 public sealed class CommandParameterGroupManifestEntry
@@ -68,6 +74,7 @@ public sealed class CommandManifestEntry
 
 public sealed class RuntimeCommandManifest
 {
+    public int FormatVersion { get; init; } = 2;
     public string ProviderId { get; init; } = string.Empty;
 
     public string? Version { get; init; }
@@ -78,51 +85,14 @@ public sealed class RuntimeCommandManifest
     public static RuntimeCommandManifest Create(
         string providerId,
         string? version,
-        IEnumerable<IRuntimeCommand> commands)
+        IEnumerable<IBoundCommand> commands)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(providerId);
         ArgumentNullException.ThrowIfNull(commands);
 
         var entries = commands
-            .OrderBy(command => command.Schema.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(command => new CommandManifestEntry
-            {
-                Name = command.Schema.Name,
-                Path = command.Schema.Path,
-                Category = command.Schema.Category,
-                Usage = command.Schema.Usage,
-                ProviderId = providerId,
-                Version = version,
-                Parameters = command.Schema.Parameters
-                    .OrderBy(param => param.Order)
-                    .Select(param => new CommandParameterManifestEntry
-                    {
-                        Name = param.Name,
-                        Order = param.Order,
-                        Primary = param.Primary,
-                        Required = param.Required,
-                        ValueType = param.ValueType.Name,
-                        ValueHint = param.ValueHint,
-                        ContractDefault = param.ContractDefault?.ToString(),
-                        Minimum = param.Minimum,
-                    })
-                    .ToArray(),
-                ParameterGroups = command.Schema.Groups
-                    .Select(group => new CommandParameterGroupManifestEntry
-                    {
-                        Id = group.Key,
-                        Parameters = group.Value.Parameters.Select(parameter => parameter.Name).ToArray(),
-                    })
-                    .OrderBy(group => group.Id, StringComparer.OrdinalIgnoreCase)
-                    .ToArray(),
-                ParameterSets = command.Schema.ParameterSets
-                    .Select(set => new CommandParameterSetManifestEntry
-                    {
-                        Rule = set.Rule,
-                        Parameters = set.Parameters.ToArray(),
-                    })
-                    .ToArray(),
-            })
+            .OrderBy(command => command.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(command => CreateCommandManifestEntry(command, providerId, version))
             .ToArray();
 
         return new RuntimeCommandManifest
@@ -140,44 +110,10 @@ public sealed class RuntimeCommandManifest
     {
         ArgumentNullException.ThrowIfNull(catalog);
         var entries = catalog.Entries
-            .Select(entry => new CommandManifestEntry
-            {
-                Name = entry.Command.Schema.Name,
-                Path = entry.Command.Schema.Path,
-                Category = entry.Command.Schema.Category,
-                Usage = entry.Command.Schema.Usage,
-                ProviderId = string.IsNullOrWhiteSpace(entry.ProviderId) ? providerId : entry.ProviderId,
-                Version = entry.Version ?? version,
-                Parameters = entry.Command.Schema.Parameters
-                    .OrderBy(parameter => parameter.Order)
-                    .Select(parameter => new CommandParameterManifestEntry
-                    {
-                        Name = parameter.Name,
-                        Order = parameter.Order,
-                        Primary = parameter.Primary,
-                        Required = parameter.Required,
-                        ValueType = parameter.ValueType.Name,
-                        ValueHint = parameter.ValueHint,
-                        ContractDefault = parameter.ContractDefault?.ToString(),
-                        Minimum = parameter.Minimum,
-                    })
-                    .ToArray(),
-                ParameterGroups = entry.Command.Schema.Groups
-                    .Select(group => new CommandParameterGroupManifestEntry
-                    {
-                        Id = group.Key,
-                        Parameters = group.Value.Parameters.Select(parameter => parameter.Name).ToArray(),
-                    })
-                    .OrderBy(group => group.Id, StringComparer.OrdinalIgnoreCase)
-                    .ToArray(),
-                ParameterSets = entry.Command.Schema.ParameterSets
-                    .Select(set => new CommandParameterSetManifestEntry
-                    {
-                        Rule = set.Rule,
-                        Parameters = set.Parameters.ToArray(),
-                    })
-                    .ToArray(),
-            })
+            .Select(entry => CreateCommandManifestEntry(
+                entry.Command,
+                string.IsNullOrWhiteSpace(entry.ProviderId) ? providerId : entry.ProviderId,
+                entry.Version ?? version))
             .OrderBy(command => command.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
@@ -188,6 +124,69 @@ public sealed class RuntimeCommandManifest
             Commands = new ReadOnlyCollection<CommandManifestEntry>(entries),
         };
     }
+
+    private static CommandManifestEntry CreateCommandManifestEntry(
+        IBoundCommand command,
+        string providerId,
+        string? version)
+    {
+        var definition = command.Definition;
+        return new CommandManifestEntry
+        {
+            Name = definition.Name,
+            Path = definition.Path,
+            Category = definition.Category,
+            Usage = command.Usage,
+            ProviderId = providerId,
+            Version = version,
+            Parameters = command.Slots
+                .OrderBy(slot => slot.Declaration.Order)
+                .Select(slot => CreateParameterEntry(slot))
+                .ToArray(),
+            ParameterGroups = FlattenGroups(definition.Groups)
+                .Select(group => new CommandParameterGroupManifestEntry
+                {
+                    Id = group.Name,
+                    Parameters = FlattenGroupParameters(group).Select(p => p.Name).ToArray(),
+                })
+                .OrderBy(group => group.Id, StringComparer.OrdinalIgnoreCase)
+                .ToArray(),
+            ParameterSets = CommandContractValidation.ResolveSets(definition)
+                .Select(set => new CommandParameterSetManifestEntry
+                {
+                    Rule = set.Rule,
+                    Parameters = set.Parameters.ToArray(),
+                })
+                .ToArray(),
+        };
+    }
+
+    private static CommandParameterManifestEntry CreateParameterEntry(BoundParameterSlot slot)
+    {
+        var param = slot.Declaration;
+        return new CommandParameterManifestEntry
+        {
+            Name = param.Name,
+            Order = param.Order,
+            Primary = param.Primary,
+            Required = param.Required,
+            ValueType = param.ValueType.FullName ?? param.ValueType.Name,
+            ValueHint = slot.Description?.Syntax ?? param.ValueHint,
+            Description = slot.Description,
+            HasContractDefault = slot.HasContractDefault,
+            DefaultIsInputText = slot.HasContractDefault && slot.Descriptor is null,
+            ContractDefault = slot.HasContractDefault
+                ? slot.FormattedDefault : null,
+            Minimum = slot.Minimum,
+        };
+    }
+
+    private static IEnumerable<CommandGroupDeclaration> FlattenGroups(IEnumerable<CommandGroupDeclaration> groups) =>
+        groups.SelectMany(g => new[] { g }.Concat(FlattenGroups(g.SubGroups ?? Array.Empty<CommandGroupDeclaration>())));
+
+    private static IEnumerable<CommandParameterDeclaration> FlattenGroupParameters(CommandGroupDeclaration group) =>
+        (group.Parameters ?? Array.Empty<CommandParameterDeclaration>()).Concat(
+            (group.SubGroups ?? Array.Empty<CommandGroupDeclaration>()).SelectMany(FlattenGroupParameters));
 
     private static readonly JsonSerializerOptions IndentedJsonOptions = new()
     {
@@ -205,8 +204,15 @@ public sealed class RuntimeCommandManifest
         JsonSerializer.Serialize(this, writeIndented ? IndentedJsonOptions : CompactJsonOptions);
 
     public static RuntimeCommandManifest FromJson(string json) =>
-        JsonSerializer.Deserialize<RuntimeCommandManifest>(json) ??
-        throw new InvalidOperationException("Failed to deserialize RuntimeCommandManifest.");
+        ReadVersioned(json);
+
+    private static RuntimeCommandManifest ReadVersioned(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        if (!document.RootElement.TryGetProperty(nameof(FormatVersion), out var version) || version.GetInt32() != 2)
+            throw new InvalidOperationException("Only command manifest format version 2 is supported.");
+        return JsonSerializer.Deserialize<RuntimeCommandManifest>(json) ?? throw new InvalidOperationException("Invalid command manifest.");
+    }
 }
 
 public static class RuntimeCommandManifestMerger

@@ -7,7 +7,8 @@ using Majo.Runtime.Dialogue.Commands;
 
 namespace Majo.Demos.Manosaba;
 
-public sealed class ManosabaStreamFrameCommand : RuntimeCommand<ManosabaStreamFrameCommand.Arguments>
+[Command("stream_frame", Category = "Manosaba")]
+public sealed partial class ManosabaStreamFrameCommand : RuntimeCommand<ManosabaStreamFrameCommand.Arguments>
 {
     private readonly IManosabaUiService ui;
 
@@ -16,28 +17,16 @@ public sealed class ManosabaStreamFrameCommand : RuntimeCommand<ManosabaStreamFr
         this.ui = ui ?? throw new ArgumentNullException(nameof(ui));
     }
 
-    public override CommandSchema<Arguments> Schema { get; } =
-        CommandSchema<Arguments>
-            .Create(
-                "stream_frame",
-                category: "Manosaba",
-                usage: "stream_frame <enabled:bool> [duration:<seconds>]")
-            .Primary<bool>("enabled", valueHint: "bool")
-            .Optional<double>("duration", valueHint: "seconds", minimum: 0)
-            .Build(static values => new Arguments(
-                values.Required<bool>("enabled"),
-                values.Optional<double>("duration").GetValueOrDefault(0.0)));
-
     protected override ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {
         var mode = arguments.Enabled ? ManosabaFrameMode.Stream : ManosabaFrameMode.Default;
-        ui.SetFrameMode(mode, arguments.Duration);
+        ui.SetFrameMode(mode, arguments.Duration.GetValueOrDefault(0.0));
         return ValueTask.CompletedTask;
     }
 
     public sealed record Arguments(
-        bool Enabled,
-        double Duration);
+        [Primary(ValueHint = "bool")] bool Enabled,
+        [Option(ValueHint = "seconds", Minimum = 0)] CommandValue<double> Duration);
 }
 
 public static class ManosabaCommands

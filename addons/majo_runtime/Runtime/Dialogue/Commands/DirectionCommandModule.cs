@@ -8,10 +8,57 @@ namespace Majo.Runtime.Dialogue.Commands;
 
 public sealed class DirectionCommandModule : IRuntimeCommandModule
 {
+	public void Register(CommandRegistrationContext context)
+	{
+		ArgumentNullException.ThrowIfNull(context);
+
+		RegisterConverters(context.Converters);
+		RegisterCommands(context.Commands);
+	}
+
+	public static void RegisterConverters(ICommandConverterRegistrar converters)
+	{
+		ArgumentNullException.ThrowIfNull(converters);
+
+		const string providerId = "majo.direction";
+
+		converters.AddDefault<Godot.Vector2>(_ => Vector2Converter.Instance, providerId);
+		converters.AddDefault<Majo.Runtime.Stage.CameraShakeAxis>(_ => CameraShakeAxisConverter.Instance, providerId);
+		converters.AddDefault<Majo.Runtime.Stage.MotionCurve>(_ => MotionCurveConverter.Instance, providerId);
+		converters.AddDefault<Majo.Runtime.Direction.Core.DirectionTransitionId>(_ => DirectionTransitionIdConverter.Instance, providerId);
+		converters.AddDefault<Majo.Runtime.Direction.Core.CurtainPosition>(_ => new EnumCommandValueConverter<Majo.Runtime.Direction.Core.CurtainPosition>(), providerId);
+        converters.AddDefault<Majo.Runtime.Direction.Core.DirectionEase>(
+            services => new DirectionEaseConverter(services.TryGet<Majo.Runtime.Timing.IEasingRegistry>(out var registry) && registry is not null
+                ? registry
+                : CreateDefaultEasingRegistry()), providerId);
+		converters.AddDefault<Majo.Runtime.Timing.EasingId>(
+            services => new EasingIdConverter(services.TryGet<Majo.Runtime.Timing.IEasingRegistry>(out var registry) && registry is not null
+                ? registry
+                : CreateDefaultEasingRegistry()), "timing");
+    }
+
 	public void Register(IRuntimeCommandRegistrar commands)
 	{
 		ArgumentNullException.ThrowIfNull(commands);
 
+		if (commands is RuntimeCommandRegistry reg)
+		{
+			reg.RegisterModule(this);
+			return;
+		}
+
+		RegisterCommands(commands);
+	}
+
+    private static Majo.Runtime.Timing.EasingRegistry CreateDefaultEasingRegistry()
+    {
+        var registry = new Majo.Runtime.Timing.EasingRegistry();
+        Majo.Runtime.Timing.BuiltInEasings.RegisterDefaults(registry);
+        return registry;
+    }
+
+	private static void RegisterCommands(IRuntimeCommandRegistrar commands)
+	{
 		const string providerId = "majo.direction";
 		const string version = "1.0";
 

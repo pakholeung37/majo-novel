@@ -57,7 +57,7 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
             dispatcher.CommandFailed += HandleCommandFailed;
             registry.UnhandledCommand += HandleUnhandledCommand;
             foreach (var group in catalog.Commands.GroupBy(
-                         command => command.Schema.RootName,
+                         command => command.RootName,
                          StringComparer.OrdinalIgnoreCase))
             {
                 var handler = new CatalogCommandHandler(
@@ -202,7 +202,7 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
                 }
 
                 var input = new CommandInput(
-                    command.Schema.Name,
+                    command.Name,
                     arguments.Skip(consumedSegments).ToArray());
 
                 await dispatcher.ExecuteAsync(
@@ -226,7 +226,7 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
             consumedSegments = 0;
             foreach (var candidate in commands)
             {
-                var childSegments = candidate.Schema.Path.Skip(1).ToArray();
+                var childSegments = candidate.Path.Skip(1).ToArray();
                 if (childSegments.Length > arguments.Length ||
                     !childSegments.Select((segment, index) => segment.Equals(
                         arguments[index], StringComparison.OrdinalIgnoreCase)).All(value => value))

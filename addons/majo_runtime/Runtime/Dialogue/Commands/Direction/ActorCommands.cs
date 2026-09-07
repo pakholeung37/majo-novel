@@ -8,7 +8,9 @@ using Majo.Runtime.Direction.Execution;
 
 namespace Majo.Runtime.Dialogue.Commands;
 
-public sealed class CharacterCommand : RuntimeCommand<CharacterCommand.Arguments>
+[Command("character", Category = "Direction")]
+[AtLeastOne(nameof(Arguments.Appearance), nameof(Arguments.At), nameof(Arguments.Scale), nameof(Arguments.Z))]
+public sealed partial class CharacterCommand : RuntimeCommand<CharacterCommand.Arguments>
 {
     private readonly IDirectionBeatRuntime beats;
     private readonly IDirectionPositionResolver positions;
@@ -30,33 +32,10 @@ public sealed class CharacterCommand : RuntimeCommand<CharacterCommand.Arguments
         this.policy = policy ?? throw new ArgumentNullException(nameof(policy));
     }
 
-    public override CommandSchema<Arguments> Schema { get; } =
-        CommandSchema<Arguments>
-            .Create(
-                "character",
-                category: "Direction",
-                usage: "character <id> [stage:<id>] [appearance:<id>] [at:<mark|x,y>] [scale:<number>] [z:<integer>] [via:<kind>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")
-            .Primary<string>("actor")
-            .Optional<string>("stage", contractDefault: "main", hasContractDefault: true)
-            .Optional<string>("appearance")
-            .Optional<string>("at")
-            .Optional<double>("scale", minimum: 0.001)
-            .Optional<int>("z")
-            .Use("transition", CommandParameterGroups.Transition())
-            .ParameterSet(CommandParameterSetRule.AtLeastOne, "appearance", "at", "scale", "z")
-            .Build(static values => new Arguments(
-                values.Required<string>("actor"),
-                values.Optional<string>("stage").GetValueOrDefault("main"),
-                values.Optional<string>("appearance"),
-                values.Optional<string>("at"),
-                values.Optional<double>("scale"),
-                values.Optional<int>("z"),
-                values.Group<TransitionArguments>("transition")));
-
     protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {
         var node = nodeAccessor.RequireNode();
-        var stageId = scopes.ResolveStage(node, arguments.Stage);
+        var stageId = scopes.ResolveStage(node, arguments.Stage.GetValueOrDefault("main"));
         var transition = policy.ResolveTransition("character", arguments.Transition, context);
         var wait = arguments.Transition.Wait.GetValueOrDefault(false);
 
@@ -92,16 +71,17 @@ public sealed class CharacterCommand : RuntimeCommand<CharacterCommand.Arguments
     }
 
     public sealed record Arguments(
-        string Actor,
-        string Stage,
-        CommandValue<string> Appearance,
-        CommandValue<string> At,
-        CommandValue<double> Scale,
-        CommandValue<int> Z,
-        TransitionArguments Transition);
+        [Primary] string Actor,
+        [Option(DefaultText = "main")] CommandValue<string> Stage,
+        [Option] CommandValue<string> Appearance,
+        [Option] CommandValue<string> At,
+        [Option(Minimum = 0.001)] CommandValue<double> Scale,
+        [Option] CommandValue<int> Z,
+        [Group] TransitionArguments Transition);
 }
 
-public sealed class LeaveCommand : RuntimeCommand<LeaveCommand.Arguments>
+[Command("leave", Category = "Direction")]
+public sealed partial class LeaveCommand : RuntimeCommand<LeaveCommand.Arguments>
 {
     private readonly IDirectionBeatRuntime beats;
     private readonly IDirectionScopeResolver scopes;
@@ -120,24 +100,10 @@ public sealed class LeaveCommand : RuntimeCommand<LeaveCommand.Arguments>
         this.policy = policy ?? throw new ArgumentNullException(nameof(policy));
     }
 
-    public override CommandSchema<Arguments> Schema { get; } =
-        CommandSchema<Arguments>
-            .Create(
-                "leave",
-                category: "Direction",
-                usage: "leave <character> [stage:<id>] [via:<cut|fade|dissolve>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")
-            .Primary<string>("actor")
-            .Optional<string>("stage", contractDefault: "main", hasContractDefault: true)
-            .Use("transition", CommandParameterGroups.Transition())
-            .Build(static values => new Arguments(
-                values.Required<string>("actor"),
-                values.Optional<string>("stage").GetValueOrDefault("main"),
-                values.Group<TransitionArguments>("transition")));
-
     protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {
         var node = nodeAccessor.RequireNode();
-        var stageId = scopes.ResolveStage(node, arguments.Stage);
+        var stageId = scopes.ResolveStage(node, arguments.Stage.GetValueOrDefault("main"));
         var transition = policy.ResolveTransition("leave", arguments.Transition, context);
         var wait = arguments.Transition.Wait.GetValueOrDefault(false);
 
@@ -151,7 +117,7 @@ public sealed class LeaveCommand : RuntimeCommand<LeaveCommand.Arguments>
     }
 
     public sealed record Arguments(
-        string Actor,
-        string Stage,
-        TransitionArguments Transition);
+        [Primary] string Actor,
+        [Option(DefaultText = "main")] CommandValue<string> Stage,
+        [Group] TransitionArguments Transition);
 }

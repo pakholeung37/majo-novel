@@ -1,6 +1,10 @@
 <Project>
     <ItemGroup>
         <Compile Remove="addons\majo_runtime\Bridges\**" />
+        <Compile Remove="addons\majo_runtime\SourceGenerators\**" />
         <ProjectReference Include="$(MSBuildThisFileDirectory)Bridges\YarnSpinnerStateBridge\YarnSpinnerStateBridge.csproj" />
+        <ProjectReference Include="$(MSBuildThisFileDirectory)SourceGenerators\Majo.CommandGenerator\Majo.CommandGenerator.csproj"
+                          ReferenceOutputAssembly="false"
+                          OutputItemType="analyzer" />
     </ItemGroup>
 </Project>

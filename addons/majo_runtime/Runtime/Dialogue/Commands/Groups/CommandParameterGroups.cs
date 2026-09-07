@@ -7,13 +7,46 @@ using Majo.Runtime.Timing;
 
 namespace Majo.Runtime.Dialogue.Commands;
 
+public sealed class BlockingWait : ICommandGroupConfiguration
+{
+    public void Configure(CommandGroupConfigurationContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        context.SetDefaultText("Wait", "true");
+    }
+}
+
+public sealed class NonBlockingWait : ICommandGroupConfiguration
+{
+    public void Configure(CommandGroupConfigurationContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        context.SetDefaultText("Wait", "false");
+    }
+}
+
 public sealed record TransitionArguments(
+    [Option(ValueHint = "seconds", Minimum = 0, Order = 21)]
     CommandValue<double> Duration,
+    [Option(ValueHint = "curve", Order = 22)]
     CommandValue<EasingId> Ease,
+    [Option(ValueHint = "kind", Order = 20)]
     CommandValue<DirectionTransitionId> Via,
+    [Option(ValueHint = "bool", DefaultText = "false", Order = 23)]
     CommandValue<bool> Wait)
 {
     public TimingArguments Timing => new(Duration, Ease, Wait);
+
+    public static TransitionArguments Create(
+        CommandValue<DirectionTransitionId>? via = null,
+        CommandValue<double>? duration = null,
+        CommandValue<EasingId>? ease = null,
+        CommandValue<bool>? wait = null) =>
+        new(
+            duration ?? CommandValue<double>.Unspecified(),
+            ease ?? CommandValue<EasingId>.Unspecified(),
+            via ?? CommandValue<DirectionTransitionId>.Unspecified(),
+            wait ?? CommandValue<bool>.Unspecified());
 }
 
 public readonly record struct TransitionParameterOptions(
@@ -24,8 +57,11 @@ public readonly record struct TransitionParameterOptions(
     int WaitOrder = 23);
 
 public sealed record TimingArguments(
+    [Option(ValueHint = "seconds", Minimum = 0, Order = 21)]
     CommandValue<double> Duration,
+    [Option(ValueHint = "curve", Order = 22)]
     CommandValue<EasingId> Ease,
+    [Option(ValueHint = "bool", DefaultText = "false", Order = 23)]
     CommandValue<bool> Wait)
 {
     public TransitionArguments ToTransitionArguments(DirectionTransitionId via = default) =>
@@ -34,6 +70,15 @@ public sealed record TimingArguments(
             Ease,
             via.IsEmpty ? CommandValue<DirectionTransitionId>.Unspecified() : CommandValue<DirectionTransitionId>.Explicit(via),
             Wait);
+
+    public static TimingArguments Create(
+        CommandValue<double>? duration = null,
+        CommandValue<EasingId>? ease = null,
+        CommandValue<bool>? wait = null) =>
+        new(
+            duration ?? CommandValue<double>.Unspecified(),
+            ease ?? CommandValue<EasingId>.Unspecified(),
+            wait ?? CommandValue<bool>.Unspecified());
 }
 
 public readonly record struct TimingParameterOptions(
@@ -43,172 +88,9 @@ public readonly record struct TimingParameterOptions(
     int WaitOrder = 23);
 
 public sealed record WaitArguments(
+    [Option(ValueHint = "bool", DefaultText = "false", Order = 20)]
     CommandValue<bool> Wait);
 
 public sealed record AudioFadeArguments(
+    [Option(ValueHint = "seconds", Minimum = 0, Order = 10)]
     CommandValue<double> Duration);
-
-public static class CommandParameterGroups
-{
-    public static ICommandParameterGroup<TransitionArguments> Transition(
-        TransitionParameterOptions options = default)
-    {
-        var parameters = new[]
-        {
-            new CommandParameterSpec(
-                "via",
-                options.ViaOrder,
-                Primary: false,
-                Required: false,
-                typeof(DirectionTransitionId),
-                "kind"),
-            new CommandParameterSpec(
-                "duration",
-                options.DurationOrder,
-                Primary: false,
-                Required: false,
-                typeof(double),
-                "seconds",
-                Minimum: 0),
-            new CommandParameterSpec(
-                "ease",
-                options.EaseOrder,
-                Primary: false,
-                Required: false,
-                typeof(EasingId),
-                "curve"),
-            new CommandParameterSpec(
-                "wait",
-                options.WaitOrder,
-                Primary: false,
-                Required: false,
-                typeof(bool),
-                "bool",
-                ContractDefault: options.WaitContractDefault),
-        };
-
-        return new DelegateCommandParameterGroup<TransitionArguments>(
-            "transition",
-            parameters,
-            (raw, env) =>
-            {
-                var duration = BindValue<double>(raw, env, "duration");
-                var ease = BindValue<EasingId>(raw, env, "ease");
-                var via = BindValue<DirectionTransitionId>(raw, env, "via");
-                var wait = BindValue(raw, env, "wait", options.WaitContractDefault);
-
-                return new TransitionArguments(duration, ease, via, wait);
-            });
-    }
-
-    public static ICommandParameterGroup<TimingArguments> Timing(
-        TimingParameterOptions options = default)
-    {
-        var parameters = new[]
-        {
-            new CommandParameterSpec(
-                "duration",
-                options.DurationOrder,
-                Primary: false,
-                Required: false,
-                typeof(double),
-                "seconds",
-                Minimum: 0),
-            new CommandParameterSpec(
-                "ease",
-                options.EaseOrder,
-                Primary: false,
-                Required: false,
-                typeof(EasingId),
-                "curve"),
-            new CommandParameterSpec(
-                "wait",
-                options.WaitOrder,
-                Primary: false,
-                Required: false,
-                typeof(bool),
-                "bool",
-                ContractDefault: options.WaitContractDefault),
-        };
-
-        return new DelegateCommandParameterGroup<TimingArguments>(
-            "timing",
-            parameters,
-            (raw, env) =>
-            {
-                var duration = BindValue<double>(raw, env, "duration");
-                var ease = BindValue<EasingId>(raw, env, "ease");
-                var wait = BindValue(raw, env, "wait", options.WaitContractDefault);
-
-                return new TimingArguments(duration, ease, wait);
-            });
-    }
-
-    public static ICommandParameterGroup<WaitArguments> Wait(
-        bool contractDefault = false,
-        int order = 20)
-    {
-        var parameters = new[]
-        {
-            new CommandParameterSpec(
-                "wait",
-                order,
-                Primary: false,
-                Required: false,
-                typeof(bool),
-                "bool",
-                ContractDefault: contractDefault),
-        };
-
-        return new DelegateCommandParameterGroup<WaitArguments>(
-            "wait",
-            parameters,
-            (raw, env) =>
-            {
-                var wait = BindValue(raw, env, "wait", contractDefault);
-                return new WaitArguments(wait);
-            });
-    }
-
-    public static ICommandParameterGroup<AudioFadeArguments> AudioFade(
-        int order = 10)
-    {
-        var parameters = new[]
-        {
-            new CommandParameterSpec(
-                "duration",
-                order,
-                Primary: false,
-                Required: false,
-                typeof(double),
-                "seconds",
-                Minimum: 0),
-        };
-
-        return new DelegateCommandParameterGroup<AudioFadeArguments>(
-            "audioFade",
-            parameters,
-            (raw, env) =>
-            {
-                var duration = BindValue<double>(raw, env, "duration");
-                return new AudioFadeArguments(duration);
-            });
-    }
-
-    private static CommandValue<T> BindValue<T>(
-        RawCommandArguments raw,
-        CommandBindingEnvironment env,
-        string name,
-        T? contractDefault = default)
-    {
-        if (raw.Named.TryGetValue(name, out var rawText))
-        {
-            var converted = env.Converters.Convert<T>(rawText);
-            return CommandValue<T>.Explicit(converted);
-        }
-
-        return contractDefault is not null
-            ? CommandValue<T>.ContractDefault(contractDefault)
-            : CommandValue<T>.Unspecified();
-    }
-}

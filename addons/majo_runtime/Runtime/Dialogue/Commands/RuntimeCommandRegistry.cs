@@ -3,7 +3,9 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Linq;
+using System.Threading.Tasks;
 using Majo.Runtime.Core;
 
 namespace Majo.Runtime.Dialogue.Commands;
@@ -19,7 +21,9 @@ public interface IRuntimeCommandRegistrar
 
 public interface IRuntimeCommandModule
 {
-    void Register(IRuntimeCommandRegistrar commands);
+    void Register(CommandRegistrationContext context);
+
+
 }
 
 public sealed class CommandFactoryRegistration
@@ -53,8 +57,26 @@ public sealed class RuntimeCommandRegistry : IRuntimeCommandRegistrar
 
     private readonly Dictionary<string, CommandFactoryRegistration> registrations =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly CommandConverterRegistry converters;
+    private readonly CommandParameterGroupRegistry groups;
     private bool isRegistrationSealed;
     private bool isSealed;
+
+    public RuntimeCommandRegistry(
+        CommandConverterRegistry? converters = null,
+        CommandParameterGroupRegistry? groups = null)
+    {
+        this.converters = converters ?? new CommandConverterRegistry();
+        this.groups = groups ?? new CommandParameterGroupRegistry();
+    }
+
+    public CommandRegistrationContext Registration => new(this, converters, groups);
+
+    public CommandConverterRegistry Converters => converters;
+
+    public CommandParameterGroupRegistry Groups => groups;
+
+    public bool IsSealed => isSealed;
 
     public IReadOnlyCollection<CommandFactoryRegistration> Registrations =>
         new ReadOnlyCollection<CommandFactoryRegistration>(registrations.Values.ToList());
@@ -113,63 +135,56 @@ public sealed class RuntimeCommandRegistry : IRuntimeCommandRegistrar
         ArgumentNullException.ThrowIfNull(module);
         EnsureMutable();
 
-        var addedKeys = new List<string>();
-        var recordingRegistrar = new RecordingRegistrar(this, addedKeys);
+        var commandSnapshot = CreateSnapshot();
+        var converterSnapshot = converters.CreateSnapshot();
+        var groupSnapshot = groups.CreateSnapshot();
+
         try
         {
-            module.Register(recordingRegistrar);
+            var context = new CommandRegistrationContext(this, converters, groups);
+            module.Register(context);
         }
         catch
         {
-            foreach (var key in addedKeys)
-            {
-                registrations.Remove(key);
-            }
+            RestoreSnapshot(commandSnapshot);
+            converters.RestoreSnapshot(converterSnapshot);
+            groups.RestoreSnapshot(groupSnapshot);
             throw;
         }
 
         return this;
     }
 
-    private sealed class RecordingRegistrar : IRuntimeCommandRegistrar
+    internal CommandRegistrationSnapshot CreateSnapshot() =>
+        new(new Dictionary<string, CommandFactoryRegistration>(registrations, StringComparer.OrdinalIgnoreCase));
+
+    internal void RestoreSnapshot(CommandRegistrationSnapshot snapshot)
     {
-        private readonly RuntimeCommandRegistry registry;
-        private readonly List<string> addedKeys;
-
-        public RecordingRegistrar(RuntimeCommandRegistry registry, List<string> addedKeys)
+        registrations.Clear();
+        foreach (var (k, v) in snapshot.Registrations)
         {
-            this.registry = registry;
-            this.addedKeys = addedKeys;
-        }
-
-        public IRuntimeCommandRegistrar Add(
-            string name,
-            Func<IServiceResolver, IRuntimeCommand> factory,
-            string providerId,
-            string? version = null)
-        {
-            registry.Add(name, factory, providerId, version);
-            var segments = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            var normalizedName = string.Join(' ', segments);
-            addedKeys.Add(normalizedName);
-            return this;
+            registrations[k] = v;
         }
     }
+
+    internal sealed record CommandRegistrationSnapshot(
+        Dictionary<string, CommandFactoryRegistration> Registrations);
 
     public void SealRegistrations()
     {
         isRegistrationSealed = true;
+        converters.Seal();
+        groups.Seal();
     }
 
-    public RuntimeCommandCatalog BuildCatalog(
-        IServiceResolver? services = null,
-        CommandBindingEnvironment? environment = null)
+    public RuntimeCommandCatalog BuildCatalog(IServiceResolver? services = null)
     {
         var resolver = services ?? EmptyServiceResolver.Instance;
-        var env = environment ?? new CommandBindingEnvironment(new CommandValueConverterRegistry());
+        var resolvedConverters = converters.Resolve(resolver);
 
-        var entries = new List<RuntimeCommandCatalogEntry>(registrations.Count);
+        var instantiatedCommands = new List<(CommandFactoryRegistration Reg, IRuntimeCommand Command)>(registrations.Count);
 
+        // Step 1: Instantiate all commands and validate names
         foreach (var registration in registrations.Values)
         {
             IRuntimeCommand command;
@@ -187,7 +202,7 @@ public sealed class RuntimeCommandRegistry : IRuntimeCommandRegistrar
                     phase: CommandFailurePhase.Schema);
             }
 
-            if (command is null || command.Schema is null)
+            if (command is null || command.Definition is null)
             {
                 throw new RuntimeCommandException(
                     registration.Name,
@@ -196,27 +211,106 @@ public sealed class RuntimeCommandRegistry : IRuntimeCommandRegistrar
                     phase: CommandFailurePhase.Schema);
             }
 
-            if (!string.Equals(command.Schema.Name, registration.Name, StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(command.Definition.Name, registration.Name, StringComparison.OrdinalIgnoreCase))
             {
                 throw new RuntimeCommandException(
                     registration.Name,
-                    $"Command schema name '{command.Schema.Name}' does not match registered name '{registration.Name}'.",
+                    $"Command schema name '{command.Definition.Name}' does not match registered name '{registration.Name}'.",
                     recoverable: false,
                     phase: CommandFailurePhase.Schema);
             }
 
-            command.Schema.Validate(env);
-            command.Schema.AttachEnvironment(env);
-            entries.Add(new RuntimeCommandCatalogEntry(
-                command,
+            instantiatedCommands.Add((registration, command));
+        }
+
+        // Step 2: Build and validate BoundCommand for each command atomically
+        var builtEntries = new List<RuntimeCommandCatalogEntry>(instantiatedCommands.Count);
+        foreach (var (registration, command) in instantiatedCommands)
+        {
+            var def = command.Definition;
+            var flattened = def.FlattenedParameters;
+            CommandContractValidation.ValidateParameters(def.Name, flattened);
+            _ = CommandContractValidation.ResolveSets(def);
+            var slots = new BoundParameterSlot[flattened.Count];
+            var slotIndicesByName = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var memberSlots = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+            for (var i = 0; i < flattened.Count; i++)
+            {
+                var decl = flattened[i];
+                var converter = resolvedConverters.ResolveForParameter(decl.ValueType, decl.ConverterType, def.Name, decl.Name, decl.ConverterFactory);
+                var descriptor = converter as ICommandValueDescriptor;
+
+                object? contractDefaultValue = null;
+                var hasDefault = decl.HasDefault;
+
+                if (hasDefault)
+                {
+                    if (decl.DefaultValue is not null)
+                    {
+                        contractDefaultValue = decl.DefaultValue;
+                    }
+                    else if (decl.DefaultText is not null)
+                    {
+                        try
+                        {
+                            contractDefaultValue = converter.ParseUntyped(decl.DefaultText);
+                        }
+                        catch (Exception ex)
+                        {
+                            throw new RuntimeCommandException(
+                                def.Name,
+                                $"Invalid contract default '{decl.DefaultText}' for parameter '{decl.Name}': {ex.Message}",
+                                ex,
+                                phase: CommandFailurePhase.Schema);
+                        }
+                    }
+
+                    CommandContractValidation.ValidateValue(def.Name, decl, contractDefaultValue, CommandFailurePhase.Schema);
+                    if (decl.DefaultValue is not null && descriptor is null)
+                        throw new RuntimeCommandException(def.Name, $"Typed default for parameter '{decl.Name}' requires a formatter.", phase: CommandFailurePhase.Schema);
+
+                    if (decl.Minimum.HasValue && contractDefaultValue is IConvertible convertible)
+                    {
+                        var num = convertible.ToDouble(CultureInfo.InvariantCulture);
+                        if (num < decl.Minimum.Value)
+                        {
+                            throw new RuntimeCommandException(
+                                def.Name,
+                                $"Contract default '{decl.DefaultText ?? contractDefaultValue?.ToString()}' for parameter '{decl.Name}' must be at least {decl.Minimum.Value.ToString(CultureInfo.InvariantCulture)}.",
+                                phase: CommandFailurePhase.Schema);
+                        }
+                    }
+                }
+
+                slots[i] = new BoundParameterSlot(
+                    i,
+                    decl.Name,
+                    decl,
+                    converter,
+                    descriptor,
+                    hasDefault,
+                    contractDefaultValue,
+                    decl.Minimum);
+
+                slotIndicesByName.Add(decl.Name, i);
+                memberSlots.Add(CommandContractValidation.MemberPath(decl), i);
+            }
+
+            var resolutionContext = new BindingResolutionContext(slotIndicesByName, slots, memberSlots);
+            var boundCommand = command.CreateBoundCommand(resolutionContext, slots);
+
+            builtEntries.Add(new RuntimeCommandCatalogEntry(
+                boundCommand,
                 registration.ProviderId,
                 registration.Version));
         }
 
-        env.Converters.Seal();
-        isRegistrationSealed = true;
+        var catalog = new RuntimeCommandCatalog(builtEntries);
+        _ = RuntimeCommandManifest.FromCatalog(catalog, "runtime").ToJson();
+        SealRegistrations();
         isSealed = true;
-        return new RuntimeCommandCatalog(entries);
+        return catalog;
     }
 
     private void EnsureMutable()
@@ -250,39 +344,39 @@ public sealed class RuntimeCommandRegistry : IRuntimeCommandRegistrar
 
 public sealed class RuntimeCommandCatalog
 {
-    private readonly ReadOnlyDictionary<string, IRuntimeCommand> commandsByName;
+    private readonly ReadOnlyDictionary<string, IBoundCommand> commandsByName;
 
-    public RuntimeCommandCatalog(IReadOnlyList<IRuntimeCommand> commands)
+    public RuntimeCommandCatalog(IReadOnlyList<IBoundCommand> commands)
         : this(commands.Select(command => new RuntimeCommandCatalogEntry(command, string.Empty, null)).ToArray())
     {
     }
 
     internal RuntimeCommandCatalog(IReadOnlyList<RuntimeCommandCatalogEntry> entries)
     {
-        Entries = entries ?? throw new ArgumentNullException(nameof(entries));
-        Commands = new ReadOnlyCollection<IRuntimeCommand>(entries.Select(entry => entry.Command).ToArray());
-        var dict = new Dictionary<string, IRuntimeCommand>(StringComparer.OrdinalIgnoreCase);
+        Entries = Array.AsReadOnly((entries ?? throw new ArgumentNullException(nameof(entries))).ToArray());
+        Commands = new ReadOnlyCollection<IBoundCommand>(entries.Select(entry => entry.Command).ToArray());
+        var dict = new Dictionary<string, IBoundCommand>(StringComparer.OrdinalIgnoreCase);
         foreach (var entry in entries)
         {
             var command = entry.Command;
-            if (!dict.TryAdd(command.Schema.Name, command))
+            if (!dict.TryAdd(command.Name, command))
             {
                 throw new RuntimeCommandException(
-                    command.Schema.Name,
-                    $"Duplicate command '{command.Schema.Name}' registered.",
+                    command.Name,
+                    $"Duplicate command '{command.Name}' registered.",
                     recoverable: false,
                     phase: CommandFailurePhase.Schema);
             }
         }
 
-        commandsByName = new ReadOnlyDictionary<string, IRuntimeCommand>(dict);
+        commandsByName = new ReadOnlyDictionary<string, IBoundCommand>(dict);
     }
 
-    public IReadOnlyList<IRuntimeCommand> Commands { get; }
+    public IReadOnlyList<IBoundCommand> Commands { get; }
 
     public IReadOnlyList<RuntimeCommandCatalogEntry> Entries { get; }
 
-    public IRuntimeCommand Get(string commandName)
+    public IBoundCommand Get(string commandName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(commandName);
         return commandsByName.TryGetValue(commandName, out var command)
@@ -294,20 +388,57 @@ public sealed class RuntimeCommandCatalog
                 phase: CommandFailurePhase.Execution);
     }
 
-    public bool TryGet(string commandName, out IRuntimeCommand? command) =>
+    public bool TryGet(string commandName, out IBoundCommand? command) =>
         commandsByName.TryGetValue(commandName, out command);
+
+    public BoundCommand<TArguments> Get<TArguments>(string commandName)
+        where TArguments : class
+    {
+        var cmd = Get(commandName);
+        if (cmd is BoundCommand<TArguments> typed)
+        {
+            return typed;
+        }
+
+        throw new RuntimeCommandException(
+            commandName,
+            $"Command '{commandName}' arguments type is not '{typeof(TArguments).FullName}'.",
+            phase: CommandFailurePhase.Binding);
+    }
+
+    public TCommand GetCommand<TCommand>(string commandName)
+        where TCommand : class, IRuntimeCommand
+    {
+        var cmd = Get(commandName);
+        if (cmd.Command is TCommand typed)
+        {
+            return typed;
+        }
+
+        if (cmd is TCommand typedBound)
+        {
+            return typedBound;
+        }
+
+        throw new RuntimeCommandException(
+            commandName,
+            $"Command '{commandName}' is not of type '{typeof(TCommand).FullName}'.",
+            phase: CommandFailurePhase.Binding);
+    }
+
+
 }
 
 public sealed class RuntimeCommandCatalogEntry
 {
-    public RuntimeCommandCatalogEntry(IRuntimeCommand command, string providerId, string? version)
+    public RuntimeCommandCatalogEntry(IBoundCommand command, string providerId, string? version)
     {
         Command = command ?? throw new ArgumentNullException(nameof(command));
         ProviderId = providerId ?? string.Empty;
         Version = version;
     }
 
-    public IRuntimeCommand Command { get; }
+    public IBoundCommand Command { get; }
     public string ProviderId { get; }
     public string? Version { get; }
 }

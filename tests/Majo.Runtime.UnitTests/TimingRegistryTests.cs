@@ -189,20 +189,52 @@ public sealed class TimingRegistryTests
         var customId = new EasingId("spring-out");
         easings.Register(new EasingDefinition(customId, t => t));
 
-        var converters = new CommandValueConverterRegistry(easings);
+        var converter = new EasingIdConverter(easings);
 
         // Built-in
-        Assert.Equal(EasingId.SineIn, converters.Convert<EasingId>("sine-in"));
-        Assert.Equal(EasingId.SineIn, converters.Convert<EasingId>("sinein"));
-        Assert.Equal(EasingId.SineIn, converters.Convert<EasingId>("SineIn"));
-        Assert.Equal(DirectionEase.SineIn, converters.Convert<DirectionEase>("sine-in"));
+        Assert.Equal(EasingId.SineIn, converter.Parse("sine-in"));
+        Assert.Equal(EasingId.SineIn, converter.Parse("sinein"));
+        Assert.Equal(EasingId.SineIn, converter.Parse("SineIn"));
+        Assert.Equal(DirectionEase.SineIn, new DirectionEaseConverter(easings).Parse("sine-in"));
 
         // Custom
-        Assert.Equal(customId, converters.Convert<EasingId>("spring-out"));
+        Assert.Equal(customId, converter.Parse("spring-out"));
 
         // Unknown
-        var ex = Assert.Throws<FormatException>(() => converters.Convert<EasingId>("nonexistent"));
+        var ex = Assert.Throws<CommandValueFormatException>(() => converter.Parse("nonexistent"));
         Assert.Contains("nonexistent", ex.Message);
+    }
+
+    private sealed class TestTransitionCommand : RuntimeCommand<TestTransitionCommand.Arguments>
+    {
+        private static readonly CommandDefinition<Arguments> StaticDefinition =
+            CommandDefinition<Arguments>.Create("test-transition")
+                .Group("transition", "Transition", typeof(TransitionArguments), groupParameters: new[]
+                {
+                    new CommandParameterDeclaration("via", "Via", 20, false, false, typeof(DirectionTransitionId), true, "kind"),
+                    new CommandParameterDeclaration("duration", "Duration", 21, false, false, typeof(double), true, "seconds", Minimum: 0),
+                    new CommandParameterDeclaration("ease", "Ease", 22, false, false, typeof(EasingId), true, "curve"),
+                    new CommandParameterDeclaration("wait", "Wait", 23, false, false, typeof(bool), true, "bool", HasDefault: true, DefaultText: "false"),
+                })
+                .Build(static context =>
+                {
+                    var viaSlot = context.GetSlot("transition.via");
+                    var durSlot = context.GetSlot("transition.duration");
+                    var easeSlot = context.GetSlot("transition.ease");
+                    var waitSlot = context.GetSlot("transition.wait");
+                    return reader => new Arguments(new TransitionArguments(
+                        reader.ReadOptional<double>(durSlot),
+                        reader.ReadOptional<EasingId>(easeSlot),
+                        reader.ReadOptional<DirectionTransitionId>(viaSlot),
+                        reader.ReadOptional<bool>(waitSlot)));
+                });
+
+        public override CommandDefinition<Arguments> Definition => StaticDefinition;
+
+        protected override ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context) =>
+            ValueTask.CompletedTask;
+
+        public sealed record Arguments(TransitionArguments Transition);
     }
 
     [Fact]
@@ -213,20 +245,20 @@ public sealed class TimingRegistryTests
         var customId = new EasingId("elastic-out");
         easings.Register(new EasingDefinition(customId, t => t));
 
-        var converters = new CommandValueConverterRegistry(easings);
-        var env = new CommandBindingEnvironment(converters);
+        var bound = TestCatalogBuilder.CreateBound(
+            new TestTransitionCommand(),
+            configureConverters: c => c.ReplaceDefault<EasingId>(_ => new EasingIdConverter(easings), "test", "timing"));
 
-        var group = CommandParameterGroups.Transition();
-        var raw = new RawCommandArguments(null, new Dictionary<string, string>
+        var raw = new RawCommandArguments("test-transition", new Dictionary<string, string>
         {
             ["via"] = "fade",
             ["duration"] = "0.8",
             ["ease"] = "elastic-out",
         });
 
-        var result = group.Bind(raw, env);
-        Assert.True(result.Ease.WasProvided);
-        Assert.Equal(customId, result.Ease.Value);
+        var result = (TestTransitionCommand.Arguments)bound.BindUntyped(raw);
+        Assert.True(result.Transition.Ease.WasProvided);
+        Assert.Equal(customId, result.Transition.Ease.Value);
     }
 
     [Fact]
@@ -234,13 +266,9 @@ public sealed class TimingRegistryTests
     {
         var beats = new FakeDirectionBeatRuntime();
         var policy = new DirectionCommandPolicy(beats, DirectionAnimationDefaults.FromConfiguration(null));
-        var group = CommandParameterGroups.Transition();
-        var raw = new RawCommandArguments(null, new Dictionary<string, string>
-        {
-            ["via"] = "dissolve",
-            ["duration"] = "0.45",
-        });
-        var transitionArgs = group.Bind(raw, CommandBindingEnvironment.Default);
+        var transitionArgs = TransitionArguments.Create(
+            via: CommandValue<DirectionTransitionId>.Explicit(new DirectionTransitionId("dissolve")),
+            duration: CommandValue<double>.Explicit(0.45));
         
         // When no beat is open
         var specNoBeat = policy.ResolveTransition("backdrop", transitionArgs, null!);
@@ -312,9 +340,7 @@ public sealed class TimingRegistryTests
             DefaultCharacterAnimationKind: customId);
 
         var policy = new DirectionCommandPolicy(defaults: defaults, transitions: transitions);
-        var transitionArgs = CommandParameterGroups.Transition().Bind(
-            new RawCommandArguments(null, new Dictionary<string, string>()),
-            CommandBindingEnvironment.Default);
+        var transitionArgs = TransitionArguments.Create();
 
         var spec = policy.ResolveTransition("character", transitionArgs, null!);
         Assert.Equal(customId, spec.Kind);
@@ -345,9 +371,8 @@ public sealed class TimingRegistryTests
         transitions.Register(new FakeTransitionDriver(stageOnlyId, TransitionDomains.Stage));
 
         var policy = new DirectionCommandPolicy(transitions: transitions);
-        var transitionArgs = CommandParameterGroups.Transition().Bind(
-            new RawCommandArguments(null, new Dictionary<string, string> { ["via"] = "stage-wipe" }),
-            CommandBindingEnvironment.Default);
+        var transitionArgs = TransitionArguments.Create(
+            via: CommandValue<DirectionTransitionId>.Explicit(new DirectionTransitionId("stage-wipe")));
 
         // Character command requires Actor domain, which stage-wipe does not have
         var ex = Assert.Throws<DirectionException>(() => policy.ResolveTransition("character", transitionArgs, null!));
@@ -365,18 +390,14 @@ public sealed class TimingRegistryTests
         var defaults = DirectionAnimationDefaults.FromConfiguration(null) with { DefaultEasing = custom };
         var policy = new DirectionCommandPolicy(beats, defaults, easings: easings);
         await policy.InitializeAsync(CancellationToken.None);
-        var env = new CommandBindingEnvironment(new CommandValueConverterRegistry(easings));
-        var transition = CommandParameterGroups.Transition().Bind(
-            new RawCommandArguments(null, new Dictionary<string, string>()), env);
-        var timing = CommandParameterGroups.Timing().Bind(
-            new RawCommandArguments(null, new Dictionary<string, string>()), env);
+        var transition = TransitionArguments.Create();
+        var timing = TimingArguments.Create();
         Assert.Equal(custom, policy.ResolveTransition("backdrop", transition, null!).Easing);
         Assert.Equal(custom, policy.ResolveMotionTransition("camera move", timing, DirectionTransitionId.Move, null!).Easing);
         Assert.Equal(custom, policy.ResolveCameraPoseTransition("camera pose", timing, DirectionTransitionId.Move, null!).Easing);
         beats.Begin("b", "n", new DirectionBeatDefaults(null, EasingId.SineIn));
         Assert.Equal(EasingId.SineIn, policy.ResolveTransition("backdrop", transition, null!).Easing);
-        var explicitEase = CommandParameterGroups.Transition().Bind(
-            new RawCommandArguments(null, new Dictionary<string, string> { ["ease"] = "cubic-out" }), env);
+        var explicitEase = TransitionArguments.Create(ease: CommandValue<EasingId>.Explicit(EasingId.CubicOut));
         Assert.Equal(EasingId.CubicOut, policy.ResolveTransition("backdrop", explicitEase, null!).Easing);
         var invalid = new DirectionCommandPolicy(defaults: defaults with { DefaultEasing = "missing" }, easings: easings);
         await Assert.ThrowsAsync<KeyNotFoundException>(() => invalid.InitializeAsync(CancellationToken.None));
@@ -391,8 +412,8 @@ public sealed class TimingRegistryTests
         };
         var policy = new DirectionCommandPolicy(defaults: defaults, transitions: new TransitionDriverRegistry());
         await policy.InitializeAsync(CancellationToken.None);
-        var arguments = CommandParameterGroups.Transition().Bind(
-            new RawCommandArguments(null, new Dictionary<string, string> { ["via"] = "move" }), CommandBindingEnvironment.Default);
+        var arguments = TransitionArguments.Create(
+            via: CommandValue<DirectionTransitionId>.Explicit(DirectionTransitionId.Move));
         Assert.Equal(DirectionTransitionId.Move, policy.ResolveTransition("layout", arguments, null!).Kind);
     }
 
@@ -431,4 +452,3 @@ public sealed class TimingRegistryTests
         public void Setup(VisualTransitionContext context) { }
     }
 }
-

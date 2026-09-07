@@ -10,7 +10,9 @@ using Majo.Runtime.Timing;
 
 namespace Majo.Runtime.Dialogue.Commands;
 
-public sealed class ShotUseCommand : RuntimeCommand<ShotUseCommand.Arguments>
+[Command("shot use", Category = "Direction")]
+[AtMostOne(nameof(Arguments.Stage), nameof(Arguments.View))]
+public sealed partial class ShotUseCommand : RuntimeCommand<ShotUseCommand.Arguments>
 {
     private readonly IDirectionBeatRuntime beats;
     private readonly IDirectionScopeResolver scopes;
@@ -28,23 +30,6 @@ public sealed class ShotUseCommand : RuntimeCommand<ShotUseCommand.Arguments>
         this.nodeAccessor = nodeAccessor ?? throw new ArgumentNullException(nameof(nodeAccessor));
         this.policy = policy ?? throw new ArgumentNullException(nameof(policy));
     }
-
-    public override CommandSchema<Arguments> Schema { get; } =
-        CommandSchema<Arguments>
-            .Create(
-                "shot use",
-                category: "Direction",
-                usage: "shot use <alias> [stage:<id>|view:<id>] [via:<kind>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")
-            .Primary<string>("alias")
-            .Optional<string>("stage")
-            .Optional<string>("view")
-            .Use("transition", CommandParameterGroups.Transition())
-            .ParameterSet(CommandParameterSetRule.AtMostOne, "stage", "view")
-            .Build(static values => new Arguments(
-                values.Required<string>("alias"),
-                values.Optional<string>("stage"),
-                values.Optional<string>("view"),
-                values.Group<TransitionArguments>("transition")));
 
     protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {
@@ -69,13 +54,14 @@ public sealed class ShotUseCommand : RuntimeCommand<ShotUseCommand.Arguments>
     }
 
     public sealed record Arguments(
-        string Alias,
-        CommandValue<string> Stage,
-        CommandValue<string> View,
-        TransitionArguments Transition);
+        [Primary] string Alias,
+        [Option] CommandValue<string> Stage,
+        [Option] CommandValue<string> View,
+        [Group] TransitionArguments Transition);
 }
 
-public sealed class LayoutCommand : RuntimeCommand<LayoutCommand.Arguments>
+[Command("layout", Category = "Direction")]
+public sealed partial class LayoutCommand : RuntimeCommand<LayoutCommand.Arguments>
 {
     private readonly IDirectionBeatRuntime beats;
     private readonly IDirectionScopeResolver scopes;
@@ -93,22 +79,6 @@ public sealed class LayoutCommand : RuntimeCommand<LayoutCommand.Arguments>
         this.nodeAccessor = nodeAccessor ?? throw new ArgumentNullException(nameof(nodeAccessor));
         this.policy = policy ?? throw new ArgumentNullException(nameof(policy));
     }
-
-    public override CommandSchema<Arguments> Schema { get; } =
-        CommandSchema<Arguments>
-            .Create(
-                "layout",
-                category: "Direction",
-                usage: "layout <single|split|pip> <slot:view> ... [via:<kind>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")
-            .Primary<string>("layout")
-            .Optional<string>("main")
-            .Optional<string>("inset")
-            .Use("transition", CommandParameterGroups.Transition())
-            .Build(static values => new Arguments(
-                values.Required<string>("layout"),
-                values.Optional<string>("main"),
-                values.Optional<string>("inset"),
-                values.Group<TransitionArguments>("transition")));
 
     protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {
@@ -136,13 +106,14 @@ public sealed class LayoutCommand : RuntimeCommand<LayoutCommand.Arguments>
     }
 
     public sealed record Arguments(
-        string Layout,
-        CommandValue<string> Main,
-        CommandValue<string> Inset,
-        TransitionArguments Transition);
+        [Primary] string Layout,
+        [Option] CommandValue<string> Main,
+        [Option] CommandValue<string> Inset,
+        [Group] TransitionArguments Transition);
 }
 
-public sealed class DirectionImportCommand : RuntimeCommand<DirectionImportCommand.Arguments>
+[Command("import", Category = "Direction")]
+public sealed partial class DirectionImportCommand : RuntimeCommand<DirectionImportCommand.Arguments>
 {
     private readonly IDirectionScopeResolver scopes;
     private readonly IDialogueNodeAccessor nodeAccessor;
@@ -154,20 +125,6 @@ public sealed class DirectionImportCommand : RuntimeCommand<DirectionImportComma
         this.scopes = scopes ?? throw new ArgumentNullException(nameof(scopes));
         this.nodeAccessor = nodeAccessor ?? throw new ArgumentNullException(nameof(nodeAccessor));
     }
-
-    public override CommandSchema<Arguments> Schema { get; } =
-        CommandSchema<Arguments>
-            .Create(
-                "import",
-                category: "Direction",
-                usage: "import <stage> alias:<alias> source:<node:symbol>")
-            .Primary<string>("kind")
-            .Required<string>("alias")
-            .Required<string>("source")
-            .Build(static values => new Arguments(
-                values.Required<string>("kind"),
-                values.Required<string>("alias"),
-                values.Required<string>("source")));
 
     protected override ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {
@@ -193,12 +150,13 @@ public sealed class DirectionImportCommand : RuntimeCommand<DirectionImportComma
     }
 
     public sealed record Arguments(
-        string Kind,
-        string Alias,
-        string Source);
+        [Primary] string Kind,
+        [Option] string Alias,
+        [Option] string Source);
 }
 
-public sealed class DirectionMarkCommand : RuntimeCommand<DirectionMarkCommand.Arguments>
+[Command("mark", Category = "Direction")]
+public sealed partial class DirectionMarkCommand : RuntimeCommand<DirectionMarkCommand.Arguments>
 {
     private readonly IDirectionPositionResolver positions;
     private readonly IDirectionScopeResolver scopes;
@@ -213,15 +171,6 @@ public sealed class DirectionMarkCommand : RuntimeCommand<DirectionMarkCommand.A
         this.scopes = scopes ?? throw new ArgumentNullException(nameof(scopes));
         this.nodeAccessor = nodeAccessor ?? throw new ArgumentNullException(nameof(nodeAccessor));
     }
-
-    public override CommandSchema<Arguments> Schema { get; } =
-        CommandSchema<Arguments>
-            .Create("mark", category: "Direction", usage: "mark <name> at:<mark>")
-            .Primary<string>("name")
-            .Required<string>("at")
-            .Build(static values => new Arguments(
-                values.Required<string>("name"),
-                values.Required<string>("at")));
 
     protected override ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {
@@ -242,10 +191,11 @@ public sealed class DirectionMarkCommand : RuntimeCommand<DirectionMarkCommand.A
         return ValueTask.CompletedTask;
     }
 
-    public sealed record Arguments(string Name, string At);
+    public sealed record Arguments([Primary] string Name, [Option] string At);
 }
 
-public sealed class CurtainCommand : RuntimeCommand<CurtainCommand.Arguments>
+[Command("curtain", Category = "Direction")]
+public sealed partial class CurtainCommand : RuntimeCommand<CurtainCommand.Arguments>
 {
     private readonly IDirectionBeatRuntime beats;
     private readonly IDialogueNodeAccessor nodeAccessor;
@@ -258,32 +208,16 @@ public sealed class CurtainCommand : RuntimeCommand<CurtainCommand.Arguments>
         this.nodeAccessor = nodeAccessor ?? throw new ArgumentNullException(nameof(nodeAccessor));
     }
 
-    public override CommandSchema<Arguments> Schema { get; } =
-        CommandSchema<Arguments>
-            .Create(
-                "curtain",
-                category: "Direction",
-                usage: "curtain <open|closed> [duration:<seconds>] [r:<0..1>] [g:<0..1>] [b:<0..1>] [wait:<bool>]")
-            .Primary<CurtainPosition>("state")
-            .Optional<double>("duration", contractDefault: 0.35, hasContractDefault: true, minimum: 0)
-            .Optional<double>("r", contractDefault: 0.0, hasContractDefault: true, minimum: 0)
-            .Optional<double>("g", contractDefault: 0.0, hasContractDefault: true, minimum: 0)
-            .Optional<double>("b", contractDefault: 0.0, hasContractDefault: true, minimum: 0)
-            .Use("wait", CommandParameterGroups.Wait(contractDefault: false))
-            .Build(static values => new Arguments(
-                values.Required<CurtainPosition>("state"),
-                values.Optional<double>("duration").GetValueOrDefault(0.35),
-                values.Optional<double>("r").GetValueOrDefault(0.0),
-                values.Optional<double>("g").GetValueOrDefault(0.0),
-                values.Optional<double>("b").GetValueOrDefault(0.0),
-                values.Group<WaitArguments>("wait")));
-
     protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {
         var node = nodeAccessor.RequireNode();
+        var duration = arguments.Duration.GetValueOrDefault(0.35);
+        var r = arguments.R.GetValueOrDefault(0.0);
+        var g = arguments.G.GetValueOrDefault(0.0);
+        var b = arguments.B.GetValueOrDefault(0.0);
         var transition = new DirectionTransitionSpec(
             DirectionTransitionId.Fade,
-            arguments.Duration,
+            duration,
             EasingId.Linear).Validate();
         var opacity = arguments.Position == CurtainPosition.Open ? 0f : 1f;
         var wait = arguments.Wait.Wait.GetValueOrDefault(false);
@@ -291,7 +225,7 @@ public sealed class CurtainCommand : RuntimeCommand<CurtainCommand.Arguments>
         await beats.SubmitAsync(
             new CurtainPatch(
                 new CurtainState(
-                    new DirectionColor((float)arguments.R, (float)arguments.G, (float)arguments.B),
+                    new DirectionColor((float)r, (float)g, (float)b),
                     opacity),
                 transition,
                 new DirectionSourceLocation(node, 0, 0)),
@@ -300,10 +234,10 @@ public sealed class CurtainCommand : RuntimeCommand<CurtainCommand.Arguments>
     }
 
     public sealed record Arguments(
-        CurtainPosition Position,
-        double Duration,
-        double R,
-        double G,
-        double B,
-        WaitArguments Wait);
+        [Primary(Name = "state")] CurtainPosition Position,
+        [Option(DefaultText = "0.35", Minimum = 0, ValueHint = "seconds")] CommandValue<double> Duration,
+        [Option(DefaultText = "0.0", Minimum = 0, ValueHint = "0..1")] CommandValue<double> R,
+        [Option(DefaultText = "0.0", Minimum = 0, ValueHint = "0..1")] CommandValue<double> G,
+        [Option(DefaultText = "0.0", Minimum = 0, ValueHint = "0..1")] CommandValue<double> B,
+        [Group] WaitArguments Wait);
 }

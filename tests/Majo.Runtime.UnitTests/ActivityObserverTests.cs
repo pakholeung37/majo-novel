@@ -232,8 +232,10 @@ public sealed class ActivityObserverTests
             this.task = task;
         }
 
-        public override CommandSchema<Arguments> Schema { get; } =
-            CommandSchema<Arguments>.Create("activity_test_cmd").Build(static _ => new Arguments());
+        private static readonly CommandDefinition<Arguments> StaticDefinition =
+            CommandDefinition<Arguments>.Create("activity_test_cmd").Build(_ => _ => new Arguments());
+
+        public override CommandDefinition<Arguments> Definition => StaticDefinition;
 
         protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
         {

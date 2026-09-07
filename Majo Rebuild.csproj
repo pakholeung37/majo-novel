@@ -6,7 +6,7 @@
     <AnalysisLevel>latest-Recommended</AnalysisLevel>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <NoWarn>$(NoWarn);SYSLIB1220;CS0618</NoWarn>
-    <DefaultItemExcludes>$(DefaultItemExcludes);tests/Majo.Runtime.UnitTests/**;tests/fixtures/**;**/bin/**;**/obj/**</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);tests/Majo.Runtime.UnitTests/**;tests/Majo.CommandGenerator.Tests/**;tests/fixtures/**;**/bin/**;**/obj/**</DefaultItemExcludes>
   </PropertyGroup>
 
   <Import Project="addons\YarnSpinner-Godot\YarnSpinner-Godot.props" />

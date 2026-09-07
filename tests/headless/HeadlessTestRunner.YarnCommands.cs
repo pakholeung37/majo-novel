@@ -232,32 +232,33 @@ public partial class HeadlessTestRunner
         Assert(!IsInstanceValid(bootstrap), "M4 Runtime node leaked after shutdown.");
         Assert(!IsInstanceValid(runner), "M4 DialogueRunner leaked after cleanup.");
     }
+}
 
-    private sealed class HeadlessProbeCommand : RuntimeCommand<HeadlessProbeCommand.Arguments>
+[Command("majo_probe", Category = "Test")]
+public sealed partial class HeadlessProbeCommand : RuntimeCommand<HeadlessProbeCommand.Arguments>
+{
+    private readonly HeadlessLifecycleService service;
+    private readonly Action onRan;
+
+    public HeadlessProbeCommand(HeadlessLifecycleService service, Action onRan)
     {
-        private readonly HeadlessLifecycleService service;
-        private readonly Action onRan;
-
-        public HeadlessProbeCommand(HeadlessLifecycleService service, Action onRan)
-        {
-            this.service = service ?? throw new ArgumentNullException(nameof(service));
-            this.onRan = onRan ?? throw new ArgumentNullException(nameof(onRan));
-        }
-
-        public override CommandSchema<Arguments> Schema { get; } =
-            CommandSchema<Arguments>
-                .Create("majo_probe", category: "Test", usage: "majo_probe <value>")
-                .Primary<string>("value")
-                .Build(static values => new Arguments(values.Required<string>("value")));
-
-        protected override ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
-        {
-            Assert(arguments.Value == "alpha", "Custom command received incorrect arguments.");
-            Assert(service is not null, "Custom command could not resolve a game extension service.");
-            onRan();
-            return ValueTask.CompletedTask;
-        }
-
-        public sealed record Arguments(string Value = "");
+        this.service = service ?? throw new ArgumentNullException(nameof(service));
+        this.onRan = onRan ?? throw new ArgumentNullException(nameof(onRan));
     }
+
+    protected override ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
+    {
+        if (arguments.Value != "alpha")
+        {
+            throw new InvalidOperationException("Custom command received incorrect arguments.");
+        }
+        if (service is null)
+        {
+            throw new InvalidOperationException("Custom command could not resolve a game extension service.");
+        }
+        onRan();
+        return ValueTask.CompletedTask;
+    }
+
+    public sealed record Arguments([Primary] string Value);
 }

@@ -7,7 +7,8 @@ using Majo.Runtime.Audio;
 
 namespace Majo.Runtime.Dialogue.Commands.Audio;
 
-public sealed class PlaySfxCommand : RuntimeCommand<PlaySfxCommand.Arguments>
+[Command("sfx", Category = "Audio")]
+public sealed partial class PlaySfxCommand : RuntimeCommand<PlaySfxCommand.Arguments>
 {
     private readonly IAudioManager audio;
     private readonly IAudioCommandPolicy policy;
@@ -18,62 +19,43 @@ public sealed class PlaySfxCommand : RuntimeCommand<PlaySfxCommand.Arguments>
         this.policy = policy ?? throw new ArgumentNullException(nameof(policy));
     }
 
-    public override CommandSchema<Arguments> Schema { get; } =
-        CommandSchema<Arguments>
-            .Create(
-                "sfx",
-                category: "Audio",
-                usage: "sfx <clip> [instance:<id>] [loop:<bool>] [volume:<0..1>] [duration:<seconds>] [wait:<bool>] [waitPlayback:<bool>]")
-            .Primary<string>("clip")
-            .Optional<string>("instance")
-            .Optional<bool>("loop")
-            .Optional<double>("volume", contractDefault: 1.0, hasContractDefault: true, minimum: 0)
-            .Optional<bool>("waitPlayback")
-            .Use("fade", CommandParameterGroups.AudioFade())
-            .Use("wait", CommandParameterGroups.Wait(contractDefault: false))
-            .Build(static values => new Arguments(
-                values.Required<string>("clip"),
-                values.Optional<string>("instance").GetValueOrDefault(string.Empty),
-                values.Optional<bool>("loop").GetValueOrDefault(false),
-                values.Optional<double>("volume").GetValueOrDefault(1.0),
-                values.Optional<bool>("waitPlayback").GetValueOrDefault(false),
-                values.Group<AudioFadeArguments>("fade"),
-                values.Group<WaitArguments>("wait")));
-
     protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {
         var fadeDuration = policy.ResolveFadeDuration(arguments.Fade, AudioCommandKind.Sfx, context);
-        var instance = string.IsNullOrWhiteSpace(arguments.Instance) ? null : arguments.Instance;
+        var instance = arguments.Instance.WasProvided && !string.IsNullOrWhiteSpace(arguments.Instance.Value) ? arguments.Instance.Value : null;
         var wait = arguments.Wait.Wait.GetValueOrDefault(false);
+        var loop = arguments.Loop.GetValueOrDefault(false);
+        var waitPlayback = arguments.WaitPlayback.GetValueOrDefault(false);
 
         var result = await audio.PlaySfxAsync(
             arguments.Clip,
             instance,
-            arguments.Loop,
-            (float)arguments.Volume,
+            loop,
+            (float)arguments.Volume.GetValueOrDefault(1.0),
             AudioCommandExecution.Fade(fadeDuration),
             context.CancellationToken);
 
         await AudioCommandExecution.WaitSettlementAsync(
             result.Settlement, wait, context.CancellationToken);
 
-        if (arguments.WaitPlayback && !arguments.Loop)
+        if (waitPlayback && !loop)
         {
             await result.Playback.Completion.WaitAsync(context.CancellationToken);
         }
     }
 
     public sealed record Arguments(
-        string Clip,
-        string Instance,
-        bool Loop,
-        double Volume,
-        bool WaitPlayback,
-        AudioFadeArguments Fade,
-        WaitArguments Wait);
+        [Primary] string Clip,
+        [Option] CommandValue<string> Instance,
+        [Option] CommandValue<bool> Loop,
+        [Option(DefaultText = "1.0", Minimum = 0)] CommandValue<double> Volume,
+        [Option] CommandValue<bool> WaitPlayback,
+        [Group] AudioFadeArguments Fade,
+        [Group] WaitArguments Wait);
 }
 
-public sealed class StopSfxCommand : RuntimeCommand<StopSfxCommand.Arguments>
+[Command("stopSfx", Category = "Audio")]
+public sealed partial class StopSfxCommand : RuntimeCommand<StopSfxCommand.Arguments>
 {
     private readonly IAudioManager audio;
     private readonly IAudioCommandPolicy policy;
@@ -84,24 +66,10 @@ public sealed class StopSfxCommand : RuntimeCommand<StopSfxCommand.Arguments>
         this.policy = policy ?? throw new ArgumentNullException(nameof(policy));
     }
 
-    public override CommandSchema<Arguments> Schema { get; } =
-        CommandSchema<Arguments>
-            .Create(
-                "stopSfx",
-                category: "Audio",
-                usage: "stopSfx [instance:<id>] [duration:<seconds>] [wait:<bool>]")
-            .Optional<string>("instance")
-            .Use("fade", CommandParameterGroups.AudioFade())
-            .Use("wait", CommandParameterGroups.Wait(contractDefault: false))
-            .Build(static values => new Arguments(
-                values.Optional<string>("instance").GetValueOrDefault(string.Empty),
-                values.Group<AudioFadeArguments>("fade"),
-                values.Group<WaitArguments>("wait")));
-
     protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {
         var fadeDuration = policy.ResolveFadeDuration(arguments.Fade, AudioCommandKind.Sfx, context);
-        var instance = string.IsNullOrWhiteSpace(arguments.Instance) ? null : arguments.Instance;
+        var instance = arguments.Instance.WasProvided && !string.IsNullOrWhiteSpace(arguments.Instance.Value) ? arguments.Instance.Value : null;
         var wait = arguments.Wait.Wait.GetValueOrDefault(false);
 
         var stopTask = audio.StopSfxAsync(
@@ -113,7 +81,7 @@ public sealed class StopSfxCommand : RuntimeCommand<StopSfxCommand.Arguments>
     }
 
     public sealed record Arguments(
-        string Instance,
-        AudioFadeArguments Fade,
-        WaitArguments Wait);
+        [Option] CommandValue<string> Instance,
+        [Group] AudioFadeArguments Fade,
+        [Group] WaitArguments Wait);
 }

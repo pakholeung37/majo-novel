@@ -182,6 +182,24 @@ public sealed class PluginAndDirectionExtensibilityTests
     }
 
     [Fact]
+    public void PluginConverterRegistrationFlowsIntoCatalogBinding()
+    {
+        var commands = new RuntimeCommandRegistry();
+        var manager = new PluginManager();
+        manager.Register(new ConverterPlugin());
+        manager.Configure(new PluginRegistrationContext(
+            commands,
+            new TransitionDriverRegistry(),
+            new CameraModifierRegistry()));
+
+        var catalog = commands.BuildCatalog();
+        var bound = catalog.Get<ConverterCommand.Arguments>("plugin convert");
+        var result = bound.Bind(new CommandInput("plugin convert", new[] { "42" }));
+
+        Assert.Equal(42, result.Value.Value);
+    }
+
+    [Fact]
     public void PluginManagerOrdersDependenciesAndSealsRegistration()
     {
         var manager = new PluginManager();
@@ -252,6 +270,44 @@ public sealed class PluginAndDirectionExtensibilityTests
         public string Id { get; }
         public IReadOnlyCollection<string> Dependencies { get; }
         public void Initialize(PluginContext context) => order.Add($"{Id}:init");
+    }
+
+    private readonly record struct PluginNumber(int Value);
+
+    private sealed class PluginNumberConverter : ICommandValueConverter<PluginNumber>
+    {
+        public PluginNumber Parse(string text) => new(int.Parse(text, System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    private sealed class ConverterPlugin : IMajoPlugin
+    {
+        public string Id => "converter.plugin";
+
+        public void Configure(PluginRegistrationContext context)
+        {
+            context.Commands.Converters.AddDefault<PluginNumber>(_ => new PluginNumberConverter(), Id);
+            context.Commands.Add("plugin convert", _ => new ConverterCommand(), Id);
+        }
+    }
+
+    [Command("plugin convert")]
+    private sealed class ConverterCommand : RuntimeCommand<ConverterCommand.Arguments>
+    {
+        public sealed record Arguments([Primary] PluginNumber Value);
+
+        private static readonly CommandDefinition<Arguments> StaticDefinition =
+            CommandDefinition<Arguments>.Create("plugin convert")
+                .Primary<PluginNumber>("value", memberName: "Value")
+                .Build(static context =>
+                {
+                    var slot = context.GetMemberSlot("Value");
+                    return reader => new Arguments(reader.ReadRequired<PluginNumber>(slot));
+                });
+
+        public override CommandDefinition<Arguments> Definition => StaticDefinition;
+
+        protected override ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context) =>
+            ValueTask.CompletedTask;
     }
 
     private sealed class TestFrameClock : IFrameClock

@@ -5,7 +5,8 @@ using Majo.Runtime.Save;
 
 namespace Majo.Runtime.Dialogue.Commands;
 
-public sealed class SaveCommand : RuntimeCommand<SaveCommand.Arguments>
+[Command("save", Category = "Save")]
+public sealed partial class SaveCommand : RuntimeCommand<SaveCommand.Arguments>
 {
     private readonly ISaveProductAccessor? saveAccessor;
 
@@ -18,11 +19,6 @@ public sealed class SaveCommand : RuntimeCommand<SaveCommand.Arguments>
         : this(saveProduct is not null ? new DelegateSaveProductAccessor(() => saveProduct) : null)
     {
     }
-
-    public override CommandSchema<Arguments> Schema { get; } =
-        CommandSchema<Arguments>
-            .Create("save", category: "Save", usage: "save")
-            .Build(static _ => new Arguments());
 
     protected override ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {
@@ -41,7 +37,8 @@ public sealed class SaveCommand : RuntimeCommand<SaveCommand.Arguments>
     public sealed record Arguments;
 }
 
-public sealed class AutoSaveCommand : RuntimeCommand<AutoSaveCommand.Arguments>
+[Command("autoSave", Category = "Save")]
+public sealed partial class AutoSaveCommand : RuntimeCommand<AutoSaveCommand.Arguments>
 {
     private readonly ISaveProductAccessor? saveAccessor;
 
@@ -54,11 +51,6 @@ public sealed class AutoSaveCommand : RuntimeCommand<AutoSaveCommand.Arguments>
         : this(saveProduct is not null ? new DelegateSaveProductAccessor(() => saveProduct) : null)
     {
     }
-
-    public override CommandSchema<Arguments> Schema { get; } =
-        CommandSchema<Arguments>
-            .Create("autoSave", category: "Save", usage: "autoSave")
-            .Build(static _ => new Arguments());
 
     protected override ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {

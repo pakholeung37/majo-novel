@@ -233,7 +233,7 @@ public static class RuntimeDemoComposition
         runtime.ConfigureCommands += RegisterCommands;
     }
 
-    public static void RegisterCommands(RuntimeCommandRegistry commands)
+    public static void RegisterCommands(CommandRegistrationContext commands)
     {
         ArgumentNullException.ThrowIfNull(commands);
         commands.Add(
@@ -277,7 +277,8 @@ public static class RuntimeDemoComposition
     }
 }
 
-public sealed class DemoRouteCommand : RuntimeCommand<DemoRouteCommand.Arguments>
+[Command("demo_route", Category = "Demo")]
+public sealed partial class DemoRouteCommand : RuntimeCommand<DemoRouteCommand.Arguments>
 {
     private readonly DemoSessionService demoService;
 
@@ -285,12 +286,6 @@ public sealed class DemoRouteCommand : RuntimeCommand<DemoRouteCommand.Arguments
     {
         this.demoService = demoService ?? throw new ArgumentNullException(nameof(demoService));
     }
-
-    public override CommandSchema<Arguments> Schema { get; } =
-        CommandSchema<Arguments>
-            .Create("demo_route", category: "Demo", usage: "demo_route <press|evidence>")
-            .Primary<string>("route")
-            .Build(static values => new Arguments(values.Required<string>("route")));
 
     protected override ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {
@@ -304,10 +299,11 @@ public sealed class DemoRouteCommand : RuntimeCommand<DemoRouteCommand.Arguments
         return ValueTask.CompletedTask;
     }
 
-    public sealed record Arguments(string Route);
+    public sealed record Arguments([Primary] string Route);
 }
 
-public sealed class DemoVoiceLocaleCommand : RuntimeCommand<DemoVoiceLocaleCommand.Arguments>
+[Command("demo_voice_locale", Category = "M17 Demo")]
+public sealed partial class DemoVoiceLocaleCommand : RuntimeCommand<DemoVoiceLocaleCommand.Arguments>
 {
     private readonly DemoSessionService demoService;
 
@@ -316,21 +312,16 @@ public sealed class DemoVoiceLocaleCommand : RuntimeCommand<DemoVoiceLocaleComma
         this.demoService = demoService ?? throw new ArgumentNullException(nameof(demoService));
     }
 
-    public override CommandSchema<Arguments> Schema { get; } =
-        CommandSchema<Arguments>
-            .Create("demo_voice_locale", category: "M17 Demo", usage: "demo_voice_locale <locale>")
-            .Primary<string>("locale")
-            .Build(static values => new Arguments(values.Required<string>("locale")));
-
     protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {
         await demoService.SwitchVoiceLocaleAsync(arguments.Locale, context.CancellationToken);
     }
 
-    public sealed record Arguments(string Locale);
+    public sealed record Arguments([Primary] string Locale);
 }
 
-public sealed class DemoPreloadCommand : RuntimeCommand<DemoPreloadCommand.Arguments>
+[Command("demo_preload", Category = "M18 Demo")]
+public sealed partial class DemoPreloadCommand : RuntimeCommand<DemoPreloadCommand.Arguments>
 {
     private readonly DemoSessionService demoService;
 
@@ -339,21 +330,16 @@ public sealed class DemoPreloadCommand : RuntimeCommand<DemoPreloadCommand.Argum
         this.demoService = demoService ?? throw new ArgumentNullException(nameof(demoService));
     }
 
-    public override CommandSchema<Arguments> Schema { get; } =
-        CommandSchema<Arguments>
-            .Create("demo_preload", category: "M18 Demo", usage: "demo_preload <group>")
-            .Primary<string>("group")
-            .Build(static values => new Arguments(values.Required<string>("group")));
-
     protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {
         await demoService.PreloadDemoAssetsAsync(arguments.Group, context.CancellationToken);
     }
 
-    public sealed record Arguments(string Group);
+    public sealed record Arguments([Primary] string Group);
 }
 
-public sealed class DemoReleasePreloadCommand : RuntimeCommand<DemoReleasePreloadCommand.Arguments>
+[Command("demo_release_preload", Category = "M18 Demo")]
+public sealed partial class DemoReleasePreloadCommand : RuntimeCommand<DemoReleasePreloadCommand.Arguments>
 {
     private readonly DemoSessionService demoService;
 
@@ -361,11 +347,6 @@ public sealed class DemoReleasePreloadCommand : RuntimeCommand<DemoReleasePreloa
     {
         this.demoService = demoService ?? throw new ArgumentNullException(nameof(demoService));
     }
-
-    public override CommandSchema<Arguments> Schema { get; } =
-        CommandSchema<Arguments>
-            .Create("demo_release_preload", category: "M18 Demo", usage: "demo_release_preload")
-            .Build(static _ => new Arguments());
 
     protected override ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {

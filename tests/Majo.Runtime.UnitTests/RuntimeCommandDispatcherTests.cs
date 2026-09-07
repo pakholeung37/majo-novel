@@ -19,8 +19,10 @@ public sealed class RuntimeCommandDispatcherTests
             this.onExecute = onExecute;
         }
 
-        public override CommandSchema<Arguments> Schema { get; } =
-            CommandSchema<Arguments>.Create("test_cmd").Build(static _ => new Arguments());
+        private static readonly CommandDefinition<Arguments> StaticDefinition =
+            CommandDefinition<Arguments>.Create("test_cmd").Build(_ => _ => new Arguments());
+
+        public override CommandDefinition<Arguments> Definition => StaticDefinition;
 
         protected override ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
         {
@@ -55,8 +57,10 @@ public sealed class RuntimeCommandDispatcherTests
 
     private sealed class FailCommand : RuntimeCommand<FailCommand.Arguments>
     {
-        public override CommandSchema<Arguments> Schema { get; } =
-            CommandSchema<Arguments>.Create("fail_cmd").Build(static _ => new Arguments());
+        private static readonly CommandDefinition<Arguments> StaticDefinition =
+            CommandDefinition<Arguments>.Create("fail_cmd").Build(_ => _ => new Arguments());
+
+        public override CommandDefinition<Arguments> Definition => StaticDefinition;
 
         protected override ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
         {
@@ -97,8 +101,10 @@ public sealed class RuntimeCommandDispatcherTests
             this.cancelledTcs = cancelledTcs;
         }
 
-        public override CommandSchema<Arguments> Schema { get; } =
-            CommandSchema<Arguments>.Create("long_cmd").Build(static _ => new Arguments());
+        private static readonly CommandDefinition<Arguments> StaticDefinition =
+            CommandDefinition<Arguments>.Create("long_cmd").Build(_ => _ => new Arguments());
+
+        public override CommandDefinition<Arguments> Definition => StaticDefinition;
 
         protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
         {

@@ -220,33 +220,6 @@ public partial class HeadlessTestRunner
             "Factory-owned Actor configuration was incorrectly validated as a texture Actor.");
     }
 
-    private sealed class HeadlessLifecycleService : IRuntimeService
-    {
-        public int InitializeCount { get; private set; }
-
-        public int ResetCount { get; private set; }
-
-        public int ShutdownCount { get; private set; }
-
-        public Task InitializeAsync(CancellationToken cancellationToken)
-        {
-            InitializeCount++;
-            return Task.CompletedTask;
-        }
-
-        public Task ResetAsync(CancellationToken cancellationToken)
-        {
-            ResetCount++;
-            return Task.CompletedTask;
-        }
-
-        public async Task ShutdownAsync(CancellationToken cancellationToken)
-        {
-            await Task.Yield();
-            ShutdownCount++;
-        }
-    }
-
     private sealed class NonCooperativeInitializationService : IRuntimeService
     {
         private readonly TaskCompletionSource initialization =
@@ -265,5 +238,32 @@ public partial class HeadlessTestRunner
         }
 
         public void CompleteInitialization() => initialization.TrySetResult();
+    }
+}
+
+public sealed class HeadlessLifecycleService : IRuntimeService
+{
+    public int InitializeCount { get; private set; }
+
+    public int ResetCount { get; private set; }
+
+    public int ShutdownCount { get; private set; }
+
+    public Task InitializeAsync(CancellationToken cancellationToken)
+    {
+        InitializeCount++;
+        return Task.CompletedTask;
+    }
+
+    public Task ResetAsync(CancellationToken cancellationToken)
+    {
+        ResetCount++;
+        return Task.CompletedTask;
+    }
+
+    public async Task ShutdownAsync(CancellationToken cancellationToken)
+    {
+        await Task.Yield();
+        ShutdownCount++;
     }
 }

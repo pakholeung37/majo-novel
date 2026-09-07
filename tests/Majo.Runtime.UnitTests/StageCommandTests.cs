@@ -41,8 +41,8 @@ public sealed class StageCommandTests
         Assert.Contains(catalog.Commands, command => command.Name == "camera reset");
         Assert.Contains(catalog.Commands, command => command.Name == "camera fx");
 
-        var move = (CameraMoveCommand)catalog.Get("camera move");
-        var moveArgs = move.Schema.Bind(new RawCommandArguments(null, new Dictionary<string, string>
+        var move = catalog.Get<CameraMoveCommand.Arguments>("camera move");
+        var moveArgs = move.Bind(new RawCommandArguments(null, new Dictionary<string, string>
         {
             ["center"] = "12,-4",
             ["ease"] = "back-out",
@@ -53,8 +53,8 @@ public sealed class StageCommandTests
         Assert.Equal(EasingId.BackOut, moveArgs.Timing.Ease.Value);
         Assert.True(moveArgs.Timing.Wait.Value);
 
-        var pose = (CameraPoseCommand)catalog.Get("camera pose");
-        var poseArguments = pose.Schema.Bind(new RawCommandArguments(null, new Dictionary<string, string>
+        var pose = catalog.Get<CameraPoseCommand.Arguments>("camera pose");
+        var poseArguments = pose.Bind(new RawCommandArguments(null, new Dictionary<string, string>
         {
             ["center"] = "80,-35",
             ["zoom"] = "3",
@@ -67,7 +67,7 @@ public sealed class StageCommandTests
         Assert.False(poseArguments.Via.WasProvided);
         Assert.False(poseArguments.Timing.Duration.WasProvided);
 
-        var dissolveArguments = pose.Schema.Bind(new RawCommandArguments(null, new Dictionary<string, string>
+        var dissolveArguments = pose.Bind(new RawCommandArguments(null, new Dictionary<string, string>
         {
             ["zoom"] = "1",
             ["via"] = "dissolve",
@@ -78,8 +78,8 @@ public sealed class StageCommandTests
         Assert.Equal(0.6, dissolveArguments.Timing.Duration.Value);
         Assert.Equal(EasingId.SineInOut, dissolveArguments.Timing.Ease.Value);
 
-        var reset = (CameraResetCommand)catalog.Get("camera reset");
-        var resetArguments = reset.Schema.Bind(new RawCommandArguments(null, new Dictionary<string, string>
+        var reset = catalog.Get<CameraResetCommand.Arguments>("camera reset");
+        var resetArguments = reset.Bind(new RawCommandArguments(null, new Dictionary<string, string>
         {
             ["via"] = "dissolve",
             ["duration"] = "0.6",
@@ -91,7 +91,7 @@ public sealed class StageCommandTests
         Assert.Equal(0.6, resetArguments.Transition.Timing.Duration.Value);
         Assert.True(resetArguments.Transition.Wait.Value);
 
-        var resetStage = reset.Schema.Bind(new RawCommandArguments(null, new Dictionary<string, string>
+        var resetStage = reset.Bind(new RawCommandArguments(null, new Dictionary<string, string>
         {
             ["stage"] = "main"
         }));
@@ -99,7 +99,7 @@ public sealed class StageCommandTests
         Assert.False(resetStage.View.WasProvided);
 
         var resetAmbiguous = Assert.Throws<RuntimeCommandException>(() =>
-            reset.Schema.Bind(new RawCommandArguments(null, new Dictionary<string, string>
+            reset.Bind(new RawCommandArguments(null, new Dictionary<string, string>
             {
                 ["stage"] = "main",
                 ["view"] = "main"
@@ -107,8 +107,8 @@ public sealed class StageCommandTests
         Assert.Contains("stage", resetAmbiguous.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("view", resetAmbiguous.Message, StringComparison.OrdinalIgnoreCase);
 
-        var fx = (CameraFxCommand)catalog.Get("camera fx");
-        var fxArguments = fx.Schema.Bind(new RawCommandArguments("shake", new Dictionary<string, string>
+        var fx = catalog.Get<CameraFxCommand.Arguments>("camera fx");
+        var fxArguments = fx.Bind(new RawCommandArguments("shake", new Dictionary<string, string>
         {
             ["stage"] = "illustration",
             ["strength"] = "15",

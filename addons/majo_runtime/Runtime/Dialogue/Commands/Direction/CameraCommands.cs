@@ -11,7 +11,8 @@ using Majo.Runtime.Stage;
 
 namespace Majo.Runtime.Dialogue.Commands;
 
-public sealed class ViewDefineCommand : RuntimeCommand<ViewDefineCommand.Arguments>
+[Command("view define", Category = "Direction")]
+public sealed partial class ViewDefineCommand : RuntimeCommand<ViewDefineCommand.Arguments>
 {
     private readonly IDirectionBeatRuntime beats;
     private readonly IDirectionScopeResolver scopes;
@@ -27,15 +28,6 @@ public sealed class ViewDefineCommand : RuntimeCommand<ViewDefineCommand.Argumen
         this.nodeAccessor = nodeAccessor ?? throw new ArgumentNullException(nameof(nodeAccessor));
     }
 
-    public override CommandSchema<Arguments> Schema { get; } =
-        CommandSchema<Arguments>
-            .Create("view define", category: "Direction", usage: "view define <id> stage:<id>")
-            .Primary<string>("view")
-            .Required<string>("stage")
-            .Build(static values => new Arguments(
-                values.Required<string>("view"),
-                values.Required<string>("stage")));
-
     protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {
         var node = nodeAccessor.RequireNode();
@@ -48,10 +40,11 @@ public sealed class ViewDefineCommand : RuntimeCommand<ViewDefineCommand.Argumen
             context.CancellationToken);
     }
 
-    public sealed record Arguments(string View, string Stage);
+    public sealed record Arguments([Primary] string View, [Option] string Stage);
 }
 
-public sealed class ViewReleaseCommand : RuntimeCommand<ViewReleaseCommand.Arguments>
+[Command("view release", Category = "Direction")]
+public sealed partial class ViewReleaseCommand : RuntimeCommand<ViewReleaseCommand.Arguments>
 {
     private readonly IDirectionBeatRuntime beats;
     private readonly IDirectionScopeResolver scopes;
@@ -67,12 +60,6 @@ public sealed class ViewReleaseCommand : RuntimeCommand<ViewReleaseCommand.Argum
         this.nodeAccessor = nodeAccessor ?? throw new ArgumentNullException(nameof(nodeAccessor));
     }
 
-    public override CommandSchema<Arguments> Schema { get; } =
-        CommandSchema<Arguments>
-            .Create("view release", category: "Direction", usage: "view release <id>")
-            .Primary<string>("view")
-            .Build(static values => new Arguments(values.Required<string>("view")));
-
     protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {
         var viewId = scopes.ResolveView(nodeAccessor.RequireNode(), arguments.View);
@@ -82,10 +69,13 @@ public sealed class ViewReleaseCommand : RuntimeCommand<ViewReleaseCommand.Argum
             context.CancellationToken);
     }
 
-    public sealed record Arguments(string View);
+    public sealed record Arguments([Primary] string View);
 }
 
-public sealed class CameraPoseCommand : RuntimeCommand<CameraPoseCommand.Arguments>
+[Command("camera pose", Category = "Direction")]
+[AtMostOne(nameof(Arguments.Stage), nameof(Arguments.View))]
+[AtLeastOne(nameof(Arguments.Center), nameof(Arguments.Zoom), nameof(Arguments.Rotation), nameof(Arguments.As))]
+public sealed partial class CameraPoseCommand : RuntimeCommand<CameraPoseCommand.Arguments>
 {
     private readonly IDirectionBeatRuntime beats;
     private readonly IDirectionScopeResolver scopes;
@@ -103,32 +93,6 @@ public sealed class CameraPoseCommand : RuntimeCommand<CameraPoseCommand.Argumen
         this.nodeAccessor = nodeAccessor ?? throw new ArgumentNullException(nameof(nodeAccessor));
         this.policy = policy ?? throw new ArgumentNullException(nameof(policy));
     }
-
-    public override CommandSchema<Arguments> Schema { get; } =
-        CommandSchema<Arguments>
-            .Create(
-                "camera pose",
-                category: "Direction",
-                usage: "camera pose [stage:<id>|view:<id>] [center:<x,y>] [zoom:<number>] [rotation:<degrees>] [as:<shot>] [via:<kind>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")
-            .Optional<string>("stage")
-            .Optional<string>("view")
-            .Optional<Vector2>("center")
-            .Optional<double>("zoom", minimum: 0.001)
-            .Optional<double>("rotation")
-            .Optional<string>("as")
-            .Optional<DirectionTransitionId>("via")
-            .Use("timing", CommandParameterGroups.Timing())
-            .ParameterSet(CommandParameterSetRule.AtMostOne, "stage", "view")
-            .ParameterSet(CommandParameterSetRule.AtLeastOne, "center", "zoom", "rotation", "as")
-            .Build(static values => new Arguments(
-                values.Optional<string>("stage"),
-                values.Optional<string>("view"),
-                values.Optional<Vector2>("center"),
-                values.Optional<double>("zoom"),
-                values.Optional<double>("rotation"),
-                values.Optional<string>("as"),
-                values.Optional<DirectionTransitionId>("via"),
-                values.Group<TimingArguments>("timing")));
 
     protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {
@@ -168,17 +132,20 @@ public sealed class CameraPoseCommand : RuntimeCommand<CameraPoseCommand.Argumen
             : scopes.ResolveView(node, string.IsNullOrWhiteSpace(view) ? "main" : view);
 
     public sealed record Arguments(
-        CommandValue<string> Stage,
-        CommandValue<string> View,
-        CommandValue<Vector2> Center,
-        CommandValue<double> Zoom,
-        CommandValue<double> Rotation,
-        CommandValue<string> As,
-        CommandValue<DirectionTransitionId> Via,
-        TimingArguments Timing);
+        [Option] CommandValue<string> Stage,
+        [Option] CommandValue<string> View,
+        [Option(ValueHint = "x,y")] CommandValue<Vector2> Center,
+        [Option(Minimum = 0.001, ValueHint = "number")] CommandValue<double> Zoom,
+        [Option(ValueHint = "degrees")] CommandValue<double> Rotation,
+        [Option(ValueHint = "shot")] CommandValue<string> As,
+        [Option(ValueHint = "kind")] CommandValue<DirectionTransitionId> Via,
+        [Group] TimingArguments Timing);
 }
 
-public sealed class CameraMoveCommand : RuntimeCommand<CameraMoveCommand.Arguments>
+[Command("camera move", Category = "Direction")]
+[AtMostOne(nameof(Arguments.Stage), nameof(Arguments.View))]
+[AtLeastOne(nameof(Arguments.Center), nameof(Arguments.Zoom), nameof(Arguments.Rotation))]
+public sealed partial class CameraMoveCommand : RuntimeCommand<CameraMoveCommand.Arguments>
 {
     private readonly IDirectionBeatRuntime beats;
     private readonly IDirectionScopeResolver scopes;
@@ -196,28 +163,6 @@ public sealed class CameraMoveCommand : RuntimeCommand<CameraMoveCommand.Argumen
         this.nodeAccessor = nodeAccessor ?? throw new ArgumentNullException(nameof(nodeAccessor));
         this.policy = policy ?? throw new ArgumentNullException(nameof(policy));
     }
-
-    public override CommandSchema<Arguments> Schema { get; } =
-        CommandSchema<Arguments>
-            .Create(
-                "camera move",
-                category: "Direction",
-                usage: "camera move [stage:<id>|view:<id>] [center:<x,y>] [zoom:<number>] [rotation:<degrees>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")
-            .Optional<string>("stage")
-            .Optional<string>("view")
-            .Optional<Vector2>("center")
-            .Optional<double>("zoom", minimum: 0.001)
-            .Optional<double>("rotation")
-            .Use("timing", CommandParameterGroups.Timing())
-            .ParameterSet(CommandParameterSetRule.AtMostOne, "stage", "view")
-            .ParameterSet(CommandParameterSetRule.AtLeastOne, "center", "zoom", "rotation")
-            .Build(static values => new Arguments(
-                values.Optional<string>("stage"),
-                values.Optional<string>("view"),
-                values.Optional<Vector2>("center"),
-                values.Optional<double>("zoom"),
-                values.Optional<double>("rotation"),
-                values.Group<TimingArguments>("timing")));
 
     protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {
@@ -251,15 +196,17 @@ public sealed class CameraMoveCommand : RuntimeCommand<CameraMoveCommand.Argumen
             : scopes.ResolveView(node, string.IsNullOrWhiteSpace(view) ? "main" : view);
 
     public sealed record Arguments(
-        CommandValue<string> Stage,
-        CommandValue<string> View,
-        CommandValue<Vector2> Center,
-        CommandValue<double> Zoom,
-        CommandValue<double> Rotation,
-        TimingArguments Timing);
+        [Option] CommandValue<string> Stage,
+        [Option] CommandValue<string> View,
+        [Option(ValueHint = "x,y")] CommandValue<Vector2> Center,
+        [Option(Minimum = 0.001, ValueHint = "number")] CommandValue<double> Zoom,
+        [Option(ValueHint = "degrees")] CommandValue<double> Rotation,
+        [Group] TimingArguments Timing);
 }
 
-public sealed class CameraResetCommand : RuntimeCommand<CameraResetCommand.Arguments>
+[Command("camera reset", Category = "Direction")]
+[AtMostOne(nameof(Arguments.Stage), nameof(Arguments.View))]
+public sealed partial class CameraResetCommand : RuntimeCommand<CameraResetCommand.Arguments>
 {
     private readonly IDirectionBeatRuntime beats;
     private readonly IDirectionScopeResolver scopes;
@@ -277,21 +224,6 @@ public sealed class CameraResetCommand : RuntimeCommand<CameraResetCommand.Argum
         this.nodeAccessor = nodeAccessor ?? throw new ArgumentNullException(nameof(nodeAccessor));
         this.policy = policy ?? throw new ArgumentNullException(nameof(policy));
     }
-
-    public override CommandSchema<Arguments> Schema { get; } =
-        CommandSchema<Arguments>
-            .Create(
-                "camera reset",
-                category: "Direction",
-                usage: "camera reset [stage:<id>|view:<id>] [via:<kind>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")
-            .Optional<string>("stage")
-            .Optional<string>("view")
-            .Use("transition", CommandParameterGroups.Transition())
-            .ParameterSet(CommandParameterSetRule.AtMostOne, "stage", "view")
-            .Build(static values => new Arguments(
-                values.Optional<string>("stage"),
-                values.Optional<string>("view"),
-                values.Group<TransitionArguments>("transition")));
 
     protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {
@@ -321,12 +253,14 @@ public sealed class CameraResetCommand : RuntimeCommand<CameraResetCommand.Argum
             : scopes.ResolveView(node, string.IsNullOrWhiteSpace(view) ? "main" : view);
 
     public sealed record Arguments(
-        CommandValue<string> Stage,
-        CommandValue<string> View,
-        TransitionArguments Transition);
+        [Option] CommandValue<string> Stage,
+        [Option] CommandValue<string> View,
+        [Group] TransitionArguments Transition);
 }
 
-public sealed class CameraFxCommand : RuntimeCommand<CameraFxCommand.Arguments>
+[Command("camera fx", Category = "Direction")]
+[AtMostOne(nameof(Arguments.Stage), nameof(Arguments.View))]
+public sealed partial class CameraFxCommand : RuntimeCommand<CameraFxCommand.Arguments>
 {
     private readonly IDirectionBeatRuntime beats;
     private readonly IDirectionScopeResolver scopes;
@@ -341,33 +275,6 @@ public sealed class CameraFxCommand : RuntimeCommand<CameraFxCommand.Arguments>
         this.scopes = scopes ?? throw new ArgumentNullException(nameof(scopes));
         this.nodeAccessor = nodeAccessor ?? throw new ArgumentNullException(nameof(nodeAccessor));
     }
-
-    public override CommandSchema<Arguments> Schema { get; } =
-        CommandSchema<Arguments>
-            .Create(
-                "camera fx",
-                category: "Direction",
-                usage: "camera fx <effect> [stage:<id>|view:<id>] [duration:<seconds>] [strength:<number>] [axis:<all|x|y|diagonal>] [frequency:<number>] [zoom:<number>] [wait:<bool>]")
-            .Primary<string>("effect")
-            .Optional<string>("stage")
-            .Optional<string>("view")
-            .Optional<double>("duration", minimum: 0)
-            .Optional<double>("strength", minimum: 0)
-            .Optional<CameraShakeAxis>("axis")
-            .Optional<int>("frequency")
-            .Optional<double>("zoom")
-            .Use("wait", CommandParameterGroups.Wait(contractDefault: false))
-            .ParameterSet(CommandParameterSetRule.AtMostOne, "stage", "view")
-            .Build(static values => new Arguments(
-                values.Required<string>("effect"),
-                values.Optional<string>("stage"),
-                values.Optional<string>("view"),
-                values.Optional<double>("duration"),
-                values.Optional<double>("strength"),
-                values.Optional<CameraShakeAxis>("axis"),
-                values.Optional<int>("frequency"),
-                values.Optional<double>("zoom"),
-                values.Group<WaitArguments>("wait")));
 
     protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {
@@ -406,13 +313,13 @@ public sealed class CameraFxCommand : RuntimeCommand<CameraFxCommand.Arguments>
             : scopes.ResolveView(node, string.IsNullOrWhiteSpace(view) ? "main" : view);
 
     public sealed record Arguments(
-        string Effect,
-        CommandValue<string> Stage,
-        CommandValue<string> View,
-        CommandValue<double> Duration,
-        CommandValue<double> Strength,
-        CommandValue<CameraShakeAxis> Axis,
-        CommandValue<int> Frequency,
-        CommandValue<double> Zoom,
-        WaitArguments Wait);
+        [Primary] string Effect,
+        [Option] CommandValue<string> Stage,
+        [Option] CommandValue<string> View,
+        [Option(Minimum = 0, ValueHint = "seconds")] CommandValue<double> Duration,
+        [Option(Minimum = 0, ValueHint = "number")] CommandValue<double> Strength,
+        [Option(Converter = typeof(CameraShakeAxisConverter), ValueHint = "all|x|y|diagonal")] CommandValue<CameraShakeAxis> Axis,
+        [Option(ValueHint = "number")] CommandValue<int> Frequency,
+        [Option(ValueHint = "number")] CommandValue<double> Zoom,
+        [Group] WaitArguments Wait);
 }

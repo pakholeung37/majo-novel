@@ -9,7 +9,8 @@ using Majo.Runtime.Timing;
 
 namespace Majo.Runtime.Dialogue.Commands;
 
-public sealed class BeatBeginCommand : RuntimeCommand<BeatBeginCommand.Arguments>
+[Command("beat begin", Category = "Direction")]
+public sealed partial class BeatBeginCommand : RuntimeCommand<BeatBeginCommand.Arguments>
 {
     private readonly IDirectionBeatRuntime beats;
     private readonly IDialogueNodeAccessor nodeAccessor;
@@ -22,20 +23,6 @@ public sealed class BeatBeginCommand : RuntimeCommand<BeatBeginCommand.Arguments
         this.beats = beats ?? throw new ArgumentNullException(nameof(beats));
         this.nodeAccessor = nodeAccessor ?? throw new ArgumentNullException(nameof(nodeAccessor));
     }
-
-    public override CommandSchema<Arguments> Schema { get; } =
-        CommandSchema<Arguments>
-            .Create(
-                "beat begin",
-                category: "Direction",
-                usage: "beat begin [id:<id>] [duration:<seconds>] [ease:<curve>]")
-            .Optional<string>("id")
-            .Optional<double>("duration", minimum: 0)
-            .Optional<EasingId>("ease")
-            .Build(static values => new Arguments(
-                values.Optional<string>("id"),
-                values.Optional<double>("duration"),
-                values.Optional<EasingId>("ease")));
 
     protected override ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {
@@ -61,12 +48,13 @@ public sealed class BeatBeginCommand : RuntimeCommand<BeatBeginCommand.Arguments
     }
 
     public sealed record Arguments(
-        CommandValue<string> Id,
-        CommandValue<double> Duration,
-        CommandValue<EasingId> Ease);
+        [Option] CommandValue<string> Id,
+        [Option(Minimum = 0, ValueHint = "seconds")] CommandValue<double> Duration,
+        [Option(ValueHint = "curve")] CommandValue<EasingId> Ease);
 }
 
-public sealed class BeatEndCommand : RuntimeCommand<BeatEndCommand.Arguments>
+[Command("beat end", Category = "Direction")]
+public sealed partial class BeatEndCommand : RuntimeCommand<BeatEndCommand.Arguments>
 {
     private readonly IDirectionBeatRuntime beats;
 
@@ -74,12 +62,6 @@ public sealed class BeatEndCommand : RuntimeCommand<BeatEndCommand.Arguments>
     {
         this.beats = beats ?? throw new ArgumentNullException(nameof(beats));
     }
-
-    public override CommandSchema<Arguments> Schema { get; } =
-        CommandSchema<Arguments>
-            .Create("beat end", category: "Direction", usage: "beat end [wait:<bool>]")
-            .Use("wait", CommandParameterGroups.Wait(contractDefault: true, order: 0))
-            .Build(static values => new Arguments(values.Group<WaitArguments>("wait")));
 
     protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {
@@ -89,10 +71,11 @@ public sealed class BeatEndCommand : RuntimeCommand<BeatEndCommand.Arguments>
             context.CancellationToken);
     }
 
-    public sealed record Arguments(WaitArguments Wait);
+    public sealed record Arguments([Group(Configuration = typeof(BlockingWait))] WaitArguments Wait);
 }
 
-public sealed class BeatJoinCommand : RuntimeCommand<BeatJoinCommand.Arguments>
+[Command("beat join", Category = "Direction")]
+public sealed partial class BeatJoinCommand : RuntimeCommand<BeatJoinCommand.Arguments>
 {
     private readonly IDirectionBeatRuntime beats;
 
@@ -101,21 +84,16 @@ public sealed class BeatJoinCommand : RuntimeCommand<BeatJoinCommand.Arguments>
         this.beats = beats ?? throw new ArgumentNullException(nameof(beats));
     }
 
-    public override CommandSchema<Arguments> Schema { get; } =
-        CommandSchema<Arguments>
-            .Create("beat join", category: "Direction", usage: "beat join <id>")
-            .Primary<string>("id")
-            .Build(static values => new Arguments(values.Required<string>("id")));
-
     protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {
         await beats.JoinAsync(arguments.Id, context.CancellationToken);
     }
 
-    public sealed record Arguments(string Id);
+    public sealed record Arguments([Primary] string Id);
 }
 
-public sealed class BeatFinishCommand : RuntimeCommand<BeatFinishCommand.Arguments>
+[Command("beat finish", Category = "Direction")]
+public sealed partial class BeatFinishCommand : RuntimeCommand<BeatFinishCommand.Arguments>
 {
     private readonly IDirectionBeatRuntime beats;
 
@@ -124,21 +102,16 @@ public sealed class BeatFinishCommand : RuntimeCommand<BeatFinishCommand.Argumen
         this.beats = beats ?? throw new ArgumentNullException(nameof(beats));
     }
 
-    public override CommandSchema<Arguments> Schema { get; } =
-        CommandSchema<Arguments>
-            .Create("beat finish", category: "Direction", usage: "beat finish <id>")
-            .Primary<string>("id")
-            .Build(static values => new Arguments(values.Required<string>("id")));
-
     protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {
         await beats.FinishAsync(arguments.Id, context.CancellationToken);
     }
 
-    public sealed record Arguments(string Id);
+    public sealed record Arguments([Primary] string Id);
 }
 
-public sealed class BeatAbortCommand : RuntimeCommand<BeatAbortCommand.Arguments>
+[Command("beat abort", Category = "Direction")]
+public sealed partial class BeatAbortCommand : RuntimeCommand<BeatAbortCommand.Arguments>
 {
     private readonly IDirectionBeatRuntime beats;
 
@@ -146,11 +119,6 @@ public sealed class BeatAbortCommand : RuntimeCommand<BeatAbortCommand.Arguments
     {
         this.beats = beats ?? throw new ArgumentNullException(nameof(beats));
     }
-
-    public override CommandSchema<Arguments> Schema { get; } =
-        CommandSchema<Arguments>
-            .Create("beat abort", category: "Direction", usage: "beat abort")
-            .Build(static _ => new Arguments());
 
     protected override ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {

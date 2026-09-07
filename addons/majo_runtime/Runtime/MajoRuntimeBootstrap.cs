@@ -61,8 +61,6 @@ public partial class MajoRuntimeBootstrap : Node
     private readonly PluginManager pluginManager = new();
     private readonly RuntimeCommandRegistry commandRegistry = new();
     private readonly EasingRegistry easingRegistry = new();
-    private readonly CommandValueConverterRegistry commandConverters;
-    private readonly CommandParameterGroupRegistry commandParameterGroups = new();
     private readonly TransitionDriverRegistry transitionDrivers = new();
     private readonly CameraModifierRegistry cameraModifiers = new();
     private readonly TransientCueHandlerRegistry transientCueHandlers = new();
@@ -71,14 +69,11 @@ public partial class MajoRuntimeBootstrap : Node
     public MajoRuntimeBootstrap()
     {
         BuiltInEasings.RegisterDefaults(easingRegistry);
-        commandConverters = new CommandValueConverterRegistry(easingRegistry);
         pluginRegistration = new PluginRegistrationContext(
             commandRegistry,
             transitionDrivers,
             cameraModifiers,
             transientCueHandlers,
-            commandConverters,
-            commandParameterGroups,
             easingRegistry);
     }
 
@@ -107,11 +102,8 @@ public partial class MajoRuntimeBootstrap : Node
 
     public Action<ActorManager>? ConfigureActorFactories { get; set; }
 
-    public Action<RuntimeCommandRegistry>? ConfigureCommands { get; set; }
+    public Action<CommandRegistrationContext>? ConfigureCommands { get; set; }
 
-    public Action<CommandValueConverterRegistry>? ConfigureCommandConverters { get; set; }
-
-    public Action<CommandParameterGroupRegistry>? ConfigureCommandParameterGroups { get; set; }
 
     public Action<ResourceProviderRegistry>? ConfigureResourceProviders { get; set; }
 
@@ -296,15 +288,11 @@ public partial class MajoRuntimeBootstrap : Node
         ConfigureEasings?.Invoke(easingRegistry);
         ConfigureTransitionDrivers?.Invoke(transitionDrivers);
         ConfigureCameraModifiers?.Invoke(cameraModifiers);
-        ConfigureCommands?.Invoke(commandRegistry);
-        ConfigureCommandConverters?.Invoke(commandConverters);
-        ConfigureCommandParameterGroups?.Invoke(commandParameterGroups);
+        ConfigureCommands?.Invoke(commandRegistry.Registration);
 
         pluginManager.Configure(pluginRegistration);
 
         commandRegistry.SealRegistrations();
-        commandConverters.Seal();
-        commandParameterGroups.Seal();
         easingRegistry.Seal();
         transitionDrivers.Seal();
         cameraModifiers.Seal();

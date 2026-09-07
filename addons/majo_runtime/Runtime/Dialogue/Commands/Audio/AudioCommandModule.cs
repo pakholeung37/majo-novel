@@ -3,6 +3,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Diagnostics.CodeAnalysis;
 using Majo.Runtime.Audio;
 using Majo.Runtime.Core;
 
@@ -10,6 +11,14 @@ namespace Majo.Runtime.Dialogue.Commands.Audio;
 
 public sealed class AudioCommandModule : IRuntimeCommandModule
 {
+    [SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Interface module registration requires an instance method.")]
+    public void Register(CommandRegistrationContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        Register(context.Commands);
+    }
+
+    [SuppressMessage("Performance", "CA1822:Mark members as static", Justification = "Legacy registrar overload is retained for source compatibility.")]
     public void Register(IRuntimeCommandRegistrar commands)
     {
         ArgumentNullException.ThrowIfNull(commands);

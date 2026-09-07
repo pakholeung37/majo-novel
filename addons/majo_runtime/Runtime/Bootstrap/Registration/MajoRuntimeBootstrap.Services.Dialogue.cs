@@ -289,8 +289,7 @@ public partial class MajoRuntimeBootstrap : Node
         IYarnDialogueBackend backend,
         IServiceResolver services)
     {
-        var environment = new CommandBindingEnvironment(commandConverters, commandParameterGroups);
-        var catalog = commandRegistry.BuildCatalog(services, environment);
+        var catalog = commandRegistry.BuildCatalog(services);
         var dispatcher = new RuntimeCommandDispatcher(
             services,
             Logger,

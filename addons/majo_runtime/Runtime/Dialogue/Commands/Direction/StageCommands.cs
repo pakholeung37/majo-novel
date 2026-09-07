@@ -9,7 +9,8 @@ using Majo.Runtime.Stage;
 
 namespace Majo.Runtime.Dialogue.Commands;
 
-public sealed class StageDefineCommand : RuntimeCommand<StageDefineCommand.Arguments>
+[Command("stage define", Category = "Direction")]
+public sealed partial class StageDefineCommand : RuntimeCommand<StageDefineCommand.Arguments>
 {
     private readonly IDirectionBeatRuntime beats;
     private readonly IDirectionScopeResolver scopes;
@@ -24,12 +25,6 @@ public sealed class StageDefineCommand : RuntimeCommand<StageDefineCommand.Argum
         this.scopes = scopes ?? throw new ArgumentNullException(nameof(scopes));
         this.nodeAccessor = nodeAccessor ?? throw new ArgumentNullException(nameof(nodeAccessor));
     }
-
-    public override CommandSchema<Arguments> Schema { get; } =
-        CommandSchema<Arguments>
-            .Create("stage define", category: "Direction", usage: "stage define <id>")
-            .Primary<string>("stage")
-            .Build(static values => new Arguments(values.Required<string>("stage")));
 
     protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {
@@ -46,10 +41,11 @@ public sealed class StageDefineCommand : RuntimeCommand<StageDefineCommand.Argum
             context.CancellationToken);
     }
 
-    public sealed record Arguments(string Stage);
+    public sealed record Arguments([Primary] string Stage);
 }
 
-public sealed class StageShowCommand : RuntimeCommand<StageShowCommand.Arguments>
+[Command("stage show", Category = "Direction")]
+public sealed partial class StageShowCommand : RuntimeCommand<StageShowCommand.Arguments>
 {
     private readonly IDirectionBeatRuntime beats;
     private readonly IDirectionScopeResolver scopes;
@@ -67,18 +63,6 @@ public sealed class StageShowCommand : RuntimeCommand<StageShowCommand.Arguments
         this.nodeAccessor = nodeAccessor ?? throw new ArgumentNullException(nameof(nodeAccessor));
         this.policy = policy ?? throw new ArgumentNullException(nameof(policy));
     }
-
-    public override CommandSchema<Arguments> Schema { get; } =
-        CommandSchema<Arguments>
-            .Create(
-                "stage show",
-                category: "Direction",
-                usage: "stage show <id> [via:<cut|dissolve>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")
-            .Primary<string>("stage")
-            .Use("transition", CommandParameterGroups.Transition())
-            .Build(static values => new Arguments(
-                values.Required<string>("stage"),
-                values.Group<TransitionArguments>("transition")));
 
     protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {
@@ -100,11 +84,12 @@ public sealed class StageShowCommand : RuntimeCommand<StageShowCommand.Arguments
     }
 
     public sealed record Arguments(
-        string Stage,
-        TransitionArguments Transition);
+        [Primary] string Stage,
+        [Group] TransitionArguments Transition);
 }
 
-public sealed class StageClearCommand : RuntimeCommand<StageClearCommand.Arguments>
+[Command("stage clear", Category = "Direction")]
+public sealed partial class StageClearCommand : RuntimeCommand<StageClearCommand.Arguments>
 {
     private readonly IDirectionBeatRuntime beats;
     private readonly IDirectionScopeResolver scopes;
@@ -123,18 +108,6 @@ public sealed class StageClearCommand : RuntimeCommand<StageClearCommand.Argumen
         this.policy = policy ?? throw new ArgumentNullException(nameof(policy));
     }
 
-    public override CommandSchema<Arguments> Schema { get; } =
-        CommandSchema<Arguments>
-            .Create(
-                "stage clear",
-                category: "Direction",
-                usage: "stage clear <id> [via:<cut|fade|dissolve>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")
-            .Primary<string>("stage")
-            .Use("transition", CommandParameterGroups.Transition())
-            .Build(static values => new Arguments(
-                values.Required<string>("stage"),
-                values.Group<TransitionArguments>("transition")));
-
     protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {
         var node = nodeAccessor.RequireNode();
@@ -149,11 +122,12 @@ public sealed class StageClearCommand : RuntimeCommand<StageClearCommand.Argumen
     }
 
     public sealed record Arguments(
-        string Stage,
-        TransitionArguments Transition);
+        [Primary] string Stage,
+        [Group] TransitionArguments Transition);
 }
 
-public sealed class StageReleaseCommand : RuntimeCommand<StageReleaseCommand.Arguments>
+[Command("stage release", Category = "Direction")]
+public sealed partial class StageReleaseCommand : RuntimeCommand<StageReleaseCommand.Arguments>
 {
     private readonly IDirectionBeatRuntime beats;
     private readonly IDirectionScopeResolver scopes;
@@ -169,12 +143,6 @@ public sealed class StageReleaseCommand : RuntimeCommand<StageReleaseCommand.Arg
         this.nodeAccessor = nodeAccessor ?? throw new ArgumentNullException(nameof(nodeAccessor));
     }
 
-    public override CommandSchema<Arguments> Schema { get; } =
-        CommandSchema<Arguments>
-            .Create("stage release", category: "Direction", usage: "stage release <id>")
-            .Primary<string>("stage")
-            .Build(static values => new Arguments(values.Required<string>("stage")));
-
     protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {
         var node = nodeAccessor.RequireNode();
@@ -186,10 +154,11 @@ public sealed class StageReleaseCommand : RuntimeCommand<StageReleaseCommand.Arg
             context.CancellationToken);
     }
 
-    public sealed record Arguments(string Stage);
+    public sealed record Arguments([Primary] string Stage);
 }
 
-public sealed class BackdropCommand : RuntimeCommand<BackdropCommand.Arguments>
+[Command("backdrop", Category = "Direction")]
+public sealed partial class BackdropCommand : RuntimeCommand<BackdropCommand.Arguments>
 {
     private readonly IDirectionBeatRuntime beats;
     private readonly IDirectionResourceKeyResolver resources;
@@ -211,24 +180,10 @@ public sealed class BackdropCommand : RuntimeCommand<BackdropCommand.Arguments>
         this.policy = policy ?? throw new ArgumentNullException(nameof(policy));
     }
 
-    public override CommandSchema<Arguments> Schema { get; } =
-        CommandSchema<Arguments>
-            .Create(
-                "backdrop",
-                category: "Direction",
-                usage: "backdrop <resource> [stage:<id>] [via:<kind>] [duration:<seconds>] [ease:<curve>] [wait:<bool>]")
-            .Primary<string>("resource")
-            .Optional<string>("stage", contractDefault: "main", hasContractDefault: true)
-            .Use("transition", CommandParameterGroups.Transition())
-            .Build(static values => new Arguments(
-                values.Required<string>("resource"),
-                values.Optional<string>("stage").GetValueOrDefault("main"),
-                values.Group<TransitionArguments>("transition")));
-
     protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {
         var node = nodeAccessor.RequireNode();
-        var stageId = scopes.ResolveStage(node, arguments.Stage);
+        var stageId = scopes.ResolveStage(node, arguments.Stage.GetValueOrDefault("main"));
         var backdropState = new BackdropState(resources.ResolveBackdrop(arguments.Resource));
         var transition = policy.ResolveTransition("backdrop", arguments.Transition, context);
         var wait = arguments.Transition.Wait.GetValueOrDefault(false);
@@ -240,7 +195,7 @@ public sealed class BackdropCommand : RuntimeCommand<BackdropCommand.Arguments>
     }
 
     public sealed record Arguments(
-        string Resource,
-        string Stage,
-        TransitionArguments Transition);
+        [Primary] string Resource,
+        [Option(DefaultText = "main")] CommandValue<string> Stage,
+        [Group] TransitionArguments Transition);
 }

@@ -83,12 +83,12 @@ public sealed class RuntimeCommandDispatcher : IDisposable
         using var activityLease = activities?.BeginActivity(
             RuntimeActivityOwner.Dialogue,
             "Command",
-            command.Schema.Name,
+            command.Name,
             isCancelable: true,
             isFinishable: false);
 
         BeginCommand(new RuntimeCommandActivity(
-            command.Schema.Name,
+            command.Name,
             executionId,
             dialogue?.CurrentLineId,
             DateTimeOffset.UtcNow));
@@ -103,14 +103,14 @@ public sealed class RuntimeCommandDispatcher : IDisposable
 
         var properties = new Dictionary<string, object?>
         {
-            ["commandName"] = command.Schema.Name,
+            ["commandName"] = command.Name,
             ["sourceLineId"] = dialogue?.CurrentLineId,
         };
 
         logger.Debug(
             "command",
             "command.started",
-            $"Command '{command.Schema.Name}' started with {input.RawArguments.Count} arguments.",
+            $"Command '{command.Name}' started with {input.RawArguments.Count} arguments.",
             correlation,
             properties);
 
@@ -127,7 +127,7 @@ public sealed class RuntimeCommandDispatcher : IDisposable
             logger.Debug(
                 "command",
                 "command.completed",
-                $"Command '{command.Schema.Name}' completed successfully.",
+                $"Command '{command.Name}' completed successfully.",
                 correlation);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -135,20 +135,20 @@ public sealed class RuntimeCommandDispatcher : IDisposable
             logger.Debug(
                 "command",
                 "command.cancelled",
-                $"Command '{command.Schema.Name}' cancelled.",
+                $"Command '{command.Name}' cancelled.",
                 correlation);
             // DialogueRunner owns dialogue cancellation; it is not a command failure.
         }
         catch (RuntimeCommandException exception)
         {
-            LogCommandFailure(command.Schema.Name, exception, correlation, properties);
+            LogCommandFailure(command.Name, exception, correlation, properties);
             ReportFailure(exception);
             throw;
         }
         catch (Exception exception)
         {
             var failure = new RuntimeCommandException(
-                command.Schema.Name,
+                command.Name,
                 exception.Message,
                 exception,
                 recoverable: false,
@@ -162,7 +162,7 @@ public sealed class RuntimeCommandDispatcher : IDisposable
             logger.Error(
                 "command",
                 "command.faulted",
-                $"Command '{command.Schema.Name}' failed: {exception.Message}",
+                $"Command '{command.Name}' failed: {exception.Message}",
                 exception,
                 correlation,
                 failureProperties);

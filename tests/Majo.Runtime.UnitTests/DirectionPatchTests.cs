@@ -35,7 +35,8 @@ public sealed class DirectionPatchTests
         var command = new BeatBeginCommand(
             new FakeDirectionBeatRuntime(),
             new DelegateDialogueNodeAccessor(() => "node"));
-        var arguments = command.Schema.Bind(new RawCommandArguments(null, new Dictionary<string, string>()));
+        var bound = TestCatalogBuilder.CreateBound(command);
+        var arguments = bound.Bind(new CommandInput("beat begin", Array.Empty<string>()));
 
         Assert.False(arguments.Id.WasProvided);
     }
@@ -43,8 +44,9 @@ public sealed class DirectionPatchTests
     [Fact]
     public void DirectionEaseAcceptsLegacyBackCurves()
     {
-        var converters = new CommandValueConverterRegistry();
-        var ease = (DirectionEase)converters.Convert("back-out", typeof(DirectionEase));
+        var easings = new Majo.Runtime.Timing.EasingRegistry();
+        Majo.Runtime.Timing.BuiltInEasings.RegisterDefaults(easings);
+        var ease = new DirectionEaseConverter(easings).Parse("back-out");
 
         Assert.Equal(DirectionEase.BackOut, ease);
     }

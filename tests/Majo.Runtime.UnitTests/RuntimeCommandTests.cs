@@ -34,7 +34,8 @@ public sealed class RuntimeCommandTests
             nodeAccessor,
             new DirectionCommandPolicy(beats, DirectionAnimationDefaults.FromConfiguration(null)));
 
-        var character = command.Schema.Bind(
+        var bound = TestCatalogBuilder.CreateBound(command);
+        var character = bound.Bind(
             new RawCommandArguments("maya", new Dictionary<string, string>
             {
                 ["wait"] = "true",
@@ -67,7 +68,8 @@ public sealed class RuntimeCommandTests
             nodeAccessor,
             policy);
 
-        var backdrop = backdropCommand.Schema.Bind(
+        var backdropBound = TestCatalogBuilder.CreateBound(backdropCommand);
+        var backdrop = backdropBound.Bind(
             new RawCommandArguments("courtroom", new Dictionary<string, string>()));
 
         var characterCommand = new CharacterCommand(
@@ -77,7 +79,8 @@ public sealed class RuntimeCommandTests
             nodeAccessor,
             policy);
 
-        var character = characterCommand.Schema.Bind(
+        var characterBound = TestCatalogBuilder.CreateBound(characterCommand);
+        var character = characterBound.Bind(
             new RawCommandArguments("maya", new Dictionary<string, string>
             {
                 ["appearance"] = "happy",
@@ -90,7 +93,8 @@ public sealed class RuntimeCommandTests
         Assert.False(character.Transition.Wait.Value);
 
         var constantCommand = new ConstantDefaultCommand();
-        var constant = constantCommand.Schema.Bind(
+        var constantBound = TestCatalogBuilder.CreateBound(constantCommand);
+        var constant = constantBound.Bind(
             new RawCommandArguments(null, new Dictionary<string, string>()));
         Assert.True(constant.Enabled.Value);
         Assert.False(constant.Enabled.WasProvided);
@@ -128,7 +132,8 @@ public sealed class RuntimeCommandTests
                         nodeAccessor,
                         policy);
                     var input = new CommandInput("character", pieces[1..]);
-                    cmd.Schema.Bind(input);
+                    var bound = TestCatalogBuilder.CreateBound(cmd);
+                    bound.Bind(input);
                     break;
                 }
                 case "backdrop":
@@ -140,7 +145,8 @@ public sealed class RuntimeCommandTests
                         nodeAccessor,
                         policy);
                     var input = new CommandInput("backdrop", pieces[1..]);
-                    cmd.Schema.Bind(input);
+                    var bound = TestCatalogBuilder.CreateBound(cmd);
+                    bound.Bind(input);
                     break;
                 }
             }
@@ -205,13 +211,12 @@ public sealed class RuntimeCommandTests
     [Fact]
     public void BinderUsesRegisteredCustomValueConverter()
     {
-        var converters = new CommandValueConverterRegistry()
-            .Register(value => new CustomCommandValue(value.ToUpperInvariant()));
-        var env = new CommandBindingEnvironment(converters);
+        var bound = TestCatalogBuilder.CreateBound(
+            new CustomValueCommand(),
+            configureConverters: c => c.AddDefault(value => new CustomCommandValue(value.ToUpperInvariant())));
 
-        var command = new CustomValueCommand();
-        command.Schema.AttachEnvironment(env);
-        var arguments = command.Schema.Bind(new RawCommandArguments("sample", new Dictionary<string, string>()));
+        var arguments = (CustomValueCommand.Arguments)bound.BindUntyped(
+            new RawCommandArguments("sample", new Dictionary<string, string>()));
 
         Assert.Equal("SAMPLE", arguments.Value.Text);
     }
@@ -219,11 +224,8 @@ public sealed class RuntimeCommandTests
     [Fact]
     public void BinderValidationRejectsMissingConverterBeforeCommandExecution()
     {
-        var env = new CommandBindingEnvironment(new CommandValueConverterRegistry());
-        var command = new CustomValueCommand();
-
         var exception = Assert.Throws<RuntimeCommandException>(() =>
-            command.Schema.Validate(env));
+            TestCatalogBuilder.CreateCatalog(new CustomValueCommand()));
 
         Assert.Contains("converter", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("value", exception.Message, StringComparison.OrdinalIgnoreCase);
@@ -307,15 +309,19 @@ public sealed class RuntimeCommandTests
             out var catalog,
             logger: logger,
             services: services,
-            configure: commands => commands.Add(
-                "character",
-                s => new CharacterCommand(
-                    s.Get<IDirectionBeatRuntime>(),
-                    s.Get<IDirectionPositionResolver>(),
-                    s.Get<IDirectionScopeResolver>(),
-                    s.Get<IDialogueNodeAccessor>(),
-                    s.Get<IDirectionCommandPolicy>()),
-                "test"));
+            configure: commands =>
+            {
+                DirectionCommandModule.RegisterConverters(commands.Converters);
+                commands.Add(
+                    "character",
+                    s => new CharacterCommand(
+                        s.Get<IDirectionBeatRuntime>(),
+                        s.Get<IDirectionPositionResolver>(),
+                        s.Get<IDirectionScopeResolver>(),
+                        s.Get<IDialogueNodeAccessor>(),
+                        s.Get<IDirectionCommandPolicy>()),
+                    "test");
+            });
         await adapter.InitializeAsync(CancellationToken.None);
         var handler = Assert.IsType<Func<string[], Task>>(registry.Handlers["character"]);
 
@@ -325,7 +331,7 @@ public sealed class RuntimeCommandTests
         Assert.Same(exception, adapter.LastFailure);
         Assert.Contains("at least one", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(
-            catalog.Get("character").Schema.Usage,
+            catalog.Get("character").Usage,
             exception.Message,
             StringComparison.Ordinal);
         Assert.Equal(1, registry.AbortCount);
@@ -360,15 +366,19 @@ public sealed class RuntimeCommandTests
             out _,
             logger: logger,
             services: services,
-            configure: commands => commands.Add(
-                "character",
-                s => new CharacterCommand(
-                    s.Get<IDirectionBeatRuntime>(),
-                    s.Get<IDirectionPositionResolver>(),
-                    s.Get<IDirectionScopeResolver>(),
-                    s.Get<IDialogueNodeAccessor>(),
-                    s.Get<IDirectionCommandPolicy>()),
-                "test"),
+            configure: commands =>
+            {
+                DirectionCommandModule.RegisterConverters(commands.Converters);
+                commands.Add(
+                    "character",
+                    s => new CharacterCommand(
+                        s.Get<IDirectionBeatRuntime>(),
+                        s.Get<IDirectionPositionResolver>(),
+                        s.Get<IDirectionScopeResolver>(),
+                        s.Get<IDialogueNodeAccessor>(),
+                        s.Get<IDirectionCommandPolicy>()),
+                    "test");
+            },
             abortOnRecoverableFailure: false);
         await adapter.InitializeAsync(CancellationToken.None);
         var handler = Assert.IsType<Func<string[], Task>>(registry.Handlers["character"]);
@@ -609,28 +619,28 @@ public sealed class RuntimeCommandTests
     }
 
     [Fact]
-    public void SchemaRejectsDuplicateParametersAndMultiplePrimaryParameters()
+    public void DefinitionRejectsDuplicateParametersAndMultiplePrimaryParameters()
     {
         Assert.Throws<RuntimeCommandException>(() =>
-            CommandSchema<WaitArguments>
+            CommandDefinition<WaitArguments>
                 .Create("duplicate")
                 .Optional<bool>("value")
                 .Optional<bool>("VALUE")
-                .Build(static values => new WaitArguments(values.Optional<bool>("value"))));
+                .Build(static context => reader => new WaitArguments(CommandValue<bool>.Unspecified())));
 
         Assert.Throws<RuntimeCommandException>(() =>
-            CommandSchema<WaitArguments>
+            CommandDefinition<WaitArguments>
                 .Create("multiple-primary")
                 .Primary<string>("first")
                 .Primary<string>("second")
-                .Build(static values => new WaitArguments(CommandValue<bool>.Unspecified())));
+                .Build(static context => reader => new WaitArguments(CommandValue<bool>.Unspecified())));
 
         Assert.Throws<RuntimeCommandException>(() =>
-            CommandSchema<WaitArguments>
+            CommandDefinition<WaitArguments>
                 .Create("unknown-set")
                 .Optional<bool>("value")
                 .ParameterSet(CommandParameterSetRule.ExactlyOne, "value", "missing")
-                .Build(static values => new WaitArguments(values.Optional<bool>("value"))));
+                .Build(static context => reader => new WaitArguments(CommandValue<bool>.Unspecified())));
     }
 
     [Fact]
@@ -640,67 +650,57 @@ public sealed class RuntimeCommandTests
         var exception = await Assert.ThrowsAsync<RuntimeCommandException>(() =>
             command.ExecuteAsync(
                 new CommandInput("probe"),
-                new CommandExecutionContext("unattached" )).AsTask());
+                new CommandExecutionContext("unattached")).AsTask());
 
         Assert.Equal(CommandFailurePhase.Schema, exception.FailurePhase);
     }
 
     [Fact]
-    public void ParameterGroups_CanBeReusedAcrossSchemas()
+    public void ParameterGroups_CanBeReusedAcrossDefinitions()
     {
-        var groups = new CommandParameterGroupRegistry();
-        groups.Register("sharedWait", CommandParameterGroups.Wait(contractDefault: true));
-        groups.Seal();
-
-        var env = new CommandBindingEnvironment(new CommandValueConverterRegistry(), groups);
-
-        var schema1 = CommandSchema<WaitArguments>
+        var def1 = CommandDefinition<WaitArguments>
             .Create("cmd1")
-            .Use("wait", groups.Get("sharedWait"))
-            .Build(static values => values.Group<WaitArguments>("wait"));
-        schema1.AttachEnvironment(env);
+            .Group("wait", "Wait", typeof(WaitArguments), typeof(BlockingWait), () => new BlockingWait(), new[]
+            {
+                new CommandParameterDeclaration("wait", "Wait", 20, false, false, typeof(bool), true, "bool", HasDefault: true, DefaultText: "false"),
+            })
+            .Build(static context =>
+            {
+                var slot = context.GetSlot("wait.wait");
+                return reader => new WaitArguments(reader.ReadOptional<bool>(slot));
+            });
 
-        var res1 = schema1.Bind(new RawCommandArguments(null, new Dictionary<string, string>()));
+        var cmd1 = new TestDefinitionCommand(def1);
+        var bound1 = TestCatalogBuilder.CreateBound(cmd1);
+
+        var res1 = bound1.Bind(new RawCommandArguments(null, new Dictionary<string, string>()));
         Assert.True(res1.Wait.Value);
         Assert.False(res1.Wait.WasProvided);
         Assert.Equal(CommandValueOrigin.ContractDefault, res1.Wait.Origin);
 
-        var res2 = schema1.Bind(new RawCommandArguments(null, new Dictionary<string, string> { ["wait"] = "false" }));
+        var res2 = bound1.Bind(new RawCommandArguments(null, new Dictionary<string, string> { ["wait"] = "false" }));
         Assert.False(res2.Wait.Value);
         Assert.True(res2.Wait.WasProvided);
         Assert.Equal(CommandValueOrigin.Explicit, res2.Wait.Origin);
     }
 
+    private sealed record TargetGroupArguments(CommandValue<string> Target);
+
     [Fact]
     public void RegisteredParameterGroupAndManifestMetadataArePreserved()
     {
-        var groups = new CommandParameterGroupRegistry();
-        groups.Add("plugin-target", new DelegateCommandParameterGroup<WaitArguments>(
-            "plugin-target",
-            new[]
-            {
-                new CommandParameterSpec(
-                    "target",
-                    0,
-                    Primary: false,
-                    Required: true,
-                    typeof(string),
-                    "id"),
-            },
-            (raw, _) => new WaitArguments(
-                raw.Named.ContainsKey("target")
-                    ? CommandValue<bool>.Explicit(true)
-                    : CommandValue<bool>.Unspecified())));
-
-        var schema = CommandSchema<WaitArguments>
+        var def = CommandDefinition<WaitArguments>
             .Create("plugin command")
             .Optional<string>("other")
-            .Use("plugin-target", groups)
+            .Group("plugin-target", "Target", typeof(TargetGroupArguments), groupParameters: new[]
+            {
+                new CommandParameterDeclaration("target", "Target", 0, false, false, typeof(string), true, "value"),
+            })
             .ParameterSet(CommandParameterSetRule.AtLeastOne, "target", "other")
-            .Build(static values => values.Group<WaitArguments>("plugin-target"));
+            .Build(static context => reader => new WaitArguments(CommandValue<bool>.Unspecified()));
 
         var registry = new RuntimeCommandRegistry();
-        registry.Add("plugin command", _ => new TestSchemaCommand(schema), "plugin", "9.0");
+        registry.Add("plugin command", _ => new TestDefinitionCommand(def), "plugin", "9.0");
         var catalog = registry.BuildCatalog();
         var manifest = RuntimeCommandManifest.FromCatalog(catalog, "fallback", "1.0");
         var entry = Assert.Single(manifest.Commands);
@@ -736,11 +736,11 @@ public sealed class RuntimeCommandTests
             dispatcher);
     }
 
-    private sealed class TestSchemaCommand : RuntimeCommand<WaitArguments>
+    private sealed class TestDefinitionCommand : RuntimeCommand<WaitArguments>
     {
-        public TestSchemaCommand(CommandSchema<WaitArguments> schema) => Schema = schema;
+        public TestDefinitionCommand(CommandDefinition<WaitArguments> definition) => Definition = definition;
 
-        public override CommandSchema<WaitArguments> Schema { get; }
+        public override CommandDefinition<WaitArguments> Definition { get; }
 
         protected override ValueTask ExecuteAsync(WaitArguments arguments, CommandExecutionContext context) =>
             ValueTask.CompletedTask;
@@ -755,14 +755,21 @@ public sealed class RuntimeCommandTests
             this.execution = execution;
         }
 
-        public override CommandSchema<Arguments> Schema { get; } =
-            CommandSchema<Arguments>
+        private static readonly CommandDefinition<Arguments> StaticDefinition =
+            CommandDefinition<Arguments>
                 .Create("probe", category: "Test", usage: "probe <value> detail:<value>")
                 .Primary<string>("value")
                 .Required<string>("detail")
-                .Build(static values => new Arguments(
-                    values.Required<string>("value"),
-                    values.Required<string>("detail")));
+                .Build(static context =>
+                {
+                    var valSlot = context.GetSlot("value");
+                    var detSlot = context.GetSlot("detail");
+                    return reader => new Arguments(
+                        reader.ReadRequired<string>(valSlot),
+                        reader.ReadRequired<string>(detSlot));
+                });
+
+        public override CommandDefinition<Arguments> Definition => StaticDefinition;
 
         protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
         {
@@ -784,14 +791,21 @@ public sealed class RuntimeCommandTests
             this.execution = execution;
         }
 
-        public override CommandSchema<Arguments> Schema { get; } =
-            CommandSchema<Arguments>
+        private static readonly CommandDefinition<Arguments> StaticDefinition =
+            CommandDefinition<Arguments>
                 .Create("camera probe", category: "Test", usage: "camera probe <value> detail:<value>")
                 .Primary<string>("value")
                 .Required<string>("detail")
-                .Build(static values => new Arguments(
-                    values.Required<string>("value"),
-                    values.Required<string>("detail")));
+                .Build(static context =>
+                {
+                    var valSlot = context.GetSlot("value");
+                    var detSlot = context.GetSlot("detail");
+                    return reader => new Arguments(
+                        reader.ReadRequired<string>(valSlot),
+                        reader.ReadRequired<string>(detSlot));
+                });
+
+        public override CommandDefinition<Arguments> Definition => StaticDefinition;
 
         protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
         {
@@ -806,8 +820,10 @@ public sealed class RuntimeCommandTests
 
     private sealed class DuplicateCommand : RuntimeCommand<DuplicateCommand.Arguments>
     {
-        public override CommandSchema<Arguments> Schema { get; } =
-            CommandSchema<Arguments>.Create("save").Build(static _ => new Arguments());
+        private static readonly CommandDefinition<Arguments> StaticDefinition =
+            CommandDefinition<Arguments>.Create("save").Build(_ => _ => new Arguments());
+
+        public override CommandDefinition<Arguments> Definition => StaticDefinition;
 
         protected override ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context) =>
             ValueTask.CompletedTask;
@@ -817,8 +833,10 @@ public sealed class RuntimeCommandTests
 
     private sealed class ReservedWaitCommand : RuntimeCommand<ReservedWaitCommand.Arguments>
     {
-        public override CommandSchema<Arguments> Schema { get; } =
-            CommandSchema<Arguments>.Create("WAIT").Build(static _ => new Arguments());
+        private static readonly CommandDefinition<Arguments> StaticDefinition =
+            CommandDefinition<Arguments>.Create("WAIT").Build(_ => _ => new Arguments());
+
+        public override CommandDefinition<Arguments> Definition => StaticDefinition;
 
         protected override ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context) =>
             ValueTask.CompletedTask;
@@ -828,10 +846,10 @@ public sealed class RuntimeCommandTests
 
     private sealed class FailingCommandModule : IRuntimeCommandModule
     {
-        public void Register(IRuntimeCommandRegistrar commands)
+        public void Register(CommandRegistrationContext context)
         {
-            commands.Add("probe", _ => new ProbeCommand(), "test");
-            commands.Add("save", _ => new DuplicateCommand(), "test");
+            context.Commands.Add("probe", _ => new ProbeCommand(), "test");
+            context.Commands.Add("save", _ => new DuplicateCommand(), "test");
         }
     }
 
@@ -839,11 +857,17 @@ public sealed class RuntimeCommandTests
 
     private sealed class CustomValueCommand : RuntimeCommand<CustomValueCommand.Arguments>
     {
-        public override CommandSchema<Arguments> Schema { get; } =
-            CommandSchema<Arguments>
+        private static readonly CommandDefinition<Arguments> StaticDefinition =
+            CommandDefinition<Arguments>
                 .Create("customValue")
                 .Primary<CustomCommandValue>("value")
-                .Build(static values => new Arguments(values.Required<CustomCommandValue>("value")));
+                .Build(static context =>
+                {
+                    var valSlot = context.GetSlot("value");
+                    return reader => new Arguments(reader.ReadRequired<CustomCommandValue>(valSlot));
+                });
+
+        public override CommandDefinition<Arguments> Definition => StaticDefinition;
 
         protected override ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context) =>
             ValueTask.CompletedTask;
@@ -853,11 +877,16 @@ public sealed class RuntimeCommandTests
 
     private sealed class ConstantDefaultCommand : RuntimeCommand<ConstantDefaultCommand.Arguments>
     {
-        public override CommandSchema<Arguments> Schema { get; } =
-            CommandSchema<Arguments>
-                .Create("constantDefault")
-                .Optional<bool>("enabled", contractDefault: true)
-                .Build(static values => new Arguments(values.Optional<bool>("enabled")));
+        private static readonly CommandDefinition<Arguments> StaticDefinition =
+            CommandDefinition<Arguments>.Create("constantDefault")
+                .Optional<bool>("enabled", defaultText: "true")
+                .Build(context =>
+                {
+                    var slot = context.GetSlot("enabled");
+                    return reader => new Arguments(reader.ReadOptional<bool>(slot));
+                });
+
+        public override CommandDefinition<Arguments> Definition => StaticDefinition;
 
         protected override ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context) =>
             ValueTask.CompletedTask;

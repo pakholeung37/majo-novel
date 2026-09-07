@@ -356,12 +356,12 @@ public sealed class AudioManagerTests
         new Majo.Runtime.Dialogue.Commands.Audio.AudioCommandModule().Register(registry);
         registry.SealRegistrations();
         var catalog = registry.BuildCatalog(services);
-        var bgmCommand = (Majo.Runtime.Dialogue.Commands.Audio.PlayBgmCommand)catalog.Get("bgm");
-        var arguments = bgmCommand.Schema.Bind(
+        var bgmCommand = catalog.Get<Majo.Runtime.Dialogue.Commands.Audio.PlayBgmCommand.Arguments>("bgm");
+        var arguments = bgmCommand.Bind(
             new RawCommandArguments("theme", new Dictionary<string, string>()));
 
         Assert.Equal("theme", arguments.Clip);
-        Assert.True(arguments.Loop);
+        Assert.True(arguments.Loop.Value);
         Assert.False(arguments.Fade.Duration.WasProvided);
         var resolvedDuration = policy.ResolveFadeDuration(arguments.Fade, AudioCommandKind.Bgm, new CommandExecutionContext("exec"));
         Assert.Equal(1.25, resolvedDuration);

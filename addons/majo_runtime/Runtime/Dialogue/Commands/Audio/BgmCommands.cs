@@ -7,7 +7,8 @@ using Majo.Runtime.Audio;
 
 namespace Majo.Runtime.Dialogue.Commands.Audio;
 
-public sealed class PlayBgmCommand : RuntimeCommand<PlayBgmCommand.Arguments>
+[Command("bgm", Category = "Audio")]
+public sealed partial class PlayBgmCommand : RuntimeCommand<PlayBgmCommand.Arguments>
 {
     private readonly IAudioManager audio;
     private readonly IAudioCommandPolicy policy;
@@ -18,37 +19,17 @@ public sealed class PlayBgmCommand : RuntimeCommand<PlayBgmCommand.Arguments>
         this.policy = policy ?? throw new ArgumentNullException(nameof(policy));
     }
 
-    public override CommandSchema<Arguments> Schema { get; } =
-        CommandSchema<Arguments>
-            .Create(
-                "bgm",
-                category: "Audio",
-                usage: "bgm <clip> [track:<id>] [loop:<bool>] [volume:<0..1>] [duration:<seconds>] [wait:<bool>]")
-            .Primary<string>("clip")
-            .Optional<string>("track")
-            .Optional<bool>("loop", contractDefault: true, hasContractDefault: true)
-            .Optional<double>("volume", contractDefault: 1.0, hasContractDefault: true, minimum: 0)
-            .Use("fade", CommandParameterGroups.AudioFade())
-            .Use("wait", CommandParameterGroups.Wait(contractDefault: false))
-            .Build(static values => new Arguments(
-                values.Required<string>("clip"),
-                values.Optional<string>("track").GetValueOrDefault(string.Empty),
-                values.Optional<bool>("loop").GetValueOrDefault(true),
-                values.Optional<double>("volume").GetValueOrDefault(1.0),
-                values.Group<AudioFadeArguments>("fade"),
-                values.Group<WaitArguments>("wait")));
-
     protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {
         var fadeDuration = policy.ResolveFadeDuration(arguments.Fade, AudioCommandKind.Bgm, context);
-        var track = string.IsNullOrWhiteSpace(arguments.Track) ? null : arguments.Track;
+        var track = arguments.Track.WasProvided && !string.IsNullOrWhiteSpace(arguments.Track.Value) ? arguments.Track.Value : null;
         var wait = arguments.Wait.Wait.GetValueOrDefault(false);
 
         var result = await audio.PlayBgmAsync(
             arguments.Clip,
             track,
-            arguments.Loop,
-            (float)arguments.Volume,
+            arguments.Loop.GetValueOrDefault(true),
+            (float)arguments.Volume.GetValueOrDefault(1.0),
             AudioCommandExecution.Fade(fadeDuration),
             context.CancellationToken);
 
@@ -57,15 +38,16 @@ public sealed class PlayBgmCommand : RuntimeCommand<PlayBgmCommand.Arguments>
     }
 
     public sealed record Arguments(
-        string Clip,
-        string Track,
-        bool Loop,
-        double Volume,
-        AudioFadeArguments Fade,
-        WaitArguments Wait);
+        [Primary] string Clip,
+        [Option] CommandValue<string> Track,
+        [Option(DefaultText = "true")] CommandValue<bool> Loop,
+        [Option(DefaultText = "1.0", Minimum = 0)] CommandValue<double> Volume,
+        [Group] AudioFadeArguments Fade,
+        [Group] WaitArguments Wait);
 }
 
-public sealed class StopBgmCommand : RuntimeCommand<StopBgmCommand.Arguments>
+[Command("stopBgm", Category = "Audio")]
+public sealed partial class StopBgmCommand : RuntimeCommand<StopBgmCommand.Arguments>
 {
     private readonly IAudioManager audio;
     private readonly IAudioCommandPolicy policy;
@@ -76,24 +58,10 @@ public sealed class StopBgmCommand : RuntimeCommand<StopBgmCommand.Arguments>
         this.policy = policy ?? throw new ArgumentNullException(nameof(policy));
     }
 
-    public override CommandSchema<Arguments> Schema { get; } =
-        CommandSchema<Arguments>
-            .Create(
-                "stopBgm",
-                category: "Audio",
-                usage: "stopBgm [track:<id>] [duration:<seconds>] [wait:<bool>]")
-            .Optional<string>("track")
-            .Use("fade", CommandParameterGroups.AudioFade())
-            .Use("wait", CommandParameterGroups.Wait(contractDefault: false))
-            .Build(static values => new Arguments(
-                values.Optional<string>("track").GetValueOrDefault(string.Empty),
-                values.Group<AudioFadeArguments>("fade"),
-                values.Group<WaitArguments>("wait")));
-
     protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {
         var fadeDuration = policy.ResolveFadeDuration(arguments.Fade, AudioCommandKind.Bgm, context);
-        var track = string.IsNullOrWhiteSpace(arguments.Track) ? null : arguments.Track;
+        var track = arguments.Track.WasProvided && !string.IsNullOrWhiteSpace(arguments.Track.Value) ? arguments.Track.Value : null;
         var wait = arguments.Wait.Wait.GetValueOrDefault(false);
 
         var stopTask = audio.StopBgmAsync(
@@ -105,7 +73,7 @@ public sealed class StopBgmCommand : RuntimeCommand<StopBgmCommand.Arguments>
     }
 
     public sealed record Arguments(
-        string Track,
-        AudioFadeArguments Fade,
-        WaitArguments Wait);
+        [Option] CommandValue<string> Track,
+        [Group] AudioFadeArguments Fade,
+        [Group] WaitArguments Wait);
 }

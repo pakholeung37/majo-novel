@@ -1,91 +1,77 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace Majo.Runtime.Dialogue.Commands;
 
 public interface IRuntimeCommand
 {
-    ICommandSchema Schema { get; }
+    string Name => Definition.Name;
 
-    string Name => Schema.Name;
+    string RootName => Definition.RootName;
 
-    string RootName => Schema.RootName;
+    IReadOnlyList<string> Path => Definition.Path;
+
+    string Usage => Definition.Usage;
+
+    ICommandDefinition Definition { get; }
 
     ValueTask ExecuteAsync(
         CommandInput input,
         CommandExecutionContext context);
+
+    internal IBoundCommand CreateBoundCommand(
+        BindingResolutionContext resolutionContext,
+        BoundParameterSlot[] slots);
 }
 
 public abstract class RuntimeCommand<TArguments> : IRuntimeCommand
     where TArguments : class
 {
-    public abstract CommandSchema<TArguments> Schema { get; }
+    public abstract CommandDefinition<TArguments> Definition { get; }
 
-    public string Name => Schema.Name;
+    ICommandDefinition IRuntimeCommand.Definition => Definition;
 
-    public string RootName => Schema.RootName;
+    public string Name => Definition.Name;
 
-    ICommandSchema IRuntimeCommand.Schema => Schema;
+    public string RootName => Definition.RootName;
 
-    public async ValueTask ExecuteAsync(
+    public IReadOnlyList<string> Path => Definition.Path;
+
+    public virtual ValueTask ExecuteAsync(
         CommandInput input,
         CommandExecutionContext context)
     {
         ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(context);
 
-        if (!Schema.IsEnvironmentAttached)
-        {
-            throw new RuntimeCommandException(
-                input.CommandName,
-                "Command schema has not been attached to a catalog binding environment.",
-                recoverable: false,
-                phase: CommandFailurePhase.Schema);
-        }
-
-        TArguments arguments;
-        try
-        {
-            arguments = Schema.Bind(input);
-        }
-        catch (RuntimeCommandException)
-        {
-            throw;
-        }
-        catch (Exception exception)
-        {
-            throw new RuntimeCommandException(
-                input.CommandName,
-                exception.Message,
-                exception,
-                recoverable: true,
-                phase: CommandFailurePhase.Binding);
-        }
-
-        try
-        {
-            await ExecuteAsync(arguments, context);
-        }
-        catch (RuntimeCommandException)
-        {
-            throw;
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception exception)
-        {
-            throw new RuntimeCommandException(
-                input.CommandName,
-                exception.Message,
-                exception,
-                recoverable: false,
-                phase: CommandFailurePhase.Execution);
-        }
+        throw new RuntimeCommandException(
+            input.CommandName,
+            "Direct execution of unbound command is not supported. Use catalog-bound command execution.",
+            recoverable: false,
+            phase: CommandFailurePhase.Schema);
     }
+
+    IBoundCommand IRuntimeCommand.CreateBoundCommand(
+        BindingResolutionContext resolutionContext,
+        BoundParameterSlot[] slots)
+    {
+        var factory = Definition.BinderFactory(resolutionContext);
+        return new BoundCommand<TArguments>(
+            this,
+            Definition,
+            factory,
+            slots,
+            CommandContractValidation.ResolveSets(Definition),
+            Definition.Validators);
+    }
+
+    internal ValueTask InvokeExecuteAsync(
+        TArguments arguments,
+        CommandExecutionContext context) =>
+        ExecuteAsync(arguments, context);
 
     protected abstract ValueTask ExecuteAsync(
         TArguments arguments,
