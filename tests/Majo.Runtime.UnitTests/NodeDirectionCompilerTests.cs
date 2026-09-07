@@ -73,7 +73,7 @@ public sealed class NodeDirectionCompilerTests
     }
 
     [Fact]
-    public void NodeDirectionCompilerResolvesShotUseAsAReference()
+    public void NodeDirectionCompilerCollectsShotAliasesWithoutCompileDiagnostics()
     {
         var snapshot = new YarnSourceSnapshot(
             "test", "test.yarnproject", 1, "en",
@@ -89,14 +89,11 @@ public sealed class NodeDirectionCompilerTests
         var module = Assert.Single(NodeDirectionCompiler.Compile(snapshot));
 
         Assert.Contains("close", module.Symbols.ShotAliases);
-        var diagnostic = Assert.Single(
-            module.Diagnostics,
-            value => value.Code == "DIR007");
-        Assert.Contains("missing", diagnostic.Message, StringComparison.Ordinal);
+        Assert.Empty(module.Diagnostics);
     }
 
     [Fact]
-    public void NodeDirectionCompilerCollectsExplicitImportsAndAuthoringDiagnostics()
+    public void NodeDirectionCompilerCollectsExplicitImportsWithoutDiagnostics()
     {
         var snapshot = new YarnSourceSnapshot(
             "test", "test.yarnproject", 1, "en",
@@ -114,7 +111,7 @@ public sealed class NodeDirectionCompilerTests
         Assert.Equal("stage", import.Kind);
         Assert.Equal("news", import.Alias);
         Assert.Equal("Broadcast", import.SourceNode);
-        Assert.Contains(module.Diagnostics, diagnostic => diagnostic.Code == "DIR001");
+        Assert.Empty(module.Diagnostics);
     }
 
     [Fact]
