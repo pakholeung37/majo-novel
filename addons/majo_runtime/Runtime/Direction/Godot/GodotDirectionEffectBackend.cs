@@ -5,17 +5,23 @@ using System.Threading;
 using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Direction.Core;
+using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Direction.Rendering;
+using Majo.Runtime.Timing;
 
 namespace Majo.Runtime.Direction.Godot;
 
 internal sealed class GodotDirectionEffectBackend : IDirectionEffectBackend
 {
     private readonly GodotDirectionRenderHost host;
+    private readonly IEasingRegistry? easings;
 
-    public GodotDirectionEffectBackend(GodotDirectionRenderHost host)
+    public GodotDirectionEffectBackend(
+        GodotDirectionRenderHost host,
+        IEasingRegistry? easings = null)
     {
         this.host = host ?? throw new ArgumentNullException(nameof(host));
+        this.easings = easings;
     }
 
     public Task<IPreparedDirectionComponent> PrepareAsync(
@@ -28,8 +34,9 @@ internal sealed class GodotDirectionEffectBackend : IDirectionEffectBackend
         var transition = GodotDirectionRendering.ResolveTransition(
             plan,
             path => path.StartsWith("effect/", StringComparison.Ordinal));
+        GodotEasingAdapter.Validate(transition.Easing, easings);
         return Task.FromResult<IPreparedDirectionComponent>(
-            new PreparedEffect(host, before, target, transition));
+            new PreparedEffect(host, before, target, transition, easings));
     }
 
     private sealed class PreparedEffect : IPreparedDirectionComponent
@@ -38,6 +45,7 @@ internal sealed class GodotDirectionEffectBackend : IDirectionEffectBackend
         private readonly StableEffectState before;
         private readonly StableEffectState target;
         private readonly DirectionTransitionSpec transition;
+        private readonly IEasingRegistry? easings;
         private readonly TaskCompletionSource settlement = new(
             TaskCreationOptions.RunContinuationsAsynchronously);
         private Tween? tween;
@@ -50,12 +58,14 @@ internal sealed class GodotDirectionEffectBackend : IDirectionEffectBackend
             GodotDirectionRenderHost host,
             StableEffectState before,
             StableEffectState target,
-            DirectionTransitionSpec transition)
+            DirectionTransitionSpec transition,
+            IEasingRegistry? easings = null)
         {
             this.host = host;
             this.before = before;
             this.target = target;
             this.transition = transition;
+            this.easings = easings;
         }
 
         public Task Settlement => settlement.Task;
@@ -66,28 +76,34 @@ internal sealed class GodotDirectionEffectBackend : IDirectionEffectBackend
                 throw new InvalidOperationException("Effect is no longer preparable.");
             committed = true;
             generation = host.BeginEffectGeneration();
-            if (transition.DurationSeconds <= 0 || transition.Kind == DirectionTransitionKind.Cut)
+            if (transition.DurationSeconds <= 0 || transition.Kind == DirectionTransitionId.Cut)
             {
                 Complete();
                 return;
             }
 
             tween = host.CreateTween();
-            GodotDirectionRendering.Configure(tween, transition.Ease);
+            GodotDirectionRendering.Configure(tween, transition.Easing, easings);
             tween.TweenMethod(
-                Callable.From<float>(progress =>
+                Callable.From<float>(progress => GodotEasingAdapter.ApplyProgress(
+                    transition.Easing, progress, easings, effectiveProgress =>
                 {
                     if (!host.IsCurrentEffectGeneration(generation)) return;
+
                     var from = before.Curtain;
                     var to = target.Curtain;
                     host.PublishEffects(new StableEffectState(new CurtainState(
                         new DirectionColor(
-                            Mathf.Lerp(from.Color.R, to.Color.R, progress),
-                            Mathf.Lerp(from.Color.G, to.Color.G, progress),
-                            Mathf.Lerp(from.Color.B, to.Color.B, progress),
-                            Mathf.Lerp(from.Color.A, to.Color.A, progress)),
-                        Mathf.Lerp(from.Opacity, to.Opacity, progress))));
-                }),
+                            Mathf.Lerp(from.Color.R, to.Color.R, effectiveProgress),
+                            Mathf.Lerp(from.Color.G, to.Color.G, effectiveProgress),
+                            Mathf.Lerp(from.Color.B, to.Color.B, effectiveProgress),
+                            Mathf.Lerp(from.Color.A, to.Color.A, effectiveProgress)),
+                        Mathf.Lerp(from.Opacity, to.Opacity, effectiveProgress))));
+                }, exception =>
+                {
+                    GodotDirectionRendering.Kill(tween);
+                    settlement.TrySetException(exception);
+                })),
                 0.0f,
                 1.0f,
                 transition.DurationSeconds);

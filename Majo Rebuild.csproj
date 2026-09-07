@@ -5,7 +5,7 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AnalysisLevel>latest-Recommended</AnalysisLevel>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
-    <NoWarn>$(NoWarn);SYSLIB1220</NoWarn>
+    <NoWarn>$(NoWarn);SYSLIB1220;CS0618</NoWarn>
     <DefaultItemExcludes>$(DefaultItemExcludes);tests/Majo.Runtime.UnitTests/**;tests/fixtures/**;**/bin/**;**/obj/**</DefaultItemExcludes>
   </PropertyGroup>
 

@@ -24,6 +24,7 @@ using Majo.Runtime.Resources;
 using Majo.Runtime.Save;
 using Majo.Runtime.Stage;
 using Majo.Runtime.State;
+using Majo.Runtime.Timing;
 using Majo.Runtime.UI.Diagnostics;
 using Majo.YarnBridge;
 
@@ -59,7 +60,8 @@ public partial class MajoRuntimeBootstrap : Node
     private bool isRuntimeShutdownSignalEmitted;
     private readonly PluginManager pluginManager = new();
     private readonly RuntimeCommandRegistry commandRegistry = new();
-    private readonly CommandValueConverterRegistry commandConverters = new();
+    private readonly EasingRegistry easingRegistry = new();
+    private readonly CommandValueConverterRegistry commandConverters;
     private readonly CommandParameterGroupRegistry commandParameterGroups = new();
     private readonly TransitionDriverRegistry transitionDrivers = new();
     private readonly CameraModifierRegistry cameraModifiers = new();
@@ -68,16 +70,23 @@ public partial class MajoRuntimeBootstrap : Node
 
     public MajoRuntimeBootstrap()
     {
+        BuiltInEasings.RegisterDefaults(easingRegistry);
+        commandConverters = new CommandValueConverterRegistry(easingRegistry);
         pluginRegistration = new PluginRegistrationContext(
             commandRegistry,
             transitionDrivers,
             cameraModifiers,
             transientCueHandlers,
             commandConverters,
-            commandParameterGroups);
+            commandParameterGroups,
+            easingRegistry);
     }
 
     public IPluginManager Plugins => pluginManager;
+
+    public IEasingRegistry Easings => easingRegistry;
+
+    public Action<IEasingRegistry>? ConfigureEasings { get; set; }
 
     public Action<ITransitionDriverRegistry>? ConfigureTransitionDrivers { get; set; }
 
@@ -284,6 +293,7 @@ public partial class MajoRuntimeBootstrap : Node
         new AudioCommandModule().Register(commandRegistry);
         new DirectionCommandModule().Register(commandRegistry);
 
+        ConfigureEasings?.Invoke(easingRegistry);
         ConfigureTransitionDrivers?.Invoke(transitionDrivers);
         ConfigureCameraModifiers?.Invoke(cameraModifiers);
         ConfigureCommands?.Invoke(commandRegistry);
@@ -295,6 +305,7 @@ public partial class MajoRuntimeBootstrap : Node
         commandRegistry.SealRegistrations();
         commandConverters.Seal();
         commandParameterGroups.Seal();
+        easingRegistry.Seal();
         transitionDrivers.Seal();
         cameraModifiers.Seal();
         transientCueHandlers.Seal();

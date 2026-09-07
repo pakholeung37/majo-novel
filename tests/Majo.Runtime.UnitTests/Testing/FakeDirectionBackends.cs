@@ -30,6 +30,11 @@ public sealed class FakeDirectionBackend : IDirectionPreparationBackend
     public TaskCompletionSource? LastSettlementTcs { get; private set; }
 
     public Task<IPreparedDirectionTransaction> PrepareAsync(
+        DirectionExecutionPlan plan,
+        CancellationToken cancellationToken) =>
+        PrepareAsync(plan.DomainPlan, cancellationToken);
+
+    public Task<IPreparedDirectionTransaction> PrepareAsync(
         DirectionPlan plan,
         CancellationToken cancellationToken)
     {
@@ -126,7 +131,8 @@ public sealed class ComponentBackendHarness :
         ViewId viewId,
         ViewState? before,
         ViewState? target,
-        CancellationToken cancellationToken) =>
+        CancellationToken cancellationToken,
+        IReadOnlyList<DirectionViewTransitionSequence>? viewSequences = null) =>
         Prepare($"view:{viewId}", FailViewPreparation, cancellationToken);
 
     public Task<IPreparedDirectionComponent> PrepareAsync(

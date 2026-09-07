@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
+using Majo.Runtime.Timing;
 
 namespace Majo.Runtime.Dialogue.Commands;
 
@@ -30,11 +31,11 @@ public sealed class BeatBeginCommand : RuntimeCommand<BeatBeginCommand.Arguments
                 usage: "beat begin [id:<id>] [duration:<seconds>] [ease:<curve>]")
             .Optional<string>("id")
             .Optional<double>("duration", minimum: 0)
-            .Optional<DirectionEase>("ease")
+            .Optional<EasingId>("ease")
             .Build(static values => new Arguments(
                 values.Optional<string>("id"),
                 values.Optional<double>("duration"),
-                values.Optional<DirectionEase>("ease")));
+                values.Optional<EasingId>("ease")));
 
     protected override ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {
@@ -49,7 +50,7 @@ public sealed class BeatBeginCommand : RuntimeCommand<BeatBeginCommand.Arguments
             : $"{node.Trim()}#anonymous-{Interlocked.Increment(ref anonymousBeatSequence)}";
 
         double? duration = arguments.Duration.WasProvided ? arguments.Duration.Value : null;
-        DirectionEase? ease = arguments.Ease.WasProvided ? arguments.Ease.Value : null;
+        EasingId? ease = (arguments.Ease.WasProvided && !arguments.Ease.Value.IsEmpty) ? arguments.Ease.Value : (EasingId?)null;
 
         beats.Begin(
             beatId,
@@ -62,7 +63,7 @@ public sealed class BeatBeginCommand : RuntimeCommand<BeatBeginCommand.Arguments
     public sealed record Arguments(
         CommandValue<string> Id,
         CommandValue<double> Duration,
-        CommandValue<DirectionEase> Ease);
+        CommandValue<EasingId> Ease);
 }
 
 public sealed class BeatEndCommand : RuntimeCommand<BeatEndCommand.Arguments>

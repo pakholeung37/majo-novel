@@ -188,7 +188,7 @@ public interface IEasingRegistry
 
 约束：
 
-- `Evaluate` 的输入输出契约为有限值，输入范围为 `[0, 1]`；内置和插件 easing 必须在注册时验证；
+- `Evaluate` 输入范围为 `[0, 1]`，输出必须有限（允许 overshoot）；注册时抽样验证不能证明任意 delegate 的全区间行为，后端每次采样仍须校验有限值并将异常传给事务 settlement；
 - alias 解析大小写不敏感，ID 规范化规则与其他 runtime ID 一致；
 - 重复 ID 和重复 alias 默认拒绝；
 - registry seal 后禁止注册；
@@ -259,7 +259,7 @@ public sealed record DirectionExecutionPlan(
 
 - `DirectionCommitToken` → `Direction.Execution`；
 - `DirectionCompletionBarrier` → `Direction.Execution`；
-- `DirectionViewTransitionSequence` → `Direction.Execution` 或 `Direction.Rendering`；
+- `DirectionViewTransitionSequence` → `Direction.Execution` 或 `Direction.Rendering`；领域计划必须保留 `DirectionViewPoseIntent` 中的中间姿态，使执行 sequence 可从领域意图重建；
 - `DirectionResourceClaim` → `Direction.Execution`/resource preparation 层。
 
 如果短期内无法物理移动文件，至少先通过命名空间和依赖约束将它们视为 execution 类型，禁止新的 Core 类型依赖它们。
@@ -528,3 +528,12 @@ built-in registration
 
 每个 PR 必须包含对应的 headless test；涉及 Godot adapter 的 PR 额外包含 fake backend 或最小场景测试。不要把所有类型移动和所有兼容删除合并成一个无法回滚的大 PR。
 
+
+## 14. 实施补充与当前后端能力
+
+- 新配置 ID 的空字符串表示未设置，此时读取旧 enum；显式字符串优先。不可用非空字段初始值覆盖旧资源中的配置。
+- easing 优先级为命令参数、beat defaults、配置 defaults、linear；启动期验证配置 easing 是否注册。
+- layout 属于 Screen domain，其 Move 是后端原生能力，不要求 Move driver 注册。
+- Fade/Dissolve/Shader driver 通过 `VisualTransitionContext.AnimateProgress` 获取已适配进度；支持该入口的插件 driver 应声明 `SupportsCustomEasing = true`。未声明的 driver 在 prepare 阶段拒绝自定义 easing。不要直接使用原始 Tween 进度并同时声明支持。
+- 角色 AnimationSpec 目前仍只支持内置枚举曲线，自定义 easing 在角色 prepare 阶段明确拒绝，不会降级为 Linear。开放角色采样需要后续迁移 Actors 动画接口。
+- `DirectionPlan.ViewPoseIntents` 保留 cut → move 的中间姿态；创建执行计划时从该意图恢复 ViewSequences。纯 planner 的命名空间及执行元数据生成仍需进一步拆分，当前不应将 Phase 5 宣称为全部完成。

@@ -30,14 +30,14 @@ public sealed class CommittedDirectionTransaction : IDisposable, IAsyncDisposabl
 
     internal CommittedDirectionTransaction(
         object owner,
-        DirectionPlan plan,
+        DirectionExecutionPlan executionPlan,
         DirectionCommitToken token,
         IPreparedDirectionTransaction prepared,
         IDisposable? activityLease = null,
         ITransientCueActivity? cueActivity = null)
     {
         this.owner = owner ?? throw new ArgumentNullException(nameof(owner));
-        Plan = plan;
+        ExecutionPlan = executionPlan;
         Token = token;
         this.prepared = prepared;
         this.activityLease = activityLease;
@@ -45,7 +45,25 @@ public sealed class CommittedDirectionTransaction : IDisposable, IAsyncDisposabl
         Settlement = ObserveSettlementAsync();
     }
 
-    public DirectionPlan Plan { get; }
+    internal CommittedDirectionTransaction(
+        object owner,
+        DirectionPlan plan,
+        DirectionCommitToken token,
+        IPreparedDirectionTransaction prepared,
+        IDisposable? activityLease = null,
+        ITransientCueActivity? cueActivity = null)
+        : this(
+            owner,
+            new DirectionExecutionPlan(plan, Array.Empty<DirectionResourceClaim>(), DirectionCompletionBarrier.Commit),
+            token,
+            prepared,
+            activityLease,
+            cueActivity)
+    {
+    }
+
+    public DirectionExecutionPlan ExecutionPlan { get; }
+    public DirectionPlan Plan => ExecutionPlan.DomainPlan;
     public DirectionCommitToken Token { get; }
     public Task Settlement { get; }
     public DirectionTransactionStatus Status =>
@@ -431,12 +449,13 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
             {
                 Revision = checked(current.Revision + 1),
             };
-            var rollbackPlan = new DirectionPlan(
-                DirectionTransactionId.New(),
-                current,
-                restored,
-                FallbackCutTransitions,
-                Array.Empty<ITransientDirectionCue>(),
+            var rollbackPlan = new DirectionExecutionPlan(
+                new DirectionPlan(
+                    DirectionTransactionId.New(),
+                    current,
+                    restored,
+                    FallbackCutTransitions,
+                    Array.Empty<ITransientDirectionCue>()),
                 Array.Empty<DirectionResourceClaim>(),
                 DirectionCompletionBarrier.Settle);
             var committed = await PrepareAndCommitAsync(
@@ -482,12 +501,13 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
         try
         {
             var current = State;
-            var plan = new DirectionPlan(
-                DirectionTransactionId.New(),
-                current,
-                target with { Revision = checked(current.Revision + 1) },
-                FallbackCutTransitions,
-                Array.Empty<ITransientDirectionCue>(),
+            var plan = new DirectionExecutionPlan(
+                new DirectionPlan(
+                    DirectionTransactionId.New(),
+                    current,
+                    target with { Revision = checked(current.Revision + 1) },
+                    FallbackCutTransitions,
+                    Array.Empty<ITransientDirectionCue>()),
                 Array.Empty<DirectionResourceClaim>(),
                 DirectionCompletionBarrier.Settle);
             var committed = await PrepareAndCommitAsync(plan, cancellationToken);
@@ -536,7 +556,7 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
     }
 
     private async Task<CommittedDirectionTransaction> PrepareAndCommitAsync(
-        DirectionPlan plan,
+        DirectionExecutionPlan plan,
         CancellationToken cancellationToken)
     {
         if (plan.Cues.Count > 0)

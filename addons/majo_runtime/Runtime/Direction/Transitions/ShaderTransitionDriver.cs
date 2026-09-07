@@ -44,6 +44,8 @@ public sealed class ShaderTransitionDriver : ITransitionDriver
 
     public DirectionTransitionId Id { get; }
 
+    public bool SupportsCustomEasing => true;
+
     public void Setup(VisualTransitionContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -63,17 +65,13 @@ public sealed class ShaderTransitionDriver : ITransitionDriver
 
         context.Surface.Material = material;
 
-        context.Tween.TweenMethod(
-            Callable.From<float>(progress =>
+        context.AnimateProgress(progress =>
             {
                 if (context.IsActive?.Invoke() != false && GodotObject.IsInstanceValid(context.Surface))
                 {
                     material.SetShaderParameter("progress", progress);
                 }
-            }),
-            0.0f,
-            1.0f,
-            context.Spec.DurationSeconds);
+            });
 
         context.Tween.Finished += () =>
         {

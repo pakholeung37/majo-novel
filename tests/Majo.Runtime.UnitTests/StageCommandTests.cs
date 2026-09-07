@@ -7,6 +7,7 @@ using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Stage;
+using Majo.Runtime.Timing;
 using Majo.Runtime.UnitTests.Testing;
 using Xunit;
 
@@ -49,7 +50,7 @@ public sealed class StageCommandTests
         }));
         Assert.Equal(12, moveArgs.Center.Value.X);
         Assert.Equal(-4, moveArgs.Center.Value.Y);
-        Assert.Equal(DirectionEase.BackOut, moveArgs.Timing.Ease.Value);
+        Assert.Equal(EasingId.BackOut, moveArgs.Timing.Ease.Value);
         Assert.True(moveArgs.Timing.Wait.Value);
 
         var pose = (CameraPoseCommand)catalog.Get("camera pose");
@@ -75,7 +76,7 @@ public sealed class StageCommandTests
         }));
         Assert.Equal(DirectionTransitionId.Dissolve, dissolveArguments.Via.Value);
         Assert.Equal(0.6, dissolveArguments.Timing.Duration.Value);
-        Assert.Equal(DirectionEase.SineInOut, dissolveArguments.Timing.Ease.Value);
+        Assert.Equal(EasingId.SineInOut, dissolveArguments.Timing.Ease.Value);
 
         var reset = (CameraResetCommand)catalog.Get("camera reset");
         var resetArguments = reset.Schema.Bind(new RawCommandArguments(null, new Dictionary<string, string>

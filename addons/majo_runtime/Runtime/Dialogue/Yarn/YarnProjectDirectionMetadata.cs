@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text.Json;
 using Godot;
 using Majo.Runtime.Direction.Core;
+using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Dialogue.Yarn.HotReload;
 using YarnProjectResource = YarnSpinnerGodot.YarnProject;
 

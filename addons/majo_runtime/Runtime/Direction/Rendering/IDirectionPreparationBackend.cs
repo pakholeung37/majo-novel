@@ -1,17 +1,29 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Majo.Runtime.Direction.Core;
+using Majo.Runtime.Direction.Execution;
 
 namespace Majo.Runtime.Direction.Rendering;
 
 public interface IDirectionPreparationBackend
 {
     Task<IPreparedDirectionTransaction> PrepareAsync(
-        DirectionPlan plan,
+        DirectionExecutionPlan plan,
         CancellationToken cancellationToken);
+
+    Task<IPreparedDirectionTransaction> PrepareAsync(
+        DirectionPlan plan,
+        CancellationToken cancellationToken) =>
+        PrepareAsync(
+            new DirectionExecutionPlan(
+                plan,
+                Array.Empty<DirectionResourceClaim>(),
+                DirectionCompletionBarrier.Commit),
+            cancellationToken);
 }
 
 public interface IPreparedDirectionTransaction : IAsyncDisposable

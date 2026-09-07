@@ -401,6 +401,11 @@ public sealed class DirectionRuntimeTests
                         DirectionEase.SineOut)),
             });
 
+        var rebuilt = new DirectionExecutionPlan(plan.DomainPlan,
+            Array.Empty<DirectionResourceClaim>(), DirectionCompletionBarrier.Commit);
+        var intent = Assert.Single(plan.DomainPlan.ViewPoseIntents);
+        Assert.Equal(cutPose, intent.StartState.Pose);
+        Assert.Equal(plan.ViewSequences, rebuilt.ViewSequences);
         var sequence = Assert.Single(plan.ViewSequences!);
         Assert.Equal(cutPose, sequence.StartState.Pose);
         Assert.Equal(DirectionTransitionKind.Move, sequence.Transition.Kind);

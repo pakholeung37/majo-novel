@@ -1,0 +1,434 @@
+#nullable enable
+
+using System;
+using System.Collections.Generic;
+using Majo.Runtime.Core;
+using Majo.Runtime.Dialogue.Commands;
+using Majo.Runtime.Direction.Camera;
+using Majo.Runtime.Direction.Core;
+using Majo.Runtime.Direction.Execution;
+using Majo.Runtime.Direction.Godot;
+using Majo.Runtime.Direction.Transitions;
+using Majo.Runtime.Plugins;
+using Majo.Runtime.Timing;
+using Majo.Runtime.UnitTests.Testing;
+using Xunit;
+
+namespace Majo.Runtime.UnitTests;
+
+public sealed class TimingRegistryTests
+{
+    [Fact]
+    public void BuiltInEasingsAreRegisteredWithExpectedDefaultsAndAliases()
+    {
+        var registry = new EasingRegistry();
+        BuiltInEasings.RegisterDefaults(registry);
+
+        foreach (var def in BuiltInEasings.All)
+        {
+            Assert.True(registry.Contains(def.Id));
+            Assert.NotNull(registry.GetRequired(def.Id));
+            Assert.Equal(def.Id, registry.Resolve(def.Id.Value).Id);
+
+            if (def.Aliases is not null)
+            {
+                foreach (var alias in def.Aliases)
+                {
+                    Assert.Equal(def.Id, registry.Resolve(alias).Id);
+                    Assert.Equal(def.Id, registry.Resolve(alias.ToUpperInvariant()).Id);
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public void BuiltInEasingsEvaluateFiniteOnDomainBounds()
+    {
+        foreach (var def in BuiltInEasings.All)
+        {
+            var v0 = def.Evaluate(0.0);
+            var vHalf = def.Evaluate(0.5);
+            var v1 = def.Evaluate(1.0);
+
+            Assert.True(double.IsFinite(v0), $"{def.Id} evaluated non-finite at 0: {v0}");
+            Assert.True(double.IsFinite(vHalf), $"{def.Id} evaluated non-finite at 0.5: {vHalf}");
+            Assert.True(double.IsFinite(v1), $"{def.Id} evaluated non-finite at 1: {v1}");
+        }
+    }
+
+    [Fact]
+    public void RegisteringCustomEasingSucceedsAndCanBeResolved()
+    {
+        var registry = new EasingRegistry();
+        BuiltInEasings.RegisterDefaults(registry);
+
+        var elasticOutId = new EasingId("elastic-out");
+        var custom = new EasingDefinition(
+            elasticOutId,
+            t => Math.Sin(-13.0 * (Math.PI / 2.0) * (t + 1.0)) * Math.Pow(2.0, -10.0 * t) + 1.0,
+            new[] { "elasticout", "ElasticOut" });
+
+        registry.Register(custom);
+
+        Assert.True(registry.Contains(elasticOutId));
+        Assert.Same(custom, registry.GetRequired(elasticOutId));
+        Assert.Same(custom, registry.Resolve("elastic-out"));
+        Assert.Same(custom, registry.Resolve("elasticout"));
+        Assert.Same(custom, registry.Resolve("ELASTICOUT"));
+        Assert.Same(custom, registry.Resolve("ElasticOut"));
+    }
+
+    [Fact]
+    public void RegisteringDuplicateIdThrowsArgumentException()
+    {
+        var registry = new EasingRegistry();
+        BuiltInEasings.RegisterDefaults(registry);
+
+        var duplicate = new EasingDefinition(EasingId.Linear, t => t);
+        var ex = Assert.Throws<ArgumentException>(() => registry.Register(duplicate));
+        Assert.Contains("linear", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RegisteringDuplicateAliasThrowsArgumentException()
+    {
+        var registry = new EasingRegistry();
+        BuiltInEasings.RegisterDefaults(registry);
+
+        var conflicting = new EasingDefinition(
+            new EasingId("custom-sine"),
+            t => t,
+            new[] { "sinein" }); // conflicts with built-in SineIn alias
+
+        var ex = Assert.Throws<ArgumentException>(() => registry.Register(conflicting));
+        Assert.Contains("sinein", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RegisteringInvalidDefinitionThrows()
+    {
+        var registry = new EasingRegistry();
+
+        // Empty ID
+        Assert.Throws<ArgumentException>(() =>
+            registry.Register(new EasingDefinition(new EasingId(""), t => t)));
+
+        // Null delegate
+        Assert.Throws<ArgumentNullException>(() =>
+            registry.Register(new EasingDefinition(new EasingId("test"), null!)));
+
+        // Non-finite evaluation
+        Assert.Throws<ArgumentException>(() =>
+            registry.Register(new EasingDefinition(new EasingId("nan-ease"), t => double.NaN)));
+    }
+
+    [Fact]
+    public void RegisteringAfterSealThrowsInvalidOperationException()
+    {
+        var registry = new EasingRegistry();
+        BuiltInEasings.RegisterDefaults(registry);
+        registry.Seal();
+
+        var custom = new EasingDefinition(new EasingId("custom"), t => t);
+        Assert.Throws<InvalidOperationException>(() => registry.Register(custom));
+    }
+
+    [Fact]
+    public void ResolveUnknownNameThrowsWithCandidateDiagnostics()
+    {
+        var registry = new EasingRegistry();
+        BuiltInEasings.RegisterDefaults(registry);
+
+        var ex = Assert.Throws<KeyNotFoundException>(() => registry.Resolve("nonexistent-ease"));
+        Assert.Contains("nonexistent-ease", ex.Message);
+        Assert.Contains("linear", ex.Message);
+    }
+
+    [Fact]
+    public void PluginCanRegisterEasingViaPluginRegistrationContext()
+    {
+        var commands = new RuntimeCommandRegistry();
+        var transitions = new TransitionDriverRegistry();
+        var cameraModifiers = new CameraModifierRegistry();
+        var easings = new EasingRegistry();
+        BuiltInEasings.RegisterDefaults(easings);
+
+        var context = new PluginRegistrationContext(
+            commands,
+            transitions,
+            cameraModifiers,
+            easings: easings);
+
+        var customId = new EasingId("wobble");
+        context.Easings.Register(new EasingDefinition(customId, t => Math.Sin(t * Math.PI * 4)));
+
+        Assert.True(easings.Contains(customId));
+        Assert.Equal(customId, easings.Resolve("wobble").Id);
+    }
+
+    [Fact]
+    public void TransitionSpecAcceptsCustomEasingWithoutEnumCheck()
+    {
+        var customId = new EasingId("custom-bounce");
+        var spec = new DirectionTransitionSpec("fade", 1.0, customId);
+        var validated = spec.Validate();
+
+        Assert.Equal(customId, validated.Easing);
+        Assert.Equal(1.0, validated.DurationSeconds);
+
+        // Empty EasingId should fail
+        var invalidSpec = new DirectionTransitionSpec(new DirectionTransitionId("fade"), 1.0, new EasingId(""));
+        Assert.Throws<ArgumentException>(() => invalidSpec.Validate());
+    }
+
+    [Fact]
+    public void CommandBindingConvertsBuiltInAndCustomEasings()
+    {
+        var easings = new EasingRegistry();
+        BuiltInEasings.RegisterDefaults(easings);
+        var customId = new EasingId("spring-out");
+        easings.Register(new EasingDefinition(customId, t => t));
+
+        var converters = new CommandValueConverterRegistry(easings);
+
+        // Built-in
+        Assert.Equal(EasingId.SineIn, converters.Convert<EasingId>("sine-in"));
+        Assert.Equal(EasingId.SineIn, converters.Convert<EasingId>("sinein"));
+        Assert.Equal(EasingId.SineIn, converters.Convert<EasingId>("SineIn"));
+        Assert.Equal(DirectionEase.SineIn, converters.Convert<DirectionEase>("sine-in"));
+
+        // Custom
+        Assert.Equal(customId, converters.Convert<EasingId>("spring-out"));
+
+        // Unknown
+        var ex = Assert.Throws<FormatException>(() => converters.Convert<EasingId>("nonexistent"));
+        Assert.Contains("nonexistent", ex.Message);
+    }
+
+    [Fact]
+    public void CommandParameterGroupsBindsCustomEasingInTransitionArguments()
+    {
+        var easings = new EasingRegistry();
+        BuiltInEasings.RegisterDefaults(easings);
+        var customId = new EasingId("elastic-out");
+        easings.Register(new EasingDefinition(customId, t => t));
+
+        var converters = new CommandValueConverterRegistry(easings);
+        var env = new CommandBindingEnvironment(converters);
+
+        var group = CommandParameterGroups.Transition();
+        var raw = new RawCommandArguments(null, new Dictionary<string, string>
+        {
+            ["via"] = "fade",
+            ["duration"] = "0.8",
+            ["ease"] = "elastic-out",
+        });
+
+        var result = group.Bind(raw, env);
+        Assert.True(result.Ease.WasProvided);
+        Assert.Equal(customId, result.Ease.Value);
+    }
+
+    [Fact]
+    public void BackdropCommand_ResolveTransition_WhenEaseNotProvided()
+    {
+        var beats = new FakeDirectionBeatRuntime();
+        var policy = new DirectionCommandPolicy(beats, DirectionAnimationDefaults.FromConfiguration(null));
+        var group = CommandParameterGroups.Transition();
+        var raw = new RawCommandArguments(null, new Dictionary<string, string>
+        {
+            ["via"] = "dissolve",
+            ["duration"] = "0.45",
+        });
+        var transitionArgs = group.Bind(raw, CommandBindingEnvironment.Default);
+        
+        // When no beat is open
+        var specNoBeat = policy.ResolveTransition("backdrop", transitionArgs, null!);
+        Assert.Equal(EasingId.Linear, specNoBeat.Easing);
+
+        // When beat is open with null defaults
+        beats.Begin("b1", "n1", null);
+        var specNullBeat = policy.ResolveTransition("backdrop", transitionArgs, null!);
+        Assert.Equal(EasingId.Linear, specNullBeat.Easing);
+
+        // When beat is open with DirectionBeatDefaults(null, null)
+        beats.AbortOpen();
+        beats.Begin("b2", "n2", new DirectionBeatDefaults(null, (EasingId?)null));
+        var specEmptyBeat = policy.ResolveTransition("backdrop", transitionArgs, null!);
+        Assert.Equal(EasingId.Linear, specEmptyBeat.Easing);
+    }
+
+    [Fact]
+    public async Task BeatBeginThenBackdropCommand_ViaCatalog_ExecutesSuccessfully()
+    {
+        var beats = new FakeDirectionBeatRuntime();
+        var scopes = new DirectionScopeResolver();
+        var nodeAccessor = new DelegateDialogueNodeAccessor(() => "Start");
+        var policy = new DirectionCommandPolicy(beats, DirectionAnimationDefaults.FromConfiguration(null));
+        var services = new ServiceResolverBuilder()
+            .Add<IDirectionBeatRuntime>(beats)
+            .Add<IDirectionScopeResolver>(scopes)
+            .Add<IDialogueNodeAccessor>(nodeAccessor)
+            .Add<IDirectionCommandPolicy>(policy)
+            .Add<IDirectionResourceKeyResolver>(new CatalogResourceResolver())
+            .Add<IDirectionPositionResolver>(new CatalogPositionResolver())
+            .Build();
+
+        var registry = new RuntimeCommandRegistry();
+        new DirectionCommandModule().Register(registry);
+        registry.SealRegistrations();
+        var catalog = registry.BuildCatalog(services);
+
+        var test1 = new DirectionBeatDefaults(null, (EasingId?)null);
+        var test2 = new DirectionBeatDefaults(null, (DirectionEase?)null);
+        Assert.True(test1.Easing is null, $"test1.Easing is '{test1.Easing}' (hasValue={test1.Easing.HasValue})");
+        Assert.True(test2.Easing is null, $"test2.Easing is '{test2.Easing}' (hasValue={test2.Easing.HasValue})");
+
+        var beatBegin = catalog.Get("beat begin");
+        var context = new CommandExecutionContext("test-exec");
+        await beatBegin.ExecuteAsync(new CommandInput("beat begin", Array.Empty<string>()), context);
+
+        Assert.True(beats.HasOpenBeat);
+        var beatDefaults = beats.OpenBeatDefaults;
+        Assert.NotNull(beatDefaults);
+        Assert.True(beatDefaults.Easing is null, $"beatDefaults.Easing is '{beatDefaults.Easing}' (hasValue={beatDefaults.Easing.HasValue})");
+
+        var backdrop = catalog.Get("backdrop");
+        await backdrop.ExecuteAsync(new CommandInput("backdrop", new[] { "backdrop/courtroom", "via:dissolve", "duration:0.45" }), context);
+
+        Assert.True(beats.HasOpenBeat);
+    }
+
+    [Fact]
+    public void CustomTransitionCanBeDefaultAndResolvedByPolicy()
+    {
+        var transitions = new TransitionDriverRegistry();
+        var customId = new DirectionTransitionId("wipe");
+        transitions.Register(new FakeTransitionDriver(customId, TransitionDomains.Actor | TransitionDomains.Stage));
+
+        var defaults = new DirectionAnimationDefaults(
+            DefaultAnimationDurationSeconds: 0.5,
+            DefaultCharacterAnimationDurationSeconds: 0.5,
+            DefaultCharacterAnimationKind: customId);
+
+        var policy = new DirectionCommandPolicy(defaults: defaults, transitions: transitions);
+        var transitionArgs = CommandParameterGroups.Transition().Bind(
+            new RawCommandArguments(null, new Dictionary<string, string>()),
+            CommandBindingEnvironment.Default);
+
+        var spec = policy.ResolveTransition("character", transitionArgs, null!);
+        Assert.Equal(customId, spec.Kind);
+    }
+
+    [Fact]
+    public async Task UnregisteredDefaultTransitionThrowsOnPolicyInitialize()
+    {
+        var transitions = new TransitionDriverRegistry();
+        var unregisteredId = new DirectionTransitionId("nonexistent");
+
+        var defaults = new DirectionAnimationDefaults(
+            DefaultAnimationDurationSeconds: 0.5,
+            DefaultCharacterAnimationDurationSeconds: 0.5,
+            DefaultCharacterAnimationKind: unregisteredId);
+
+        var policy = new DirectionCommandPolicy(defaults: defaults, transitions: transitions);
+        var ex = await Assert.ThrowsAsync<DirectionException>(() => policy.InitializeAsync(CancellationToken.None));
+        Assert.Contains("nonexistent", ex.Message);
+        Assert.Contains("character", ex.Message);
+    }
+
+    [Fact]
+    public void TransitionNotSupportingDomainThrowsOnResolve()
+    {
+        var transitions = new TransitionDriverRegistry();
+        var stageOnlyId = new DirectionTransitionId("stage-wipe");
+        transitions.Register(new FakeTransitionDriver(stageOnlyId, TransitionDomains.Stage));
+
+        var policy = new DirectionCommandPolicy(transitions: transitions);
+        var transitionArgs = CommandParameterGroups.Transition().Bind(
+            new RawCommandArguments(null, new Dictionary<string, string> { ["via"] = "stage-wipe" }),
+            CommandBindingEnvironment.Default);
+
+        // Character command requires Actor domain, which stage-wipe does not have
+        var ex = Assert.Throws<DirectionException>(() => policy.ResolveTransition("character", transitionArgs, null!));
+        Assert.Contains("stage-wipe", ex.Message);
+    }
+
+    [Fact]
+    public async Task ConfiguredEasingIsValidatedAndUsedAfterCommandAndBeatDefaults()
+    {
+        var easings = new EasingRegistry();
+        BuiltInEasings.RegisterDefaults(easings);
+        var custom = new EasingId("custom");
+        easings.Register(new EasingDefinition(custom, t => t * t));
+        var beats = new FakeDirectionBeatRuntime();
+        var defaults = DirectionAnimationDefaults.FromConfiguration(null) with { DefaultEasing = custom };
+        var policy = new DirectionCommandPolicy(beats, defaults, easings: easings);
+        await policy.InitializeAsync(CancellationToken.None);
+        var env = new CommandBindingEnvironment(new CommandValueConverterRegistry(easings));
+        var transition = CommandParameterGroups.Transition().Bind(
+            new RawCommandArguments(null, new Dictionary<string, string>()), env);
+        var timing = CommandParameterGroups.Timing().Bind(
+            new RawCommandArguments(null, new Dictionary<string, string>()), env);
+        Assert.Equal(custom, policy.ResolveTransition("backdrop", transition, null!).Easing);
+        Assert.Equal(custom, policy.ResolveMotionTransition("camera move", timing, DirectionTransitionId.Move, null!).Easing);
+        Assert.Equal(custom, policy.ResolveCameraPoseTransition("camera pose", timing, DirectionTransitionId.Move, null!).Easing);
+        beats.Begin("b", "n", new DirectionBeatDefaults(null, EasingId.SineIn));
+        Assert.Equal(EasingId.SineIn, policy.ResolveTransition("backdrop", transition, null!).Easing);
+        var explicitEase = CommandParameterGroups.Transition().Bind(
+            new RawCommandArguments(null, new Dictionary<string, string> { ["ease"] = "cubic-out" }), env);
+        Assert.Equal(EasingId.CubicOut, policy.ResolveTransition("backdrop", explicitEase, null!).Easing);
+        var invalid = new DirectionCommandPolicy(defaults: defaults with { DefaultEasing = "missing" }, easings: easings);
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => invalid.InitializeAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task LayoutMoveUsesNativeScreenCapabilityWithRegistryPresent()
+    {
+        var defaults = DirectionAnimationDefaults.FromConfiguration(null) with
+        {
+            DefaultLayoutAnimationKind = DirectionTransitionId.Move,
+        };
+        var policy = new DirectionCommandPolicy(defaults: defaults, transitions: new TransitionDriverRegistry());
+        await policy.InitializeAsync(CancellationToken.None);
+        var arguments = CommandParameterGroups.Transition().Bind(
+            new RawCommandArguments(null, new Dictionary<string, string> { ["via"] = "move" }), CommandBindingEnvironment.Default);
+        Assert.Equal(DirectionTransitionId.Move, policy.ResolveTransition("layout", arguments, null!).Kind);
+    }
+
+    [Fact]
+    public void CustomSamplingDoesNotSilentlyFallBackAndReportsInvalidRuntimeValues()
+    {
+        var registry = new EasingRegistry();
+        var id = new EasingId("square");
+        registry.Register(new EasingDefinition(id, t => t * t));
+        Assert.Equal(0.0625f, GodotEasingAdapter.SampleProgress(id, 0.25f, registry));
+        Assert.Throws<DirectionException>(() => DirectionTransitionSpec.ToDirectionEase(id));
+        Assert.Throws<DirectionException>(() => GodotEasingAdapter.SampleProgress("missing", 0.25f, registry));
+        registry.Register(new EasingDefinition("invalid-between-samples", t => t == 0.25 ? double.NaN : t));
+        Exception? failure = null;
+        var applied = false;
+        GodotEasingAdapter.ApplyProgress("invalid-between-samples", 0.25f, registry,
+            _ => applied = true, exception => failure = exception);
+        Assert.False(applied);
+        Assert.IsType<DirectionException>(failure);
+        Assert.Throws<DirectionException>(() => GodotEasingAdapter.Validate(id, registry,
+            new FakeTransitionDriver("legacy", TransitionDomains.Stage)));
+        GodotEasingAdapter.Validate(id, registry, new FadeTransitionDriver());
+    }
+
+    private sealed class FakeTransitionDriver : ITransitionDriver
+    {
+        public DirectionTransitionId Id { get; }
+        public TransitionDomains Domains { get; }
+
+        public FakeTransitionDriver(DirectionTransitionId id, TransitionDomains domains)
+        {
+            Id = id;
+            Domains = domains;
+        }
+
+        public void Setup(VisualTransitionContext context) { }
+    }
+}
+

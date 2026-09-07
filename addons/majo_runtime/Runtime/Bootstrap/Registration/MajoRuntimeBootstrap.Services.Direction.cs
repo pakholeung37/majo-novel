@@ -16,6 +16,7 @@ using Majo.Runtime.Localization;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Resources;
 using Majo.Runtime.Stage;
+using Majo.Runtime.Timing;
 
 namespace Majo.Runtime;
 
@@ -24,6 +25,8 @@ public partial class MajoRuntimeBootstrap : Node
     private void RegisterDirectionServices(RuntimeServiceRegistry services)
     {
         services
+            .AddSingleton<IEasingRegistry>(_ =>
+                easingRegistry)
             .AddSingleton<ITransitionDriverRegistry>(_ =>
                 transitionDrivers)
             .AddSingleton<GodotDirectionRenderHost>(
@@ -41,14 +44,16 @@ public partial class MajoRuntimeBootstrap : Node
                         resolver.Get<IActorTextureLoader>(),
                         resolver.Get<IFrameClock>(),
                         resolver.Get<ILocaleManager>()),
-                    resolver.Get<ITransitionDriverRegistry>()),
+                    resolver.Get<ITransitionDriverRegistry>(),
+                    resolver.Get<IEasingRegistry>()),
                 typeof(GodotDirectionRenderHost),
                 typeof(IResourceManager),
                 typeof(IOperationRunner),
                 typeof(IActorTextureLoader),
                 typeof(IFrameClock),
                 typeof(ILocaleManager),
-                typeof(ITransitionDriverRegistry))
+                typeof(ITransitionDriverRegistry),
+                typeof(IEasingRegistry))
             .AddSingleton<ICameraModifierManager>(
                 resolver =>
                 {
@@ -81,13 +86,22 @@ public partial class MajoRuntimeBootstrap : Node
                 {
                     var host = resolver.Get<GodotDirectionRenderHost>();
                     var drivers = resolver.Get<ITransitionDriverRegistry>();
+                    var easings = resolver.Get<IEasingRegistry>();
                     var textures = new DirectionTextureLoader(
                         resolver.Get<IResourceManager>());
                     var backend = new CompositeDirectionPreparationBackend(
                         resolver.Get<GodotDirectionStageBackend>(),
-                        new GodotDirectionViewBackend(host, drivers),
-                        new GodotDirectionScreenBackend(host),
-                        new GodotDirectionEffectBackend(host));
+                        new GodotDirectionViewBackend(host, drivers, easings),
+                        new GodotDirectionScreenBackend(host, easings),
+                        new GodotDirectionEffectBackend(host, easings),
+                        plan =>
+                        {
+                            foreach (var intent in plan.Transitions)
+                            {
+                                drivers.TryGet(intent.Spec.Kind, out var driver);
+                                GodotEasingAdapter.Validate(intent.Spec.Easing, easings, driver);
+                            }
+                        });
                     return new DirectionTransactionCoordinator(
                         new DirectionPlanner(),
                         backend,
@@ -97,6 +111,7 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(GodotDirectionRenderHost),
                 typeof(GodotDirectionStageBackend),
                 typeof(ITransitionDriverRegistry),
+                typeof(IEasingRegistry),
                 typeof(IResourceManager),
                 typeof(IRuntimeActivityRegistry),
                 typeof(ITransientDirectionCueExecutor))
@@ -115,9 +130,11 @@ public partial class MajoRuntimeBootstrap : Node
                 resolver => new DirectionCommandPolicy(
                     resolver.Get<IDirectionBeatRuntime>(),
                     DirectionAnimationDefaults.FromConfiguration(Configuration?.Animation),
-                    resolver.Get<ITransitionDriverRegistry>()),
+                    resolver.Get<ITransitionDriverRegistry>(),
+                    resolver.Get<IEasingRegistry>()),
                 typeof(IDirectionBeatRuntime),
-                typeof(ITransitionDriverRegistry))
+                typeof(ITransitionDriverRegistry),
+                typeof(IEasingRegistry))
             .AddSingleton<DirectionBeatNodeBoundaryService>(
                 resolver => new DirectionBeatNodeBoundaryService(
                     resolver.Get<IYarnDialogueBackend>(),

@@ -6,6 +6,8 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Majo.Runtime.Direction.Core;
+using Majo.Runtime.Direction.Execution;
+
 
 namespace Majo.Runtime.Direction.Rendering;
 
@@ -15,24 +17,45 @@ public sealed class CompositeDirectionPreparationBackend : IDirectionPreparation
     private readonly IDirectionViewBackend views;
     private readonly IDirectionScreenBackend screen;
     private readonly IDirectionEffectBackend effects;
+    private readonly Action<DirectionPlan>? validate;
 
     public CompositeDirectionPreparationBackend(
         IDirectionStageBackend stages,
         IDirectionViewBackend views,
         IDirectionScreenBackend screen,
-        IDirectionEffectBackend effects)
+        IDirectionEffectBackend effects,
+        Action<DirectionPlan>? validate = null)
     {
         this.stages = stages ?? throw new ArgumentNullException(nameof(stages));
         this.views = views ?? throw new ArgumentNullException(nameof(views));
         this.screen = screen ?? throw new ArgumentNullException(nameof(screen));
         this.effects = effects ?? throw new ArgumentNullException(nameof(effects));
+        this.validate = validate;
     }
 
-    public async Task<IPreparedDirectionTransaction> PrepareAsync(
+    public Task<IPreparedDirectionTransaction> PrepareAsync(
+        DirectionExecutionPlan plan,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        return PrepareInternalAsync(plan.DomainPlan, plan.ViewSequences, cancellationToken);
+    }
+
+    public Task<IPreparedDirectionTransaction> PrepareAsync(
         DirectionPlan plan,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(plan);
+        return PrepareAsync(new DirectionExecutionPlan(plan, Array.Empty<DirectionResourceClaim>(),
+            DirectionCompletionBarrier.Commit), cancellationToken);
+    }
+
+    private async Task<IPreparedDirectionTransaction> PrepareInternalAsync(
+        DirectionPlan plan,
+        IReadOnlyList<DirectionViewTransitionSequence>? viewSequences,
+        CancellationToken cancellationToken)
+    {
+        validate?.Invoke(plan);
         var prepared = new List<IPreparedDirectionComponent>();
         try
         {
@@ -43,7 +66,7 @@ public sealed class CompositeDirectionPreparationBackend : IDirectionPreparation
             await AddPreparedBatchAsync(
                 BuildStagePreparations(plan, cancellationToken), prepared);
             await AddPreparedBatchAsync(
-                BuildViewPreparations(plan, cancellationToken), prepared);
+                BuildViewPreparations(plan, viewSequences, cancellationToken), prepared);
             await AddPreparedBatchAsync(
                 BuildScreenAndEffectPreparations(plan, cancellationToken), prepared);
         }
@@ -137,6 +160,7 @@ public sealed class CompositeDirectionPreparationBackend : IDirectionPreparation
 
     private List<Task<IPreparedDirectionComponent>> BuildViewPreparations(
         DirectionPlan plan,
+        IReadOnlyList<DirectionViewTransitionSequence>? viewSequences,
         CancellationToken cancellationToken)
     {
         var preparations = new List<Task<IPreparedDirectionComponent>>();
@@ -149,7 +173,7 @@ public sealed class CompositeDirectionPreparationBackend : IDirectionPreparation
             if (!Equals(before, target))
             {
                 preparations.Add(CapturePreparation(() =>
-                    views.PrepareAsync(plan, viewId, before, target, cancellationToken)));
+                    views.PrepareAsync(plan, viewId, before, target, cancellationToken, viewSequences)));
             }
         }
 

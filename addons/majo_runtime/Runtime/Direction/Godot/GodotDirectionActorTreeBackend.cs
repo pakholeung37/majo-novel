@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Direction.Core;
+using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Direction.Rendering;
 using Majo.Runtime.Operations;
 
@@ -190,9 +191,9 @@ internal sealed class GodotDirectionActorTreeBackend
             // this case so there is no blank frame between expressions.
             if (source is not null && destination is not null &&
                 !string.Equals(source.Appearance, destination.Appearance, StringComparison.Ordinal) &&
-                transition.Kind == DirectionTransitionKind.Fade)
+                transition.Kind == DirectionTransitionId.Fade)
             {
-                transition = transition with { Kind = DirectionTransitionKind.Dissolve };
+                transition = transition with { Kind = DirectionTransitionId.Dissolve };
             }
             ValidateTransition(actorId, source, destination, transition);
             transitions.Add(actorId, transition);
@@ -208,7 +209,9 @@ internal sealed class GodotDirectionActorTreeBackend
         DirectionTransitionSpec transition)
     {
         transition.Validate();
-        if (transition.Kind == DirectionTransitionKind.Move &&
+        if (!GodotEasingAdapter.TryGetNativeTween(transition.Easing, out _, out _))
+            throw new DirectionException($"Direction Actor '{actorId}' does not support easing '{transition.Easing}'.");
+        if (transition.Kind == DirectionTransitionId.Move &&
             (before is null || target is null))
         {
             throw new DirectionException(
@@ -407,7 +410,7 @@ internal sealed class GodotDirectionActorTreeBackend
                         }
                     }
 
-                    if (pair.Value.Kind == DirectionTransitionKind.Move &&
+                    if (pair.Value.Kind == DirectionTransitionId.Move &&
                         pair.Value.DurationSeconds > 0)
                     {
                         var state = targetState!.Actors[pair.Key];

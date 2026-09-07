@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
+using Majo.Runtime.Direction.Godot;
 using Majo.Runtime.Direction.Rendering;
 using Majo.Runtime.Resources;
 using Majo.Runtime.UnitTests.Testing;
@@ -200,6 +201,27 @@ public sealed class DirectionPatchTests
         Assert.Equal(illustration, plan.TargetState.Views[illustrationView].StageId);
         Assert.Equal(3, plan.TargetState.Views[illustrationView].Pose.Zoom);
         Assert.Equal(illustrationView, plan.TargetState.Screen.Bindings[LayoutSlotId.Main]);
+    }
+
+    [Fact]
+    public void PureDomainPlanningWorksWithoutRuntimeAndDecoupledFromExecution()
+    {
+        var planner = new DirectionPlanner();
+        var before = DirectionState.CreateDefault();
+        var directives = new IDirectionDirective[]
+        {
+            View(ViewId.Main, zoom: 2.0f),
+        };
+
+        DirectionPlan domainPlan = planner.PlanDomain(before, directives);
+        Assert.NotNull(domainPlan);
+        Assert.Equal(2.0f, domainPlan.TargetState.Views[ViewId.Main].Pose.Zoom);
+        Assert.Single(domainPlan.Transitions);
+
+        DirectionExecutionPlan executionPlan = planner.Plan(before, directives);
+        Assert.NotNull(executionPlan);
+        Assert.Equal(domainPlan.TargetState.Views[ViewId.Main].Pose.Zoom, executionPlan.TargetState.Views[ViewId.Main].Pose.Zoom);
+        Assert.Same(executionPlan.DomainPlan.TargetState, executionPlan.TargetState);
     }
 
     private static ActorPatch Actor(

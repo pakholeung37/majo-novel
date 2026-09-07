@@ -222,7 +222,7 @@ public sealed class CameraMoveCommand : RuntimeCommand<CameraMoveCommand.Argumen
     protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {
         var node = nodeAccessor.RequireNode();
-        var transition = policy.ResolveMotionTransition("camera move", arguments.Timing, DirectionTransitionKind.Move, context);
+        var transition = policy.ResolveMotionTransition("camera move", arguments.Timing, DirectionTransitionId.Move, context);
         var wait = arguments.Timing.Wait.GetValueOrDefault(false);
 
         var targetView = ResolveTarget(node, arguments.Stage.Value, arguments.View.Value);

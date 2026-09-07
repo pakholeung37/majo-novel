@@ -19,6 +19,8 @@ using Majo.Runtime.Operations;
 using Majo.Runtime.Operations.Godot;
 using Majo.Runtime.Resources;
 using Majo.Runtime.Stage;
+using Majo.Runtime.Timing;
+using Majo.Runtime.Direction.Transitions;
 
 namespace Majo.Runtime.HeadlessTests;
 
@@ -26,8 +28,43 @@ public partial class HeadlessTestRunner
 {
     private async Task ValidateDirectionRenderingAsync()
     {
+        using (var configuration = new AnimationConfiguration
+        {
+            DefaultBackdropAnimationKind = DirectionTransitionKind.Dissolve,
+            DefaultCharacterAnimationKind = DirectionTransitionKind.Move,
+            DefaultDirectionAnimationEase = DirectionEase.SineOut,
+        })
+        {
+            Assert(configuration.ResolveBackdropAnimationId() == DirectionTransitionId.Dissolve,
+                "Legacy backdrop configuration must survive new ID defaults.");
+            Assert(configuration.ResolveCharacterAnimationId() == DirectionTransitionId.Move,
+                "Legacy character configuration must survive new ID defaults.");
+            Assert(configuration.ResolveDirectionEasingId() == EasingId.SineOut,
+                "Legacy easing configuration must survive new ID defaults.");
+            configuration.DefaultBackdropAnimationId = "fade";
+            Assert(configuration.ResolveBackdropAnimationId() == DirectionTransitionId.Fade,
+                "Explicit new configuration must override legacy configuration.");
+        }
         var owner = new Node { Name = "DirectionRenderingProbe" };
         AddChild(owner);
+        var customEasings = new EasingRegistry();
+        customEasings.Register(new EasingDefinition("square", t => t * t));
+        foreach (var driver in new ITransitionDriver[] { new FadeTransitionDriver(), new DissolveTransitionDriver() })
+        {
+            var surface = new Sprite2D();
+            owner.AddChild(surface);
+            var tween = owner.CreateTween();
+            tween.Pause();
+            GodotEasingAdapter.Configure(tween, "square", customEasings);
+            driver.Setup(new VisualTransitionContext(surface,
+                new DirectionTransitionSpec(driver.Id, 1, new EasingId("square")), tween,
+                MapProgress: progress => GodotEasingAdapter.SampleProgress("square", progress, customEasings)));
+            tween.CustomStep(0.5);
+            Assert(Math.Abs(surface.Modulate.A - 0.75f) < 0.001f,
+                "Transition drivers must apply custom easing to their progress.");
+            tween.Kill();
+            surface.Free();
+        }
         var host = new GodotDirectionRenderHost(owner, new Vector2I(640, 360));
         await host.InitializeAsync(CancellationToken.None);
         var textures = new HeadlessDirectionTextureLoader();
@@ -114,6 +151,25 @@ public partial class HeadlessTestRunner
         Assert(firstActor.Scale.IsEqualApprox(new Vector2(1.25f, 1.25f)) &&
                 firstActor.ZIndex == 7 && firstActor.Texture is not null,
             "Direction Actor did not commit appearance, scale, and z-index together.");
+
+        var revisionBeforeUnsupportedEase = coordinator.State.Revision;
+        var rejectedCustomActorEase = false;
+        try
+        {
+            await coordinator.ExecuteAsync(new IDirectionDirective[]
+            {
+                ActorPatchFor("hero", new DirectionPoint(30, 0), "red", 1.25f, 7) with
+                {
+                    Transition = new DirectionTransitionSpec(DirectionTransitionId.Move, 1, new EasingId("square")),
+                },
+            });
+        }
+        catch (DirectionException exception)
+        {
+            rejectedCustomActorEase = exception.Message.Contains("square", StringComparison.Ordinal);
+        }
+        Assert(rejectedCustomActorEase && coordinator.State.Revision == revisionBeforeUnsupportedEase,
+            "Unsupported actor easing must fail preparation without publishing state.");
 
         var illustration = new StageId("illustration");
         var illustrationView = new ViewId("illustration");

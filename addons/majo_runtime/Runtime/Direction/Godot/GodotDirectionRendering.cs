@@ -7,6 +7,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Direction.Core;
+using Majo.Runtime.Direction.Execution;
+using Majo.Runtime.Timing;
 
 namespace Majo.Runtime.Direction.Godot;
 
@@ -31,13 +33,14 @@ internal static class GodotDirectionRendering
         };
     }
 
+    public static void Configure(Tween tween, EasingId easing, IEasingRegistry? registry = null)
+    {
+        GodotEasingAdapter.Configure(tween, easing, registry);
+    }
+
     public static void Configure(Tween tween, DirectionEase ease)
     {
-        var parts = ease.Decompose();
-        var transition = Enum.Parse<Tween.TransitionType>(parts.Curve.ToString());
-        var easing = Enum.Parse<Tween.EaseType>(parts.Mode.ToString());
-        tween.SetTrans(transition);
-        tween.SetEase(easing);
+        GodotEasingAdapter.Configure(tween, DirectionTransitionSpec.FromDirectionEase(ease), null);
     }
 
     public static Color ToGodot(DirectionColor color, float? alpha = null) =>

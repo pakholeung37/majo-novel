@@ -3,12 +3,13 @@
 using System;
 using System.Collections.Generic;
 using Majo.Runtime.Direction.Core;
+using Majo.Runtime.Timing;
 
 namespace Majo.Runtime.Dialogue.Commands;
 
 public sealed record TransitionArguments(
     CommandValue<double> Duration,
-    CommandValue<DirectionEase> Ease,
+    CommandValue<EasingId> Ease,
     CommandValue<DirectionTransitionId> Via,
     CommandValue<bool> Wait)
 {
@@ -24,7 +25,7 @@ public readonly record struct TransitionParameterOptions(
 
 public sealed record TimingArguments(
     CommandValue<double> Duration,
-    CommandValue<DirectionEase> Ease,
+    CommandValue<EasingId> Ease,
     CommandValue<bool> Wait)
 {
     public TransitionArguments ToTransitionArguments(DirectionTransitionId via = default) =>
@@ -74,7 +75,7 @@ public static class CommandParameterGroups
                 options.EaseOrder,
                 Primary: false,
                 Required: false,
-                typeof(DirectionEase),
+                typeof(EasingId),
                 "curve"),
             new CommandParameterSpec(
                 "wait",
@@ -92,7 +93,7 @@ public static class CommandParameterGroups
             (raw, env) =>
             {
                 var duration = BindValue<double>(raw, env, "duration");
-                var ease = BindValue<DirectionEase>(raw, env, "ease");
+                var ease = BindValue<EasingId>(raw, env, "ease");
                 var via = BindValue<DirectionTransitionId>(raw, env, "via");
                 var wait = BindValue(raw, env, "wait", options.WaitContractDefault);
 
@@ -118,7 +119,7 @@ public static class CommandParameterGroups
                 options.EaseOrder,
                 Primary: false,
                 Required: false,
-                typeof(DirectionEase),
+                typeof(EasingId),
                 "curve"),
             new CommandParameterSpec(
                 "wait",
@@ -136,7 +137,7 @@ public static class CommandParameterGroups
             (raw, env) =>
             {
                 var duration = BindValue<double>(raw, env, "duration");
-                var ease = BindValue<DirectionEase>(raw, env, "ease");
+                var ease = BindValue<EasingId>(raw, env, "ease");
                 var wait = BindValue(raw, env, "wait", options.WaitContractDefault);
 
                 return new TimingArguments(duration, ease, wait);

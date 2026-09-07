@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Stage;
+using Majo.Runtime.Timing;
 
 namespace Majo.Runtime.Dialogue.Commands;
 
@@ -281,9 +282,9 @@ public sealed class CurtainCommand : RuntimeCommand<CurtainCommand.Arguments>
     {
         var node = nodeAccessor.RequireNode();
         var transition = new DirectionTransitionSpec(
-            DirectionTransitionKind.Fade,
+            DirectionTransitionId.Fade,
             arguments.Duration,
-            DirectionEase.Linear).Validate();
+            EasingId.Linear).Validate();
         var opacity = arguments.Position == CurtainPosition.Open ? 0f : 1f;
         var wait = arguments.Wait.Wait.GetValueOrDefault(false);
 

@@ -13,6 +13,8 @@ using Majo.Runtime.Direction.Transitions;
 using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Actors;
 
+using Majo.Runtime.Timing;
+
 namespace Majo.Runtime.Plugins;
 
 public sealed class PluginContext
@@ -44,7 +46,8 @@ public sealed class PluginRegistrationContext
         ICameraModifierRegistry cameraModifiers,
         ITransientCueHandlerRegistry? transientCueHandlers = null,
         CommandValueConverterRegistry? commandConverters = null,
-        CommandParameterGroupRegistry? commandParameterGroups = null)
+        CommandParameterGroupRegistry? commandParameterGroups = null,
+        IEasingRegistry? easings = null)
     {
         Commands = commands ?? throw new ArgumentNullException(nameof(commands));
         Transitions = transitions ?? throw new ArgumentNullException(nameof(transitions));
@@ -52,6 +55,7 @@ public sealed class PluginRegistrationContext
         TransientCueHandlers = transientCueHandlers ?? new TransientCueHandlerRegistry();
         CommandConverters = commandConverters ?? new CommandValueConverterRegistry();
         CommandParameterGroups = commandParameterGroups ?? new CommandParameterGroupRegistry();
+        Easings = easings ?? new EasingRegistry();
     }
 
     public RuntimeCommandRegistry Commands { get; }
@@ -60,6 +64,7 @@ public sealed class PluginRegistrationContext
     public ITransitionDriverRegistry Transitions { get; }
     public ICameraModifierRegistry CameraModifiers { get; }
     public ITransientCueHandlerRegistry TransientCueHandlers { get; }
+    public IEasingRegistry Easings { get; }
     private readonly List<Action<ActorManager>> actorFactoryConfigurations = new();
 
     public void ConfigureActorFactories(Action<ActorManager> configure)

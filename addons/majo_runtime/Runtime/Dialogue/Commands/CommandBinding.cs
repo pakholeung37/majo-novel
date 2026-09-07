@@ -7,6 +7,7 @@ using System.Linq;
 using Godot;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Stage;
+using Majo.Runtime.Timing;
 
 namespace Majo.Runtime.Dialogue.Commands;
 
@@ -15,8 +16,10 @@ public sealed class CommandValueConverterRegistry
     private readonly Dictionary<Type, Func<string, object>> converters = new();
     private bool isSealed;
 
-    public CommandValueConverterRegistry()
+    public CommandValueConverterRegistry(IEasingRegistry? easings = null)
     {
+        var easingRegistry = easings ?? CreateDefaultEasingRegistry();
+
         Register<string>(value => value);
         Register<bool>(value => bool.TryParse(value, out var result)
             ? result
@@ -63,21 +66,73 @@ public sealed class CommandValueConverterRegistry
             float.IsFinite(result)
                 ? result
                 : throw new FormatException("must be a finite number"));
-        Register<DirectionEase>(value => value.Trim().ToLowerInvariant() switch
+        Register<EasingId>(value =>
         {
-            "linear" => DirectionEase.Linear,
-            "sine-in" or "sinein" => DirectionEase.SineIn,
-            "sine-out" or "sineout" => DirectionEase.SineOut,
-            "sine-in-out" or "sineinout" => DirectionEase.SineInOut,
-            "cubic-in" or "cubicin" => DirectionEase.CubicIn,
-            "cubic-out" or "cubicout" => DirectionEase.CubicOut,
-            "cubic-in-out" or "cubicinout" => DirectionEase.CubicInOut,
-            "back-out" or "backout" => DirectionEase.BackOut,
-            "back-in" or "backin" => DirectionEase.BackIn,
-            "back-in-out" or "backinout" => DirectionEase.BackInOut,
-            _ => throw new FormatException($"must be a valid DirectionEase (got '{value}')"),
+            try
+            {
+                var def = easingRegistry.Resolve(value);
+                return def.Id;
+            }
+            catch (Exception ex) when (ex is KeyNotFoundException or ArgumentException)
+            {
+                throw new FormatException($"must be a valid registered easing (got '{value}'): {ex.Message}");
+            }
+        });
+        Register<DirectionEase>(value =>
+        {
+            try
+            {
+                var def = easingRegistry.Resolve(value);
+                return DirectionTransitionSpec.ToDirectionEase(def.Id);
+            }
+            catch (Exception ex) when (ex is KeyNotFoundException or ArgumentException)
+            {
+                throw new FormatException($"must be a valid DirectionEase (got '{value}'): {ex.Message}");
+            }
         });
         Register<DirectionTransitionId>(value => new DirectionTransitionId(value));
+    }
+
+    private static EasingRegistry CreateDefaultEasingRegistry()
+    {
+        var registry = new EasingRegistry();
+        BuiltInEasings.RegisterDefaults(registry);
+        return registry;
+    }
+
+    public void BindEasingRegistry(IEasingRegistry registry)
+    {
+        ArgumentNullException.ThrowIfNull(registry);
+        if (isSealed)
+        {
+            throw new InvalidOperationException("Converters cannot be modified after catalog is sealed.");
+        }
+
+        converters[typeof(EasingId)] = value =>
+        {
+            try
+            {
+                var def = registry.Resolve(value);
+                return def.Id;
+            }
+            catch (Exception ex) when (ex is KeyNotFoundException or ArgumentException)
+            {
+                throw new FormatException($"must be a valid registered easing (got '{value}'): {ex.Message}");
+            }
+        };
+
+        converters[typeof(DirectionEase)] = value =>
+        {
+            try
+            {
+                var def = registry.Resolve(value);
+                return DirectionTransitionSpec.ToDirectionEase(def.Id);
+            }
+            catch (Exception ex) when (ex is KeyNotFoundException or ArgumentException)
+            {
+                throw new FormatException($"must be a valid DirectionEase (got '{value}'): {ex.Message}");
+            }
+        };
     }
 
     public void Seal() => isSealed = true;

@@ -9,7 +9,11 @@ namespace Majo.Runtime.Direction.Execution;
 
 public interface IDirectionPlanner
 {
-    DirectionPlan Plan(
+    DirectionPlan PlanDomain(
+        DirectionState beforeState,
+        IEnumerable<IDirectionDirective> directives);
+
+    DirectionExecutionPlan Plan(
         DirectionState beforeState,
         IEnumerable<IDirectionDirective> directives,
         DirectionCompletionBarrier completion = DirectionCompletionBarrier.Commit);
@@ -17,7 +21,14 @@ public interface IDirectionPlanner
 
 public sealed class DirectionPlanner : IDirectionPlanner
 {
-    public DirectionPlan Plan(
+    public DirectionPlan PlanDomain(
+        DirectionState beforeState,
+        IEnumerable<IDirectionDirective> directives)
+    {
+        return Plan(beforeState, directives, DirectionCompletionBarrier.Commit).DomainPlan;
+    }
+
+    public DirectionExecutionPlan Plan(
         DirectionState beforeState,
         IEnumerable<IDirectionDirective> directives,
         DirectionCompletionBarrier completion = DirectionCompletionBarrier.Commit)
@@ -74,7 +85,7 @@ public sealed class DirectionPlanner : IDirectionPlanner
                     break;
                 case ViewPosePatch patch:
                     ViewState? cutBaseline = null;
-                    var canSequencePose = patch.Transition.Kind == DirectionTransitionKind.Move &&
+                    var canSequencePose = patch.Transition.Kind == DirectionTransitionId.Move &&
                         !sequencedViews.Contains(patch.ViewId) &&
                         viewCutBaselines.TryGetValue(patch.ViewId, out cutBaseline);
                     ApplyViewPose(
@@ -98,7 +109,7 @@ public sealed class DirectionPlanner : IDirectionPlanner
                         }
                         sequencedViews.Add(patch.ViewId);
                     }
-                    if (patch.Transition.Kind == DirectionTransitionKind.Cut &&
+                    if (patch.Transition.Kind == DirectionTransitionId.Cut &&
                         views.TryGetValue(patch.ViewId, out var cutState))
                     {
                         viewCutBaselines[patch.ViewId] = cutState;
@@ -134,12 +145,17 @@ public sealed class DirectionPlanner : IDirectionPlanner
             checked(beforeState.Revision + 1));
         targetState.Validate();
 
-        return new DirectionPlan(
+        var domainPlan = new DirectionPlan(
             DirectionTransactionId.New(),
             beforeState,
             targetState,
             transitions.AsReadOnly(),
             cues.AsReadOnly(),
+            viewSequences.Values.Select(sequence => new DirectionViewPoseIntent(
+                sequence.ViewId, sequence.StartState, sequence.Transition)).ToArray());
+
+        return new DirectionExecutionPlan(
+            domainPlan,
             claims.OrderBy(claim => claim.Kind).ThenBy(claim => claim.SemanticId).ToArray(),
             completion,
             viewSequences.Values.ToArray());
@@ -594,8 +610,8 @@ public sealed class DirectionPlanner : IDirectionPlanner
         IReadOnlyDictionary<ViewId, DirectionViewTransitionSequence> viewSequences)
     {
         if (!component.StartsWith("view/", StringComparison.Ordinal) ||
-            previous.Kind != DirectionTransitionKind.Cut ||
-            current.Kind != DirectionTransitionKind.Move)
+            previous.Kind != DirectionTransitionId.Cut ||
+            current.Kind != DirectionTransitionId.Move)
             return false;
         var viewId = component["view/".Length..];
         return !string.IsNullOrWhiteSpace(viewId) &&

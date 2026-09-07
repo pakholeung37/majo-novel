@@ -17,6 +17,8 @@
 - 插件 reset/shutdown 会继续清理其余插件并聚合异常；初始化失败会包含当前插件在内逆序回滚，避免部分初始化资源泄漏。
 - `DirectionTransitionId` 替代封闭 enum；`TransitionDomains` 区分 View、Stage、Screen、Actor。
 - Transition registry 拒绝意外重复 ID，支持按 domain 检查能力。
+- 插件可通过 `context.RegisterEasing(definition)` 注册自定义 easing；内置与自定义 easing 统一通过只读 `IEasingRegistry` 管理并在初始化时 seal。
+- `DirectionPlan` 拆分为纯领域模型 `DirectionPlan` 与运行时执行模型 `DirectionExecutionPlan`，Core 层完全解耦 Godot、Execution、Commands 与 Transition/Easing Registries。
 - Camera modifier 支持同一 View 的多个实例，delta 平移/旋转求和、缩放相乘；单个实例结束不会清除其他实例。
 - 内置 modifier 使用 `IFrameClock`；Reduce Motion 保持 duration/wait 语义。
 - 瞬态 cue 已改为 `ITransientCueHandlerRegistry`：`TransientDirectionCueExecutor` 只负责 handler 分发、operation 聚合、barrier 等待和取消清理；`CameraFx`、`Flash`、`Curtain` 各自使用独立 handler，插件可注册新的 transient cue 类型。

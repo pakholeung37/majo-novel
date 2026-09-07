@@ -22,13 +22,33 @@ public sealed record VisualTransitionContext(
     Tween Tween,
     Func<bool>? IsActive = null,
     Texture2D? SourceTexture = null,
-    Texture2D? TargetTexture = null);
+    Texture2D? TargetTexture = null,
+    Func<float, float>? MapProgress = null,
+    Action<Exception>? OnFailure = null)
+{
+    public void AnimateProgress(Action<float> apply)
+    {
+        Tween.TweenMethod(Callable.From<float>(progress =>
+        {
+            if (IsActive?.Invoke() == false) return;
+            try { apply(MapProgress?.Invoke(progress) ?? progress); }
+            catch (Exception exception)
+            {
+                Tween.Kill();
+                if (OnFailure is null) throw;
+                OnFailure(exception);
+            }
+        }), 0.0f, 1.0f, Spec.DurationSeconds);
+    }
+}
 
 public interface ITransitionDriver
 {
     DirectionTransitionId Id { get; }
 
     TransitionDomains Domains => TransitionDomains.View | TransitionDomains.Stage | TransitionDomains.Screen;
+
+    bool SupportsCustomEasing => false;
 
     void Setup(VisualTransitionContext context);
 }

@@ -1,9 +1,11 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Majo.Runtime.Direction.Core;
+using Majo.Runtime.Direction.Execution;
 
 namespace Majo.Runtime.Direction.Rendering;
 
@@ -45,7 +47,8 @@ public interface IDirectionViewBackend
         ViewId viewId,
         ViewState? before,
         ViewState? target,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        IReadOnlyList<DirectionViewTransitionSequence>? viewSequences = null);
 }
 
 public interface IDirectionScreenBackend
