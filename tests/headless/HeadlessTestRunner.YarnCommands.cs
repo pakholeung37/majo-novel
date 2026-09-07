@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Actors;
+using Majo.Runtime.Actors.Godot;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Commands;
@@ -32,6 +33,23 @@ public partial class HeadlessTestRunner
         configuration.Actors!.LeftPosition = new Vector2(100, 200);
         configuration.Actors.CenterPosition = new Vector2(200, 200);
         configuration.Actors.RightPosition = new Vector2(300, 200);
+        configuration.Actors.Marks["witness"] = new Vector2(37, 0);
+        var directionMarks = configuration.Actors.CreateDirectionMarks();
+        Assert(new CharacterPositionMap(configuration.Actors)
+                .GetScenePosition(new Vector2(directionMarks["left"].X, directionMarks["left"].Y))
+                .IsEqualApprox(configuration.Actors.LeftPosition),
+            "Legacy pixel presets should retain their rendered position after mark conversion.");
+        Assert(directionMarks["witness"] == new DirectionPoint(37, 0),
+            "Project marks should use scene percentages directly.");
+        configuration.Actors.Marks["left"] = new Vector2(12, 0);
+        Assert(configuration.Actors.CreateDirectionMarks()["left"] == new DirectionPoint(12, 0),
+            "Project marks should override legacy presets by name.");
+        configuration.Actors.Marks.Remove("left");
+        var referenceResolution = configuration.Actors.ReferenceResolution;
+        configuration.Actors.ReferenceResolution = Vector2I.Zero;
+        Assert(configuration.Actors.CreateDirectionMarks().Count == 1,
+            "Without a reference resolution only explicit percentage marks should be registered.");
+        configuration.Actors.ReferenceResolution = referenceResolution;
         configuration.Actors.Actors.Add(CreateActorDefinition(
             "hero",
             ActorFactoryIds.Character,

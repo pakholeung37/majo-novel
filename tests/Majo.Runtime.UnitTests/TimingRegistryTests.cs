@@ -297,8 +297,6 @@ public sealed class TimingRegistryTests
             .Add<IDirectionScopeResolver>(scopes)
             .Add<IDialogueNodeAccessor>(nodeAccessor)
             .Add<IDirectionCommandPolicy>(policy)
-            .Add<IDirectionResourceKeyResolver>(new CatalogResourceResolver())
-            .Add<IDirectionPositionResolver>(new CatalogPositionResolver())
             .Build();
 
         var registry = new RuntimeCommandRegistry();

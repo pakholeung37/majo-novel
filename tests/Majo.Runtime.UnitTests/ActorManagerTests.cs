@@ -227,6 +227,28 @@ public sealed class ActorManagerTests
         await manager.ShutdownAsync(CancellationToken.None);
     }
 
+    [Theory(Timeout = 5_000)]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PendingCreationEnforcesFactoryConstraintAcrossBothEntryPoints(bool spawnFirst)
+    {
+        var factory = new DeferredActorFactory();
+        using var manager = new ActorManager([CreateDefinition("hero")], [factory]);
+        await manager.InitializeAsync(default);
+        var request = new ActorSpawnRequest("hero", "test", "default", requiredFactoryId: "test");
+        var first = spawnFirst ? manager.GetOrCreateAsync(request) : manager.CreateAsync("hero");
+
+        await Assert.ThrowsAsync<ActorFactoryConflictException>(() => manager.GetOrCreateAsync(
+            new ActorSpawnRequest("hero", "other", "default", requiredFactoryId: "other")));
+        var matching = manager.GetOrCreateAsync(request);
+        var unconstrained = manager.CreateAsync("hero");
+        Assert.Equal(1, factory.CreateCount);
+        factory.Complete(new FakeActor("hero", "default", "test"));
+        Assert.Same(await first, await matching);
+        Assert.Same(await first, await unconstrained);
+        await manager.ShutdownAsync(default);
+    }
+
     [Fact(Timeout = 5_000)]
     public async Task MissingBuiltInDefinitionUsesSpawnRequestAndResourceConventions()
     {

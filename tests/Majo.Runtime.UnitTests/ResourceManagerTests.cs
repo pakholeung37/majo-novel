@@ -8,6 +8,61 @@ namespace Majo.Runtime.UnitTests;
 
 public sealed class ResourceManagerTests
 {
+    [Fact(Timeout = 5_000)]
+    public async Task CancellingOneTreeAcquisitionDoesNotCancelSharedProviderWork()
+    {
+        using var lifetime = new TestRuntimeLifetime();
+        var asset = new TestAsset("atlas");
+        var provider = new MemoryProvider("memory").Add("memory://atlas", asset).PauseAsyncLoads();
+        var manager = new ResourceManager([provider], lifetime);
+        await manager.InitializeAsync(CancellationToken.None);
+        using var cancelledTree = new ResourceRetentionScope(manager);
+        using var survivingTree = new ResourceRetentionScope(manager);
+        using var cancellation = new CancellationTokenSource();
+        var key = new ResourceKey("atlas");
+        var first = cancelledTree.AcquireAsync<TestAsset>(key, cancellationToken: cancellation.Token);
+        var second = survivingTree.AcquireAsync<TestAsset>(key);
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => first);
+        cancelledTree.Dispose();
+        provider.ReleaseAsyncLoads();
+        Assert.Same(asset, await second);
+        Assert.Equal(1, provider.AsyncLoadCount);
+        Assert.Equal(1, manager.CaptureCacheSnapshot().Entries.Single().PinnedLeaseCount);
+        survivingTree.Dispose();
+        Assert.Equal(0, manager.CaptureCacheSnapshot().ActiveLeaseCount);
+        await manager.ShutdownAsync(CancellationToken.None);
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task RenderTreesShareResourceAndKeepItPinnedUntilLastOwnerExits()
+    {
+        using var lifetime = new TestRuntimeLifetime();
+        var asset = new TestAsset("atlas");
+        var provider = new MemoryProvider("memory").Add("memory://atlas", asset);
+        var manager = new ResourceManager([provider], lifetime, memoryBudgetBytes: 1, defaultResourceEstimateBytes: 100);
+        await manager.InitializeAsync(CancellationToken.None);
+        using var current = new ResourceRetentionScope(manager);
+        using var candidate = new ResourceRetentionScope(manager);
+        var key = new ResourceKey("atlas");
+        Assert.Same(asset, await current.AcquireAsync<TestAsset>(key));
+        Assert.Same(asset, await current.AcquireAsync<TestAsset>(key));
+        Assert.Same(asset, await candidate.AcquireAsync<TestAsset>(key));
+        Assert.Equal(1, provider.AsyncLoadCount);
+        Assert.Equal(2, manager.CaptureCacheSnapshot().Entries.Single().PinnedLeaseCount);
+        Assert.Equal(100, manager.CaptureCacheSnapshot().EstimatedBytes);
+        Assert.True(manager.IsPinned<TestAsset>(key));
+        Assert.Equal(0, manager.TrimCache());
+        candidate.Dispose(); // rollback candidate
+        Assert.True(manager.IsPinned<TestAsset>(key));
+        Assert.Same(asset, await manager.LoadAsync<TestAsset>(key));
+        current.Dispose();
+        Assert.False(manager.IsPinned<TestAsset>(key));
+        Assert.Equal(0, manager.CaptureCacheSnapshot().ActiveLeaseCount);
+        Assert.Equal(0, manager.LoadedResourceCount);
+        await manager.ShutdownAsync(CancellationToken.None);
+    }
+
     [Fact]
     public void ResourceKeyNormalizesSeparatorsAndRejectsPhysicalPaths()
     {

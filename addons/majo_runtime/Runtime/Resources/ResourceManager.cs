@@ -47,6 +47,15 @@ public sealed class ResourceManager : IResourceManager
         ValidateProviders(this.providers);
     }
 
+    public bool IsPinned<TResource>(ResourceKey key, string? overridePath = null) where TResource : class
+    {
+        EnsureInitialized();
+        var resolved = Resolve(key, typeof(TResource), overridePath);
+        if (resolved.Location is null) return false;
+        var cacheKey = RequireCacheKey(key, typeof(TResource), resolved);
+        lock (gate) return loaded.TryGetValue(cacheKey, out var entry) && entry.PinnedLeaseCount > 0;
+    }
+
     public int LoadedResourceCount { get { lock (gate) { return loaded.Count; } } }
 
     public async Task InitializeAsync(CancellationToken cancellationToken)

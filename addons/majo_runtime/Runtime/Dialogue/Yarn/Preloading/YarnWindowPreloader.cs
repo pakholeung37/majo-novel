@@ -32,15 +32,19 @@ public sealed class YarnWindowPreloader : IDisposable
     private YarnProject? project;
     private readonly List<YarnPreloadReference> beatResources = new();
     private bool inBeat;
+    private string? preparedRestoreNode;
 
-    public async Task PrepareStartAsync(YarnProject value, string node, CancellationToken token)
+    public async Task PrepareStartAsync(YarnProject value, string node, CancellationToken token, string? restoreLine = null)
     {
         inBeat = false;
         beatResources.Clear();
         if (!ReferenceEquals(project, value)) textureEstimates.Clear();
         project = value;
         planner.Enter(value.Program.Nodes.TryGetValue(node, out var found) ? found : null);
-        await MoveAsync(Array.Empty<YarnPreloadReference>(), token, waitForAhead: true);
+        preparedRestoreNode = restoreLine is null ? null : node;
+        if (restoreLine is not null) planner.Line(restoreLine);
+        await MoveAsync(restoreLine is null ? Array.Empty<YarnPreloadReference>() :
+            new[] { new YarnPreloadReference("line", restoreLine) }, token, waitForAhead: true);
     }
 
     public YarnWindowPreloader(IResourceManager resources, ResourceConfiguration configuration,
@@ -61,6 +65,12 @@ public sealed class YarnWindowPreloader : IDisposable
 
     public void EnterNode(YarnProject value, string node)
     {
+        if (ReferenceEquals(project, value) && preparedRestoreNode == node)
+        {
+            preparedRestoreNode = null;
+            return; // The saved line window was prepared before starting the VM.
+        }
+        preparedRestoreNode = null;
         inBeat = false;
         beatResources.Clear();
         if (!ReferenceEquals(project, value)) textureEstimates.Clear();
@@ -160,7 +170,7 @@ public sealed class YarnWindowPreloader : IDisposable
                 var entries = kind == "character"
                     ? actors.GetPreloadResources(new ActorSpawnRequest(id[..id.IndexOf('/')],
                         ActorFactoryIds.Character, id[(id.IndexOf('/') + 1)..]))
-                    : new[] { ResourcePreloadEntry.Create<Texture2D>(ResourceKey.Combine(root, id)) };
+                    : new[] { ResourcePreloadEntry.Create<Texture2D>(new BackdropId(id).ToResourceKey(root)) };
                 foreach (var entry in entries)
                 {
                     var resolved = entry;
@@ -191,7 +201,10 @@ public sealed class YarnWindowPreloader : IDisposable
                         estimatedBytes: (long)configuration.PreloadAudioEstimateKiB * 1024));
             }
         }
-        return result.Distinct().ToArray();
+        // Render owners keep these resources alive independently of this window.
+        // Do not charge shared, already-active textures to speculative capacity.
+        return result.Distinct().Where(entry => entry.ResourceType != typeof(Texture2D) ||
+            !resources.IsPinned<Texture2D>(entry.Key, entry.OverridePath)).ToArray();
     }
 
     private long EstimateTexture(ResourcePreloadEntry entry)
@@ -217,6 +230,7 @@ public sealed class YarnWindowPreloader : IDisposable
 
     public void Clear()
     {
+        preparedRestoreNode = null;
         inBeat = false;
         beatResources.Clear();
         planner.Enter(null);

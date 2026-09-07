@@ -11,6 +11,9 @@ using Majo.Runtime.Configuration;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Yarn.Preloading;
 using Majo.Runtime.Localization;
+using Majo.Runtime.Direction.Core;
+using Majo.Runtime.Direction.Execution;
+using Majo.Runtime.Direction.Godot;
 using Majo.Runtime.Resources;
 using YarnSpinnerGodot;
 
@@ -23,6 +26,7 @@ public partial class HeadlessTestRunner
         var configuration = MajoProjectConfiguration.CreateDefault();
         configuration.Resources!.RootPath = "res://demos/manosaba/assets";
         configuration.Presentation!.Enabled = false;
+        configuration.Actors!.ReferenceResolution = new Vector2I(2560, 1440);
         var bootstrap = new MajoRuntimeBootstrap { Name = "WindowPreloadRuntime", Configuration = configuration };
         AddChild(bootstrap);
         await bootstrap.InitializationCompletion;
@@ -47,6 +51,12 @@ public partial class HeadlessTestRunner
         using var project = new YarnProject { CompiledYarnProgramBase64 = Convert.ToBase64String(program.ToByteArray()) };
         using var preloader = new YarnWindowPreloader(resources, configuration.Resources, configuration.Audio!,
             services.Get<ILocaleManager>(), services.Get<ILocalizedResourceResolver>(), actors);
+        await preloader.PrepareStartAsync(project, "Start", CancellationToken.None, "line:0101Adv02_Ema014");
+        preloader.EnterNode(project, "Start");
+        var restoredWindow = resources.CaptureCacheSnapshot();
+        Assert(restoredWindow.Entries.Any(entry => entry.ResolvedPath.Contains("0101Adv02_Ema014", StringComparison.Ordinal)) &&
+            !restoredWindow.Entries.Any(entry => entry.ResolvedPath.Contains("Warden/1", StringComparison.Ordinal)),
+            "Restore window loaded the node opening instead of the saved voice line.");
         await preloader.PrepareStartAsync(project, "Start", CancellationToken.None);
         var snapshot = resources.CaptureCacheSnapshot();
         Assert(snapshot.Entries.Any(entry => entry.ResolvedPath.Contains("Background_025_001", StringComparison.Ordinal)) &&
@@ -68,7 +78,36 @@ public partial class HeadlessTestRunner
         var layered = actors.GetPreloadResources(new ActorSpawnRequest("Ema", ActorFactoryIds.Character, "Surprised1"));
         Assert(layered.Count > 0 && layered.All(entry => entry.OverridePath?.Contains("Ema_Angle01", StringComparison.Ordinal) == true)
             && actors.Actors.Count == 0, "Layered preload discovery did not return atlases without spawning actors.");
+        var coordinator = services.Get<IDirectionTransactionCoordinator>();
+        await preloader.BeforeCommandAsync("character", ["Ema", "appearance:Surprised1"], CancellationToken.None);
+        await coordinator.ExecuteAsync(
+            [ActorPatchFor("Ema", new DirectionPoint(50, 0), "Surprised1", 1, 0)], DirectionCompletionBarrier.Settle);
+        var atlas = layered[0];
+        Assert(resources.IsPinned<Texture2D>(atlas.Key, atlas.OverridePath), "Active Direction tree did not retain its atlas.");
+        var treeMisses = resources.CaptureCacheSnapshot().CacheMisses;
+        for (var index = 0; index < 3; index++)
+        {
+            await preloader.BeforeCommandAsync("character", ["Ema", "appearance:Surprised1"], CancellationToken.None);
+            resources.TrimCache();
+            await coordinator.ExecuteAsync(
+                [ActorPatchFor("Ema", new DirectionPoint(50 + index, 0), "Surprised1", 1, 0)], DirectionCompletionBarrier.Settle);
+            Assert(resources.CaptureCacheSnapshot().CacheMisses == treeMisses,
+                "Replacement Direction tree reloaded an atlas retained by the previous tree.");
+        }
         preloader.Clear();
+        Assert(resources.IsPinned<Texture2D>(atlas.Key, atlas.OverridePath), "Preload window release invalidated an active tree.");
+        var savedDirection = coordinator.State;
+        for (var index = 0; index < 3; index++)
+        {
+            await coordinator.ResetAsync(CancellationToken.None);
+            await WaitForConditionAsync(() => resources.CaptureCacheSnapshot().ActiveLeaseCount == 0, 2);
+            Assert(!resources.IsPinned<Texture2D>(atlas.Key, atlas.OverridePath),
+                "Restore reset left an old actor tree pinned.");
+            await coordinator.RestoreAsync(savedDirection, CancellationToken.None);
+            Assert(resources.IsPinned<Texture2D>(atlas.Key, atlas.OverridePath),
+                "Restored actor tree did not retain its atlas.");
+        }
+        await coordinator.ResetAsync(CancellationToken.None);
         await WaitForConditionAsync(() => resources.CaptureCacheSnapshot().ActiveLeaseCount == 0, 2);
         await bootstrap.RequestShutdownAsync();
     }

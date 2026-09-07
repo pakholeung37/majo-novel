@@ -4,6 +4,8 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Majo.Runtime.Direction.Core;
+using Majo.Runtime.Resources;
+using Majo.Runtime.Configuration;
 using Majo.Runtime.Direction.Execution;
 
 namespace Majo.Runtime.Dialogue.Commands;
@@ -160,20 +162,20 @@ public sealed partial class StageReleaseCommand : RuntimeCommand<StageReleaseCom
 public sealed partial class BackdropCommand : RuntimeCommand<BackdropCommand.Arguments>
 {
     private readonly IDirectionBeatRuntime beats;
-    private readonly IDirectionResourceKeyResolver resources;
+    private readonly string backgroundsPath;
     private readonly IDirectionScopeResolver scopes;
     private readonly IDialogueNodeAccessor nodeAccessor;
     private readonly IDirectionCommandPolicy policy;
 
     public BackdropCommand(
         IDirectionBeatRuntime beats,
-        IDirectionResourceKeyResolver resources,
         IDirectionScopeResolver scopes,
         IDialogueNodeAccessor nodeAccessor,
-        IDirectionCommandPolicy policy)
+        IDirectionCommandPolicy policy,
+        string backgroundsPath = ResourceConfiguration.DefaultBackgroundsPath)
     {
         this.beats = beats ?? throw new ArgumentNullException(nameof(beats));
-        this.resources = resources ?? throw new ArgumentNullException(nameof(resources));
+        this.backgroundsPath = backgroundsPath ?? throw new ArgumentNullException(nameof(backgroundsPath));
         this.scopes = scopes ?? throw new ArgumentNullException(nameof(scopes));
         this.nodeAccessor = nodeAccessor ?? throw new ArgumentNullException(nameof(nodeAccessor));
         this.policy = policy ?? throw new ArgumentNullException(nameof(policy));
@@ -183,7 +185,7 @@ public sealed partial class BackdropCommand : RuntimeCommand<BackdropCommand.Arg
     {
         var node = nodeAccessor.RequireNode();
         var stageId = scopes.ResolveStage(node, arguments.Stage.GetValueOrDefault("main"));
-        var backdropState = new BackdropState(resources.ResolveBackdrop(arguments.Resource));
+        var backdropState = new BackdropState(arguments.Resource.ToResourceKey(backgroundsPath));
         var transition = policy.ResolveTransition("backdrop", arguments.Transition, context);
         var wait = arguments.Transition.Wait.GetValueOrDefault(false);
 
@@ -194,7 +196,7 @@ public sealed partial class BackdropCommand : RuntimeCommand<BackdropCommand.Arg
     }
 
     public sealed record Arguments(
-        [Primary] string Resource,
+        [Primary] BackdropId Resource,
         [Option(DefaultText = "main")] CommandValue<string> Stage,
         [Group] TransitionArguments Transition);
 }

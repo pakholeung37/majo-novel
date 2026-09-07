@@ -1,5 +1,6 @@
 using System.Threading.Channels;
 using Majo.Runtime.Preloading;
+using Majo.Runtime.Core;
 using Majo.Runtime.Resources;
 using Xunit;
 
@@ -7,6 +8,33 @@ namespace Majo.Runtime.UnitTests;
 
 public sealed class ResourceLookAheadWindowTests
 {
+    [Fact(Timeout = 5000)]
+    public async Task RepeatedOversizedSetWarnsOnceButNewBudgetAndResourcesRemainVisible()
+    {
+        var resources = new FakeResources { AutoComplete = true };
+        var logger = new CaptureLogger();
+        using var window = new ResourceLookAheadWindow(resources, logger);
+        for (var i = 0; i < 25; i++)
+            await window.MoveAsync(new[] { Entry("ema-atlas", 341) }, Array.Empty<ResourcePreloadEntry>(), 96, 12);
+        Assert.Single(logger.Warnings);
+        Assert.Contains("ema-atlas", logger.Warnings[0].Message);
+        Assert.Contains("not measured", logger.Warnings[0].Message);
+        Assert.Single(resources.Loaded);
+        await window.MoveAsync(new[] { Entry("ema-atlas", 341) }, Array.Empty<ResourcePreloadEntry>(), 128, 12);
+        await window.MoveAsync(new[] { Entry("other-atlas", 341) }, Array.Empty<ResourcePreloadEntry>(), 128, 12);
+        Assert.Equal(3, logger.Warnings.Count);
+    }
+
+    private sealed class CaptureLogger : IRuntimeLogger
+    {
+        public List<RuntimeLogEvent> Warnings { get; } = new();
+        public bool IsEnabled(string category, RuntimeLogLevel level) => true;
+        public void Log(RuntimeLogEvent logEvent)
+        {
+            if (logEvent.Level == RuntimeLogLevel.Warning) Warnings.Add(logEvent);
+        }
+    }
+
     [Fact(Timeout = 5000)]
     public async Task BudgetAndCountLimitSpeculationButRequiredResourceIsAlwaysPrepared()
     {

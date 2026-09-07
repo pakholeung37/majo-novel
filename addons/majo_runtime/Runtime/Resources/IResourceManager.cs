@@ -47,6 +47,9 @@ public interface IResourceManager : IRuntimeService
         CancellationToken cancellationToken = default) => throw new System.NotSupportedException(
             "This resource manager does not support preload groups.");
 
+    /// <summary>Whether a resolved resource already has a persistent owner (for example a render tree).</summary>
+    bool IsPinned<TResource>(ResourceKey key, string? overridePath = null) where TResource : class => false;
+
     int TrimCache() => 0;
 
     bool Exists<TResource>(

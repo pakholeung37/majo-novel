@@ -242,6 +242,63 @@ public sealed class DialoguePlayerTests
         await player.StopAsync();
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FailedStartCanBeCleanedUpWithoutLosingOriginalFailure(bool shutdown)
+    {
+        var failure = new InvalidOperationException("project load failed");
+        var backend = new FakeDialogueBackend { StartFailure = failure };
+        var player = new DialoguePlayer(backend, "main", "Start");
+        await player.InitializeAsync(default);
+        var failures = new List<Exception>();
+        player.Failed += failures.Add;
+
+        Assert.Same(failure, await Assert.ThrowsAsync<InvalidOperationException>(() => player.StartAsync()));
+        var failedCompletion = player.Completion;
+        if (shutdown)
+        {
+            await player.ShutdownAsync(default);
+            Assert.Equal(0, backend.PlayerSubscriberCount);
+            await player.InitializeAsync(default);
+        }
+        else
+        {
+            await player.ResetAsync(default);
+            Assert.Null(player.CurrentProjectId);
+            Assert.Null(player.CurrentNode);
+            Assert.Null(player.CurrentLineId);
+        }
+
+        Assert.Equal(DialogueSessionState.Idle, player.State);
+        Assert.Equal(1, backend.StopCount);
+        Assert.Same(failure, Assert.Single(failures));
+        Assert.Same(failure, await Assert.ThrowsAsync<InvalidOperationException>(() => failedCompletion));
+        backend.StartFailure = null;
+        await player.StartAsync();
+        Assert.Equal(DialogueSessionState.Running, player.State);
+        await player.ShutdownAsync(default);
+    }
+
+    [Fact]
+    public async Task StopStillReportsBackendCleanupFailureAfterFailedStart()
+    {
+        var backend = new FakeDialogueBackend
+        {
+            StartFailure = new InvalidOperationException("start failed"),
+            StopFailure = new InvalidOperationException("stop failed"),
+        };
+        var player = new DialoguePlayer(backend, "main", "Start");
+        await player.InitializeAsync(default);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => player.StartAsync());
+
+        Assert.Same(backend.StopFailure,
+            await Assert.ThrowsAsync<InvalidOperationException>(() => player.ResetAsync(default)));
+        Assert.Equal(DialogueSessionState.Faulted, player.State);
+        backend.StopFailure = null;
+        await player.ShutdownAsync(default);
+    }
+
     [Fact]
     public async Task DialogueVariablesHideYarnPrefixAndPreserveTypes()
     {
@@ -360,6 +417,14 @@ public sealed class DialoguePlayerTests
 
         public bool DelayStart { get; init; }
 
+        public Exception? StartFailure { get; set; }
+        public Exception? StopFailure { get; set; }
+        public int PlayerSubscriberCount =>
+            (NodeEntered?.GetInvocationList().Length ?? 0) +
+            (LinePresented?.GetInvocationList().Length ?? 0) +
+            (OptionsPresented?.GetInvocationList().Length ?? 0) +
+            (Failed?.GetInvocationList().Length ?? 0);
+
         public string? ProjectId { get; private set; }
 
         public string? StartNode { get; private set; }
@@ -383,6 +448,7 @@ public sealed class DialoguePlayerTests
             StartNode = startNode;
             completion = NewCompletion();
             StartEntered.TrySetResult();
+            if (StartFailure is not null) throw StartFailure;
             if (DelayStart)
             {
                 await AllowStart.Task.WaitAsync(cancellationToken);
@@ -393,6 +459,7 @@ public sealed class DialoguePlayerTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             StopCount++;
+            if (StopFailure is not null) throw StopFailure;
             return Task.CompletedTask;
         }
 

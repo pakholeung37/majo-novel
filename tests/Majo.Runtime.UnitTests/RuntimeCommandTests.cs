@@ -26,7 +26,7 @@ public sealed class RuntimeCommandTests
     public async Task AppearanceWithPositionUsesDissolveByDefault()
     {
         var beats = new FakeDirectionBeatRuntime();
-        var command = new CharacterCommand(beats, new CatalogPositionResolver(),
+        var command = new CharacterCommand(beats,
             new DirectionScopeResolver(), new DelegateDialogueNodeAccessor(() => "Start"),
             new DirectionCommandPolicy(beats));
         var bound = TestCatalogBuilder.CreateBound(command);
@@ -44,7 +44,6 @@ public sealed class RuntimeCommandTests
         var nodeAccessor = new DelegateDialogueNodeAccessor(() => "node");
         var command = new CharacterCommand(
             beats,
-            new CatalogPositionResolver(),
             new DirectionScopeResolver(),
             nodeAccessor,
             new DirectionCommandPolicy(beats, DirectionAnimationDefaults.FromConfiguration(null)));
@@ -63,7 +62,7 @@ public sealed class RuntimeCommandTests
 
         Assert.Equal("maya", character.Actor);
         Assert.Equal("happy", character.Appearance.Value);
-        Assert.Equal("right", character.At.Value);
+        Assert.Equal(new PositionRef.Named("right"), character.At.Value);
         Assert.Equal(0.5, character.Transition.Duration.Value);
         Assert.True(character.Transition.Wait.Value);
         Assert.Equal(0.75f, character.Scale.Value);
@@ -78,7 +77,6 @@ public sealed class RuntimeCommandTests
         var policy = new DirectionCommandPolicy(beats, DirectionAnimationDefaults.FromConfiguration(null));
         var backdropCommand = new BackdropCommand(
             beats,
-            new CatalogResourceResolver(),
             new DirectionScopeResolver(),
             nodeAccessor,
             policy);
@@ -89,7 +87,6 @@ public sealed class RuntimeCommandTests
 
         var characterCommand = new CharacterCommand(
             beats,
-            new CatalogPositionResolver(),
             new DirectionScopeResolver(),
             nodeAccessor,
             policy);
@@ -102,9 +99,9 @@ public sealed class RuntimeCommandTests
                 ["at"] = "center",
             }));
 
-        Assert.Equal("courtroom", backdrop.Resource);
+        Assert.Equal("courtroom", backdrop.Resource.Value);
         Assert.False(backdrop.Transition.Wait.Value);
-        Assert.Equal("center", character.At.Value);
+        Assert.Equal(new PositionRef.Named("center"), character.At.Value);
         Assert.False(character.Transition.Wait.Value);
 
         var constantCommand = new ConstantDefaultCommand();
@@ -142,7 +139,6 @@ public sealed class RuntimeCommandTests
                     {
                         var cmd = new CharacterCommand(
                             beats,
-                            new CatalogPositionResolver(),
                             new DirectionScopeResolver(),
                             nodeAccessor,
                             policy);
@@ -155,7 +151,6 @@ public sealed class RuntimeCommandTests
                     {
                         var cmd = new BackdropCommand(
                             beats,
-                            new CatalogResourceResolver(),
                             new DirectionScopeResolver(),
                             nodeAccessor,
                             policy);
@@ -343,8 +338,6 @@ public sealed class RuntimeCommandTests
             .Add<IDirectionBeatRuntime>(beats)
             .Add<IDialogueNodeAccessor>(nodeAccessor)
             .Add<IDirectionScopeResolver>(new DirectionScopeResolver())
-            .Add<IDirectionPositionResolver>(new CatalogPositionResolver())
-            .Add<IDirectionResourceKeyResolver>(new CatalogResourceResolver())
             .Add<IDirectionCommandPolicy>(policy)
             .Build();
 
@@ -360,7 +353,6 @@ public sealed class RuntimeCommandTests
                     "character",
                     s => new CharacterCommand(
                         s.Get<IDirectionBeatRuntime>(),
-                        s.Get<IDirectionPositionResolver>(),
                         s.Get<IDirectionScopeResolver>(),
                         s.Get<IDialogueNodeAccessor>(),
                         s.Get<IDirectionCommandPolicy>()),
@@ -400,8 +392,6 @@ public sealed class RuntimeCommandTests
             .Add<IDirectionBeatRuntime>(beats)
             .Add<IDialogueNodeAccessor>(nodeAccessor)
             .Add<IDirectionScopeResolver>(new DirectionScopeResolver())
-            .Add<IDirectionPositionResolver>(new CatalogPositionResolver())
-            .Add<IDirectionResourceKeyResolver>(new CatalogResourceResolver())
             .Add<IDirectionCommandPolicy>(policy)
             .Build();
 
@@ -417,7 +407,6 @@ public sealed class RuntimeCommandTests
                     "character",
                     s => new CharacterCommand(
                         s.Get<IDirectionBeatRuntime>(),
-                        s.Get<IDirectionPositionResolver>(),
                         s.Get<IDirectionScopeResolver>(),
                         s.Get<IDialogueNodeAccessor>(),
                         s.Get<IDirectionCommandPolicy>()),

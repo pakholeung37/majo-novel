@@ -18,7 +18,7 @@ public enum DirectionTransactionStatus
     Faulted,
 }
 
-public sealed class CommittedDirectionTransaction : IDisposable, IAsyncDisposable
+public sealed class CommittedDirectionTransaction : IAsyncDisposable
 {
     private readonly object owner;
     private readonly IPreparedDirectionTransaction prepared;
@@ -273,11 +273,6 @@ public sealed class CommittedDirectionTransaction : IDisposable, IAsyncDisposabl
         if (disposeException is not null)
             throw disposeException;
     }
-
-    public void Dispose()
-    {
-        lifecycleGate.Dispose();
-    }
 }
 
 public interface IDirectionTransactionCoordinator : IRuntimeService
@@ -315,6 +310,7 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
     private readonly IDirectionPreparationBackend backend;
     private readonly IRuntimeActivityRegistry? activities;
     private readonly ITransientDirectionCueExecutor? cues;
+    private readonly Func<CancellationToken, Task>? resetRendering;
     private readonly SemaphoreSlim commitGate = new(1, 1);
     private readonly object stateGate = new();
     private readonly List<CommittedDirectionTransaction> transactions = new();
@@ -325,12 +321,14 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
         IDirectionPreparationBackend backend,
         DirectionState? initialState = null,
         IRuntimeActivityRegistry? activities = null,
-        ITransientDirectionCueExecutor? cues = null)
+        ITransientDirectionCueExecutor? cues = null,
+        Func<CancellationToken, Task>? resetRendering = null)
     {
         this.planner = planner ?? throw new ArgumentNullException(nameof(planner));
         this.backend = backend ?? throw new ArgumentNullException(nameof(backend));
         this.activities = activities;
         this.cues = cues;
+        this.resetRendering = resetRendering;
         state = initialState ?? DirectionState.CreateDefault();
         state.Validate();
     }
@@ -375,6 +373,16 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
             {
                 await transaction.CleanupAsync(cancellationToken);
             }
+            catch (Exception exception)
+            {
+                (failures ??= new List<Exception>()).Add(exception);
+            }
+        }
+
+        // Committed targets outlive their transactions; release them before restoring state.
+        if (resetRendering is not null)
+        {
+            try { await resetRendering(cancellationToken); }
             catch (Exception exception)
             {
                 (failures ??= new List<Exception>()).Add(exception);

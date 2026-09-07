@@ -2,11 +2,20 @@
 
 using System;
 using Majo.Runtime.Direction.Execution;
+using Majo.Runtime.Configuration;
+using Majo.Runtime.Resources;
 
 namespace Majo.Runtime.Dialogue.Commands;
 
 public sealed class DirectionCommandModule : IRuntimeCommandModule
 {
+    private readonly string backgroundsPath;
+
+    public DirectionCommandModule(string backgroundsPath = ResourceConfiguration.DefaultBackgroundsPath)
+    {
+        this.backgroundsPath = backgroundsPath ?? throw new ArgumentNullException(nameof(backgroundsPath));
+    }
+
     public void Register(CommandRegistrationContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -21,6 +30,8 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
 
         const string providerId = "majo.direction";
 
+        converters.AddDefault<PositionRef>(_ => PositionRefConverter.Instance, providerId);
+        converters.AddDefault<BackdropId>(text => new BackdropId(text), providerId);
         converters.AddDefault<Godot.Vector2>(_ => Vector2Converter.Instance, providerId);
         converters.AddDefault<Direction.Camera.CameraShakeAxis>(_ => CameraShakeAxisConverter.Instance, providerId);
         converters.AddDefault<Direction.Core.DirectionTransitionId>(_ => DirectionTransitionIdConverter.Instance, providerId);
@@ -38,7 +49,7 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
         return registry;
     }
 
-    private static void RegisterCommands(IRuntimeCommandRegistrar commands)
+    private void RegisterCommands(IRuntimeCommandRegistrar commands)
     {
         const string providerId = "majo.direction";
         const string version = "1.0";
@@ -67,14 +78,12 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
 
         commands.Add("backdrop", services => new BackdropCommand(
             services.Get<IDirectionBeatRuntime>(),
-            services.Get<IDirectionResourceKeyResolver>(),
             services.Get<IDirectionScopeResolver>(),
             services.Get<IDialogueNodeAccessor>(),
-            services.Get<IDirectionCommandPolicy>()), providerId, version);
+            services.Get<IDirectionCommandPolicy>(), backgroundsPath), providerId, version);
 
         commands.Add("character", services => new CharacterCommand(
             services.Get<IDirectionBeatRuntime>(),
-            services.Get<IDirectionPositionResolver>(),
             services.Get<IDirectionScopeResolver>(),
             services.Get<IDialogueNodeAccessor>(),
             services.Get<IDirectionCommandPolicy>()), providerId, version);
@@ -135,7 +144,6 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
             services.Get<IDialogueNodeAccessor>()), providerId, version);
 
         commands.Add("mark", services => new DirectionMarkCommand(
-            services.Get<IDirectionPositionResolver>(),
             services.Get<IDirectionScopeResolver>(),
             services.Get<IDialogueNodeAccessor>()), providerId, version);
 

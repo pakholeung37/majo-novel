@@ -157,16 +157,13 @@ public sealed partial class DirectionImportCommand : RuntimeCommand<DirectionImp
 [Command("mark", Category = "Direction")]
 public sealed partial class DirectionMarkCommand : RuntimeCommand<DirectionMarkCommand.Arguments>
 {
-    private readonly IDirectionPositionResolver positions;
     private readonly IDirectionScopeResolver scopes;
     private readonly IDialogueNodeAccessor nodeAccessor;
 
     public DirectionMarkCommand(
-        IDirectionPositionResolver positions,
         IDirectionScopeResolver scopes,
         IDialogueNodeAccessor nodeAccessor)
     {
-        this.positions = positions ?? throw new ArgumentNullException(nameof(positions));
         this.scopes = scopes ?? throw new ArgumentNullException(nameof(scopes));
         this.nodeAccessor = nodeAccessor ?? throw new ArgumentNullException(nameof(nodeAccessor));
     }
@@ -174,23 +171,12 @@ public sealed partial class DirectionMarkCommand : RuntimeCommand<DirectionMarkC
     protected override ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {
         var node = nodeAccessor.RequireNode();
-        var position = positions.Resolve(arguments.At);
-        try
-        {
-            scopes.DefineMark(node, arguments.Name, position);
-        }
-        catch (DirectionReferenceException)
-        {
-            if (!scopes.ResolveMark(node, arguments.Name).Equals(position))
-            {
-                throw;
-            }
-        }
+        scopes.DefineMark(node, arguments.Name, scopes.ResolvePosition(node, arguments.At));
 
         return ValueTask.CompletedTask;
     }
 
-    public sealed record Arguments([Primary] string Name, [Option] string At);
+    public sealed record Arguments([Primary] string Name, [Option] PositionRef At);
 }
 
 [Command("curtain", Category = "Direction")]

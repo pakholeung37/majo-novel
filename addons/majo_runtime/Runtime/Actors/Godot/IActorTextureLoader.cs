@@ -38,7 +38,7 @@ public interface IActorTextureLoader : IRuntimeService
     }
 }
 
-public sealed class ResourceActorTextureLoader : IActorTextureLoader
+public sealed class ResourceActorTextureLoader : IActorTextureLoader, System.IDisposable
 {
     private readonly IResourceManager? resources;
     private readonly IMissingResourceReporter? missingResources;
@@ -47,6 +47,36 @@ public sealed class ResourceActorTextureLoader : IActorTextureLoader
     private readonly ILocaleManager? locales;
     private readonly string[] localizedRoots;
     private Texture2D? placeholderTexture;
+    private ResourceRetentionScope? retention;
+
+    public ResourceActorTextureLoader CreateRetainedScope()
+    {
+        if (resources is null) throw new System.InvalidOperationException("Resource-backed texture loading is required for retention.");
+        return new ResourceActorTextureLoader(resources, failOnMissingAssets, missingResources,
+            localizedResources, locales, localizedRoots) { retention = new ResourceRetentionScope(resources) };
+    }
+
+    private Texture2D LoadResource(ResourceKey key, string? overridePath = null)
+    {
+        if (retention is null) return resources!.Load<Texture2D>(key, overridePath);
+        // Constructors may still use sync reads; populate the cache before taking
+        // the lease so no asynchronous provider work is synchronously blocked.
+        var texture = resources!.Load<Texture2D>(key, overridePath);
+        retention.AcquireAsync<Texture2D>(key, overridePath).GetAwaiter().GetResult();
+        return texture;
+    }
+
+    private Task<Texture2D> LoadResourceAsync(ResourceKey key, string? overridePath = null,
+        CancellationToken cancellationToken = default) => retention is null
+        ? resources!.LoadAsync<Texture2D>(key, overridePath, cancellationToken)
+        : retention.AcquireAsync<Texture2D>(key, overridePath, cancellationToken);
+
+    public void Dispose()
+    {
+        retention?.Dispose();
+        placeholderTexture?.Dispose();
+        placeholderTexture = null;
+    }
 
     public ResourceActorTextureLoader(
         bool failOnMissingAssets = false,
@@ -95,19 +125,19 @@ public sealed class ResourceActorTextureLoader : IActorTextureLoader
                 overridePath);
             if (resolution.IsResolved)
             {
-                return resources.Load<Texture2D>(
+                return LoadResource(
                     resolution.ResolvedKey!.Value,
                     resolution.ResolvedOverridePath);
             }
 
             if (failOnMissingAssets)
             {
-                return resources.Load<Texture2D>(key, overridePath);
+                return LoadResource(key, overridePath);
             }
         }
         else if (failOnMissingAssets || resources.Exists<Texture2D>(key, overridePath))
         {
-            return resources.Load<Texture2D>(key, overridePath);
+            return LoadResource(key, overridePath);
         }
 
         var requestedPath = overridePath ?? key.Path;
@@ -138,7 +168,7 @@ public sealed class ResourceActorTextureLoader : IActorTextureLoader
                 overridePath);
             if (resolution.IsResolved)
             {
-                return await resources.LoadAsync<Texture2D>(
+                return await LoadResourceAsync(
                     resolution.ResolvedKey!.Value,
                     resolution.ResolvedOverridePath,
                     cancellationToken);
@@ -146,7 +176,7 @@ public sealed class ResourceActorTextureLoader : IActorTextureLoader
 
             if (failOnMissingAssets)
             {
-                return await resources.LoadAsync<Texture2D>(
+                return await LoadResourceAsync(
                     key,
                     overridePath,
                     cancellationToken);
@@ -154,7 +184,7 @@ public sealed class ResourceActorTextureLoader : IActorTextureLoader
         }
         else if (failOnMissingAssets || resources.Exists<Texture2D>(key, overridePath))
         {
-            return await resources.LoadAsync<Texture2D>(
+            return await LoadResourceAsync(
                 key,
                 overridePath,
                 cancellationToken);
@@ -180,6 +210,12 @@ public sealed class ResourceActorTextureLoader : IActorTextureLoader
             return GetPlaceholderTexture();
         }
 
+        if (resources is not null)
+        {
+            var logicalPath = resourcePath.StartsWith("res://", System.StringComparison.Ordinal)
+                ? resourcePath["res://".Length..] : resourcePath;
+            return LoadResource(new ResourceKey(logicalPath), resourcePath);
+        }
         return ResourceLoader.Load<Texture2D>(resourcePath) ?? throw new ActorException(
             $"Actor resource '{resourcePath}' is not a Texture2D.");
     }
@@ -210,7 +246,7 @@ public sealed class ResourceActorTextureLoader : IActorTextureLoader
         var logicalPath = resourcePath.StartsWith("res://", System.StringComparison.Ordinal)
             ? resourcePath["res://".Length..]
             : resourcePath;
-        return await resources.LoadAsync<Texture2D>(
+        return await LoadResourceAsync(
             new ResourceKey(logicalPath),
             resourcePath,
             cancellationToken);
@@ -231,8 +267,7 @@ public sealed class ResourceActorTextureLoader : IActorTextureLoader
     public Task ShutdownAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        placeholderTexture?.Dispose();
-        placeholderTexture = null;
+        Dispose();
         return Task.CompletedTask;
     }
 

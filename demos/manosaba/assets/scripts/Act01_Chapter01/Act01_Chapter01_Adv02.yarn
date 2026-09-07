@@ -213,11 +213,9 @@ Warden: 想反抗也没问题……[br /]只不过小命不保罢了……嗯…
 <<character Hiro at:30,0 appearance:Surprised1>>
 <<character Ema at:70,0 appearance:"Surprised1,ArmR3">>
 <<stage show main via:dissolve duration:0.4>>
-<<stage release broadcast>>
-<<beat end wait:false>>
-
 <<curtain open duration:0.5>>
-<<wait 0.3>>
+<<beat end wait:true>>
+<<stage release broadcast>>
 
 
 Ema: 典狱长……？看守……？ #line:0101Adv02_Ema015

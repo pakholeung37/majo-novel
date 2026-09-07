@@ -107,7 +107,14 @@ public partial class MajoRuntimeBootstrap : Node
                         new DirectionPlanner(),
                         backend,
                         activities: resolver.Get<IRuntimeActivityRegistry>(),
-                        cues: resolver.Get<ITransientDirectionCueExecutor>());
+                        cues: resolver.Get<ITransientDirectionCueExecutor>(),
+                        resetRendering: async token =>
+                        {
+                            await resolver.Get<GodotDirectionStageBackend>().ResetAsync(token);
+                            // Scene teardown may already have freed the render surfaces.
+                            if (GodotObject.IsInstanceValid(host.StageViewport))
+                                await host.ResetAsync(token);
+                        });
                 },
                 typeof(GodotDirectionRenderHost),
                 typeof(GodotDirectionStageBackend),
@@ -122,11 +129,8 @@ public partial class MajoRuntimeBootstrap : Node
                     resolver.Get<ITransientDirectionCueExecutor>()),
                 typeof(IDirectionTransactionCoordinator),
                 typeof(ITransientDirectionCueExecutor))
-            .AddSingleton<IDirectionScopeResolver>(_ => new DirectionScopeResolver())
-            .AddSingleton<IDirectionResourceKeyResolver>(_ =>
-                DirectionResourceResolver ?? new DirectionResourceKeyResolver(Configuration!.Resources!))
-            .AddSingleton<IDirectionPositionResolver>(_ =>
-                DirectionPositionResolver ?? new DirectionPositionResolver(Configuration!.Actors!))
+            .AddSingleton<IDirectionScopeResolver>(_ =>
+                new DirectionScopeResolver(Configuration!.Actors!.CreateDirectionMarks()))
             .AddSingleton<IDirectionCommandPolicy>(
                 resolver => new DirectionCommandPolicy(
                     resolver.Get<IDirectionBeatRuntime>(),
@@ -152,6 +156,12 @@ public partial class MajoRuntimeBootstrap : Node
         ILocaleManager locales,
         IEasingRegistry easingRegistry)
     {
+        if (textureLoader is ResourceActorTextureLoader resourceLoader)
+        {
+            var scope = resourceLoader.CreateRetainedScope();
+            root.TreeExiting += scope.Dispose;
+            textureLoader = scope;
+        }
         var actorConfiguration = Configuration!.Actors!;
         var manager = new ActorManager(
             ActorConfigurationCompiler.Compile(

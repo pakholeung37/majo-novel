@@ -26,8 +26,6 @@ public sealed class DirectionRuntimeTests
         var services = new ServiceResolverBuilder()
             .Add<IDirectionBeatRuntime>(new DirectionBeatRuntime(CreateCoordinator(
                 new FakeDirectionBackend { AutoSettle = true })))
-            .Add<IDirectionResourceKeyResolver>(new CatalogResourceResolver())
-            .Add<IDirectionPositionResolver>(new CatalogPositionResolver())
             .Add<IDirectionScopeResolver>(new DirectionScopeResolver())
             .Add<IDirectionCommandPolicy>(new DirectionCommandPolicy())
             .Add<IDialogueNodeAccessor>(new DelegateDialogueNodeAccessor(() => "Opening"))
@@ -638,6 +636,34 @@ public sealed class DirectionRuntimeTests
 
         await Assert.ThrowsAsync<ExpectedDirectionException>(() => transaction.Settlement);
         await Assert.ThrowsAsync<ExpectedDirectionException>(() => coordinator.FinishAsync(transaction));
+    }
+
+    [Theory(Timeout = 5_000)]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TransactionAsyncDisposalIsIdempotentAcrossSettlement(bool settleFirst)
+    {
+        var backend = new FakeDirectionBackend();
+        using var coordinator = CreateCoordinator(backend);
+        await using var transaction = await coordinator.ExecuteAsync(new[] { View(ViewId.Main, zoom: 2) });
+        // Synchronous using must not be offered for a resource with asynchronous cleanup.
+        Assert.False(typeof(IDisposable).IsAssignableFrom(typeof(CommittedDirectionTransaction)));
+        if (settleFirst)
+        {
+            backend.LastSettlementTcs!.SetResult();
+            await transaction.Settlement;
+        }
+
+        await transaction.DisposeAsync();
+        if (!settleFirst)
+        {
+            backend.LastSettlementTcs!.SetResult();
+            await transaction.Settlement;
+        }
+        await coordinator.FinishAsync(transaction);
+        await coordinator.ResetAsync();
+        Assert.Equal(DirectionTransactionStatus.Settled, transaction.Status);
+        Assert.Equal(1, backend.DisposeCount);
     }
 
     private static DirectionTransactionCoordinator CreateCoordinator(

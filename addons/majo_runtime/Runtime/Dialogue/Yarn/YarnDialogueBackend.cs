@@ -280,7 +280,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
         SetLocale(configuredLocale);
         presenterAdapter!.BeginSession();
         if (preloader is not null) await preloader.PrepareStartAsync(project,
-            pendingRestore?.Spot.Script.NodeName ?? startNode, cancellationToken);
+            pendingRestore?.Spot.Script.NodeName ?? startNode, cancellationToken, pendingRestore?.Spot.LineId);
         cancellationToken.ThrowIfCancellationRequested();
         await Runner.StartDialogue(startNode);
         cancellationToken.ThrowIfCancellationRequested();

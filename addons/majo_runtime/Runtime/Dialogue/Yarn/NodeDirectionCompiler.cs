@@ -2,7 +2,7 @@
 
 using System;
 using System.Collections.Generic;
-using System.Globalization;
+using Majo.Runtime.Dialogue.Commands;
 using System.Linq;
 using System.Text.RegularExpressions;
 using Majo.Runtime.Direction.Core;
@@ -181,6 +181,7 @@ public sealed class NodeDirectionCompiler
         var resources = new List<TypedDirectionResourceReference>();
         var imports = new List<DirectionImport>();
         var markDefinitions = new List<DirectionMark>();
+        var diagnostics = new List<YarnCompilationDiagnostic>();
 
         foreach (var command in commands)
         {
@@ -220,7 +221,7 @@ public sealed class NodeDirectionCompiler
             }
             else if (command.Is("mark") && command.Tokens.Length > 1)
             {
-                CompileMark(command, marks, markDefinitions);
+                CompileMark(command, marks, markDefinitions, diagnostics);
             }
             else if (command.Is("camera") &&
                 command.Options.TryGetValue("as", out var alias))
@@ -267,31 +268,34 @@ public sealed class NodeDirectionCompiler
             maps.ToArray(),
             imports,
             markDefinitions,
-            Array.Empty<YarnCompilationDiagnostic>());
+            diagnostics);
     }
 
     private static void CompileMark(
         ParsedCommand command,
         HashSet<string> marks,
-        List<DirectionMark> definitions)
+        List<DirectionMark> definitions,
+        List<YarnCompilationDiagnostic> diagnostics)
     {
         var name = command.Positional(1);
         if (string.IsNullOrWhiteSpace(name) || !marks.Add(name)) return;
         if (!command.Options.TryGetValue("at", out var at)) return;
-        var parts = at.Split(',', StringSplitOptions.TrimEntries);
-        if (parts.Length != 2 ||
-            !float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var x) ||
-            !float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var y) ||
-            !float.IsFinite(x) || !float.IsFinite(y))
+        // Yarn substitutions are evaluated before runtime command binding.
+        if (at.Contains('{')) return;
+        try
         {
-            return;
+            // Named references depend on project defaults and the executing node.
+            // Only literals can be materialized in the compiled module.
+            if (PositionRefConverter.Instance.Parse(at) is PositionRef.Literal literal)
+                definitions.Add(new DirectionMark(
+                    name, literal.Point, command.File, command.Line, command.Column));
         }
-        definitions.Add(new DirectionMark(
-            name,
-            new DirectionPoint(x, y),
-            command.File,
-            command.Line,
-            command.Column));
+        catch (CommandValueFormatException error)
+        {
+            diagnostics.Add(new YarnCompilationDiagnostic(
+                "error", "MAJO_POSITION", command.File, command.Line, command.Column,
+                command.Line, command.Column + command.Raw.Length, error.Message));
+        }
     }
 
     private static string Unquote(string value) =>

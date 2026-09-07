@@ -202,24 +202,6 @@ public sealed class ComponentBackendHarness :
     }
 }
 
-public sealed class CatalogResourceResolver : IDirectionResourceKeyResolver
-{
-    public ResourceKey ResolveBackdrop(string semanticId) => new(semanticId);
-
-    public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-    public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-    public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-}
-
-public sealed class CatalogPositionResolver : IDirectionPositionResolver
-{
-    public DirectionPoint Resolve(string value) => new(50, 50);
-
-    public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-    public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-    public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-}
-
 public sealed class VersionStoreResourceManager : IResourceManager
 {
     public int LoadedResourceCount => 0;

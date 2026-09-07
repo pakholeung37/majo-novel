@@ -330,8 +330,11 @@ public sealed class DialoguePlayer : IDialoguePlayer
                 {
                     await pendingStart;
                 }
-                catch (OperationCanceledException)
+                catch (Exception)
                 {
+                    // StartCoreAsync already publishes the failure to the start caller
+                    // and session completion. Stopping only needs to drain that work;
+                    // a previous startup failure must not prevent cleanup or recovery.
                 }
             }
 

@@ -33,6 +33,7 @@ public interface IDirectionScopeResolver : IRuntimeService
     void ExitNode(string nodeId);
     void DefineMark(string nodeId, string name, DirectionPoint position);
     DirectionPoint ResolveMark(string nodeId, string name);
+    DirectionPoint ResolvePosition(string nodeId, PositionRef position);
 }
 
 /// <summary>
@@ -46,6 +47,28 @@ public sealed class DirectionScopeResolver : IDirectionScopeResolver
     private readonly Dictionary<(string Node, string Alias), ViewId> viewImports = new();
     private readonly Dictionary<(string Node, string Alias), ViewPosePatch> shotAliases = new();
     private readonly Dictionary<(string Node, string Name), DirectionPoint> marks = new();
+    private readonly Dictionary<string, DirectionPoint> defaultMarks;
+
+    public DirectionScopeResolver(IReadOnlyDictionary<string, DirectionPoint>? defaultMarks = null)
+    {
+        this.defaultMarks = new Dictionary<string, DirectionPoint>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (name, point) in defaultMarks ?? new Dictionary<string, DirectionPoint>
+        {
+            ["left"] = new(25, 50), ["center"] = new(50, 50), ["right"] = new(75, 50),
+        })
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(name);
+            this.defaultMarks.Add(name.Trim(), point.Validate());
+        }
+    }
+
+    public DirectionPoint ResolvePosition(string nodeId, PositionRef position) => position switch
+    {
+        PositionRef.Literal literal => literal.Point.Validate(),
+        PositionRef.Named named => ResolveMark(nodeId, named.Name),
+        _ => throw new ArgumentException("Position requires a coordinate or mark name.", nameof(position)),
+    };
+
     private string? activeNode;
     private NodeDirectionModule? activeModule;
 
@@ -145,7 +168,8 @@ public sealed class DirectionScopeResolver : IDirectionScopeResolver
     public DirectionPoint ResolveMark(string nodeId, string name)
     {
         var (node, local) = Validate(nodeId, name);
-        if (!marks.TryGetValue((node, local), out var position))
+        if (!marks.TryGetValue((node, local), out var position) &&
+            !defaultMarks.TryGetValue(local, out position))
             throw new DirectionReferenceException($"Mark '{local}' is not defined in Node '{node}'.");
         return position;
     }

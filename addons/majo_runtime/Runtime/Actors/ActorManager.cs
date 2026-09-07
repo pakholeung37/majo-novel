@@ -20,9 +20,7 @@ public sealed class ActorManager : IActorManager, IDisposable
     private readonly Dictionary<string, IActor> actors =
         new(StringComparer.Ordinal);
     private readonly List<string> actorOrder = new();
-    private readonly Dictionary<string, Task<IActor>> pendingActors =
-        new(StringComparer.Ordinal);
-    private readonly Dictionary<string, string> pendingActorFactories =
+    private readonly Dictionary<string, PendingActorCreation> pendingActors =
         new(StringComparer.Ordinal);
     private CancellationTokenSource actorLifetime = new();
     private readonly ILocaleManager? locales;
@@ -195,7 +193,11 @@ public sealed class ActorManager : IActorManager, IDisposable
                 throw new DuplicateActorIdException(actorId);
             }
 
-            if (!pendingActors.TryGetValue(actorId, out creation!))
+            if (pendingActors.TryGetValue(actorId, out var pending))
+            {
+                creation = pending.Task;
+            }
+            else
             {
                 if (!definitions.TryGetValue(actorId, out var definition))
                 {
@@ -207,17 +209,7 @@ public sealed class ActorManager : IActorManager, IDisposable
                     throw new ActorFactoryNotFoundException(definition.FactoryId, actorId);
                 }
 
-                var completion = new TaskCompletionSource<IActor>(
-                    TaskCreationOptions.RunContinuationsAsynchronously);
-                creation = completion.Task;
-                pendingActors.Add(actorId, creation);
-                _ = CompleteCreationAsync(
-                    actorId,
-                    definition,
-                    factory,
-                    ActorCreationMode.Active,
-                    completion,
-                    actorLifetime.Token);
+                creation = StartCreation(actorId, definition, factory, ActorCreationMode.Active);
             }
         }
 
@@ -276,10 +268,10 @@ public sealed class ActorManager : IActorManager, IDisposable
                 return Task.FromResult(existing);
             }
 
-            if (pendingActors.TryGetValue(request.ActorId, out creation!))
+            if (pendingActors.TryGetValue(request.ActorId, out var pending))
             {
-                ValidatePendingFactory(request);
-                return creation.WaitAsync(cancellationToken);
+                ValidateRequiredFactory(request, pending.FactoryId);
+                return pending.Task.WaitAsync(cancellationToken);
             }
 
             var definition = ResolveDefinition(request);
@@ -288,18 +280,7 @@ public sealed class ActorManager : IActorManager, IDisposable
                 throw new ActorFactoryNotFoundException(definition.FactoryId, request.ActorId);
             }
 
-            var completion = new TaskCompletionSource<IActor>(
-                TaskCreationOptions.RunContinuationsAsynchronously);
-            creation = completion.Task;
-            pendingActors.Add(request.ActorId, creation);
-            pendingActorFactories.Add(request.ActorId, definition.FactoryId);
-            _ = CompleteCreationAsync(
-                request.ActorId,
-                definition,
-                factory,
-                request.CreationMode,
-                completion,
-                actorLifetime.Token);
+            creation = StartCreation(request.ActorId, definition, factory, request.CreationMode);
         }
 
         return creation.WaitAsync(cancellationToken);
@@ -475,16 +456,6 @@ public sealed class ActorManager : IActorManager, IDisposable
         return false;
     }
 
-    private void ValidatePendingFactory(ActorSpawnRequest request)
-    {
-        if (!pendingActorFactories.TryGetValue(request.ActorId, out var factoryId))
-        {
-            return;
-        }
-
-        ValidateRequiredFactory(request, factoryId);
-    }
-
     private static void ValidateRequiredFactory(
         ActorSpawnRequest request,
         string factoryId)
@@ -559,6 +530,23 @@ public sealed class ActorManager : IActorManager, IDisposable
         }
     }
 
+    // Called under gate so both public entry points publish the same creation metadata.
+    private Task<IActor> StartCreation(
+        string actorId,
+        ActorDefinition definition,
+        IActorFactory factory,
+        ActorCreationMode creationMode)
+    {
+        var completion = new TaskCompletionSource<IActor>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        pendingActors.Add(actorId, new PendingActorCreation(completion.Task, definition.FactoryId));
+        _ = CompleteCreationAsync(
+            actorId, definition, factory, creationMode, completion, actorLifetime.Token);
+        return completion.Task;
+    }
+
+    private sealed record PendingActorCreation(Task<IActor> Task, string FactoryId);
+
     private async Task CompleteCreationAsync(
         string actorId,
         ActorDefinition definition,
@@ -596,7 +584,6 @@ public sealed class ActorManager : IActorManager, IDisposable
             lock (gate)
             {
                 pendingActors.Remove(actorId);
-                pendingActorFactories.Remove(actorId);
             }
         }
     }
@@ -609,7 +596,7 @@ public sealed class ActorManager : IActorManager, IDisposable
         Task<IActor>[] pending;
         lock (gate)
         {
-            pending = pendingActors.Values.ToArray();
+            pending = pendingActors.Values.Select(creation => creation.Task).ToArray();
         }
 
         foreach (var creation in pending)

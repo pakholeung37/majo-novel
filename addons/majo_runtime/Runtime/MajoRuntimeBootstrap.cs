@@ -108,10 +108,6 @@ public partial class MajoRuntimeBootstrap : Node
 
     public IResourcePathResolver? ResourcePathResolver { get; set; }
 
-    public IDirectionResourceKeyResolver? DirectionResourceResolver { get; set; }
-
-    public IDirectionPositionResolver? DirectionPositionResolver { get; set; }
-
     public Action<DialoguePresenterRegistry>? ConfigureDialoguePresenters { get; set; }
 
     public Action<DialogueMarkupHandlerRegistry>? ConfigureDialogueMarkupHandlers { get; set; }
@@ -281,7 +277,7 @@ public partial class MajoRuntimeBootstrap : Node
         commandRegistry
             .RegisterModule(new BuiltInCommandModule())
             .RegisterModule(new AudioCommandModule())
-            .RegisterModule(new DirectionCommandModule());
+            .RegisterModule(new DirectionCommandModule(Configuration!.Resources!.BackgroundsPath));
 
         ConfigureEasings?.Invoke(easingRegistry);
         ConfigureTransitionDrivers?.Invoke(transitionDrivers);

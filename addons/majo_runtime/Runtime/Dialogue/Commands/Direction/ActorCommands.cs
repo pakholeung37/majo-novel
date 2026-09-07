@@ -13,20 +13,17 @@ namespace Majo.Runtime.Dialogue.Commands;
 public sealed partial class CharacterCommand : RuntimeCommand<CharacterCommand.Arguments>
 {
     private readonly IDirectionBeatRuntime beats;
-    private readonly IDirectionPositionResolver positions;
     private readonly IDirectionScopeResolver scopes;
     private readonly IDialogueNodeAccessor nodeAccessor;
     private readonly IDirectionCommandPolicy policy;
 
     public CharacterCommand(
         IDirectionBeatRuntime beats,
-        IDirectionPositionResolver positions,
         IDirectionScopeResolver scopes,
         IDialogueNodeAccessor nodeAccessor,
         IDirectionCommandPolicy policy)
     {
         this.beats = beats ?? throw new ArgumentNullException(nameof(beats));
-        this.positions = positions ?? throw new ArgumentNullException(nameof(positions));
         this.scopes = scopes ?? throw new ArgumentNullException(nameof(scopes));
         this.nodeAccessor = nodeAccessor ?? throw new ArgumentNullException(nameof(nodeAccessor));
         this.policy = policy ?? throw new ArgumentNullException(nameof(policy));
@@ -42,11 +39,9 @@ public sealed partial class CharacterCommand : RuntimeCommand<CharacterCommand.A
         var transition = policy.ResolveTransition(commandName, arguments.Transition, context);
         var wait = arguments.Transition.Wait.GetValueOrDefault(false);
 
-        DirectionPoint? position = null;
-        if (arguments.At.WasProvided && !string.IsNullOrWhiteSpace(arguments.At.Value))
-        {
-            position = ResolvePosition(arguments.At.Value);
-        }
+        DirectionPoint? position = arguments.At.WasProvided
+            ? scopes.ResolvePosition(node, arguments.At.Value!)
+            : null;
 
         await beats.SubmitAsync(
             new ActorPatch(
@@ -61,23 +56,11 @@ public sealed partial class CharacterCommand : RuntimeCommand<CharacterCommand.A
             context.CancellationToken);
     }
 
-    private DirectionPoint ResolvePosition(string value)
-    {
-        try
-        {
-            return scopes.ResolveMark(nodeAccessor.RequireNode(), value);
-        }
-        catch (DirectionReferenceException)
-        {
-            return positions.Resolve(value);
-        }
-    }
-
     public sealed record Arguments(
         [Primary] string Actor,
         [Option(DefaultText = "main")] CommandValue<string> Stage,
         [Option] CommandValue<string> Appearance,
-        [Option] CommandValue<string> At,
+        [Option] CommandValue<PositionRef> At,
         [Option(Minimum = 0.001)] CommandValue<double> Scale,
         [Option] CommandValue<int> Z,
         [Group] TransitionArguments Transition);

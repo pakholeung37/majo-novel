@@ -18,6 +18,7 @@ public sealed class ResourceLookAheadWindow : IDisposable
     private readonly IRuntimeLogger logger;
     private readonly SemaphoreSlim gate = new(1, 1);
     private readonly Dictionary<ResourcePreloadEntry, IResourceGroupLease> held = new();
+    private readonly HashSet<(long Budget, string Resources)> reportedOverBudget = new();
     private long generation;
     private bool disposed;
 
@@ -65,8 +66,16 @@ public sealed class ResourceLookAheadWindow : IDisposable
                 held.Remove(entry);
             }
             if (bytes > budgetBytes)
-                logger.Warning("preload", "preload.required_over_budget",
-                    $"Required resources exceed the look-ahead budget ({bytes}/{budgetBytes} bytes).");
+            {
+                var description = string.Join(", ", required.Distinct()
+                    .Select(entry => $"{entry.OverridePath ?? entry.Key.Path} [{entry.ResourceType.Name}]: {entry.EstimatedBytes} bytes")
+                    .OrderBy(value => value, StringComparer.Ordinal));
+                if (reportedOverBudget.Add((budgetBytes, description)))
+                    logger.Warning("preload", "preload.required_over_budget",
+                        $"Required resource estimate exceeds the look-ahead budget ({bytes}/{budgetBytes} bytes). " +
+                        $"This is not measured process memory; required loading continues and speculative loading is limited. " +
+                        $"Resources: {description}. Repeated warnings for this set and budget are suppressed for this window manager's lifetime.");
+            }
             foreach (var entry in required.Distinct())
             {
                 cancellationToken.ThrowIfCancellationRequested();
