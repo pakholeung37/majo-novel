@@ -115,6 +115,14 @@ public sealed class NodeDirectionCompilerTests
     }
 
     [Fact]
+    public void DirectionMetadataRejectsCorruptPayloads()
+    {
+        Assert.Throws<System.Text.Json.JsonException>(() => YarnProjectDirectionMetadata.Deserialize("{broken"));
+        Assert.Throws<InvalidOperationException>(() => YarnProjectDirectionMetadata.Deserialize("null"));
+        Assert.Throws<InvalidOperationException>(() => YarnProjectDirectionMetadata.Deserialize("[{}]"));
+    }
+
+    [Fact]
     public void DirectionMetadataRoundTripsNodeModules()
     {
         var module = new NodeDirectionModule(
@@ -136,10 +144,9 @@ public sealed class NodeDirectionCompilerTests
             },
             new[] { new DirectionMark("focus", new DirectionPoint(25, 75), "main.yarn", 5, 1) },
             Array.Empty<YarnCompilationDiagnostic>());
-        var project = (YarnProject)RuntimeHelpers.GetUninitializedObject(typeof(YarnProject));
-        project.CompiledDirectionModulesJson = YarnProjectDirectionMetadata.Serialize(new[] { module });
+        var json = YarnProjectDirectionMetadata.Serialize(new[] { module });
 
-        var roundTrip = Assert.Single(YarnProjectDirectionMetadata.Deserialize(project));
+        var roundTrip = Assert.Single(YarnProjectDirectionMetadata.Deserialize(json));
         Assert.Equal(module.NodeId, roundTrip.NodeId);
         Assert.Equal(module.Version, roundTrip.Version);
         Assert.Equal(module.Symbols.Stages, roundTrip.Symbols.Stages);

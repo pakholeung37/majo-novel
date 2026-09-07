@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Actors.Layered;
+using Majo.Runtime.Resources;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Direction.Transitions;
@@ -77,6 +78,10 @@ public sealed class LayeredCharacterActorFactory : IConventionActorFactory
 
     public string FactoryId => ActorFactoryIds.LayeredCharacter;
 
+    // Creation loads every atlas; the actor's layer sprites retain them even if
+    // ResourceManager later evicts its separate cache entry.
+    public bool PreloadExistingAppearances => false;
+
     public bool TryResolveDefinition(
         ActorSpawnRequest request,
         out ActorDefinition definition)
@@ -105,6 +110,17 @@ public sealed class LayeredCharacterActorFactory : IConventionActorFactory
                 InitialPosition = request.InitialPosition ?? CharacterPositionPreset.Center,
             });
         return true;
+    }
+
+    public IReadOnlyList<ResourcePreloadEntry> GetPreloadResources(ActorDefinition definition, string appearance)
+    {
+        var path = definition.GetFactoryData<LayeredCharacterConfiguration>().ManifestPath;
+        var directory = GetDirectory(path);
+        return GetManifest(path).Layers.Select(layer => layer.Atlas).Distinct(StringComparer.Ordinal)
+            .Select(atlas => $"{directory}/{atlas}")
+            .Select(atlasPath => ResourcePreloadEntry.Create<Texture2D>(
+                new ResourceKey(atlasPath.StartsWith("res://", StringComparison.Ordinal)
+                    ? atlasPath["res://".Length..] : atlasPath), atlasPath)).ToArray();
     }
 
     public void ValidateDefinition(ActorDefinition definition)

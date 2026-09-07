@@ -28,6 +28,7 @@ public partial class HeadlessTestRunner
 {
     private async Task ValidateDirectionRenderingAsync()
     {
+        ValidateImportedDirectionData();
         using (var configuration = new AnimationConfiguration
         {
             DefaultBackdropAnimationId = "dissolve",

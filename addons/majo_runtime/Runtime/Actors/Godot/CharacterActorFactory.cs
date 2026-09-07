@@ -35,6 +35,13 @@ public sealed class CharacterActorFactory : IActorFactory
 
     public string FactoryId => ActorFactoryIds.Character;
 
+    public System.Collections.Generic.IReadOnlyList<Majo.Runtime.Resources.ResourcePreloadEntry> GetPreloadResources(
+        ActorDefinition definition, string appearance) => new[]
+        {
+            Majo.Runtime.Resources.ResourcePreloadEntry.Create<Texture2D>(
+                definition.GetAppearanceResourceKey(appearance), definition.GetAppearanceOverride(appearance)),
+        };
+
     public void ValidateDefinition(ActorDefinition definition) =>
         _ = definition.GetFactoryData<TextureActorDefinitionData>();
 

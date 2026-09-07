@@ -1,0 +1,10 @@
+[gd_resource type="Resource" format=3 uid="uid://b3k1yhbkuxk77"]
+
+[ext_resource type="Script" uid="uid://orqi0qstlslj" path="res://addons/majo_runtime/Runtime/Dialogue/Yarn/MajoDirectionData.cs" id="1_pbv1a"]
+
+[resource]
+script = ExtResource("1_pbv1a")
+ManifestPath = "res://tests/headless/M8Presentation.yarnproject"
+SourceFingerprint = "5f1e103b2b0a5663071416d5ce388e9079099c9bf6e1d3b48b528d70478537eb"
+ProgramFingerprint = "ef61b7c9d11ff4e81a6fa990e6fbd3ed21f21f817a8a52b1ba58f82daf0da857"
+ModulesJson = "[{\"NodeId\":\"Start\",\"Version\":1,\"Symbols\":{\"Stages\":[],\"Views\":[],\"ShotAliases\":[],\"Marks\":[]},\"Resources\":[],\"SourceMaps\":[],\"Imports\":[],\"Marks\":[],\"Diagnostics\":[]}]"

@@ -1,0 +1,10 @@
+[gd_resource type="Resource" format=3 uid="uid://byo030ec5qkdg"]
+
+[ext_resource type="Script" uid="uid://orqi0qstlslj" path="res://addons/majo_runtime/Runtime/Dialogue/Yarn/MajoDirectionData.cs" id="1_sd7u8"]
+
+[resource]
+script = ExtResource("1_sd7u8")
+ManifestPath = "res://tests/headless/YarnVmBridge.yarnproject"
+SourceFingerprint = "c37b4916ec868335b031b924280a4ea22945a45e103b146d23564ebb86bbf7b5"
+ProgramFingerprint = "9a55cf91aa3f33b3390d7b93ef4b50408db4dafc491a607a69f65ad89cd1161c"
+ModulesJson = "[{\"NodeId\":\"Start\",\"Version\":1,\"Symbols\":{\"Stages\":[],\"Views\":[],\"ShotAliases\":[],\"Marks\":[]},\"Resources\":[],\"SourceMaps\":[],\"Imports\":[],\"Marks\":[],\"Diagnostics\":[]}]"

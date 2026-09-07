@@ -237,7 +237,7 @@ public sealed class YarnProjectVersionStore : IYarnProjectVersionStore
             Array.Empty<YarnCompilationDiagnostic>(),
             DateTimeOffset.MinValue)
         {
-            DirectionModules = YarnProjectDirectionMetadata.Deserialize(project),
+            DirectionModules = MajoDirectionData.LoadModules(project),
         };
     }
 

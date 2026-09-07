@@ -4,25 +4,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
-using Godot;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Dialogue.Yarn.HotReload;
-using YarnProjectResource = YarnSpinnerGodot.YarnProject;
-
-namespace YarnSpinnerGodot
-{
-
-    // This partial keeps the serialized field on YarnProject itself, so imported
-    // projects retain Direction metadata even when hot reload is disabled. The
-    // metadata is intentionally JSON-only and does not make YarnSpinner depend on
-    // Majo runtime types at the resource layer.
-    public partial class YarnProject
-    {
-        [Export] public string CompiledDirectionModulesJson { get; set; } = string.Empty;
-    }
-
-}
 
 namespace Majo.Runtime.Dialogue.Yarn
 {
@@ -35,24 +19,15 @@ namespace Majo.Runtime.Dialogue.Yarn
             return JsonSerializer.Serialize(modules.Select(ToPayload).ToArray());
         }
 
-        public static IReadOnlyList<NodeDirectionModule> Deserialize(YarnProjectResource project)
+        public static IReadOnlyList<NodeDirectionModule> Deserialize(string json)
         {
-            ArgumentNullException.ThrowIfNull(project);
-            if (string.IsNullOrWhiteSpace(project.CompiledDirectionModulesJson))
+            ArgumentNullException.ThrowIfNull(json);
+            if (string.IsNullOrWhiteSpace(json))
                 return Array.Empty<NodeDirectionModule>();
 
-            try
-            {
-                var payloads = JsonSerializer.Deserialize<ModulePayload[]>(
-                    project.CompiledDirectionModulesJson) ?? Array.Empty<ModulePayload>();
-                return payloads.Select(FromPayload).ToArray();
-            }
-            catch (Exception exception)
-            {
-                GD.PushWarning(
-                    "Could not read Direction metadata from a YarnProject: " + exception.Message);
-                return Array.Empty<NodeDirectionModule>();
-            }
+            var payloads = JsonSerializer.Deserialize<ModulePayload[]>(json) ??
+                throw new InvalidOperationException("Direction metadata is null.");
+            return payloads.Select(FromPayload).ToArray();
         }
 
         private static ModulePayload ToPayload(NodeDirectionModule module) => new()

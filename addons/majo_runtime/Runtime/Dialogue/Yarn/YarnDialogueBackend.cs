@@ -15,6 +15,7 @@ using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Resources;
 using Majo.Runtime.Localization;
 using Majo.Runtime.Dialogue.Yarn.HotReload;
+using Majo.Runtime.Dialogue.Yarn.Preloading;
 using Yarn.Markup;
 using YarnSpinnerGodot;
 
@@ -25,6 +26,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
     IScriptCheckpointBackend,
     IDisposable
 {
+    private readonly YarnWindowPreloader? preloader;
     private readonly Node owner;
     private readonly IYarnProjectVersionStore projectVersions;
     private readonly IDirectionScopeResolver? directionScopes;
@@ -73,13 +75,15 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
         IRuntimeLogger? logger = null,
         bool requireExactProgramFingerprint = false,
         IYarnProjectVersionStore? projectVersions = null,
-        IDirectionScopeResolver? directionScopes = null)
+        IDirectionScopeResolver? directionScopes = null,
+        YarnWindowPreloader? preloader = null)
     {
         this.owner = owner ?? throw new ArgumentNullException(nameof(owner));
         ArgumentNullException.ThrowIfNull(resources);
         this.projectVersions = projectVersions ??
             new YarnProjectVersionStore(resources, scriptsPath);
         this.directionScopes = directionScopes;
+        this.preloader = preloader;
         this.presenters = presenters ?? throw new ArgumentNullException(nameof(presenters));
         this.localeManager = localeManager;
         this.speakerNameResolver = speakerNameResolver;
@@ -139,6 +143,8 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
             ConvertPresentedLine)
         {
             Name = "MajoPresenterAdapter",
+            PrepareLineAsync = preloader is null ? null : preloader.BeforeLineAsync,
+            OptionsStarting = preloader is null ? null : preloader.OptionsStarting,
         };
         variableStore.Name = "MajoDialogueVariables";
         runner.AddChild(variableStore);
@@ -273,6 +279,9 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
         Runner.SetProject(project);
         SetLocale(configuredLocale);
         presenterAdapter!.BeginSession();
+        if (preloader is not null) await preloader.PrepareStartAsync(project,
+            pendingRestore?.Spot.Script.NodeName ?? startNode, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         await Runner.StartDialogue(startNode);
         cancellationToken.ThrowIfCancellationRequested();
         if (!Runner.IsDialogueRunning && !Completion.IsCompleted)
@@ -291,6 +300,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
             return;
         }
 
+        preloader?.Clear();
         lock (sync)
         {
             isStopping = true;
@@ -374,6 +384,8 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
 
         commandAdapter = adapter;
         adapter.CommandFailed += HandleCommandFailed;
+        if (adapter is YarnCommandAdapter yarnAdapter && preloader is not null)
+            yarnAdapter.PrepareCommandAsync = preloader.BeforeCommandAsync;
     }
 
     public async Task ReplaceRunningProjectAsync(
@@ -597,6 +609,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
     private void HandleNodeStarted(string nodeName)
     {
         currentNodeName = nodeName;
+        if (Runner.YarnProject is { } project) preloader?.EnterNode(project, nodeName);
         var module = projectVersions.GetActiveVersion(currentProjectId)?.DirectionModules
             .FirstOrDefault(candidate => candidate.NodeId.Equals(nodeName, StringComparison.Ordinal));
         if (module is not null)
@@ -614,6 +627,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
 
     private void HandleDialogueCompleted()
     {
+        preloader?.Clear();
         if (isInternalMigration)
         {
             return;
@@ -998,6 +1012,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
 
     public void Dispose()
     {
+        preloader?.Dispose();
         presenterAdapter?.Dispose();
         if (GodotObject.IsInstanceValid(runner))
         {

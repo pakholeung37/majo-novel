@@ -52,6 +52,8 @@ public partial class HeadlessTestRunner
         Assert(!character.Visible &&
                 preloader.CurrentWindowId == "headless-layered-character",
             "Layered character preload did not create a dormant ready actor.");
+        Assert(actors.GetPreloadResources(new ActorSpawnRequest("Ema", ActorFactoryIds.Character, "Surprised1")).Count == 0,
+            "An existing layered actor redundantly requested its resident atlases for preload.");
         character.SetVisible(true);
         var layerComposite = character.View.GetNode<CanvasGroup>("LayerComposite");
         var layers = layerComposite.GetChildren().OfType<Sprite2D>().ToArray();

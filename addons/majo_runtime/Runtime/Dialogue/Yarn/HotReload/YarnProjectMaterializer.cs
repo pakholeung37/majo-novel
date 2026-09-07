@@ -99,8 +99,6 @@ public sealed class YarnProjectMaterializer
             LastImportHadAnyStrings = lineNodes.Count > 0,
             LastImportHadImplicitStringIDs = implicitIds.Count > 0,
         };
-        project.CompiledDirectionModulesJson = YarnProjectDirectionMetadata.Serialize(
-            compilation.DirectionModules);
 
         var roundTrip = project.Program.ToByteArray();
         if (!programBytes.AsSpan().SequenceEqual(roundTrip))

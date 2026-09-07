@@ -28,6 +28,8 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
         this.dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
     }
 
+    public Func<string, IReadOnlyList<string>, CancellationToken, Task>? PrepareCommandAsync { get; set; }
+
     public event Action<RuntimeCommandException>? CommandFailed;
 
     public RuntimeCommandException? LastFailure => dispatcher.LastFailure;
@@ -65,7 +67,8 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
                     group.ToArray(),
                     dispatcher,
                     registry,
-                    dispatcher.AbortOnRecoverableFailure);
+                    dispatcher.AbortOnRecoverableFailure,
+                    (root, args, token) => PrepareCommandAsync?.Invoke(root, args, token) ?? Task.CompletedTask);
                 commandHandlers.Add(handler);
                 Register(group.Key, (Func<string[], Task>)handler.ExecuteAsync);
             }
@@ -174,19 +177,22 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
         private readonly RuntimeCommandDispatcher dispatcher;
         private readonly IYarnCommandRegistry registry;
         private readonly bool abortOnRecoverableFailure;
+        private readonly Func<string, IReadOnlyList<string>, CancellationToken, Task> prepare;
 
         public CatalogCommandHandler(
             string rootName,
             IReadOnlyList<IRuntimeCommand> commands,
             RuntimeCommandDispatcher dispatcher,
             IYarnCommandRegistry registry,
-            bool abortOnRecoverableFailure)
+            bool abortOnRecoverableFailure,
+            Func<string, IReadOnlyList<string>, CancellationToken, Task> prepare)
         {
             this.rootName = rootName;
             this.commands = commands;
             this.dispatcher = dispatcher;
             this.registry = registry;
             this.abortOnRecoverableFailure = abortOnRecoverableFailure;
+            this.prepare = prepare;
         }
 
         public async Task ExecuteAsync(params string[] arguments)
@@ -208,7 +214,8 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
                 await dispatcher.ExecuteAsync(
                     command,
                     input,
-                    registry.DialogueCancellationToken);
+                    registry.DialogueCancellationToken,
+                    () => prepare(rootName, arguments, registry.DialogueCancellationToken));
             }
             catch (RuntimeCommandException exception) when (
                 exception.IsRecoverable && !abortOnRecoverableFailure)

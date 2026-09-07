@@ -10,6 +10,35 @@ namespace Majo.Runtime.UnitTests;
 
 public sealed class ActorManagerTests
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AppearancePreloadRespectsResourcesOwnedByExistingActor(bool preloadExisting)
+    {
+        var factory = new PreloadActorFactory(preloadExisting);
+        using var manager = new ActorManager([CreateDefinition("hero")], [factory]);
+        await manager.InitializeAsync(CancellationToken.None);
+        var request = new ActorSpawnRequest("hero", "test", "happy");
+        Assert.Single(manager.GetPreloadResources(request));
+        Assert.Empty(manager.Actors);
+        manager.Create("hero");
+        Assert.Equal(preloadExisting ? 1 : 0, manager.GetPreloadResources(request).Count);
+        Assert.Throws<ActorFactoryConflictException>(() => manager.GetPreloadResources(
+            new ActorSpawnRequest("hero", "test", "happy", requiredFactoryId: "other")));
+        manager.Remove("hero");
+        Assert.Single(manager.GetPreloadResources(request));
+        await manager.ShutdownAsync(CancellationToken.None);
+    }
+
+    private sealed class PreloadActorFactory(bool preloadExisting) : IActorFactory
+    {
+        public string FactoryId => "test";
+        public bool PreloadExistingAppearances => preloadExisting;
+        public IActor Create(ActorDefinition definition) => new FakeActor(definition.Id, "happy", FactoryId);
+        public IReadOnlyList<ResourcePreloadEntry> GetPreloadResources(ActorDefinition definition, string appearance) =>
+            new[] { ResourcePreloadEntry.Create<object>(new ResourceKey("atlas")) };
+    }
+
     [Fact]
     public void AnimationSpecValidatesDurationAndPreservesConflictPolicy()
     {

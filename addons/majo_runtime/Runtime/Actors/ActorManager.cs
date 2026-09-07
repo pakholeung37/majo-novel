@@ -373,6 +373,25 @@ public sealed class ActorManager : IActorManager, IDisposable
             : IsConventionFactory(factoryId);
     }
 
+    public IReadOnlyList<Majo.Runtime.Resources.ResourcePreloadEntry> GetPreloadResources(ActorSpawnRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        lock (gate)
+        {
+            if (actors.TryGetValue(request.ActorId, out var existing))
+            {
+                ValidateRequiredFactory(request, existing.FactoryId);
+                if (factories.TryGetValue(existing.FactoryId, out var existingFactory) &&
+                    !existingFactory.PreloadExistingAppearances)
+                    return Array.Empty<Majo.Runtime.Resources.ResourcePreloadEntry>();
+            }
+            var definition = ResolveDefinition(request);
+            return factories.TryGetValue(definition.FactoryId, out var factory)
+                ? factory.GetPreloadResources(definition, request.InitialAppearance)
+                : Array.Empty<Majo.Runtime.Resources.ResourcePreloadEntry>();
+        }
+    }
+
     private ActorDefinition ResolveDefinition(ActorSpawnRequest request)
     {
         if (definitions.TryGetValue(request.ActorId, out var definition))

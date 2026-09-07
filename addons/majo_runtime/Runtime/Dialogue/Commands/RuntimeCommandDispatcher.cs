@@ -68,7 +68,8 @@ public sealed class RuntimeCommandDispatcher : IDisposable
     public async Task ExecuteAsync(
         IRuntimeCommand command,
         CommandInput input,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<Task>? prepare = null)
     {
         ArgumentNullException.ThrowIfNull(command);
         ArgumentNullException.ThrowIfNull(input);
@@ -122,6 +123,8 @@ public sealed class RuntimeCommandDispatcher : IDisposable
 
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (prepare is not null) await prepare();
             cancellationToken.ThrowIfCancellationRequested();
             await command.ExecuteAsync(input, context);
             logger.Debug(

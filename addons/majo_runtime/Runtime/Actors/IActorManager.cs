@@ -11,6 +11,9 @@ public interface IActorManager : IRuntimeService
 {
     IReadOnlyCollection<IActor> Actors { get; }
 
+    IReadOnlyList<Majo.Runtime.Resources.ResourcePreloadEntry> GetPreloadResources(ActorSpawnRequest request) =>
+        System.Array.Empty<Majo.Runtime.Resources.ResourcePreloadEntry>();
+
     IActor Create(string actorId);
 
     Task<IActor> CreateAsync(

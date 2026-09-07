@@ -70,6 +70,11 @@ public partial class HeadlessTestRunner : Node
             await ValidateTransitionRegressionsAsync();
             return;
         }
+        if (OS.GetCmdlineUserArgs().Contains("--preload-regressions", StringComparer.Ordinal))
+        {
+            await ValidateWindowPreloadingAsync();
+            return;
+        }
         var dependencyStatus = YarnDependencyValidator.ValidateProject(
             ProjectSettings.GlobalizePath("res://"));
         Assert(dependencyStatus.IsCompatible, dependencyStatus.Message);
@@ -91,6 +96,7 @@ public partial class HeadlessTestRunner : Node
         await ValidateTransitionRegressionsAsync();
         await ValidateActorSystemAsync();
         await ValidateLayeredCharacterAsync();
+        await ValidateWindowPreloadingAsync();
         await ValidateYarnCommandAdapterAsync();
         await ValidatePlayableDemoAsync();
         await ValidateFailedConfigurationCleanupAsync();

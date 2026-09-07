@@ -755,6 +755,35 @@ public sealed class RuntimeCommandTests
         Assert.Contains(entry.ParameterSets, set => set.Rule == CommandParameterSetRule.AtLeastOne);
     }
 
+    [Fact(Timeout = 5_000)]
+    public async Task PreloadBarrierIsAnActiveCommandAndCancellationPreventsExecution()
+    {
+        var registry = new FakeCommandRegistry();
+        var executed = false;
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var adapter = CreateAdapter(registry, out _, configure: commands => commands.Add(
+            "probe", _ => new ProbeCommand((_, _) => { executed = true; return Task.CompletedTask; }), "test"));
+        adapter.PrepareCommandAsync = async (root, arguments, token) =>
+        {
+            Assert.Equal("probe", root);
+            Assert.Equal("test", arguments[0]);
+            entered.SetResult();
+            await Task.Delay(Timeout.Infinite, token);
+        };
+        await adapter.InitializeAsync(CancellationToken.None);
+        var handler = Assert.IsType<Func<string[], Task>>(registry.Handlers["probe"]);
+        var running = handler(["test", "detail:ready"]);
+        await entered.Task;
+        Assert.True(adapter.HasActiveCommands);
+        Assert.False(adapter.WaitForQuiescenceAsync().IsCompleted);
+        Assert.False(executed);
+        adapter.CancelDialogue();
+        await running;
+        Assert.False(executed);
+        Assert.Null(adapter.LastFailure);
+        await adapter.ShutdownAsync(CancellationToken.None);
+    }
+
     private static YarnCommandAdapter CreateAdapter(
         FakeCommandRegistry yarnRegistry,
         out RuntimeCommandCatalog catalog,

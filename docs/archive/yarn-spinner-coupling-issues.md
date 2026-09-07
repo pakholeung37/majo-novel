@@ -1,5 +1,7 @@
 # Yarn Spinner 源码修改与侵入式耦合问题记录
 
+> 2026-09-07：本文所列两处耦合已按方案 A 修复。第 1–3 节保留为历史问题记录；当前实现见第 5 节。
+
 ## 1. 背景与现状
 
 在近期对演出（Direction）编译和热重载功能的迭代中，系统对第三方插件 **Yarn Spinner for Godot**（`addons/YarnSpinner-Godot/`）进行了源码修改与侵入式类扩展。
@@ -116,6 +118,32 @@
 
 ## 4. 后续任务清单
 
-- [ ] 移除 `addons/YarnSpinner-Godot/Editor/YarnProjectEditorUtility.cs` 中的 Majo 演出编译代码，还原 Yarn Spinner 官方源码。
-- [ ] 移除 `YarnProjectDirectionMetadata.cs` 中的 `namespace YarnSpinnerGodot` 分部类声明。
-- [ ] 为 Majo Direction 建立独立的编译与资源持久化管线。
+- [x] 移除 `addons/YarnSpinner-Godot/Editor/YarnProjectEditorUtility.cs` 中的 Majo 演出编译代码，还原 Yarn Spinner 官方源码。
+- [x] 移除 `YarnProjectDirectionMetadata.cs` 中的 `namespace YarnSpinnerGodot` 分部类声明。
+- [x] 为 Majo Direction 建立独立的编译与资源持久化管线。
+
+
+## 5. 当前实现与迁移方式
+
+- `addons/majo_runtime/Runtime/Dialogue/Yarn/MajoDirectionData.cs` 定义独立 Godot Resource；每个 `example.yarnproject` 对应 `example.yarnproject.direction.tres`，包含 schema 版本、源文件指纹、Yarn 程序指纹与模块 JSON。
+- `addons/majo_runtime/Editor/MajoDirectionCompiler.cs` 负责生成资源。使用 Yarn 自己的 manifest/glob 解析规则；来源发生变化时由 Majo 调用 Yarn 的公开编译接口，随后生成演出数据。依赖方向为 Majo → Yarn，Yarn 插件不引用 Majo。
+- `MajoRuntimePlugin` 在启用时以及 Godot 文件系统变化、资源重新导入后检查项目。指纹相同则跳过写入；脚本删除会重建模块列表，manifest 删除会清除伴随资源。编译失败会移除旧产物，并报告文件与错误信息。
+- `YarnProjectVersionStore` 从伴随资源读取普通导入版本的演出模块，并校验 schema、manifest 和程序指纹。资源缺失或版本不符时明确失败，不静默使用空模块。
+- `YarnProjectMaterializer` 继续将热重载模块直接放在 `YarnProjectVersion.DirectionModules`，不再序列化到第三方资源。
+- `MajoDirectionExportPlugin` 在导出 Yarn 项目时显式加入对应资源和资源脚本，兼容按场景/资源选择的导出方式。运行时无需读取原始 `.yarn` 文件。
+
+升级后先构建 C# 工程，再启用 Majo Runtime 编辑器插件并打开项目（CI 可使用 Godot `--headless --editor --quit`），即可从源脚本重建伴随资源。旧 `.godot/imported/` 中的内嵌字段不再被读取。生成的 `.direction.tres` 是 Majo 管理的产物，不应手工编辑；格式变更时提升 `CurrentSchemaVersion` 并重新生成。
+
+### 回归检查
+
+- 单元测试：模块 JSON 往返，以及损坏 JSON 的拒绝行为。
+- `HeadlessTestRunner.DirectionData.cs`：普通导入模块加载、独立资源落盘往返、缺失资源、schema 不兼容和 Yarn 程序指纹不匹配。
+- `python3 tools/test-direction-import.py`（先构建 Debug 工程）：实际编辑器首次导入、重复导入、源修改、源删除、编译失败、恢复与 manifest 删除。该脚本创建并清理临时测试目录。
+
+### 本次验证结果
+
+- Debug / Release 构建通过；363 个单元测试通过；Godot headless 集成测试通过。
+- 实际编辑器导入回归全部通过。
+- 将 YarnSpinner-Godot 单独复制到临时 Godot C# 工程，在不包含 Majo 的情况下构建成功（保留插件原有 SYSLIB1220 警告）。
+- macOS 资源包导出成功；直接从包中加载 Yarn / Direction 资源，校验模块 JSON 与程序指纹通过。
+- 完整包内 Demo 启动验证未通过：现有 `MajoRuntimeBootstrap.InitializeRuntimeAsync` 调用 `YarnDependencyValidator.ValidateProject` 时，打包模式下 `ProjectSettings.GlobalizePath("res://")` 返回空路径，在加载演出前失败。这是另一个启动路径问题，本次未修改该校验。

@@ -366,6 +366,13 @@ public partial class MajoProjectConfiguration : Resource
                 $"{nameof(Resources)}.{nameof(Resources.MemoryBudgetMiB)}",
                 "Memory budget cannot be negative."));
         }
+        if (Resources.PreloadVoiceLines < 0 || Resources.PreloadVoiceLines > 32 ||
+            Resources.PreloadBudgetMiB < 0 || Resources.PreloadMaxResources < 0 ||
+            Resources.PreloadTextureEstimateMiB <= 0 || Resources.PreloadAudioEstimateKiB <= 0)
+        {
+            issues.Add(new ConfigurationIssue("Resources.Preloading",
+                "Preload limits must be non-negative, voice look-ahead at most 32 lines, and estimates positive."));
+        }
         if (Resources.DefaultResourceEstimateKiB < 0)
         {
             issues.Add(new ConfigurationIssue(

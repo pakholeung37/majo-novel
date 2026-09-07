@@ -46,6 +46,10 @@ internal sealed partial class YarnDialoguePresenterAdapter : Node, DialoguePrese
         this.lineConverter = lineConverter ?? (line => YarnLineConverter.Convert(line));
     }
 
+    public Action? OptionsStarting { get; set; }
+
+    public Func<DialogueLine, CancellationToken, Task>? PrepareLineAsync { get; set; }
+
     public List<IActionMarkupHandler> ActionMarkupHandlers { get; } = new();
 
     public void BeginSession()
@@ -104,6 +108,8 @@ internal sealed partial class YarnDialoguePresenterAdapter : Node, DialoguePrese
         var converted = lineConverter(line);
         try
         {
+            if (PrepareLineAsync is not null) await PrepareLineAsync(converted, token.NextLineToken);
+            token.NextLineToken.ThrowIfCancellationRequested();
             linePresented(converted, Array.AsReadOnly(line.Substitutions.ToArray()));
             var context = new DialoguePresentationContext(
                 requestHurryUp,
@@ -120,6 +126,9 @@ internal sealed partial class YarnDialoguePresenterAdapter : Node, DialoguePrese
             {
                 _ = ObserveDetachedAsync(new[] { presentation });
             }
+        }
+        catch (OperationCanceledException) when (token.NextLineToken.IsCancellationRequested)
+        {
         }
         finally
         {
@@ -162,6 +171,7 @@ internal sealed partial class YarnDialoguePresenterAdapter : Node, DialoguePrese
         YarnDialogueOption[] dialogueOptions,
         CancellationToken cancellationToken)
     {
+        OptionsStarting?.Invoke();
         var converted = dialogueOptions.Select(option => new MajoDialogueOption(
             option.DialogueOptionID,
             lineConverter(option.Line),

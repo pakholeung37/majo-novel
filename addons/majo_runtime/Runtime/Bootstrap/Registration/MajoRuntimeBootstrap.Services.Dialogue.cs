@@ -15,6 +15,7 @@ using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Dialogue.Commands.Audio;
 using Majo.Runtime.Dialogue.Presentation;
 using Majo.Runtime.Dialogue.Yarn;
+using Majo.Runtime.Dialogue.Yarn.Preloading;
 using Majo.Runtime.Dialogue.Yarn.HotReload;
 using Majo.Runtime.Dialogue.Yarn.Presentation;
 using Majo.Runtime.Direction.Execution;
@@ -103,7 +104,10 @@ public partial class MajoRuntimeBootstrap : Node
                         Logger,
                         Configuration.Script!.RequireExactProgramFingerprint,
                         resolver.Get<IYarnProjectVersionStore>(),
-                        resolver.Get<IDirectionScopeResolver>());
+                        resolver.Get<IDirectionScopeResolver>(),
+                        new YarnWindowPreloader(resolver.Get<IResourceManager>(),
+                            Configuration.Resources, Configuration.Audio!,
+                            resolver.Get<ILocaleManager>(), resolver.Get<ILocalizedResourceResolver>(), resolver.Get<IActorManager>(), Logger));
                     return yarnDialogueBackend;
                 },
                 typeof(IResourceManager),
@@ -111,7 +115,8 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(ILocaleManager),
                 typeof(ILocalizedResourceResolver),
                 typeof(IYarnProjectVersionStore),
-                typeof(IDirectionScopeResolver))
+                typeof(IDirectionScopeResolver),
+                typeof(IActorManager))
             .AddSingleton<IDialoguePresentation>(
                 resolver =>
                 {

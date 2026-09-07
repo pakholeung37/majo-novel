@@ -4,6 +4,13 @@ public interface IActorFactory
 {
     string FactoryId { get; }
 
+    /// <summary>False only when every appearance dependency is owned for the actor's lifetime.</summary>
+    bool PreloadExistingAppearances => true;
+
+    System.Collections.Generic.IReadOnlyList<Majo.Runtime.Resources.ResourcePreloadEntry> GetPreloadResources(
+        ActorDefinition definition, string appearance) =>
+        System.Array.Empty<Majo.Runtime.Resources.ResourcePreloadEntry>();
+
     IActor Create(ActorDefinition definition);
 
     IActor Create(ActorDefinition definition, ActorCreationMode creationMode)
