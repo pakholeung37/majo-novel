@@ -44,7 +44,7 @@ public sealed class DirectionPatchTests
     [Fact]
     public void DirectionEaseAcceptsLegacyBackCurves()
     {
-        var easings = new Majo.Runtime.Timing.EasingRegistry();
+        var easings = new Timing.EasingRegistry();
         Majo.Runtime.Timing.BuiltInEasings.RegisterDefaults(easings);
         var ease = new DirectionEaseConverter(easings).Parse("back-out");
 

@@ -23,7 +23,7 @@ public sealed class CommandRegistrationContext : IRuntimeCommandRegistrar
     public ICommandParameterGroupRegistrar Groups { get; }
 
     public IRuntimeCommandRegistrar Add(string name,
-        Func<Majo.Runtime.Core.IServiceResolver, IRuntimeCommand> factory,
+        Func<Core.IServiceResolver, IRuntimeCommand> factory,
         string providerId, string? version = null) =>
         Commands.Add(name, factory, providerId, version);
 }

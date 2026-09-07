@@ -205,7 +205,7 @@ public partial class HeadlessTestRunner
         Assert(
             played.LocalePolicy == PlayedLocalePolicy.Shared &&
             configuration.GlobalState!.Enabled &&
-            bootstrap.Host.Services.Get<Majo.Runtime.Auto.IPlaybackModeManager>() is not null,
+            bootstrap.Host.Services.Get<Auto.IPlaybackModeManager>() is not null,
             "M15 Demo did not compose Global Played state and unified playback modes.");
 
         var missingProject = await AssertThrowsAsync<DialogueProjectException>(

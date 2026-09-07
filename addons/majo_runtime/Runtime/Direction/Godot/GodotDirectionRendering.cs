@@ -63,7 +63,7 @@ internal static class GodotDirectionRendering
 }
 
 internal sealed class ImmediatePreparedDirectionComponent :
-    Majo.Runtime.Direction.Rendering.IPreparedDirectionComponent
+    Rendering.IPreparedDirectionComponent
 {
     private readonly Action<DirectionCommitToken>? commit;
     private readonly TaskCompletionSource settlement = new(

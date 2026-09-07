@@ -35,7 +35,7 @@ public sealed partial class GeneratedProbeCommand : RuntimeCommand<GeneratedProb
         [Primary] string Target,
         [Group] Options Options);
 
-    protected override System.Threading.Tasks.ValueTask ExecuteAsync(
+    protected override ValueTask ExecuteAsync(
         Arguments arguments,
         CommandExecutionContext context) =>
         System.Threading.Tasks.ValueTask.CompletedTask;

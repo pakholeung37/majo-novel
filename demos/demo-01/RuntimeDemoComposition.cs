@@ -200,7 +200,7 @@ public static class RuntimeDemoComposition
         ArgumentNullException.ThrowIfNull(runtime);
         runtime.ConfigureServices += services =>
         {
-            services.AddSingleton<DemoSessionService>(
+            services.AddSingleton(
                 resolver => new DemoSessionService(
                     resolver.Get<IRuntimeLifetime>(),
                     resolver.Get<IResourceManager>(),

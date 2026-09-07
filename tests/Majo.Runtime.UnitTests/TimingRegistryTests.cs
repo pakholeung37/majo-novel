@@ -247,7 +247,7 @@ public sealed class TimingRegistryTests
 
         var bound = TestCatalogBuilder.CreateBound(
             new TestTransitionCommand(),
-            configureConverters: c => c.ReplaceDefault<EasingId>(_ => new EasingIdConverter(easings), "test", "timing"));
+            configureConverters: c => c.ReplaceDefault(_ => new EasingIdConverter(easings), "test", "timing"));
 
         var raw = new RawCommandArguments("test-transition", new Dictionary<string, string>
         {
@@ -269,7 +269,7 @@ public sealed class TimingRegistryTests
         var transitionArgs = TransitionArguments.Create(
             via: CommandValue<DirectionTransitionId>.Explicit(new DirectionTransitionId("dissolve")),
             duration: CommandValue<double>.Explicit(0.45));
-        
+
         // When no beat is open
         var specNoBeat = policy.ResolveTransition("backdrop", transitionArgs, null!);
         Assert.Equal(EasingId.Linear, specNoBeat.Easing);

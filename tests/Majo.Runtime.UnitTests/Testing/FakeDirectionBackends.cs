@@ -353,7 +353,7 @@ public sealed class RecordingCueExecutor : ITransientDirectionCueExecutor
         if (activity is FakeCueActivity fakeAct)
             LastActivity = fakeAct;
 
-        return Task.FromResult<ITransientCueActivity?>(activity);
+        return Task.FromResult(activity);
     }
 }
 

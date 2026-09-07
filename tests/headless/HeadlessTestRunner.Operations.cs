@@ -18,7 +18,7 @@ public partial class HeadlessTestRunner
             Name = "OperationRuntime",
             Configuration = MajoProjectConfiguration.CreateDefault(),
             ConfigureServices = services =>
-                services.AddSingleton<ShutdownStartsOperationService>(
+                services.AddSingleton(
                     resolver => new ShutdownStartsOperationService(
                         resolver.Get<IOperationRunner>()),
                     typeof(IOperationRunner)),

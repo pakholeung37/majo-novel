@@ -65,11 +65,11 @@ public sealed class TestCatalogBuilder
     private sealed class TestServices : IServiceResolver
     {
         private readonly IServiceResolver? inner;
-        private readonly Majo.Runtime.Timing.IEasingRegistry easings;
+        private readonly Timing.IEasingRegistry easings;
         public TestServices(IServiceResolver? inner)
         {
             this.inner = inner;
-            var defaults = new Majo.Runtime.Timing.EasingRegistry();
+            var defaults = new Timing.EasingRegistry();
             Majo.Runtime.Timing.BuiltInEasings.RegisterDefaults(defaults);
             easings = defaults;
         }
@@ -78,11 +78,11 @@ public sealed class TestCatalogBuilder
         public bool TryGet<T>(out T? service) where T : class
         {
             if (inner is not null && inner.TryGet(out service)) return true;
-            service = typeof(T) == typeof(Majo.Runtime.Timing.IEasingRegistry) ? easings as T : null;
+            service = typeof(T) == typeof(Timing.IEasingRegistry) ? easings as T : null;
             return service is not null;
         }
-        public object Resolve(Type type) => type == typeof(Majo.Runtime.Timing.IEasingRegistry)
-            ? Resolve<Majo.Runtime.Timing.IEasingRegistry>() : inner?.Resolve(type) ?? throw new InvalidOperationException($"Missing test service '{type}'.");
+        public object Resolve(Type type) => type == typeof(Timing.IEasingRegistry)
+            ? Resolve<Timing.IEasingRegistry>() : inner?.Resolve(type) ?? throw new InvalidOperationException($"Missing test service '{type}'.");
     }
 
     public static BoundCommand<TArguments> CreateBound<TArguments>(

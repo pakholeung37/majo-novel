@@ -175,7 +175,7 @@ public sealed class BoundCommand<TArguments> : IBoundCommand
     private readonly BoundParameterSlot? primarySlot;
     private readonly Dictionary<string, BoundParameterSlot> namedSlots;
     private readonly IReadOnlyList<CommandParameterSetSpec> parameterSets;
-    private readonly System.Collections.ObjectModel.ReadOnlyCollection<ICommandArgumentValidator<TArguments>> validators;
+    private readonly ReadOnlyCollection<ICommandArgumentValidator<TArguments>> validators;
 
     public BoundCommand(
         RuntimeCommand<TArguments> command,

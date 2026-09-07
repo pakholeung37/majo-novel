@@ -128,7 +128,7 @@ public sealed class CommandConverterProtocolTests
 
         var registry = new CommandConverterRegistry();
         registry.AddDefault<CustomCoordinate>(_ => new CustomCoordinateConverter(), "tests");
-        registry.AddDefault<EasingId>(s => new EasingIdConverter(s.Resolve<IEasingRegistry>()), "timing");
+        registry.AddDefault(s => new EasingIdConverter(s.Resolve<IEasingRegistry>()), "timing");
 
         var resolved = registry.Resolve(services);
         var coordConv = resolved.FindDefault<CustomCoordinate>();
@@ -151,11 +151,11 @@ public sealed class CommandConverterProtocolTests
         Assert.Contains("already registered by provider 'providerA'", duplicate.Message);
 
         var wrongExpected = Assert.Throws<RuntimeCommandException>(() =>
-            registry.ReplaceDefault<CustomCoordinate>(_ => new OverriddenCoordinateConverter(), "providerB", "wrongProvider"));
+            registry.ReplaceDefault(_ => new OverriddenCoordinateConverter(), "providerB", "wrongProvider"));
         Assert.Contains("expected provider 'wrongProvider' but was 'providerA'", wrongExpected.Message);
 
         // Successful replacement
-        registry.ReplaceDefault<CustomCoordinate>(_ => new OverriddenCoordinateConverter(), "providerB", "providerA");
+        registry.ReplaceDefault(_ => new OverriddenCoordinateConverter(), "providerB", "providerA");
         var resolved = registry.Resolve(EmptyServiceResolver.Instance);
         Assert.Equal(new CustomCoordinate(999, 999), resolved.FindDefault<CustomCoordinate>()!.Parse("anything"));
     }
@@ -170,7 +170,7 @@ public sealed class CommandConverterProtocolTests
             registry.AddDefault<CustomCoordinate>(_ => new CustomCoordinateConverter(), "test"));
 
         Assert.Throws<InvalidOperationException>(() =>
-            registry.ReplaceDefault<string>(_ => StringCommandValueConverter.Instance, "test", "core"));
+            registry.ReplaceDefault(_ => StringCommandValueConverter.Instance, "test", "core"));
     }
 
     [Fact]

@@ -65,7 +65,7 @@ public sealed class CommandDefinitionAndBindingTests
         var catalog2 = new TestCatalogBuilder()
             .ConfigureConverters(converters =>
             {
-                converters.ReplaceDefault<int>(
+                converters.ReplaceDefault(
                     _ => new MultiplyingIntConverter(10),
                     "test",
                     "core");
@@ -152,7 +152,7 @@ public sealed class CommandDefinitionAndBindingTests
         var catalog = new TestCatalogBuilder()
             .ConfigureConverters(converters =>
             {
-                converters.ReplaceDefault<int>(
+                converters.ReplaceDefault(
                     _ => spyConverter,
                     "spy",
                     "core");

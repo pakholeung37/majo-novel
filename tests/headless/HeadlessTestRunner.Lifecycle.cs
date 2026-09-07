@@ -20,7 +20,7 @@ public partial class HeadlessTestRunner
             Name = "SuccessfulRuntime",
             Configuration = MajoProjectConfiguration.CreateDefault(),
             ConfigureServices = services =>
-                services.AddSingleton<HeadlessLifecycleService>(_ => service),
+                services.AddSingleton(_ => service),
         };
         bootstrap.RuntimeShutdown += () => shutdownSignalCount++;
 
@@ -74,7 +74,7 @@ public partial class HeadlessTestRunner
             Name = "TimedOutRuntime",
             Configuration = configuration,
             ConfigureServices = services =>
-                services.AddSingleton<NonCooperativeInitializationService>(_ => service),
+                services.AddSingleton(_ => service),
         };
         var exited = false;
         bootstrap.TreeExited += () => exited = true;

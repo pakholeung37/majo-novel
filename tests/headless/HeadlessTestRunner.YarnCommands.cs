@@ -52,7 +52,7 @@ public partial class HeadlessTestRunner
         {
             Name = "M4Runtime",
             Configuration = configuration,
-            ConfigureServices = services => services.AddSingleton<HeadlessLifecycleService>(
+            ConfigureServices = services => services.AddSingleton(
                 _ => customCommandService),
             ConfigureCommands = commands => commands.Add(
                 "majo_probe",
@@ -116,7 +116,7 @@ public partial class HeadlessTestRunner
                     directionBeatCommitted =
                         state.Revision == 1 &&
                         mainStage?.Backdrop?.Resource ==
-                            new Majo.Runtime.Resources.ResourceKey(
+                            new Resources.ResourceKey(
                                 "headless/fixtures/background_dark") &&
                         mainStage.Actors.TryGetValue(new ActorId("hero"), out var placed) &&
                         placed.Appearance == "red" && placed.Z == 5 &&

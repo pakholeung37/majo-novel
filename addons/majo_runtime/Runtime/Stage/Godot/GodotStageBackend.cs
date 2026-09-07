@@ -341,7 +341,7 @@ internal sealed class GodotStageBackend : IStageBackend, IDisposable
         setSlot(tween);
         // Keep the tween values typed as floats. Integer Variants are interpolated
         // discretely by Godot, which makes fades hold at 0 and jump to 1 at the end.
-        tween.TweenMethod(Callable.From<float>(apply), 0.0f, 1.0f, duration);
+        tween.TweenMethod(Callable.From(apply), 0.0f, 1.0f, duration);
         await WaitForTweenAsync(tween, cancellationToken);
         setSlot(null);
     }

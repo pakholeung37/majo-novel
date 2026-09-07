@@ -131,19 +131,19 @@ public sealed class TransitionDriverRegistry : ITransitionDriverRegistry
         Register(new ShaderTransitionDriver(id, material, ruleTexture, smoothness, invert));
     }
 
-    public Task InitializeAsync(System.Threading.CancellationToken cancellationToken)
+    public Task InitializeAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         return Task.CompletedTask;
     }
 
-    public Task ResetAsync(System.Threading.CancellationToken cancellationToken)
+    public Task ResetAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         return Task.CompletedTask;
     }
 
-    public Task ShutdownAsync(System.Threading.CancellationToken cancellationToken)
+    public Task ShutdownAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         return Task.CompletedTask;

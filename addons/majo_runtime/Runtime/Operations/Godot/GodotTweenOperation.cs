@@ -45,7 +45,7 @@ public static class GodotTweenOperation
                 tween.SetEase(ease);
                 tween.SetIgnoreTimeScale(ignoreTimeScale);
                 tween.TweenMethod(
-                    Callable.From<float>(applyValue),
+                    Callable.From(applyValue),
                     initialValue,
                     finalValue,
                     durationSeconds);

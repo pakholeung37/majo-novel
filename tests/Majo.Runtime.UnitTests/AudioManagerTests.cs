@@ -353,10 +353,10 @@ public sealed class AudioManagerTests
             .Add<IAudioCommandPolicy>(policy)
             .Build();
 
-        new Majo.Runtime.Dialogue.Commands.Audio.AudioCommandModule().Register(registry);
+        new AudioCommandModule().Register(registry);
         registry.SealRegistrations();
         var catalog = registry.BuildCatalog(services);
-        var bgmCommand = catalog.Get<Majo.Runtime.Dialogue.Commands.Audio.PlayBgmCommand.Arguments>("bgm");
+        var bgmCommand = catalog.Get<PlayBgmCommand.Arguments>("bgm");
         var arguments = bgmCommand.Bind(
             new RawCommandArguments("theme", new Dictionary<string, string>()));
 
