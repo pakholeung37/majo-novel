@@ -103,6 +103,7 @@ public partial class MajoRuntimeBootstrap : Node
             Logger,
             memoryBudgetBytes: (long)resourceConfiguration.MemoryBudgetMiB * 1024 * 1024,
             defaultResourceEstimateBytes:
-                (long)resourceConfiguration.DefaultResourceEstimateKiB * 1024);
+                (long)resourceConfiguration.DefaultResourceEstimateKiB * 1024,
+            releaseOnLastLease: resourceConfiguration.MemoryBudgetMiB == 0);
     }
 }

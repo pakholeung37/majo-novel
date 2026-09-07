@@ -25,12 +25,14 @@ public partial class ResourceConfiguration : Resource
     [Export]
     public bool FailOnMissingAssets { get; set; }
 
+    /// <summary>Cache budget in MiB. Zero disables the byte cap and evicts leased resources when their last owner releases them.</summary>
     [Export(PropertyHint.Range, "0,16384,1,or_greater")]
-    public int MemoryBudgetMiB { get; set; } = 512;
+    public int MemoryBudgetMiB { get; set; } = 0;
 
     [Export] public bool EnableYarnPreloading { get; set; } = true;
     [Export(PropertyHint.Range, "0,32,1")] public int PreloadVoiceLines { get; set; } = 4;
-    [Export(PropertyHint.Range, "0,4096,1")] public int PreloadBudgetMiB { get; set; } = 96;
+    /// <summary>Look-ahead budget in MiB. Zero disables the byte cap; voice and resource counts still limit the window.</summary>
+    [Export(PropertyHint.Range, "0,4096,1")] public int PreloadBudgetMiB { get; set; } = 0;
     [Export(PropertyHint.Range, "0,128,1")] public int PreloadMaxResources { get; set; } = 12;
     [Export(PropertyHint.Range, "1,1024,1")] public int PreloadTextureEstimateMiB { get; set; } = 32;
     [Export(PropertyHint.Range, "1,65536,1")] public int PreloadAudioEstimateKiB { get; set; } = 2048;

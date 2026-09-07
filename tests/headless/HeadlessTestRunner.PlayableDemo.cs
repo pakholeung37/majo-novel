@@ -63,6 +63,8 @@ public partial class HeadlessTestRunner
         };
         AddChild(presenter);
         var configuration = RuntimeDemoComposition.CreateConfiguration();
+        // This fixture verifies retained cache entries after playback; opt into budgeted caching.
+        configuration.Resources!.MemoryBudgetMiB = 512;
         configuration.Presentation!.Enabled = false;
         var bootstrap = new MajoRuntimeBootstrap
         {

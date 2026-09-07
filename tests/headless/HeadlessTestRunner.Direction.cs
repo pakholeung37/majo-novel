@@ -566,6 +566,29 @@ public partial class HeadlessTestRunner
                 !host.StageIds.Contains(illustration),
             "Direction Stage/View release retained prepared render surfaces.");
 
+        // A load resets the persistent main surface before restoring a snapshot.
+        // Default-pose snapshots do not prepare a view diff, so reset must clear
+        // both the published surface state and the actual camera transform.
+        var savedDefault = DirectionState.CreateDefault();
+        var zoomedPose = new ViewPose(new DirectionPoint(35, 60), 2, 10);
+        await coordinator.ExecuteAsync(
+            new IDirectionDirective[] { ViewPoseFor(ViewId.Main, zoomedPose, DirectionTransitionSpec.Cut) },
+            DirectionCompletionBarrier.Settle);
+        var savedZoomed = coordinator.State;
+        host.ApplyViewModifierDelta(ViewId.Main, new CameraPoseDelta(new Vector2(5, 3), 1.2f, 4));
+        await stageBackend.ResetAsync(CancellationToken.None);
+        await host.ResetAsync(CancellationToken.None);
+        await coordinator.ResetAsync();
+        await coordinator.RestoreAsync(savedDefault);
+        var mainSurface = host.GetOrCreateView(ViewId.Main);
+        Assert(Equals(mainSurface.PublishedView?.Pose, ViewPose.Default),
+            "Loading a default camera retained the previous published main camera pose.");
+        Assert(Equals(mainSurface.CurrentPose, ViewPose.Default) &&
+                host.ViewTransform.Transform.IsEqualApprox(Transform2D.Identity),
+            "Loading a default camera retained zoom, center, or rotation.");
+        await coordinator.RestoreAsync(savedZoomed);
+        Assert(Equals(mainSurface.CurrentPose, zoomedPose),
+            "Loading a zoomed snapshot lost its saved camera pose.");
         await stageBackend.ResetAsync(CancellationToken.None);
         await host.ResetAsync(CancellationToken.None);
         Assert(host.PublishedBackdrop is null && host.Backdrop.Texture is null,

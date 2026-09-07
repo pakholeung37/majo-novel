@@ -9,6 +9,18 @@ namespace Majo.Runtime.UnitTests;
 public sealed class ResourceLookAheadWindowTests
 {
     [Fact(Timeout = 5000)]
+    public async Task ZeroByteBudgetStillPreloadsAndHonorsResourceCount()
+    {
+        var resources = new FakeResources { AutoComplete = true };
+        var logger = new CaptureLogger();
+        using var window = new ResourceLookAheadWindow(resources, logger);
+        await window.MoveAsync(new[] { Entry("required", 1000) },
+            new[] { Entry("ahead", 1000), Entry("outside", 1000) }, 0, 2, waitForAhead: true);
+        Assert.Equal(new[] { "required", "ahead" }, resources.Loaded.Select(item => item.GroupId));
+        Assert.Empty(logger.Warnings);
+    }
+
+    [Fact(Timeout = 5000)]
     public async Task RepeatedOversizedSetWarnsOnceButNewBudgetAndResourcesRemainVisible()
     {
         var resources = new FakeResources { AutoComplete = true };

@@ -169,11 +169,10 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
         screenSlots[LayoutSlotId.Main].Texture = ViewViewport.GetTexture();
         LiveOutput.Texture = ScreenViewport.GetTexture();
         isInitialized = true;
-        PublishedView = new ViewState(
+        PublishView(
             ViewId.Main,
-            StageId.Main,
-            ViewPose.Default);
-        ApplyViewPose(ViewId.Main, ViewPose.Default);
+            new ViewState(ViewId.Main, StageId.Main, ViewPose.Default),
+            StageViewport.GetTexture());
         PublishEffects(StableEffectState.Default);
         ownerViewport = owner.GetViewport();
         ownerViewport.SizeChanged += Resize;
@@ -215,13 +214,15 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
         ViewContent.Texture = StageViewport.GetTexture();
         ViewContent.Modulate = Colors.White;
         ClearViewTransition(ViewId.Main);
+        ClearViewModifierDelta(ViewId.Main);
         ClearScreenTransition();
         PublishedBackdrop = null;
-        PublishedView = new ViewState(
+        // Keep the retained surface and public state in sync. Restoring a
+        // default view produces no view diff after the coordinator reset.
+        PublishView(
             ViewId.Main,
-            StageId.Main,
-            ViewPose.Default);
-        ApplyViewPose(ViewId.Main, ViewPose.Default);
+            new ViewState(ViewId.Main, StageId.Main, ViewPose.Default),
+            StageViewport.GetTexture());
         PublishedScreen = ScreenState.Default;
         PublishScreen(ScreenState.Default);
         PublishEffects(StableEffectState.Default);

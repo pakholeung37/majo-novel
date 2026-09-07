@@ -10,6 +10,8 @@ using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Presentation;
 using Majo.Runtime.Dialogue.Yarn.HotReload;
 using Majo.Runtime.Script;
+using Majo.Runtime.Dialogue.Yarn;
+using YarnSpinnerGodot;
 
 namespace Majo.Runtime.HeadlessTests;
 
@@ -72,9 +74,14 @@ public partial class HeadlessTestRunner
             dialogue.Stopped += _ => stopped++;
             dialogue.Completed += _ => completed++;
 
+            var runner = services.Get<IYarnDialogueBackend>().Runner;
+            var delayedPresenter = new DelayedDismissalPresenter();
+            runner.AddChild(delayedPresenter);
+            runner.dialoguePresenters!.Add(delayedPresenter);
             await dialogue.StartAsync();
             await WaitForConditionAsync(() => presenter.Lines.Count == 1, 2);
             var sessionId = ((DialoguePlayer)dialogue).CurrentDialogueSessionId;
+            delayedPresenter.DelayNextDismissal = true;
             await hotReload.RequestReloadAsync("YarnVmBridge");
             await WaitForConditionAsync(
                 () => hotReload.Status.Message?.Contains("was applied", StringComparison.Ordinal) == true,
@@ -82,6 +89,12 @@ public partial class HeadlessTestRunner
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
 
+            Assert(!delayedPresenter.OverlappedDismissal && delayedPresenter.DismissalCompleted,
+                "Yarn hot reload replayed before the previous line finished dismissing.");
+            var linePresenter = runner.dialoguePresenters.OfType<LinePresenter>().Single();
+            Assert(linePresenter.presenterControl!.Visible &&
+                    linePresenter.presenterControl.Modulate.A > 0,
+                "Yarn hot reload left the line presenter hidden.");
             Assert(presenter.Lines.Count >= 2 &&
                     presenter.Lines[^1].Id == "line:bridge-headless-first" &&
                     presenter.Lines[^1].Text.Text == "Updated current line." &&
@@ -128,6 +141,29 @@ public partial class HeadlessTestRunner
             if (Directory.Exists(sourceRoot))
             {
                 Directory.Delete(sourceRoot, recursive: true);
+            }
+        }
+    }
+
+    private sealed partial class DelayedDismissalPresenter : Node, DialoguePresenterBase
+    {
+        public List<IActionMarkupHandler> ActionMarkupHandlers { get; } = new();
+        public bool DelayNextDismissal { get; set; }
+        public bool DismissalCompleted { get; private set; }
+        public bool OverlappedDismissal { get; private set; }
+        private bool dismissing;
+
+        public async YarnTask RunLineAsync(LocalizedLine line, LineCancellationToken token)
+        {
+            OverlappedDismissal |= dismissing;
+            await YarnTask.WaitUntilCanceled(token.NextLineToken).SuppressCancellationThrow();
+            if (DelayNextDismissal)
+            {
+                DelayNextDismissal = false;
+                dismissing = true;
+                await YarnTask.Delay(100);
+                dismissing = false;
+                DismissalCompleted = true;
             }
         }
     }

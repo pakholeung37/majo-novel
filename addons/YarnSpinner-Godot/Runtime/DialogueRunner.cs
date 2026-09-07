@@ -339,6 +339,7 @@ public partial class DialogueRunner : Godot.Node
     private CancellationTokenSource? currentLineHurryUpSource;
     private YarnTaskCompletionSource? dialogueCompletionSource;
     private YarnTaskCompletionSource? dialogueCancellationCompletion;
+    private YarnTask activeLineTask = YarnTask.CompletedTask;
 
     internal ICommandDispatcher CommandDispatcher
     {
@@ -546,6 +547,18 @@ public partial class DialogueRunner : Godot.Node
 
     private async YarnTask OnDialogueCompleteAsync()
     {
+        // Cancellation signals presenters to exit; their asynchronous dismissal may
+        // still be running. Drain it before completion callbacks or a new session
+        // can reuse their UI and input state.
+        if (dialogueCancellationSource?.IsCancellationRequested == true)
+        {
+            await activeLineTask.SuppressCancellationThrow();
+            if (!IsInstanceValid(this))
+            {
+                return;
+            }
+        }
+
         // cleaning up the old cancellation token
         currentLineCancellationSource?.Dispose();
         currentLineCancellationSource = null;
@@ -747,7 +760,8 @@ public partial class DialogueRunner : Godot.Node
 
     private void OnLineReceived(Line line)
     {
-        OnLineReceivedAsync(line).Forget();
+        activeLineTask = OnLineReceivedAsync(line);
+        activeLineTask.Forget();
     }
 
     private async YarnTask OnLineReceivedAsync(Line line)
@@ -756,6 +770,12 @@ public partial class DialogueRunner : Godot.Node
         var localisedLine =
             await LineProvider.GetLocalizedLineAsync(line,
                 lineDialogueCancellationSource?.Token ?? CancellationToken.None);
+        if (!ReferenceEquals(dialogueCancellationSource, lineDialogueCancellationSource) ||
+            lineDialogueCancellationSource?.IsCancellationRequested != false)
+        {
+            return;
+        }
+
         localisedLine.Source = this;
         if (!IsInstanceValid(this))
         {

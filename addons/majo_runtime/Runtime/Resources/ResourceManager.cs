@@ -22,11 +22,13 @@ public sealed class ResourceManager : IResourceManager
     private readonly Dictionary<CacheKey, Task<object>> pending = new();
     private readonly HashSet<IResourceLease> activeLeases = new();
     private readonly long budgetBytes;
+    private readonly bool releaseOnLastLease;
     private readonly long defaultEstimateBytes;
     private CancellationTokenSource? loadLifetime;
     private long cacheHits;
     private long cacheMisses;
     private long evictionCount;
+    private long reportedPressureBytes;
     private bool isInitialized;
 
     public ResourceManager(
@@ -34,7 +36,8 @@ public sealed class ResourceManager : IResourceManager
         IRuntimeLifetime lifetime,
         IRuntimeLogger? logger = null,
         long memoryBudgetBytes = 0,
-        long defaultResourceEstimateBytes = 0)
+        long defaultResourceEstimateBytes = 0,
+        bool releaseOnLastLease = false)
     {
         ArgumentNullException.ThrowIfNull(providers);
         this.providers = providers.ToArray();
@@ -43,6 +46,7 @@ public sealed class ResourceManager : IResourceManager
         ArgumentOutOfRangeException.ThrowIfNegative(memoryBudgetBytes);
         ArgumentOutOfRangeException.ThrowIfNegative(defaultResourceEstimateBytes);
         budgetBytes = memoryBudgetBytes;
+        this.releaseOnLastLease = releaseOnLastLease;
         defaultEstimateBytes = defaultResourceEstimateBytes;
         ValidateProviders(this.providers);
     }
@@ -321,6 +325,13 @@ public sealed class ResourceManager : IResourceManager
                 entry.LeaseCount = Math.Max(0, entry.LeaseCount - 1);
                 if (pinned) entry.PinnedLeaseCount = Math.Max(0, entry.PinnedLeaseCount - 1);
                 entry.LastAccessedAt = DateTimeOffset.UtcNow;
+                if (releaseOnLastLease && entry.LeaseCount == 0 && entry.PinnedLeaseCount == 0)
+                {
+                    loaded.Remove(cacheKey);
+                    evictionCount++;
+                    logger.Info("resource", "resource.cache_evicted",
+                        $"Evicted Runtime cache entry '{cacheKey.ResolvedPath}' (last_lease_released).");
+                }
             }
             EvictToBudgetLocked(null, "budget_after_release");
         }
@@ -489,6 +500,7 @@ public sealed class ResourceManager : IResourceManager
         bool trimAllUnleased = false)
     {
         var total = loaded.Values.Sum(entry => entry.EstimatedBytes);
+        if (budgetBytes <= 0 || total <= budgetBytes) reportedPressureBytes = 0;
         if (!trimAllUnleased && (budgetBytes <= 0 || total <= budgetBytes)) return 0;
         var removed = 0;
         foreach (var candidate in loaded
@@ -506,8 +518,21 @@ public sealed class ResourceManager : IResourceManager
                 $"Evicted Runtime cache entry '{candidate.Key.ResolvedPath}' ({reason}).");
         }
         if (budgetBytes > 0 && total > budgetBytes)
-            logger.Warning("resource", "resource.budget_pressure",
-                $"Resource cache estimate {total} bytes exceeds budget {budgetBytes} bytes; retained entries are leased or protected.");
+        {
+            // Lease churn during tree replacement must not report the same pressure repeatedly.
+            if (reportedPressureBytes == 0 || total - reportedPressureBytes >= Math.Max(1, budgetBytes / 10))
+            {
+                reportedPressureBytes = total;
+                var largest = string.Join("; ", loaded.OrderByDescending(pair => pair.Value.EstimatedBytes)
+                    .Take(5).Select(pair => $"{pair.Key.ResolvedPath}: {pair.Value.EstimatedBytes} bytes " +
+                        $"(leases={pair.Value.LeaseCount}, pinned={pair.Value.PinnedLeaseCount})"));
+                logger.Warning("resource", "resource.budget_pressure",
+                    $"Resource cache estimate {total} bytes exceeds budget {budgetBytes} bytes; retained entries are leased or protected. " +
+                    $"Largest entries: {largest}. This is not measured process memory. " +
+                    "Repeated pressure is reported only after recovery or growth of at least 10% of the budget.");
+            }
+        }
+        else reportedPressureBytes = 0;
         return removed;
     }
 

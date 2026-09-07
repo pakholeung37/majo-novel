@@ -212,7 +212,7 @@ Warden: 想反抗也没问题……[br /]只不过小命不保罢了……嗯…
 <<backdrop Background_001_001 via:dissolve duration:0.3>>
 <<character Hiro at:30,0 appearance:Surprised1>>
 <<character Ema at:70,0 appearance:"Surprised1,ArmR3">>
-<<stage show main via:dissolve duration:0.4>>
+<<stage show main via:cut>>
 <<curtain open duration:0.5>>
 <<beat end wait:true>>
 <<stage release broadcast>>

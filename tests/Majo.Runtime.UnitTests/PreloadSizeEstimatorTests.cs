@@ -15,6 +15,7 @@ public sealed class PreloadSizeEstimatorTests
         BinaryPrimitives.WriteUInt32BigEndian(header.AsSpan(16), 8192);
         BinaryPrimitives.WriteUInt32BigEndian(header.AsSpan(20), 8192);
         Assert.Equal(8192L * 8192 * 4 * 4 / 3, PreloadSizeEstimator.EstimatePng(header, 32 * 1024 * 1024));
+        Assert.Equal(8192L * 8192 * 4, PreloadSizeEstimator.EstimatePng(header, 32 * 1024 * 1024, mipmaps: false));
         Assert.Equal(1024L * 1024 * 1024, PreloadSizeEstimator.EstimatePng(header, 1024L * 1024 * 1024));
         BinaryPrimitives.WriteUInt32BigEndian(header.AsSpan(20), uint.MaxValue);
         Assert.Equal(1234, PreloadSizeEstimator.EstimatePng(header, 1234));

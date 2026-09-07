@@ -94,6 +94,16 @@ public partial class HeadlessTestRunner
             Assert(resources.CaptureCacheSnapshot().CacheMisses == treeMisses,
                 "Replacement Direction tree reloaded an atlas retained by the previous tree.");
         }
+        await preloader.BeforeCommandAsync("character", ["Hiro", "appearance:Surprised1"], CancellationToken.None);
+        await coordinator.ExecuteAsync(
+            [ActorPatchFor("Hiro", new DirectionPoint(30, 0), "Surprised1", 1, 0),
+             ActorPatchFor("Ema", new DirectionPoint(70, 0), "Fearful1", 1, 0)], DirectionCompletionBarrier.Settle);
+        var pairSnapshot = resources.CaptureCacheSnapshot();
+        Assert(pairSnapshot.Entries.Single(entry => entry.ResolvedPath.Contains("Ema_Angle01", StringComparison.Ordinal)).EstimatedBytes == 256L * 1024 * 1024,
+            "Ema estimate charged mipmaps disabled by the texture importer.");
+        Assert(pairSnapshot.Entries.Single(entry => entry.ResolvedPath.Contains("Hiro_Angle01", StringComparison.Ordinal)).EstimatedBytes == 128L * 1024 * 1024,
+            "Hiro estimate charged mipmaps disabled by the texture importer.");
+        Assert(!pairSnapshot.IsOverBudget, "Hiro/Ema pair exceeded the global cache budget.");
         preloader.Clear();
         Assert(resources.IsPinned<Texture2D>(atlas.Key, atlas.OverridePath), "Preload window release invalidated an active tree.");
         var savedDirection = coordinator.State;

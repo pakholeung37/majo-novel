@@ -9,6 +9,69 @@ namespace Majo.Runtime.UnitTests;
 public sealed class ResourceManagerTests
 {
     [Fact(Timeout = 5_000)]
+    public async Task OwnershipModeEvictsOnlyAfterLastSharedLeaseWithoutByteBudget()
+    {
+        using var lifetime = new TestRuntimeLifetime();
+        var provider = new MemoryProvider("memory").Add("memory://atlas", new TestAsset("atlas"));
+        var manager = new ResourceManager([provider], lifetime, releaseOnLastLease: true);
+        await manager.InitializeAsync(default);
+        var first = manager.LeaseAsync<TestAsset>(new ResourceKey("atlas"), estimatedBytes: 1_000_000_000, pinned: true);
+        await first.Completion;
+        var second = manager.LeaseAsync<TestAsset>(new ResourceKey("atlas"), pinned: true);
+        await second.Completion;
+        first.Release();
+        Assert.Equal(1, manager.LoadedResourceCount);
+        Assert.False(manager.CaptureCacheSnapshot().IsOverBudget);
+        second.Release();
+        Assert.Equal(0, manager.LoadedResourceCount);
+        Assert.Equal(1, provider.AsyncLoadCount);
+        await manager.ShutdownAsync(default);
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task BudgetPressureReportsGrowthAndRecoveryWithoutLeaseChurnSpam()
+    {
+        using var lifetime = new TestRuntimeLifetime();
+        var logger = new PressureLogger();
+        var provider = new MemoryProvider("memory")
+            .Add("memory://atlas", new TestAsset("atlas"))
+            .Add("memory://extra", new TestAsset("extra"));
+        var manager = new ResourceManager([provider], lifetime, logger, memoryBudgetBytes: 100);
+        await manager.InitializeAsync(default);
+        var owner = manager.LeaseAsync<TestAsset>(new ResourceKey("atlas"), estimatedBytes: 120, pinned: true);
+        await owner.Completion;
+        for (var i = 0; i < 17; i++)
+        {
+            var replacement = manager.LeaseAsync<TestAsset>(new ResourceKey("atlas"), estimatedBytes: 120, pinned: true);
+            await replacement.Completion;
+            replacement.Release();
+        }
+        Assert.Single(logger.Messages);
+        Assert.Contains("memory://atlas", logger.Messages[0]);
+        var extra = manager.LeaseAsync<TestAsset>(new ResourceKey("extra"), estimatedBytes: 20);
+        await extra.Completion;
+        Assert.Equal(2, logger.Messages.Count);
+        extra.Release();
+        owner.Release();
+        Assert.False(manager.CaptureCacheSnapshot().IsOverBudget);
+        var again = manager.LeaseAsync<TestAsset>(new ResourceKey("atlas"), estimatedBytes: 120);
+        await again.Completion;
+        Assert.Equal(3, logger.Messages.Count);
+        again.Release();
+        await manager.ShutdownAsync(default);
+    }
+
+    private sealed class PressureLogger : IRuntimeLogger
+    {
+        public List<string> Messages { get; } = new();
+        public bool IsEnabled(string category, RuntimeLogLevel level) => true;
+        public void Log(RuntimeLogEvent entry)
+        {
+            if (entry.EventId == "resource.budget_pressure") Messages.Add(entry.Message);
+        }
+    }
+
+    [Fact(Timeout = 5_000)]
     public async Task CancellingOneTreeAcquisitionDoesNotCancelSharedProviderWork()
     {
         using var lifetime = new TestRuntimeLifetime();

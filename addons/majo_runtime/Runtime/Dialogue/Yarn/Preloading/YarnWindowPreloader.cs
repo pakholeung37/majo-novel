@@ -216,7 +216,11 @@ public sealed class YarnWindowPreloader : IDisposable
         if (FileAccess.FileExists(path))
         {
             using var file = FileAccess.Open(path, FileAccess.ModeFlags.Read);
-            if (file is not null) fallback = PreloadSizeEstimator.EstimatePng(file.GetBuffer(24), fallback);
+            using var import = new ConfigFile();
+            var mipmaps = true;
+            if (import.Load(path + ".import") == Error.Ok)
+                mipmaps = import.GetValue("params", "mipmaps/generate", true).AsBool();
+            if (file is not null) fallback = PreloadSizeEstimator.EstimatePng(file.GetBuffer(24), fallback, mipmaps);
         }
         textureEstimates[path] = fallback;
         return fallback;

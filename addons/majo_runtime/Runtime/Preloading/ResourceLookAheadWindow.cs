@@ -51,7 +51,7 @@ public sealed class ResourceLookAheadWindow : IDisposable
         {
             if (selected.Contains(entry)) continue;
             var estimate = Math.Max(1, entry.EstimatedBytes);
-            if (selected.Count >= maxResources || estimate > budgetBytes - bytes) continue;
+            if (selected.Count >= maxResources || (budgetBytes > 0 && estimate > budgetBytes - bytes)) continue;
             selected.Add(entry);
             bytes += estimate;
         }
@@ -65,7 +65,7 @@ public sealed class ResourceLookAheadWindow : IDisposable
                 held[entry].Release();
                 held.Remove(entry);
             }
-            if (bytes > budgetBytes)
+            if (budgetBytes > 0 && bytes > budgetBytes)
             {
                 var description = string.Join(", ", required.Distinct()
                     .Select(entry => $"{entry.OverridePath ?? entry.Key.Path} [{entry.ResourceType.Name}]: {entry.EstimatedBytes} bytes")
