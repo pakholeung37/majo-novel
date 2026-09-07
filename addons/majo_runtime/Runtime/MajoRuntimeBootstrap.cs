@@ -281,9 +281,10 @@ public partial class MajoRuntimeBootstrap : Node
 
     private void ConfigureAndSealPlugins()
     {
-        BuiltInRuntimeCommands.Register(commandRegistry);
-        new AudioCommandModule().Register(commandRegistry);
-        new DirectionCommandModule().Register(commandRegistry);
+        commandRegistry
+            .RegisterModule(new BuiltInCommandModule())
+            .RegisterModule(new AudioCommandModule())
+            .RegisterModule(new DirectionCommandModule());
 
         ConfigureEasings?.Invoke(easingRegistry);
         ConfigureTransitionDrivers?.Invoke(transitionDrivers);

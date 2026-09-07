@@ -33,7 +33,7 @@ public sealed class DirectionRuntimeTests
             .Build();
 
         var commands = new RuntimeCommandRegistry();
-        new DirectionCommandModule().Register(commands);
+        commands.RegisterModule(new DirectionCommandModule());
         commands.SealRegistrations();
 
         var names = commands.BuildCatalog(services).Commands

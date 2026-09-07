@@ -353,7 +353,7 @@ public sealed class AudioManagerTests
             .Add<IAudioCommandPolicy>(policy)
             .Build();
 
-        new AudioCommandModule().Register(registry);
+        registry.RegisterModule(new AudioCommandModule());
         registry.SealRegistrations();
         var catalog = registry.BuildCatalog(services);
         var bgmCommand = catalog.Get<PlayBgmCommand.Arguments>("bgm");

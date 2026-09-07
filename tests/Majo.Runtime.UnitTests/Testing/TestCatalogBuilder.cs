@@ -2,8 +2,9 @@
 
 using System;
 using Majo.Runtime.Core;
+using Majo.Runtime.Dialogue.Commands;
 
-namespace Majo.Runtime.Dialogue.Commands;
+namespace Majo.Runtime.UnitTests.Testing;
 
 public sealed class TestCatalogBuilder
 {

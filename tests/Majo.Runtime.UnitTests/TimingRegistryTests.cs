@@ -303,7 +303,7 @@ public sealed class TimingRegistryTests
             .Build();
 
         var registry = new RuntimeCommandRegistry();
-        new DirectionCommandModule().Register(registry);
+        registry.RegisterModule(new DirectionCommandModule());
         registry.SealRegistrations();
         var catalog = registry.BuildCatalog(services);
 

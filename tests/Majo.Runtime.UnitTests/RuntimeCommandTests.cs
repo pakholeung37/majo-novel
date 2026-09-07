@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue.Commands;
+using Majo.Runtime.Dialogue.Commands.Audio;
 using Majo.Runtime.Dialogue.Yarn;
 using Majo.Runtime.Diagnostics;
 using Majo.Runtime.Direction.Core;
@@ -160,7 +161,7 @@ public sealed class RuntimeCommandTests
     public void CatalogIsTheSingleSourceOfBuiltInCommandNames()
     {
         var commands = new RuntimeCommandRegistry();
-        BuiltInRuntimeCommands.Register(commands);
+        commands.RegisterModule(new BuiltInCommandModule());
         commands.SealRegistrations();
         var catalog = commands.BuildCatalog();
 
@@ -177,7 +178,7 @@ public sealed class RuntimeCommandTests
     public void RegistryRejectsReservedDuplicateAndLateRegistrations()
     {
         var commands = new RuntimeCommandRegistry();
-        BuiltInRuntimeCommands.Register(commands);
+        commands.RegisterModule(new BuiltInCommandModule());
 
         var duplicate = Assert.Throws<RuntimeCommandException>(() =>
             commands.Add("save", _ => new DuplicateCommand(), "test"));
@@ -197,7 +198,7 @@ public sealed class RuntimeCommandTests
     public void FailedCommandModuleRegistrationRollsBackPartialModule()
     {
         var commands = new RuntimeCommandRegistry();
-        BuiltInRuntimeCommands.Register(commands);
+        commands.RegisterModule(new BuiltInCommandModule());
 
         Assert.Throws<RuntimeCommandException>(() =>
             commands.RegisterModule(new FailingCommandModule()));
@@ -206,6 +207,35 @@ public sealed class RuntimeCommandTests
             commands.Registrations,
             registration => registration.Name == "probe");
         Assert.Equal(2, commands.Registrations.Count);
+    }
+
+    [Fact]
+    public void BuiltInCommandModuleRegistersExpectedCommandsThroughModuleInterface()
+    {
+        var commands = new RuntimeCommandRegistry();
+        commands.RegisterModule(new BuiltInCommandModule());
+        commands.SealRegistrations();
+        var catalog = commands.BuildCatalog();
+
+        Assert.Equal(
+            ["save", "autoSave"],
+            catalog.Commands.Select(command => command.Name));
+    }
+
+    [Fact]
+    public void BuiltInAudioAndDirectionModulesRegisterThroughModuleInterface()
+    {
+        var commands = new RuntimeCommandRegistry();
+        commands.RegisterModule(new BuiltInCommandModule());
+        commands.RegisterModule(new AudioCommandModule());
+        commands.RegisterModule(new DirectionCommandModule());
+
+        var registeredNames = commands.Registrations.Select(c => c.Name).ToList();
+        Assert.Contains("save", registeredNames);
+        Assert.Contains("autoSave", registeredNames);
+        Assert.Contains("bgm", registeredNames);
+        Assert.Contains("voice", registeredNames);
+        Assert.Contains("camera move", registeredNames);
     }
 
     [Fact]
@@ -589,7 +619,7 @@ public sealed class RuntimeCommandTests
     public void Manifest_GeneratesAndMergesCleanly()
     {
         var commands = new RuntimeCommandRegistry();
-        BuiltInRuntimeCommands.Register(commands);
+        commands.RegisterModule(new BuiltInCommandModule());
         commands.SealRegistrations();
         var catalog = commands.BuildCatalog();
 
@@ -722,7 +752,7 @@ public sealed class RuntimeCommandTests
         IServiceResolver? services = null)
     {
         var commands = new RuntimeCommandRegistry();
-        BuiltInRuntimeCommands.Register(commands);
+        commands.RegisterModule(new BuiltInCommandModule());
         configure?.Invoke(commands);
         commands.SealRegistrations();
         catalog = commands.BuildCatalog(services);

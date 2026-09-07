@@ -5,11 +5,20 @@ using Majo.Runtime.Save;
 
 namespace Majo.Runtime.Dialogue.Commands;
 
-public static class BuiltInRuntimeCommands
+public sealed class BuiltInCommandModule : IRuntimeCommandModule
 {
-    public static void Register(IRuntimeCommandRegistrar commands)
+    public void Register(CommandRegistrationContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        RegisterCommands(context.Commands);
+    }
+
+    public static void RegisterCommands(IRuntimeCommandRegistrar commands)
     {
         ArgumentNullException.ThrowIfNull(commands);
+        const string providerId = "majo.builtin";
+        const string version = "1.0";
+
         commands.Add(
             "save",
             services => new SaveCommand(
@@ -18,8 +27,8 @@ public static class BuiltInRuntimeCommands
                     : services.TryGet<ISaveProductManager>(out var manager)
                         ? new DelegateSaveProductAccessor(() => manager)
                         : null),
-            "majo.builtin",
-            "1.0");
+            providerId,
+            version);
         commands.Add(
             "autoSave",
             services => new AutoSaveCommand(
@@ -28,7 +37,7 @@ public static class BuiltInRuntimeCommands
                     : services.TryGet<ISaveProductManager>(out var manager)
                         ? new DelegateSaveProductAccessor(() => manager)
                         : null),
-            "majo.builtin",
-            "1.0");
+            providerId,
+            version);
     }
 }

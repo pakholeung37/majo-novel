@@ -36,19 +36,6 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
                 : CreateDefaultEasingRegistry()), "timing");
     }
 
-    public void Register(IRuntimeCommandRegistrar commands)
-    {
-        ArgumentNullException.ThrowIfNull(commands);
-
-        if (commands is RuntimeCommandRegistry reg)
-        {
-            reg.RegisterModule(this);
-            return;
-        }
-
-        RegisterCommands(commands);
-    }
-
     private static Timing.EasingRegistry CreateDefaultEasingRegistry()
     {
         var registry = new Timing.EasingRegistry();
