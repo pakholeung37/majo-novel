@@ -290,7 +290,6 @@ public sealed class PluginAndDirectionExtensibilityTests
         }
     }
 
-    [Command("plugin convert")]
     private sealed class ConverterCommand : RuntimeCommand<ConverterCommand.Arguments>
     {
         public sealed record Arguments([Primary] PluginNumber Value);

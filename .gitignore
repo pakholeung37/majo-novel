@@ -21,3 +21,4 @@ TestResults/
 /demos/manosaba/assets/backgrounds
 /demos/manosaba/assets/ui
 /demos/manosaba/reference
+**/obj/generated/**
