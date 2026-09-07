@@ -16,76 +16,45 @@ public partial class AnimationConfiguration : Resource
     [Export] public double DefaultAudioFadeDurationSeconds { get; set; } = RuntimeDefaults.AnimationDurationSeconds;
     [Export] public double DefaultVoiceFadeDurationSeconds { get; set; } = RuntimeDefaults.ImmediateDurationSeconds;
 
-    [Export] public string DefaultCharacterAnimationId { get; set; } = string.Empty;
-    [Export] public string DefaultLeaveAnimationId { get; set; } = string.Empty;
-    [Export] public string DefaultStageShowAnimationId { get; set; } = string.Empty;
-    [Export] public string DefaultStageClearAnimationId { get; set; } = string.Empty;
-    [Export] public string DefaultBackdropAnimationId { get; set; } = string.Empty;
-    [Export] public string DefaultCameraPoseAnimationId { get; set; } = string.Empty;
-    [Export] public string DefaultCameraResetAnimationId { get; set; } = string.Empty;
-    [Export] public string DefaultShotAnimationId { get; set; } = string.Empty;
-    [Export] public string DefaultLayoutAnimationId { get; set; } = string.Empty;
-    [Export] public string DefaultDirectionEasingId { get; set; } = string.Empty;
-
-    [Export] public DirectionTransitionKind DefaultCharacterAnimationKind { get; set; } = DirectionTransitionKind.Fade;
-    [Export] public DirectionTransitionKind DefaultLeaveAnimationKind { get; set; } = DirectionTransitionKind.Fade;
-    [Export] public DirectionTransitionKind DefaultStageShowAnimationKind { get; set; } = DirectionTransitionKind.Cut;
-    [Export] public DirectionTransitionKind DefaultStageClearAnimationKind { get; set; } = DirectionTransitionKind.Cut;
-    [Export] public DirectionTransitionKind DefaultBackdropAnimationKind { get; set; } = DirectionTransitionKind.Cut;
-    [Export] public DirectionTransitionKind DefaultCameraPoseAnimationKind { get; set; } = DirectionTransitionKind.Cut;
-    [Export] public DirectionTransitionKind DefaultCameraResetAnimationKind { get; set; } = DirectionTransitionKind.Cut;
-    [Export] public DirectionTransitionKind DefaultShotAnimationKind { get; set; } = DirectionTransitionKind.Cut;
-    [Export] public DirectionTransitionKind DefaultLayoutAnimationKind { get; set; } = DirectionTransitionKind.Cut;
-    [Export] public DirectionEase DefaultDirectionAnimationEase { get; set; } = DirectionEase.Linear;
+    [Export] public string DefaultCharacterAnimationId { get; set; } = "fade";
+    [Export] public string DefaultLeaveAnimationId { get; set; } = "fade";
+    [Export] public string DefaultStageShowAnimationId { get; set; } = "cut";
+    [Export] public string DefaultStageClearAnimationId { get; set; } = "cut";
+    [Export] public string DefaultBackdropAnimationId { get; set; } = "cut";
+    [Export] public string DefaultCameraPoseAnimationId { get; set; } = "cut";
+    [Export] public string DefaultCameraResetAnimationId { get; set; } = "cut";
+    [Export] public string DefaultShotAnimationId { get; set; } = "cut";
+    [Export] public string DefaultLayoutAnimationId { get; set; } = "cut";
+    [Export] public string DefaultDirectionEasingId { get; set; } = "linear";
     [Export] public MotionCurve DefaultStageAnimationCurve { get; set; } = MotionCurve.Linear;
 
     public DirectionTransitionId ResolveCharacterAnimationId() =>
-        !string.IsNullOrWhiteSpace(DefaultCharacterAnimationId)
-            ? new DirectionTransitionId(DefaultCharacterAnimationId)
-            : DirectionTransitionId.FromKind(DefaultCharacterAnimationKind);
+        new(!string.IsNullOrWhiteSpace(DefaultCharacterAnimationId) ? DefaultCharacterAnimationId : "fade");
 
     public DirectionTransitionId ResolveLeaveAnimationId() =>
-        !string.IsNullOrWhiteSpace(DefaultLeaveAnimationId)
-            ? new DirectionTransitionId(DefaultLeaveAnimationId)
-            : DirectionTransitionId.FromKind(DefaultLeaveAnimationKind);
+        new(!string.IsNullOrWhiteSpace(DefaultLeaveAnimationId) ? DefaultLeaveAnimationId : "fade");
 
     public DirectionTransitionId ResolveStageShowAnimationId() =>
-        !string.IsNullOrWhiteSpace(DefaultStageShowAnimationId)
-            ? new DirectionTransitionId(DefaultStageShowAnimationId)
-            : DirectionTransitionId.FromKind(DefaultStageShowAnimationKind);
+        new(!string.IsNullOrWhiteSpace(DefaultStageShowAnimationId) ? DefaultStageShowAnimationId : "cut");
 
     public DirectionTransitionId ResolveStageClearAnimationId() =>
-        !string.IsNullOrWhiteSpace(DefaultStageClearAnimationId)
-            ? new DirectionTransitionId(DefaultStageClearAnimationId)
-            : DirectionTransitionId.FromKind(DefaultStageClearAnimationKind);
+        new(!string.IsNullOrWhiteSpace(DefaultStageClearAnimationId) ? DefaultStageClearAnimationId : "cut");
 
     public DirectionTransitionId ResolveBackdropAnimationId() =>
-        !string.IsNullOrWhiteSpace(DefaultBackdropAnimationId)
-            ? new DirectionTransitionId(DefaultBackdropAnimationId)
-            : DirectionTransitionId.FromKind(DefaultBackdropAnimationKind);
+        new(!string.IsNullOrWhiteSpace(DefaultBackdropAnimationId) ? DefaultBackdropAnimationId : "cut");
 
     public DirectionTransitionId ResolveCameraPoseAnimationId() =>
-        !string.IsNullOrWhiteSpace(DefaultCameraPoseAnimationId)
-            ? new DirectionTransitionId(DefaultCameraPoseAnimationId)
-            : DirectionTransitionId.FromKind(DefaultCameraPoseAnimationKind);
+        new(!string.IsNullOrWhiteSpace(DefaultCameraPoseAnimationId) ? DefaultCameraPoseAnimationId : "cut");
 
     public DirectionTransitionId ResolveCameraResetAnimationId() =>
-        !string.IsNullOrWhiteSpace(DefaultCameraResetAnimationId)
-            ? new DirectionTransitionId(DefaultCameraResetAnimationId)
-            : DirectionTransitionId.FromKind(DefaultCameraResetAnimationKind);
+        new(!string.IsNullOrWhiteSpace(DefaultCameraResetAnimationId) ? DefaultCameraResetAnimationId : "cut");
 
     public DirectionTransitionId ResolveShotAnimationId() =>
-        !string.IsNullOrWhiteSpace(DefaultShotAnimationId)
-            ? new DirectionTransitionId(DefaultShotAnimationId)
-            : DirectionTransitionId.FromKind(DefaultShotAnimationKind);
+        new(!string.IsNullOrWhiteSpace(DefaultShotAnimationId) ? DefaultShotAnimationId : "cut");
 
     public DirectionTransitionId ResolveLayoutAnimationId() =>
-        !string.IsNullOrWhiteSpace(DefaultLayoutAnimationId)
-            ? new DirectionTransitionId(DefaultLayoutAnimationId)
-            : DirectionTransitionId.FromKind(DefaultLayoutAnimationKind);
+        new(!string.IsNullOrWhiteSpace(DefaultLayoutAnimationId) ? DefaultLayoutAnimationId : "cut");
 
     public EasingId ResolveDirectionEasingId() =>
-        !string.IsNullOrWhiteSpace(DefaultDirectionEasingId)
-            ? new EasingId(DefaultDirectionEasingId)
-            : DirectionTransitionSpec.FromDirectionEase(DefaultDirectionAnimationEase);
+        new(!string.IsNullOrWhiteSpace(DefaultDirectionEasingId) ? DefaultDirectionEasingId : "linear");
 }

@@ -195,7 +195,6 @@ public sealed class TimingRegistryTests
         Assert.Equal(EasingId.SineIn, converter.Parse("sine-in"));
         Assert.Equal(EasingId.SineIn, converter.Parse("sinein"));
         Assert.Equal(EasingId.SineIn, converter.Parse("SineIn"));
-        Assert.Equal(DirectionEase.SineIn, new DirectionEaseConverter(easings).Parse("sine-in"));
 
         // Custom
         Assert.Equal(customId, converter.Parse("spring-out"));
@@ -308,9 +307,7 @@ public sealed class TimingRegistryTests
         var catalog = registry.BuildCatalog(services);
 
         var test1 = new DirectionBeatDefaults(null, (EasingId?)null);
-        var test2 = new DirectionBeatDefaults(null, (DirectionEase?)null);
         Assert.True(test1.Easing is null, $"test1.Easing is '{test1.Easing}' (hasValue={test1.Easing.HasValue})");
-        Assert.True(test2.Easing is null, $"test2.Easing is '{test2.Easing}' (hasValue={test2.Easing.HasValue})");
 
         var beatBegin = catalog.Get("beat begin");
         var context = new CommandExecutionContext("test-exec");
@@ -424,7 +421,6 @@ public sealed class TimingRegistryTests
         var id = new EasingId("square");
         registry.Register(new EasingDefinition(id, t => t * t));
         Assert.Equal(0.0625f, GodotEasingAdapter.SampleProgress(id, 0.25f, registry));
-        Assert.Throws<DirectionException>(() => DirectionTransitionSpec.ToDirectionEase(id));
         Assert.Throws<DirectionException>(() => GodotEasingAdapter.SampleProgress("missing", 0.25f, registry));
         registry.Register(new EasingDefinition("invalid-between-samples", t => t == 0.25 ? double.NaN : t));
         Exception? failure = null;

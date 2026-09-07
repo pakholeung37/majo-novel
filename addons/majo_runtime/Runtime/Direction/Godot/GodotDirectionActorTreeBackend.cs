@@ -11,6 +11,7 @@ using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Direction.Rendering;
 using Majo.Runtime.Operations;
+using Majo.Runtime.Timing;
 
 namespace Majo.Runtime.Direction.Godot;
 
@@ -500,10 +501,29 @@ internal sealed class GodotDirectionActorTreeBackend
 
         private static AnimationSpec ToAnimationSpec(DirectionTransitionSpec transition)
         {
-            var parts = transition.Ease.Decompose();
-            var curve = Enum.Parse<AnimationTransition>(parts.Curve.ToString());
-            var ease = Enum.Parse<AnimationEase>(parts.Mode.ToString());
-            return new AnimationSpec(transition.DurationSeconds, curve, ease);
+            var easing = transition.Easing;
+            if (easing == EasingId.Linear)
+                return new AnimationSpec(transition.DurationSeconds, AnimationTransition.Linear, AnimationEase.InOut);
+            if (easing == EasingId.SineIn)
+                return new AnimationSpec(transition.DurationSeconds, AnimationTransition.Sine, AnimationEase.In);
+            if (easing == EasingId.SineOut)
+                return new AnimationSpec(transition.DurationSeconds, AnimationTransition.Sine, AnimationEase.Out);
+            if (easing == EasingId.SineInOut)
+                return new AnimationSpec(transition.DurationSeconds, AnimationTransition.Sine, AnimationEase.InOut);
+            if (easing == EasingId.CubicIn)
+                return new AnimationSpec(transition.DurationSeconds, AnimationTransition.Cubic, AnimationEase.In);
+            if (easing == EasingId.CubicOut)
+                return new AnimationSpec(transition.DurationSeconds, AnimationTransition.Cubic, AnimationEase.Out);
+            if (easing == EasingId.CubicInOut)
+                return new AnimationSpec(transition.DurationSeconds, AnimationTransition.Cubic, AnimationEase.InOut);
+            if (easing == EasingId.BackIn)
+                return new AnimationSpec(transition.DurationSeconds, AnimationTransition.Back, AnimationEase.In);
+            if (easing == EasingId.BackOut)
+                return new AnimationSpec(transition.DurationSeconds, AnimationTransition.Back, AnimationEase.Out);
+            if (easing == EasingId.BackInOut)
+                return new AnimationSpec(transition.DurationSeconds, AnimationTransition.Back, AnimationEase.InOut);
+
+            throw new DirectionException($"Easing '{easing}' is not supported by actor animation backend.");
         }
     }
 

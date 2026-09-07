@@ -27,10 +27,6 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
         converters.AddDefault<Direction.Core.DirectionTransitionId>(_ => DirectionTransitionIdConverter.Instance, providerId);
         converters.AddDefault<Direction.Core.CurtainPosition>(_ => new EnumCommandValueConverter<Direction.Core.CurtainPosition>(), providerId);
         converters.AddDefault(
-            services => new DirectionEaseConverter(services.TryGet<Timing.IEasingRegistry>(out var registry) && registry is not null
-                ? registry
-                : CreateDefaultEasingRegistry()), providerId);
-        converters.AddDefault(
             services => new EasingIdConverter(services.TryGet<Timing.IEasingRegistry>(out var registry) && registry is not null
                 ? registry
                 : CreateDefaultEasingRegistry()), "timing");

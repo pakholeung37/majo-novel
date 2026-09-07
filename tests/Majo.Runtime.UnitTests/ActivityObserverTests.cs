@@ -164,7 +164,7 @@ public sealed class ActivityObserverTests
         var planDirectives = new IDirectionDirective[]
         {
             new StageCreatePatch(StageId.Main, ViewId.Main, DirectionTransitionSpec.Cut),
-            new BackdropPatch(StageId.Main, new BackdropState(new ResourceKey("bg1")), new DirectionTransitionSpec(DirectionTransitionKind.Fade, 1.0)),
+            new BackdropPatch(StageId.Main, new BackdropState(new ResourceKey("bg1")), new DirectionTransitionSpec(DirectionTransitionId.Fade, 1.0)),
         };
 
         var tx = await coordinator.ExecuteAsync(planDirectives, DirectionCompletionBarrier.Commit);

@@ -10,6 +10,7 @@ using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Direction.Rendering;
 using Majo.Runtime.Operations;
+using Majo.Runtime.Timing;
 using Majo.Runtime.UnitTests.Testing;
 using Xunit;
 
@@ -21,7 +22,7 @@ public sealed class TransientCueTransactionTests
     private static readonly StageCreatePatch DummyVisual = new(
         new StageId("main"),
         new ViewId("main"),
-        new DirectionTransitionSpec(DirectionTransitionKind.Fade, 0.5, DirectionEase.Linear, skippable: true));
+        new DirectionTransitionSpec(DirectionTransitionId.Fade, 0.5, EasingId.Linear, Skippable: true));
 
     [Fact(Timeout = 5_000)]
     public async Task TransactionSettlement_WaitsForBothVisualTransitionAndCueActivity()

@@ -12,6 +12,7 @@ using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Direction.Rendering;
 using Majo.Runtime.Resources;
 using Majo.Runtime.State;
+using Majo.Runtime.Timing;
 using Majo.Runtime.UnitTests.Testing;
 using Xunit;
 
@@ -233,7 +234,7 @@ public sealed class DirectionRuntimeTests
                 ViewId.Main,
                 zoom: 2,
                 transition: new DirectionTransitionSpec(
-                    DirectionTransitionKind.Move,
+                    DirectionTransitionId.Move,
                     2,
                     Skippable: true)),
         });
@@ -277,13 +278,13 @@ public sealed class DirectionRuntimeTests
         {
             new CurtainPatch(
                 new CurtainState(new DirectionColor(0.1f, 0.2f, 0.3f), 1),
-                new DirectionTransitionSpec(DirectionTransitionKind.Fade, 0.5)),
+                new DirectionTransitionSpec(DirectionTransitionId.Fade, 0.5)),
         });
 
         Assert.Equal(1, plan.TargetState.Effects.Curtain.Opacity);
         var transition = Assert.Single(plan.Transitions);
         Assert.Contains("effect/curtain", transition.StablePaths);
-        Assert.Equal(DirectionTransitionKind.Fade, transition.Spec.Kind);
+        Assert.Equal(DirectionTransitionId.Fade, transition.Spec.Kind);
         Assert.Empty(plan.Cues);
     }
 
@@ -365,10 +366,10 @@ public sealed class DirectionRuntimeTests
             new IDirectionDirective[]
             {
                 View(ViewId.Main, zoom: 1.5f,
-                    transition: new DirectionTransitionSpec(DirectionTransitionKind.Move, 1),
+                    transition: new DirectionTransitionSpec(DirectionTransitionId.Move, 1),
                     location: first),
                 View(ViewId.Main, rotation: 10,
-                    transition: new DirectionTransitionSpec(DirectionTransitionKind.Fade, 1),
+                    transition: new DirectionTransitionSpec(DirectionTransitionId.Fade, 1),
                     location: second),
             }));
 
@@ -396,9 +397,9 @@ public sealed class DirectionRuntimeTests
                     default,
                     default,
                     new DirectionTransitionSpec(
-                        DirectionTransitionKind.Move,
+                        DirectionTransitionId.Move,
                         0.4,
-                        DirectionEase.SineOut)),
+                        EasingId.SineOut)),
             });
 
         var rebuilt = new DirectionExecutionPlan(plan.DomainPlan,
@@ -408,7 +409,7 @@ public sealed class DirectionRuntimeTests
         Assert.Equal(plan.ViewSequences, rebuilt.ViewSequences);
         var sequence = Assert.Single(plan.ViewSequences!);
         Assert.Equal(cutPose, sequence.StartState.Pose);
-        Assert.Equal(DirectionTransitionKind.Move, sequence.Transition.Kind);
+        Assert.Equal(DirectionTransitionId.Move, sequence.Transition.Kind);
         Assert.Equal(movePose, plan.TargetState.Views[ViewId.Main].Pose);
     }
 
@@ -491,7 +492,7 @@ public sealed class DirectionRuntimeTests
         await beats.SubmitAsync(View(
             ViewId.Main,
             zoom: 2,
-            transition: new DirectionTransitionSpec(DirectionTransitionKind.Move, 4)));
+            transition: new DirectionTransitionSpec(DirectionTransitionId.Move, 4)));
         await beats.EndAsync(DirectionCompletionBarrier.Commit);
 
         var join = beats.JoinAsync("slow-pan");

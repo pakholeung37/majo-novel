@@ -16,19 +16,6 @@ namespace Majo.Runtime.UnitTests;
 
 public sealed class DirectionPatchTests
 {
-    [Theory]
-    [InlineData(DirectionEase.BackIn, DirectionEaseCurve.Back, DirectionEaseMode.In)]
-    [InlineData(DirectionEase.BackOut, DirectionEaseCurve.Back, DirectionEaseMode.Out)]
-    [InlineData(DirectionEase.BackInOut, DirectionEaseCurve.Back, DirectionEaseMode.InOut)]
-    [InlineData(DirectionEase.CubicOut, DirectionEaseCurve.Cubic, DirectionEaseMode.Out)]
-    public void DirectionEaseDecomposesIntoCurveAndMode(
-        DirectionEase ease,
-        DirectionEaseCurve curve,
-        DirectionEaseMode mode)
-    {
-        Assert.Equal(new DirectionEaseParts(curve, mode), ease.Decompose());
-    }
-
     [Fact]
     public void BeatBeginAllowsAnonymousBeats()
     {
@@ -39,16 +26,6 @@ public sealed class DirectionPatchTests
         var arguments = bound.Bind(new CommandInput("beat begin", Array.Empty<string>()));
 
         Assert.False(arguments.Id.WasProvided);
-    }
-
-    [Fact]
-    public void DirectionEaseAcceptsLegacyBackCurves()
-    {
-        var easings = new Timing.EasingRegistry();
-        Majo.Runtime.Timing.BuiltInEasings.RegisterDefaults(easings);
-        var ease = new DirectionEaseConverter(easings).Parse("back-out");
-
-        Assert.Equal(DirectionEase.BackOut, ease);
     }
 
     [Fact]

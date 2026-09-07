@@ -6,6 +6,7 @@ using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Direction.Rendering;
 using Majo.Runtime.Resources;
 using Majo.Runtime.Stage;
+using Majo.Runtime.Timing;
 using Majo.Runtime.UnitTests.Testing;
 using Xunit;
 
@@ -24,7 +25,7 @@ public sealed class CompositeDirectionTransactionTests
         var planDirectives = new IDirectionDirective[]
         {
             new StageCreatePatch(StageId.Main, ViewId.Main, DirectionTransitionSpec.Cut),
-            new BackdropPatch(StageId.Main, new BackdropState(new ResourceKey("bg1")), new DirectionTransitionSpec(DirectionTransitionKind.Fade, 1.0)),
+            new BackdropPatch(StageId.Main, new BackdropState(new ResourceKey("bg1")), new DirectionTransitionSpec(DirectionTransitionId.Fade, 1.0)),
         };
 
         var transaction = await coordinator.ExecuteAsync(planDirectives, DirectionCompletionBarrier.Commit);
@@ -50,7 +51,7 @@ public sealed class CompositeDirectionTransactionTests
         var transaction = await coordinator.ExecuteAsync(new IDirectionDirective[]
         {
             new BackdropPatch(StageId.Main, new BackdropState(new ResourceKey("bg1")), new DirectionTransitionSpec(
-                DirectionTransitionKind.Fade, 1.0, DirectionEase.Linear)),
+                DirectionTransitionId.Fade, 1.0, EasingId.Linear)),
         }, DirectionCompletionBarrier.Commit);
 
         Assert.False(transaction.Settlement.IsCompleted);
@@ -90,7 +91,7 @@ public sealed class CompositeDirectionTransactionTests
         var skippableTx = await coordinator.ExecuteAsync(new IDirectionDirective[]
         {
             new BackdropPatch(StageId.Main, new BackdropState(new ResourceKey("bg1")), new DirectionTransitionSpec(
-                DirectionTransitionKind.Fade, 1.0, DirectionEase.Linear, Skippable: true)),
+                DirectionTransitionId.Fade, 1.0, EasingId.Linear, Skippable: true)),
         }, DirectionCompletionBarrier.Commit);
 
         Assert.True(skippableTx.IsSkippable);

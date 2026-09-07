@@ -30,20 +30,20 @@ public partial class HeadlessTestRunner
     {
         using (var configuration = new AnimationConfiguration
         {
-            DefaultBackdropAnimationKind = DirectionTransitionKind.Dissolve,
-            DefaultCharacterAnimationKind = DirectionTransitionKind.Move,
-            DefaultDirectionAnimationEase = DirectionEase.SineOut,
+            DefaultBackdropAnimationId = "dissolve",
+            DefaultCharacterAnimationId = "move",
+            DefaultDirectionEasingId = "sine-out",
         })
         {
             Assert(configuration.ResolveBackdropAnimationId() == DirectionTransitionId.Dissolve,
-                "Legacy backdrop configuration must survive new ID defaults.");
+                "Configured backdrop ID should match.");
             Assert(configuration.ResolveCharacterAnimationId() == DirectionTransitionId.Move,
-                "Legacy character configuration must survive new ID defaults.");
+                "Configured character ID should match.");
             Assert(configuration.ResolveDirectionEasingId() == EasingId.SineOut,
-                "Legacy easing configuration must survive new ID defaults.");
+                "Configured easing ID should match.");
             configuration.DefaultBackdropAnimationId = "fade";
             Assert(configuration.ResolveBackdropAnimationId() == DirectionTransitionId.Fade,
-                "Explicit new configuration must override legacy configuration.");
+                "Explicit new configuration must update resolution.");
         }
         var owner = new Node { Name = "DirectionRenderingProbe" };
         AddChild(owner);
@@ -190,9 +190,9 @@ public partial class HeadlessTestRunner
                 ShowView(
                     illustrationView,
                     new DirectionTransitionSpec(
-                        DirectionTransitionKind.Dissolve,
+                        DirectionTransitionId.Dissolve,
                         2,
-                        DirectionEase.SineInOut)),
+                        EasingId.SineInOut)),
             });
 
         Assert(coordinator.State.Screen.Bindings[LayoutSlotId.Main] == illustrationView,
@@ -268,9 +268,9 @@ public partial class HeadlessTestRunner
                     default,
                     default,
                     new DirectionTransitionSpec(
-                        DirectionTransitionKind.Move,
+                        DirectionTransitionId.Move,
                         0.4,
-                        DirectionEase.SineOut)),
+                        EasingId.SineOut)),
             });
         Assert(Equals(host.PublishedView?.Pose, cutPose),
             "A sequential View move did not publish its Cut pose before tweening.");
@@ -317,7 +317,7 @@ public partial class HeadlessTestRunner
                     "red",
                     1,
                     0,
-                    new DirectionTransitionSpec(DirectionTransitionKind.Move, 0.2)),
+                    new DirectionTransitionSpec(DirectionTransitionId.Move, 0.2)),
             });
         var movedActorRoot = GetVisibleActorRoot(host);
         var movedActor = movedActorRoot.GetNode<Sprite2D>("hero");
@@ -341,7 +341,7 @@ public partial class HeadlessTestRunner
                     "blue",
                     1,
                     0,
-                    new DirectionTransitionSpec(DirectionTransitionKind.Dissolve, 1.0)),
+                    new DirectionTransitionSpec(DirectionTransitionId.Dissolve, 1.0)),
             });
         var fadedActorRoot = GetLatestVisibleActorRoot(host);
         var fadedActor = fadedActorRoot.GetNode<Sprite2D>("hero");
@@ -384,7 +384,7 @@ public partial class HeadlessTestRunner
                 new ActorLeavePatch(
                     StageId.Main,
                     new ActorId("hero"),
-                    new DirectionTransitionSpec(DirectionTransitionKind.Move, 0.2)),
+                    new DirectionTransitionSpec(DirectionTransitionId.Move, 0.2)),
             },
             DirectionCompletionBarrier.Settle));
         Assert(ReferenceEquals(GetVisibleActorRoot(host), fadedActorRoot),
@@ -396,7 +396,7 @@ public partial class HeadlessTestRunner
                 new ActorLeavePatch(
                     StageId.Main,
                     new ActorId("hero"),
-                    new DirectionTransitionSpec(DirectionTransitionKind.Fade, 0.2)),
+                    new DirectionTransitionSpec(DirectionTransitionId.Fade, 0.2)),
             });
         Assert(fadedActorRoot.Visible && GetLatestVisibleActorRoot(host).GetChildCount() == 0,
             "Direction fade-leave did not retain its source Actor during transition.");

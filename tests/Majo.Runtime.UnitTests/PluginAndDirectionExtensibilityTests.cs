@@ -16,6 +16,7 @@ using Majo.Runtime.Direction.Transitions;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Plugins;
 using Majo.Runtime.Stage;
+using Majo.Runtime.Timing;
 using Xunit;
 
 namespace Majo.Runtime.UnitTests;
@@ -23,7 +24,7 @@ namespace Majo.Runtime.UnitTests;
 public sealed class PluginAndDirectionExtensibilityTests
 {
     [Fact]
-    public void DirectionTransitionIdSupportsEquivalenceAndKindMapping()
+    public void DirectionTransitionIdSupportsEquivalenceAndComparison()
     {
         var cut = DirectionTransitionId.Cut;
         var fade = new DirectionTransitionId("fade");
@@ -33,14 +34,9 @@ public sealed class PluginAndDirectionExtensibilityTests
         Assert.Equal("fade", fade.Value);
         Assert.Equal("wipe_clock", custom.Value);
 
-        Assert.True(cut == DirectionTransitionKind.Cut);
-        Assert.True(DirectionTransitionKind.Fade == fade);
-        Assert.False(custom == DirectionTransitionKind.Cut);
-
-        Assert.True(fade.TryToKind(out var kind));
-        Assert.Equal(DirectionTransitionKind.Fade, kind);
-
-        Assert.False(custom.TryToKind(out _));
+        Assert.Equal(DirectionTransitionId.Cut, cut);
+        Assert.Equal(DirectionTransitionId.Fade, fade);
+        Assert.Equal(new DirectionTransitionId("wipe_clock"), custom);
 
         Assert.True(cut < fade);
         Assert.True(cut <= fade);
@@ -51,16 +47,16 @@ public sealed class PluginAndDirectionExtensibilityTests
     [Fact]
     public void DirectionTransitionSpecValidatesCustomTransitions()
     {
-        var spec = new DirectionTransitionSpec("glitch", 0.5, DirectionEase.CubicOut);
+        var spec = new DirectionTransitionSpec("glitch", 0.5, EasingId.CubicOut);
         Assert.Equal(new DirectionTransitionId("glitch"), spec.Kind);
         Assert.Equal(0.5, spec.DurationSeconds);
-        Assert.Equal(DirectionEase.CubicOut, spec.Ease);
+        Assert.Equal(EasingId.CubicOut, spec.Easing);
         Assert.Same(spec, spec.Validate());
 
         var emptySpec = new DirectionTransitionSpec(string.Empty, 0.5);
         Assert.Throws<ArgumentException>(() => emptySpec.Validate());
 
-        var invalidCut = new DirectionTransitionSpec(DirectionTransitionKind.Cut, 1.0);
+        var invalidCut = new DirectionTransitionSpec(DirectionTransitionId.Cut, 1.0);
         Assert.Throws<ArgumentException>(() => invalidCut.Validate());
     }
 

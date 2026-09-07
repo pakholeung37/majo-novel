@@ -436,19 +436,26 @@ public partial class MajoProjectConfiguration : Resource
         };
         foreach (var duration in durations)
             ValidateNonNegativeDuration(duration.Value, $"{nameof(Animation)}.{duration.Name}", issues);
-        var kinds = new[]
+        var animationIds = new[]
         {
-            Animation.DefaultCharacterAnimationKind, Animation.DefaultLeaveAnimationKind,
-            Animation.DefaultStageShowAnimationKind, Animation.DefaultStageClearAnimationKind,
-            Animation.DefaultBackdropAnimationKind, Animation.DefaultCameraPoseAnimationKind,
-            Animation.DefaultCameraResetAnimationKind, Animation.DefaultShotAnimationKind,
-            Animation.DefaultLayoutAnimationKind,
+            (nameof(Animation.DefaultCharacterAnimationId), Animation.DefaultCharacterAnimationId),
+            (nameof(Animation.DefaultLeaveAnimationId), Animation.DefaultLeaveAnimationId),
+            (nameof(Animation.DefaultStageShowAnimationId), Animation.DefaultStageShowAnimationId),
+            (nameof(Animation.DefaultStageClearAnimationId), Animation.DefaultStageClearAnimationId),
+            (nameof(Animation.DefaultBackdropAnimationId), Animation.DefaultBackdropAnimationId),
+            (nameof(Animation.DefaultCameraPoseAnimationId), Animation.DefaultCameraPoseAnimationId),
+            (nameof(Animation.DefaultCameraResetAnimationId), Animation.DefaultCameraResetAnimationId),
+            (nameof(Animation.DefaultShotAnimationId), Animation.DefaultShotAnimationId),
+            (nameof(Animation.DefaultLayoutAnimationId), Animation.DefaultLayoutAnimationId),
         };
-        foreach (var kind in kinds)
-            if (!Enum.IsDefined(kind) || kind == DirectionTransitionKind.Move)
-                issues.Add(new ConfigurationIssue(nameof(Animation), "Default animation kind is invalid."));
-        if (!Enum.IsDefined(Animation.DefaultDirectionAnimationEase) ||
-            !Enum.IsDefined(Animation.DefaultStageAnimationCurve))
+        foreach (var (propName, animId) in animationIds)
+        {
+            if (string.IsNullOrWhiteSpace(animId))
+                issues.Add(new ConfigurationIssue($"{nameof(Animation)}.{propName}", "Default animation ID cannot be empty."));
+        }
+        if (string.IsNullOrWhiteSpace(Animation.DefaultDirectionEasingId))
+            issues.Add(new ConfigurationIssue($"{nameof(Animation)}.{nameof(Animation.DefaultDirectionEasingId)}", "Default direction easing ID cannot be empty."));
+        if (!Enum.IsDefined(Animation.DefaultStageAnimationCurve))
             issues.Add(new ConfigurationIssue(nameof(Animation), "Default animation curve is invalid."));
     }
 

@@ -27,35 +27,6 @@ public sealed record DirectionAnimationDefaults(
     double DefaultCurtainDurationSeconds = RuntimeDefaults.CurtainDurationSeconds,
     EasingId DefaultEasing = default)
 {
-    public DirectionAnimationDefaults(
-        double defaultAnimationDurationSeconds,
-        double defaultCharacterAnimationDurationSeconds,
-        DirectionTransitionKind defaultCharacterAnimationKind,
-        DirectionTransitionKind defaultLeaveAnimationKind = DirectionTransitionKind.Fade,
-        DirectionTransitionKind defaultStageShowAnimationKind = DirectionTransitionKind.Cut,
-        DirectionTransitionKind defaultStageClearAnimationKind = DirectionTransitionKind.Fade,
-        DirectionTransitionKind defaultBackdropAnimationKind = DirectionTransitionKind.Cut,
-        DirectionTransitionKind defaultCameraPoseAnimationKind = DirectionTransitionKind.Cut,
-        DirectionTransitionKind defaultCameraResetAnimationKind = DirectionTransitionKind.Cut,
-        DirectionTransitionKind defaultShotAnimationKind = DirectionTransitionKind.Cut,
-        DirectionTransitionKind defaultLayoutAnimationKind = DirectionTransitionKind.Cut,
-        double defaultCurtainDurationSeconds = RuntimeDefaults.CurtainDurationSeconds)
-        : this(
-            defaultAnimationDurationSeconds,
-            defaultCharacterAnimationDurationSeconds,
-            DirectionTransitionId.FromKind(defaultCharacterAnimationKind),
-            DirectionTransitionId.FromKind(defaultLeaveAnimationKind),
-            DirectionTransitionId.FromKind(defaultStageShowAnimationKind),
-            DirectionTransitionId.FromKind(defaultStageClearAnimationKind),
-            DirectionTransitionId.FromKind(defaultBackdropAnimationKind),
-            DirectionTransitionId.FromKind(defaultCameraPoseAnimationKind),
-            DirectionTransitionId.FromKind(defaultCameraResetAnimationKind),
-            DirectionTransitionId.FromKind(defaultShotAnimationKind),
-            DirectionTransitionId.FromKind(defaultLayoutAnimationKind),
-            defaultCurtainDurationSeconds)
-    {
-    }
-
     public static DirectionAnimationDefaults FromConfiguration(AnimationConfiguration? animation)
     {
         if (animation is null)
@@ -175,6 +146,12 @@ public sealed class DirectionCommandPolicy : IDirectionCommandPolicy
         _ => TransitionDomains.Stage,
     };
 
+    private static bool IsBuiltInTransition(DirectionTransitionId kind) =>
+        kind == DirectionTransitionId.Cut ||
+        kind == DirectionTransitionId.Move ||
+        kind == DirectionTransitionId.Fade ||
+        kind == DirectionTransitionId.Dissolve;
+
     private void ValidateDefaultTransition(DirectionTransitionId id, string commandName, TransitionDomains domain)
     {
         if (id.IsEmpty) return;
@@ -203,7 +180,7 @@ public sealed class DirectionCommandPolicy : IDirectionCommandPolicy
 
         var isSupported = transitions is not null
             ? ((domain is TransitionDomains.View or TransitionDomains.Actor or TransitionDomains.Screen && kind == DirectionTransitionId.Move) || transitions.Supports(kind, domain))
-            : (kind.TryToKind(out _) || kind == DirectionTransitionId.Move);
+            : IsBuiltInTransition(kind);
 
         if (!isSupported)
         {
@@ -293,7 +270,7 @@ public sealed class DirectionCommandPolicy : IDirectionCommandPolicy
 
         var isSupported = transitions is not null
             ? (kind == DirectionTransitionId.Move || transitions.Supports(kind, TransitionDomains.View))
-            : (kind.TryToKind(out _) || kind == DirectionTransitionId.Move);
+            : IsBuiltInTransition(kind);
 
         if (!isSupported)
         {

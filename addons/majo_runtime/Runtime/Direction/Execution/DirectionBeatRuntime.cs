@@ -13,15 +13,7 @@ namespace Majo.Runtime.Direction.Execution;
 
 public sealed record DirectionBeatDefaults(
     double? DurationSeconds = null,
-    EasingId? Easing = null)
-{
-    public DirectionBeatDefaults(double? durationSeconds, DirectionEase? ease)
-        : this(durationSeconds, ease.HasValue ? DirectionTransitionSpec.FromDirectionEase(ease.Value) : (EasingId?)null)
-    {
-    }
-
-    public DirectionEase? Ease => Easing.HasValue ? DirectionTransitionSpec.ToDirectionEase(Easing.Value) : null;
-}
+    EasingId? Easing = null);
 
 public interface IDirectionBeatRuntime : IRuntimeService
 {

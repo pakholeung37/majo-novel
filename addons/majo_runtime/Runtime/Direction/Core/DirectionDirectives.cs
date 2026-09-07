@@ -36,15 +36,6 @@ public sealed record DirectionSourceLocation(string Node, int Line, int CommandI
     public override string ToString() => $"{Node}:{Line}#{CommandIndex}";
 }
 
-[Obsolete("Use DirectionTransitionId instead.")]
-public enum DirectionTransitionKind
-{
-    Cut,
-    Move,
-    Fade,
-    Dissolve,
-}
-
 public readonly record struct DirectionTransitionId : IEquatable<DirectionTransitionId>, IComparable<DirectionTransitionId>
 {
     public string Value { get; }
@@ -76,41 +67,6 @@ public readonly record struct DirectionTransitionId : IEquatable<DirectionTransi
 
     public static implicit operator DirectionTransitionId(string? value) => new(value);
 
-#pragma warning disable CS0618
-    public static implicit operator DirectionTransitionId(DirectionTransitionKind kind) => FromKind(kind);
-
-    public static DirectionTransitionId FromKind(DirectionTransitionKind kind) => kind switch
-    {
-        DirectionTransitionKind.Cut => Cut,
-        DirectionTransitionKind.Move => Move,
-        DirectionTransitionKind.Fade => Fade,
-        DirectionTransitionKind.Dissolve => Dissolve,
-        _ => new(kind.ToString().ToLowerInvariant()),
-    };
-
-    public bool TryToKind(out DirectionTransitionKind kind)
-    {
-        if (Equals(Cut)) { kind = DirectionTransitionKind.Cut; return true; }
-        if (Equals(Move)) { kind = DirectionTransitionKind.Move; return true; }
-        if (Equals(Fade)) { kind = DirectionTransitionKind.Fade; return true; }
-        if (Equals(Dissolve)) { kind = DirectionTransitionKind.Dissolve; return true; }
-        kind = default;
-        return false;
-    }
-
-    public static bool operator ==(DirectionTransitionId id, DirectionTransitionKind kind) =>
-        id.Equals(FromKind(kind));
-
-    public static bool operator !=(DirectionTransitionId id, DirectionTransitionKind kind) =>
-        !id.Equals(FromKind(kind));
-
-    public static bool operator ==(DirectionTransitionKind kind, DirectionTransitionId id) =>
-        id.Equals(FromKind(kind));
-
-    public static bool operator !=(DirectionTransitionKind kind, DirectionTransitionId id) =>
-        !id.Equals(FromKind(kind));
-#pragma warning restore CS0618
-
     public static bool operator <(DirectionTransitionId left, DirectionTransitionId right) =>
         left.CompareTo(right) < 0;
 
@@ -124,21 +80,6 @@ public readonly record struct DirectionTransitionId : IEquatable<DirectionTransi
         left.CompareTo(right) >= 0;
 }
 
-[Obsolete("Use EasingId instead.")]
-public enum DirectionEase
-{
-    Linear,
-    SineIn,
-    SineOut,
-    SineInOut,
-    CubicIn,
-    CubicOut,
-    CubicInOut,
-    BackIn,
-    BackOut,
-    BackInOut,
-}
-
 public sealed record DirectionTransitionSpec(
     DirectionTransitionId Kind,
     double DurationSeconds,
@@ -147,22 +88,10 @@ public sealed record DirectionTransitionSpec(
 {
     public DirectionTransitionId Id => Kind;
 
-    [Obsolete("Use Easing instead.")]
-    public DirectionEase Ease => ToDirectionEase(Easing);
-
     public DirectionTransitionSpec(
         DirectionTransitionId Kind,
         double DurationSeconds)
         : this(Kind, DurationSeconds, EasingId.Linear, true)
-    {
-    }
-
-#pragma warning disable CS0618
-    [Obsolete("Use constructor taking DirectionTransitionId instead.")]
-    public DirectionTransitionSpec(
-        DirectionTransitionKind Kind,
-        double DurationSeconds)
-        : this(DirectionTransitionId.FromKind(Kind), DurationSeconds, EasingId.Linear, true)
     {
     }
 
@@ -173,46 +102,6 @@ public sealed record DirectionTransitionSpec(
         : this(Kind, DurationSeconds, EasingId.Linear, Skippable)
     {
     }
-
-    [Obsolete("Use constructor taking DirectionTransitionId instead.")]
-    public DirectionTransitionSpec(
-        DirectionTransitionKind kind,
-        double durationSeconds,
-        bool skippable)
-        : this(DirectionTransitionId.FromKind(kind), durationSeconds, EasingId.Linear, skippable)
-    {
-    }
-
-    [Obsolete("Use constructor taking EasingId instead.")]
-    public DirectionTransitionSpec(
-        DirectionTransitionId Kind,
-        double DurationSeconds,
-        DirectionEase Ease,
-        bool Skippable = true)
-        : this(Kind, DurationSeconds, FromDirectionEase(Ease), Skippable)
-    {
-    }
-
-    [Obsolete("Use constructor taking DirectionTransitionId and EasingId instead.")]
-    public DirectionTransitionSpec(
-        DirectionTransitionKind kind,
-        double durationSeconds,
-        DirectionEase ease,
-        bool skippable = true)
-        : this(DirectionTransitionId.FromKind(kind), durationSeconds, FromDirectionEase(ease), skippable)
-    {
-    }
-
-    [Obsolete("Use constructor taking DirectionTransitionId instead.")]
-    public DirectionTransitionSpec(
-        DirectionTransitionKind kind,
-        double durationSeconds,
-        EasingId easing,
-        bool skippable = true)
-        : this(DirectionTransitionId.FromKind(kind), durationSeconds, easing, skippable)
-    {
-    }
-#pragma warning restore CS0618
 
     public static DirectionTransitionSpec Cut { get; } =
         new(DirectionTransitionId.Cut, 0, EasingId.Linear);
@@ -227,40 +116,6 @@ public sealed record DirectionTransitionSpec(
             throw new ArgumentException("A cut transition cannot have a duration.");
         return this;
     }
-
-#pragma warning disable CS0618
-    [Obsolete("Use EasingId instead.")]
-    public static EasingId FromDirectionEase(DirectionEase ease) => ease switch
-    {
-        DirectionEase.Linear => EasingId.Linear,
-        DirectionEase.SineIn => EasingId.SineIn,
-        DirectionEase.SineOut => EasingId.SineOut,
-        DirectionEase.SineInOut => EasingId.SineInOut,
-        DirectionEase.CubicIn => EasingId.CubicIn,
-        DirectionEase.CubicOut => EasingId.CubicOut,
-        DirectionEase.CubicInOut => EasingId.CubicInOut,
-        DirectionEase.BackIn => EasingId.BackIn,
-        DirectionEase.BackOut => EasingId.BackOut,
-        DirectionEase.BackInOut => EasingId.BackInOut,
-        _ => new(ease.ToString().ToLowerInvariant()),
-    };
-
-    [Obsolete("Use EasingId instead.")]
-    public static DirectionEase ToDirectionEase(EasingId easing)
-    {
-        if (easing.Equals(EasingId.Linear)) return DirectionEase.Linear;
-        if (easing.Equals(EasingId.SineIn)) return DirectionEase.SineIn;
-        if (easing.Equals(EasingId.SineOut)) return DirectionEase.SineOut;
-        if (easing.Equals(EasingId.SineInOut)) return DirectionEase.SineInOut;
-        if (easing.Equals(EasingId.CubicIn)) return DirectionEase.CubicIn;
-        if (easing.Equals(EasingId.CubicOut)) return DirectionEase.CubicOut;
-        if (easing.Equals(EasingId.CubicInOut)) return DirectionEase.CubicInOut;
-        if (easing.Equals(EasingId.BackIn)) return DirectionEase.BackIn;
-        if (easing.Equals(EasingId.BackOut)) return DirectionEase.BackOut;
-        if (easing.Equals(EasingId.BackInOut)) return DirectionEase.BackInOut;
-        throw new DirectionException($"Easing '{easing}' cannot be represented by the legacy animation backend.");
-    }
-#pragma warning restore CS0618
 }
 
 public interface IDirectionDirective

@@ -38,11 +38,6 @@ internal static class GodotDirectionRendering
         GodotEasingAdapter.Configure(tween, easing, registry);
     }
 
-    public static void Configure(Tween tween, DirectionEase ease)
-    {
-        GodotEasingAdapter.Configure(tween, DirectionTransitionSpec.FromDirectionEase(ease), null);
-    }
-
     public static Color ToGodot(DirectionColor color, float? alpha = null) =>
         new(color.R, color.G, color.B, alpha ?? color.A);
 
