@@ -36,7 +36,10 @@ public sealed partial class CharacterCommand : RuntimeCommand<CharacterCommand.A
     {
         var node = nodeAccessor.RequireNode();
         var stageId = scopes.ResolveStage(node, arguments.Stage.GetValueOrDefault("main"));
-        var transition = policy.ResolveTransition("character", arguments.Transition, context);
+        var commandName = arguments.Appearance.WasProvided
+            ? "character appearance"
+            : "character";
+        var transition = policy.ResolveTransition(commandName, arguments.Transition, context);
         var wait = arguments.Transition.Wait.GetValueOrDefault(false);
 
         DirectionPoint? position = null;

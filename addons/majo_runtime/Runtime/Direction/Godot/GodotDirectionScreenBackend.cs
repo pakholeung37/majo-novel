@@ -9,21 +9,26 @@ using Majo.Runtime.Core;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Direction.Rendering;
+using Majo.Runtime.Direction.Transitions;
 using Majo.Runtime.Timing;
+using Majo.Runtime.Operations.Godot;
 
 namespace Majo.Runtime.Direction.Godot;
 
 internal sealed class GodotDirectionScreenBackend : IDirectionScreenBackend
 {
     private readonly GodotDirectionRenderHost host;
-    private readonly IEasingRegistry? easings;
+    private readonly ITransitionDriverRegistry drivers;
+    private readonly IEasingRegistry easings;
 
     public GodotDirectionScreenBackend(
         GodotDirectionRenderHost host,
+        ITransitionDriverRegistry? drivers = null,
         IEasingRegistry? easings = null)
     {
         this.host = host ?? throw new ArgumentNullException(nameof(host));
-        this.easings = easings;
+        this.drivers = drivers ?? new TransitionDriverRegistry();
+        this.easings = easings ?? BuiltInEasings.CreateDefaultRegistry();
     }
 
     public async Task<IPreparedDirectionComponent> PrepareAsync(
@@ -54,7 +59,7 @@ internal sealed class GodotDirectionScreenBackend : IDirectionScreenBackend
             var transition = GodotDirectionRendering.ResolveTransition(
                 plan,
                 path => path.StartsWith("screen/", StringComparison.Ordinal));
-            GodotEasingAdapter.Validate(transition.Easing, easings);
+            GodotDirectionRendering.ValidateTransition(transition, TransitionDomains.Screen, drivers, easings);
             if (transition.DurationSeconds > 0 &&
                 transition.Kind != DirectionTransitionId.Cut &&
                 transition.Kind != DirectionTransitionId.Move)
@@ -62,7 +67,7 @@ internal sealed class GodotDirectionScreenBackend : IDirectionScreenBackend
                 source = await host.CaptureScreenAsync(cancellationToken);
             }
             IPreparedDirectionComponent prepared = new PreparedScreen(
-                host, before, target, transition, source, easings);
+                host, before, target, transition, source, drivers, easings);
             source = null;
             return createdViews.Count == 0
                 ? prepared
@@ -84,9 +89,11 @@ internal sealed class GodotDirectionScreenBackend : IDirectionScreenBackend
         private readonly ScreenState target;
         private readonly DirectionTransitionSpec transition;
         private ImageTexture? source;
-        private readonly IEasingRegistry? easings;
+        private readonly ITransitionDriverRegistry drivers;
+        private readonly IEasingRegistry easings;
         private readonly TaskCompletionSource settlement = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private Tween? tween;
+        private GodotProgressTween? clock;
+        private IPreparedVisualTransition? preparedTransition;
         private long generation;
         private bool committed;
         private bool rolledBack;
@@ -98,6 +105,7 @@ internal sealed class GodotDirectionScreenBackend : IDirectionScreenBackend
             ScreenState target,
             DirectionTransitionSpec transition,
             ImageTexture? source,
+            ITransitionDriverRegistry? drivers = null,
             IEasingRegistry? easings = null)
         {
             this.host = host;
@@ -105,7 +113,8 @@ internal sealed class GodotDirectionScreenBackend : IDirectionScreenBackend
             this.target = target;
             this.transition = transition;
             this.source = source;
-            this.easings = easings;
+            this.drivers = drivers ?? new TransitionDriverRegistry();
+            this.easings = easings ?? BuiltInEasings.CreateDefaultRegistry();
         }
 
         public Task Settlement => settlement.Task;
@@ -125,46 +134,26 @@ internal sealed class GodotDirectionScreenBackend : IDirectionScreenBackend
 
             if (transition.Kind == DirectionTransitionId.Move)
             {
-                tween = host.CreateTween();
-                GodotDirectionRendering.Configure(tween, transition.Easing, easings);
-                tween.TweenMethod(Callable.From<float>(progress => GodotEasingAdapter.ApplyProgress(
-                    transition.Easing, progress, easings, effectiveProgress =>
+                clock = host.Animate(transition, easings.GetRequired(transition.Easing), p =>
                 {
-                    if (host.IsCurrentScreenGeneration(generation))
-                    {
-
-                        host.PublishScreenLayout(target, before, effectiveProgress);
-                    }
-                }, exception =>
-                {
-                    GodotDirectionRendering.Kill(tween);
-                    settlement.TrySetException(exception);
-                })), 0.0f, 1.0f, transition.DurationSeconds);
+                    if (host.IsCurrentScreenGeneration(generation)) host.PublishScreenLayout(target, before, p);
+                }, OnFinished, exception => settlement.TrySetException(exception));
             }
             else
             {
-                if (source is null)
-                    throw new DirectionException(
-                        "Direction Screen transition committed without a source capture.");
+                if (source is null) throw new DirectionException("Screen transition has no source capture.");
                 host.PublishScreen(target);
                 host.PublishScreenTransition(source);
-                tween = host.CreateTween();
-                GodotDirectionRendering.Configure(tween, transition.Easing, easings);
-                tween.TweenMethod(Callable.From<float>(progress => GodotEasingAdapter.ApplyProgress(
-                    transition.Easing, progress, easings, effectiveProgress =>
+                var context = new VisualTransitionContext(host.ScreenTransitionSource, transition, source,
+                    host.ScreenViewport.GetTexture(), true, true,
+                    () => host.IsCurrentScreenGeneration(generation));
+                preparedTransition = drivers.GetRequired(transition.Kind).Prepare(context);
+                if (transition.Kind != DirectionTransitionId.Fade) host.LiveOutput.Visible = false;
+                clock = host.Animate(transition, easings.GetRequired(transition.Easing), p =>
                 {
-                    if (host.IsCurrentScreenGeneration(generation))
-                    {
-
-                        host.SetScreenTransitionOpacity(1.0f - effectiveProgress);
-                    }
-                }, exception =>
-                {
-                    GodotDirectionRendering.Kill(tween);
-                    settlement.TrySetException(exception);
-                })), 0.0f, 1.0f, transition.DurationSeconds);
+                    if (host.IsCurrentScreenGeneration(generation)) preparedTransition.ApplyProgress(p);
+                }, OnFinished, exception => settlement.TrySetException(exception));
             }
-            tween.Finished += OnFinished;
         }
 
         public ValueTask FinishAsync(CancellationToken cancellationToken)
@@ -181,10 +170,10 @@ internal sealed class GodotDirectionScreenBackend : IDirectionScreenBackend
             if (rolledBack || disposed) return;
             rolledBack = true;
             generation = host.BeginScreenGeneration();
-            if (tween is not null && GodotObject.IsInstanceValid(tween))
-                tween.Finished -= OnFinished;
-            GodotDirectionRendering.Kill(tween);
-            tween = null;
+            clock?.Dispose();
+            clock = null;
+            preparedTransition?.Dispose();
+            preparedTransition = null;
             host.ClearScreenTransition();
             host.PublishScreen(before);
             DisposeSource();
@@ -196,10 +185,12 @@ internal sealed class GodotDirectionScreenBackend : IDirectionScreenBackend
             if (disposed) return ValueTask.CompletedTask;
             disposed = true;
             if (!settlement.Task.IsCompleted) settlement.TrySetCanceled();
-            if (tween is not null && GodotObject.IsInstanceValid(tween)) tween.Finished -= OnFinished;
-            GodotDirectionRendering.Kill(tween);
-            tween = null;
-            if (!committed) DisposeSource();
+            clock?.Dispose();
+            clock = null;
+            preparedTransition?.Dispose();
+            preparedTransition = null;
+            if (host.IsCurrentScreenGeneration(generation)) host.ClearScreenTransition();
+            DisposeSource();
             return ValueTask.CompletedTask;
         }
 
@@ -207,14 +198,16 @@ internal sealed class GodotDirectionScreenBackend : IDirectionScreenBackend
         private void Complete()
         {
             if (settlement.Task.IsCompleted || rolledBack || disposed) return;
-            if (tween is not null && GodotObject.IsInstanceValid(tween)) tween.Finished -= OnFinished;
-            GodotDirectionRendering.Kill(tween);
-            tween = null;
+            clock?.Dispose();
+            clock = null;
             if (host.IsCurrentScreenGeneration(generation))
             {
+                preparedTransition?.ApplyProgress(1.0f);
                 host.PublishScreen(target);
                 host.ClearScreenTransition();
             }
+            preparedTransition?.Dispose();
+            preparedTransition = null;
             DisposeSource();
             settlement.TrySetResult();
         }

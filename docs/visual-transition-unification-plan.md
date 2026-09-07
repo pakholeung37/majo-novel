@@ -332,4 +332,20 @@ rg -n -i 'crossfade' addons/majo_runtime tests demos
 
 验证结果：用户反馈“看起来没问题，可以切换到新实现，更新到文档中”。据此批准重构采用统一整图 Dissolve，包括替换 LayeredCharacter 的旧差量层渐变。用户未提供逐案例结果，不推定所有外观、进度或背景组合都已验证。
 
-本次更新确认实现方向；生产代码尚未切换。动态目标、资源成本、整体 opacity 并行变化及事务接入属于 P3/第 8 节的剩余验收项，无需再就替换旧渐变算法本身请求批准。
+生产代码已切换，LayeredCharacter 保留图层解析与端点合成，外观切换使用与普通角色相同的整图 Dissolve。实验左侧调用的是当前生产实现，因此迁移后不再代表历史差量层算法；历史对照应运行迁移前版本。
+
+## 11. 实施修正与验证记录
+
+本轮修正统一了 GodotProgressTween 的进度采样与异常传播，删除 GodotEasingAdapter。角色外观使用独立 appearance 操作槽，在前序操作结束后准备捕获，Finish、Cancel、立即 SetAppearance 和销毁通过统一清理与版本检查隔离旧回调。普通角色原始纹理在混合期间隐藏，分层角色克隆显式恢复可见状态，整体 opacity 可独立变化。
+
+Dissolve shader 只乘顶点调制颜色，避免片元 COLOR 再乘承载纹理。Stage 背景将 fit、尺寸与 tint 合成为同尺寸端点；View 将相机内容与转场输出分为两个 viewport；Screen 转场层位于 ScreenViewport 外，避免反馈采样。角色外观和整体视觉变化均执行注册的 driver，自定义 easing 和 driver 的异常向事务传播，不再静默降级。
+
+新增回归覆盖真实渲染的红蓝混合五个进度点、半透明输入、非法 easing 故障、外观与 opacity 并行、连续换装、立即设置、临时节点释放、自定义 Actor driver 事务接入，以及 View/Screen 输入输出隔离。真实渲染必须使用非 headless 模式：
+
+```bash
+/Applications/Godot_mono.app/Contents/MacOS/Godot --path . --resolution 800x600 res://tests/headless/HeadlessTestRunner.tscn -- --transition-regressions
+```
+
+当前 Actor 和背景端点在准备后冻结；这避免持续重绘，但不提供转场期间动态更新目标内容的契约。整体 Actor 视觉变化使用舞台尺寸捕获，普通外观变化使用内容边界。尚未给出多角色压力场景的 GPU 内存与帧率测量，不能把功能测试视为性能验收。第 8 节是完整验收目标，不能将上述新增回归解释为所有视觉组合均已逐像素验证。
+
+本轮验证结果：`tools/test.sh --full` 通过（349 项单元测试、三轮 Godot 集成测试、Release 构建和 macOS export smoke）；`tools/quality.sh --check` 与 `git diff --check` 通过；Metal 实际渲染的 transition-regressions 通过。旧 Stage/Transition/Ease 类型静态扫描无残留，crossfade 引用仅剩音频测试语义。

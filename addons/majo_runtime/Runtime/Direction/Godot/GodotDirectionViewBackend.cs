@@ -12,6 +12,7 @@ using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Direction.Rendering;
 using Majo.Runtime.Direction.Transitions;
 using Majo.Runtime.Timing;
+using Majo.Runtime.Operations.Godot;
 
 namespace Majo.Runtime.Direction.Godot;
 
@@ -19,7 +20,7 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
 {
     private readonly GodotDirectionRenderHost host;
     private readonly ITransitionDriverRegistry drivers;
-    private readonly IEasingRegistry? easings;
+    private readonly IEasingRegistry easings;
 
     public GodotDirectionViewBackend(
         GodotDirectionRenderHost host,
@@ -28,7 +29,7 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
     {
         this.host = host ?? throw new ArgumentNullException(nameof(host));
         this.drivers = drivers ?? new TransitionDriverRegistry();
-        this.easings = easings;
+        this.easings = easings ?? BuiltInEasings.CreateDefaultRegistry();
     }
 
     public async Task<IPreparedDirectionComponent> PrepareAsync(
@@ -62,8 +63,7 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
             var transition = sequence?.Transition ?? GodotDirectionRendering.ResolveTransition(
                 plan,
                 path => path.StartsWith($"view/{viewId.Value}/", StringComparison.Ordinal));
-            drivers.TryGet(transition.Kind, out var driver);
-            GodotEasingAdapter.Validate(transition.Easing, easings, driver);
+            GodotDirectionRendering.ValidateTransition(transition, TransitionDomains.View, drivers, easings);
             ImageTexture? capture = null;
             if (transition.DurationSeconds > 0 &&
                 transition.Kind != DirectionTransitionId.Cut &&
@@ -158,10 +158,11 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
         private readonly DirectionTransitionSpec transition;
         private readonly bool publishTransitionStart;
         private readonly ITransitionDriverRegistry drivers;
-        private readonly IEasingRegistry? easings;
+        private readonly IEasingRegistry easings;
         private readonly TaskCompletionSource settlement = new(
             TaskCreationOptions.RunContinuationsAsynchronously);
-        private Tween? tween;
+        private GodotProgressTween? clock;
+        private IPreparedVisualTransition? preparedTransition;
         private bool committed;
         private bool rolledBack;
         private bool disposed;
@@ -191,8 +192,8 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
             this.capture = capture;
             this.transition = transition;
             this.publishTransitionStart = publishTransitionStart;
-            this.drivers = drivers;
-            this.easings = easings;
+            this.drivers = drivers ?? new TransitionDriverRegistry();
+            this.easings = easings ?? BuiltInEasings.CreateDefaultRegistry();
         }
 
         public Task Settlement => settlement.Task;
@@ -225,72 +226,29 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
                 return;
             }
 
-            tween = host.CreateTween();
-            GodotDirectionRendering.Configure(tween, transition.Easing, easings);
             if (transition.Kind == DirectionTransitionId.Move)
             {
                 host.ApplyViewPose(viewId, before.Pose);
-                tween.TweenMethod(
-                    Callable.From<float>(progress => GodotEasingAdapter.ApplyProgress(
-                    transition.Easing, progress, easings, effectiveProgress =>
+                clock = host.Animate(transition, easings.GetRequired(transition.Easing), p =>
                 {
-                    if (!host.IsCurrentViewGeneration(viewId, generation)) return;
-
-                    host.ApplyViewPose(
-                        viewId,
-                        GodotDirectionRendering.Interpolate(
-                            before.Pose,
-                            target.Pose,
-                            effectiveProgress));
-                }, exception =>
-            {
-                GodotDirectionRendering.Kill(tween);
-                settlement.TrySetException(exception);
-            })),
-                    0.0f,
-                    1.0f,
-                    transition.DurationSeconds);
+                    if (host.IsCurrentViewGeneration(viewId, generation))
+                        host.ApplyViewPose(viewId, GodotDirectionRendering.Interpolate(before.Pose, target.Pose, p));
+                }, OnFinished, exception => settlement.TrySetException(exception));
             }
             else
             {
-                if (capture is null)
+                if (capture is null) { Complete(); return; }
+                var surface = host.GetOrCreateView(viewId);
+                var context = new VisualTransitionContext(transitionSource, transition, capture,
+                    surface.ContentViewport.GetTexture(), true, true,
+                    () => host.IsCurrentViewGeneration(viewId, generation));
+                preparedTransition = drivers.GetRequired(transition.Kind).Prepare(context);
+                if (transition.Kind != DirectionTransitionId.Fade) surface.Output.Visible = false;
+                clock = host.Animate(transition, easings.GetRequired(transition.Easing), p =>
                 {
-                    Complete();
-                    return;
-                }
-
-                if (drivers.TryGet(transition.Kind, out var driver) && driver is not null)
-                {
-                    var transitionContext = new VisualTransitionContext(
-                        transitionSource,
-                        transition,
-                        tween,
-                        () => host.IsCurrentViewGeneration(viewId, generation),
-                        capture,
-                        targetTexture,
-                        progress => GodotEasingAdapter.SampleProgress(transition.Easing, progress, easings),
-                        exception => settlement.TrySetException(exception));
-                    driver.Setup(transitionContext);
-                }
-                else
-                {
-                    tween.TweenMethod(Callable.From<float>(progress => GodotEasingAdapter.ApplyProgress(
-                    transition.Easing, progress, easings, effectiveProgress =>
-                {
-                    if (host.IsCurrentViewGeneration(viewId, generation))
-                    {
-
-                        transitionSource.Modulate = new Color(
-                            transitionSource.Modulate, 1 - effectiveProgress);
-                    }
-                }, exception =>
-            {
-                GodotDirectionRendering.Kill(tween);
-                settlement.TrySetException(exception);
-            })), 0.0f, 1.0f, transition.DurationSeconds);
-                }
+                    if (host.IsCurrentViewGeneration(viewId, generation)) preparedTransition.ApplyProgress(p);
+                }, OnFinished, exception => settlement.TrySetException(exception));
             }
-            tween.Finished += OnFinished;
         }
 
         public ValueTask FinishAsync(CancellationToken cancellationToken)
@@ -307,10 +265,10 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
             if (rolledBack || disposed) return;
             rolledBack = true;
             generation = host.BeginViewGeneration(viewId);
-            if (tween is not null && GodotObject.IsInstanceValid(tween))
-                tween.Finished -= OnFinished;
-            GodotDirectionRendering.Kill(tween);
-            tween = null;
+            clock?.Dispose();
+            clock = null;
+            preparedTransition?.Dispose();
+            preparedTransition = null;
             host.ClearViewTransition(viewId);
             if (restoreState is not null && restoreTexture is not null)
                 host.PublishView(viewId, restoreState, restoreTexture);
@@ -322,10 +280,10 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
             if (disposed) return ValueTask.CompletedTask;
             disposed = true;
             if (!settlement.Task.IsCompleted) settlement.TrySetCanceled();
-            if (tween is not null && GodotObject.IsInstanceValid(tween))
-                tween.Finished -= OnFinished;
-            GodotDirectionRendering.Kill(tween);
-            tween = null;
+            clock?.Dispose();
+            clock = null;
+            preparedTransition?.Dispose();
+            preparedTransition = null;
             if (host.IsCurrentViewGeneration(viewId, generation))
                 host.ClearViewTransition(viewId);
             capture?.Dispose();
@@ -337,15 +295,16 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
         private void Complete()
         {
             if (settlement.Task.IsCompleted || rolledBack || disposed) return;
-            if (tween is not null && GodotObject.IsInstanceValid(tween))
-                tween.Finished -= OnFinished;
-            GodotDirectionRendering.Kill(tween);
-            tween = null;
+            clock?.Dispose();
+            clock = null;
             if (host.IsCurrentViewGeneration(viewId, generation))
             {
+                preparedTransition?.ApplyProgress(1.0f);
                 host.PublishView(viewId, target, targetTexture);
                 host.ClearViewTransition(viewId);
             }
+            preparedTransition?.Dispose();
+            preparedTransition = null;
             settlement.TrySetResult();
         }
     }

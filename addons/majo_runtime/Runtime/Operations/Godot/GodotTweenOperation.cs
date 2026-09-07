@@ -4,11 +4,63 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
+using Majo.Runtime.Timing;
 
 namespace Majo.Runtime.Operations.Godot;
 
 public static class GodotTweenOperation
 {
+    public static OperationDefinition CreateProgressOperation(
+        Node owner,
+        AnimationTiming timing,
+        EasingDefinition resolvedEasing,
+        Action<float> applyProgress,
+        Action? finish = null,
+        Action? cancel = null)
+    {
+        ArgumentNullException.ThrowIfNull(owner);
+        ArgumentNullException.ThrowIfNull(resolvedEasing);
+        ArgumentNullException.ThrowIfNull(applyProgress);
+        if (!double.IsFinite(timing.DurationSeconds) || timing.DurationSeconds < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(timing), "Duration must be finite and non-negative.");
+        }
+
+        GodotProgressTween? clock = null;
+        var settled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        return new OperationDefinition(
+            async context =>
+            {
+                context.CancellationToken.ThrowIfCancellationRequested();
+                EnsureValid(owner, nameof(owner));
+                if (timing.DurationSeconds > 0)
+                {
+                    clock = new GodotProgressTween(owner, timing, resolvedEasing, applyProgress,
+                        () => settled.TrySetResult(), exception => settled.TrySetException(exception));
+                    try { await settled.Task.WaitAsync(context.CancellationToken); }
+                    finally { clock.Dispose(); clock = null; }
+                }
+                context.CancellationToken.ThrowIfCancellationRequested();
+                applyProgress(1);
+                finish?.Invoke();
+            },
+            onFinish: _ =>
+            {
+                clock?.Dispose(); clock = null;
+                EnsureValid(owner, nameof(owner));
+                applyProgress(1);
+                finish?.Invoke();
+                return Task.CompletedTask;
+            },
+            onCancel: _ =>
+            {
+                clock?.Dispose(); clock = null;
+                cancel?.Invoke();
+                return Task.CompletedTask;
+            });
+    }
+
     public static OperationDefinition CreateFloatMethodTween(
         Node owner,
         Func<float> getCurrentValue,

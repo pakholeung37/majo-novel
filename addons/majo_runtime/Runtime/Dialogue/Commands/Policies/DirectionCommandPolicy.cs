@@ -16,6 +16,7 @@ public sealed record DirectionAnimationDefaults(
     double DefaultAnimationDurationSeconds,
     double DefaultCharacterAnimationDurationSeconds,
     DirectionTransitionId DefaultCharacterAnimationKind,
+    DirectionTransitionId DefaultCharacterAppearanceAnimationKind = default,
     DirectionTransitionId DefaultLeaveAnimationKind = default,
     DirectionTransitionId DefaultStageShowAnimationKind = default,
     DirectionTransitionId DefaultStageClearAnimationKind = default,
@@ -34,13 +35,15 @@ public sealed record DirectionAnimationDefaults(
             return new DirectionAnimationDefaults(
                 RuntimeDefaults.AnimationDurationSeconds,
                 RuntimeDefaults.CommandBindingCharacterAnimationDurationSeconds,
-                DirectionTransitionId.Fade);
+                DirectionTransitionId.Fade,
+                DirectionTransitionId.Dissolve);
         }
 
         return new DirectionAnimationDefaults(
             animation.DefaultAnimationDurationSeconds,
             animation.DefaultCharacterAnimationDurationSeconds,
             animation.ResolveCharacterAnimationId(),
+            animation.ResolveCharacterAppearanceAnimationId(),
             animation.ResolveLeaveAnimationId(),
             animation.ResolveStageShowAnimationId(),
             animation.ResolveStageClearAnimationId(),
@@ -63,6 +66,7 @@ public sealed record DirectionAnimationDefaults(
         "camera reset" => DefaultCameraResetAnimationKind.IsEmpty ? DirectionTransitionId.Cut : DefaultCameraResetAnimationKind,
         "shot use" => DefaultShotAnimationKind.IsEmpty ? DirectionTransitionId.Cut : DefaultShotAnimationKind,
         "layout" => DefaultLayoutAnimationKind.IsEmpty ? DirectionTransitionId.Cut : DefaultLayoutAnimationKind,
+        "character appearance" => DefaultCharacterAppearanceAnimationKind.IsEmpty ? DirectionTransitionId.Dissolve : DefaultCharacterAppearanceAnimationKind,
         "character" => DefaultCharacterAnimationKind.IsEmpty ? DirectionTransitionId.Fade : DefaultCharacterAnimationKind,
         _ => DefaultCharacterAnimationKind.IsEmpty ? DirectionTransitionId.Fade : DefaultCharacterAnimationKind,
     };
@@ -123,6 +127,7 @@ public sealed class DirectionCommandPolicy : IDirectionCommandPolicy
         if (transitions is not null)
         {
             ValidateDefaultTransition(defaults.DefaultCharacterAnimationKind, "character", TransitionDomains.Actor);
+            ValidateDefaultTransition(defaults.DefaultCharacterAppearanceAnimationKind, "character appearance", TransitionDomains.Actor);
             ValidateDefaultTransition(defaults.DefaultLeaveAnimationKind, "leave", TransitionDomains.Actor);
             ValidateDefaultTransition(defaults.DefaultStageShowAnimationKind, "stage show", TransitionDomains.Stage);
             ValidateDefaultTransition(defaults.DefaultStageClearAnimationKind, "stage clear", TransitionDomains.Stage);
@@ -140,7 +145,7 @@ public sealed class DirectionCommandPolicy : IDirectionCommandPolicy
 
     private static TransitionDomains ResolveCommandDomain(string commandName) => commandName switch
     {
-        "character" or "leave" => TransitionDomains.Actor,
+        "character" or "character appearance" or "leave" => TransitionDomains.Actor,
         "camera pose" or "camera reset" or "camera move" or "camera fx" or "shot use" => TransitionDomains.View,
         "curtain" or "layout" => TransitionDomains.Screen,
         _ => TransitionDomains.Stage,

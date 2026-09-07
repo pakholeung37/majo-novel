@@ -11,7 +11,6 @@ using Majo.Runtime.Audio;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.History;
 using Majo.Runtime.Script;
-using Majo.Runtime.Stage;
 
 namespace Majo.Runtime.State;
 
@@ -22,7 +21,6 @@ public static class BuiltInStateKeys
     public const string AudioBgm = "majo.audio.bgm";
     public const string ScriptPlayback = "majo.script.playback";
     public const string SessionHistory = "majo.session.history";
-    public const string Stage = "majo.stage";
     public const string Direction = "majo.direction";
 }
 

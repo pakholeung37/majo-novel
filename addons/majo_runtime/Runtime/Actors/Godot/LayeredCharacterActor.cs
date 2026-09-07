@@ -7,6 +7,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Actors.Layered;
+using Majo.Runtime.Direction.Core;
+using Majo.Runtime.Direction.Transitions;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Operations.Godot;
 
@@ -14,7 +16,6 @@ namespace Majo.Runtime.Actors.Godot;
 
 public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IDisposable
 {
-    private const string AppearanceProperty = "layered-appearance";
     private const string GroupOpacityParameter = "group_opacity";
     private const ulong LayerBuildBudgetMicroseconds = 2_000;
     private const string AlphaAwareMultiplyShaderPath =
@@ -22,6 +23,7 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IDisposa
     private const string LayeredCompositeShaderPath =
         "res://addons/majo_runtime/Runtime/Actors/Godot/Shaders/LayeredComposite.gdshader";
     private readonly CharacterPositionMap positions;
+    private readonly ITransitionDriverRegistry transitions;
     private readonly LayerCompositionResolver resolver;
     private readonly HashSet<string> activeLayers;
     private readonly HashSet<string> targetLayers;
@@ -29,6 +31,10 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IDisposa
     private readonly CanvasGroup layerComposite;
     private readonly Dictionary<string, Sprite2D> layerViews =
         new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> nodeNameToLayerPath =
+        new(StringComparer.Ordinal);
+    private Rect2 canvasBounds;
+    private Sprite2D? activeOverlay;
 
     public LayeredCharacterActor(
         ActorDefinition definition,
@@ -40,14 +46,18 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IDisposa
         string manifestPath,
         CharacterPositionPreset initialPosition,
         ShaderMaterial? multiplyMaterial = null,
-        bool buildLayerViews = true)
+        bool buildLayerViews = true,
+        Majo.Runtime.Timing.IEasingRegistry? easings = null, ITransitionDriverRegistry? transitions = null)
         : base(
             definition,
             view,
             runner,
             textureLoader,
-            manifest.DefaultAppearance)
+            manifest.DefaultAppearance,
+            easings)
     {
+
+        this.transitions = transitions ?? new TransitionDriverRegistry();
         this.positions = positions ?? throw new ArgumentNullException(nameof(positions));
         ArgumentNullException.ThrowIfNull(manifest);
         ArgumentException.ThrowIfNullOrWhiteSpace(manifestPath);
@@ -95,30 +105,13 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IDisposa
         SetPosition(positions.Get(preset));
     }
 
-    public override void SetOpacity(float opacity)
+    protected override void ApplyOpacity(float opacity)
     {
-        ValidateOpacity(opacity);
-        CancelPropertyAnimation(OpacityProperty);
         SetCompositeOpacity(opacity);
-        TargetOpacity = opacity;
-    }
-
-    public override IOperationHandle ChangeOpacity(
-        float opacity,
-        double durationSeconds) => ChangeOpacity(
-        opacity,
-        new AnimationSpec(durationSeconds));
-
-    public override IOperationHandle ChangeOpacity(
-        float opacity,
-        AnimationSpec animation)
-    {
-        ValidateOpacity(opacity);
-        TargetOpacity = opacity;
-        return StartSequencedOperation(
-            OpacityProperty,
-            CreateCompositeOpacityTween(opacity, animation),
-            animation.ConflictPolicy);
+        if (activeOverlay is not null && GodotObject.IsInstanceValid(activeOverlay))
+        {
+            activeOverlay.Modulate = new Color(1, 1, 1, opacity);
+        }
     }
 
     public void SetScale(Vector2 scale)
@@ -129,111 +122,58 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IDisposa
 
     public IOperationHandle ChangeAppearance(
         string appearance,
-        double durationSeconds)
+        double durationSeconds) =>
+        ChangeAppearance(appearance, new AnimationSpec(durationSeconds));
+
+    public IOperationHandle ChangeAppearance(string appearance, AnimationSpec animation) =>
+        ChangeAppearance(appearance, animation, transitions.GetRequired(DirectionTransitionId.Dissolve));
+
+    public IOperationHandle ChangeAppearance(string appearance, AnimationSpec animation, ITransitionDriver driver)
     {
+        EnsureAlive();
+        ArgumentException.ThrowIfNullOrWhiteSpace(appearance);
+        var easing = Easings.GetRequired(animation.Easing);
         var nextLayers = new HashSet<string>(targetLayers, StringComparer.Ordinal);
         resolver.Apply(nextLayers, appearance);
         var canonicalAppearance = resolver.Canonicalize(nextLayers);
-        targetLayers.Clear();
-        targetLayers.UnionWith(nextLayers);
+        var epoch = AppearanceEpoch;
+        targetLayers.Clear(); targetLayers.UnionWith(nextLayers);
         TargetAppearance = canonicalAppearance;
-        TargetVisible = true;
-        TargetOpacity = 1;
-        var animation = new AnimationSpec(durationSeconds);
-        OperationDefinition[] fades = [];
-        string[] exitingLayers = [];
-        string[] enteringLayers = [];
-        var prepared = false;
-        var committed = false;
-
-        void PrepareTransition()
-        {
-            if (prepared)
+        var operation = GodotActorAppearanceTransition.CreateOperation(View, animation, easing,
+            token => GodotActorAppearanceTransition.PrepareAsync(View,
+                CreateComposite(activeLayers), CreateComposite(nextLayers), canvasBounds, Opacity,
+                visible => { if (IsAlive) layerComposite.Visible = visible; },
+                overlay =>
+                {
+                    activeOverlay = overlay;
+                    if (overlay is not null) overlay.Modulate = new Color(1, 1, 1, Opacity);
+                }, driver, animation, token),
+            () =>
             {
-                return;
-            }
-
-            exitingLayers = activeLayers.Except(nextLayers, StringComparer.Ordinal).ToArray();
-            enteringLayers = nextLayers.Except(activeLayers, StringComparer.Ordinal).ToArray();
-            var transitionFades = new List<OperationDefinition>(
-                exitingLayers.Length + enteringLayers.Length);
-            foreach (var layerPath in exitingLayers)
-            {
-                var layer = layerViews[layerPath];
-                layer.Visible = true;
-                SetLayerOpacity(layer, 1);
-                transitionFades.Add(CreateLayerOpacityTween(layer, 0, animation));
-            }
-
-            foreach (var layerPath in enteringLayers)
-            {
-                var layer = layerViews[layerPath];
-                layer.Visible = true;
-                SetLayerOpacity(layer, 0);
-                transitionFades.Add(CreateLayerOpacityTween(layer, 1, animation));
-            }
-
-            fades = transitionFades.ToArray();
-            View.Visible = true;
-            prepared = true;
-        }
-
-        void Commit()
-        {
-            if (committed)
-            {
-                return;
-            }
-
-            PrepareTransition();
-            foreach (var layerPath in exitingLayers)
-            {
-                var layer = layerViews[layerPath];
-                layer.Visible = false;
-                SetLayerOpacity(layer, 1);
-            }
-
-            foreach (var layerPath in enteringLayers)
-            {
-                var layer = layerViews[layerPath];
-                layer.Visible = true;
-                SetLayerOpacity(layer, 1);
-            }
-
-            activeLayers.Clear();
-            activeLayers.UnionWith(nextLayers);
-            Appearance = canonicalAppearance;
-            committed = true;
-        }
-
-        var transition = new OperationDefinition(
-            async context =>
-            {
-                PrepareTransition();
-                await Task.WhenAll(fades.Select(fade => fade.ExecuteAsync(context)));
-                Commit();
-            },
-            onFinish: async cancellationToken =>
-            {
-                PrepareTransition();
-                await Task.WhenAll(fades.Select(
-                    fade => fade.FinishAsync(cancellationToken)));
-                Commit();
-            },
-            onCancel: async cancellationToken =>
-            {
-                PrepareTransition();
-                await Task.WhenAll(fades.Select(
-                    fade => fade.CancelAsync(cancellationToken)));
-                Commit();
+                if (!IsAlive || AppearanceEpoch != epoch) return;
+                activeLayers.Clear(); activeLayers.UnionWith(nextLayers);
+                ApplyLayerVisibility(activeLayers);
+                Appearance = canonicalAppearance;
             });
-        return StartSequencedOperation(
-            AppearanceProperty,
-            transition);
+        return StartSequencedOperation(AppearanceProperty, operation, animation.ConflictPolicy);
+    }
+
+    private CanvasGroup CreateComposite(HashSet<string> layers)
+    {
+        var composite = (CanvasGroup)layerComposite.Duplicate();
+        composite.Visible = true;
+        composite.SetInstanceShaderParameter(GroupOpacityParameter, 1f);
+        foreach (var sprite in composite.GetChildren().OfType<Sprite2D>())
+        {
+            sprite.Visible = nodeNameToLayerPath.TryGetValue(sprite.Name, out var path) && layers.Contains(path);
+        }
+        return composite;
     }
 
     public override void SetAppearance(string appearance)
     {
+        EnsureAlive();
+        InvalidateAppearance();
         CancelPropertyAnimation(AppearanceProperty);
         resolver.Apply(activeLayers, appearance);
         targetLayers.Clear();
@@ -318,6 +258,7 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IDisposa
         }
 
         ApplyLayerVisibility(activeLayers);
+        canvasBounds = CalculateCanvasBounds();
     }
 
     private void BuildLayerViews(
@@ -351,6 +292,9 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IDisposa
                 pixelsPerUnit,
                 multiplyMaterial);
         }
+
+        ApplyLayerVisibility(activeLayers);
+        canvasBounds = CalculateCanvasBounds();
     }
 
     private void AddLayerView(
@@ -402,6 +346,7 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IDisposa
 
         layerComposite.AddChild(layerView);
         layerViews.Add(layer.Path, layerView);
+        nodeNameToLayerPath[layerView.Name] = layer.Path;
     }
 
     private void ApplyLayerVisibility(HashSet<string> visibleLayers)
@@ -412,34 +357,37 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IDisposa
         }
     }
 
-    private OperationDefinition CreateLayerOpacityTween(
-        CanvasItem target,
-        float opacity,
-        AnimationSpec animation) =>
-        GodotTweenOperation.CreatePropertyTween(
-            View,
-            target,
-            new NodePath("self_modulate:a"),
-            opacity,
-            animation.DurationSeconds,
-            transition: GodotAnimationSpec.Transition(animation.Transition),
-            ease: GodotAnimationSpec.Ease(animation.Ease),
-            ignoreTimeScale: animation.TimeMode == AnimationTimeMode.Unscaled);
+    private Rect2 CalculateCanvasBounds()
+    {
+        Rect2? bounds = null;
+        foreach (var layer in layerViews.Values)
+        {
+            var localRect = layer.GetRect();
+            var xform = layer.Transform;
+            var p0 = xform * localRect.Position;
+            var p1 = xform * new Vector2(localRect.Position.X + localRect.Size.X, localRect.Position.Y);
+            var p2 = xform * new Vector2(localRect.Position.X, localRect.Position.Y + localRect.Size.Y);
+            var p3 = xform * (localRect.Position + localRect.Size);
 
-    private OperationDefinition CreateCompositeOpacityTween(
-        float opacity,
-        AnimationSpec animation) =>
-        GodotTweenOperation.CreateFloatMethodTween(
-            View,
-            () => Opacity,
-            SetCompositeOpacity,
-            opacity,
-            animation.DurationSeconds,
-            transition: GodotAnimationSpec.Transition(animation.Transition),
-            ease: GodotAnimationSpec.Ease(animation.Ease),
-            ignoreTimeScale: animation.TimeMode == AnimationTimeMode.Unscaled);
+            var minX = Mathf.Min(Mathf.Min(p0.X, p1.X), Mathf.Min(p2.X, p3.X));
+            var maxX = Mathf.Max(Mathf.Max(p0.X, p1.X), Mathf.Max(p2.X, p3.X));
+            var minY = Mathf.Min(Mathf.Min(p0.Y, p1.Y), Mathf.Min(p2.Y, p3.Y));
+            var maxY = Mathf.Max(Mathf.Max(p0.Y, p1.Y), Mathf.Max(p2.Y, p3.Y));
+
+            var rect = new Rect2(minX, minY, maxX - minX, maxY - minY);
+            bounds = bounds.HasValue ? bounds.Value.Merge(rect) : rect;
+        }
+
+        if (!bounds.HasValue || bounds.Value.Size.X <= 0 || bounds.Value.Size.Y <= 0)
+        {
+            return new Rect2(0, 0, 1, 1);
+        }
+
+        return bounds.Value;
+    }
 
     private void SetCompositeOpacity(float opacity)
+
     {
         layerComposite.SetInstanceShaderParameter(GroupOpacityParameter, opacity);
         layerComposite.QueueRedraw();
@@ -495,5 +443,13 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IDisposa
         }
     }
 
-    public void Dispose() => layerComposite.Dispose();
+    public void Dispose()
+    {
+        if (activeOverlay is not null && GodotObject.IsInstanceValid(activeOverlay))
+        {
+            activeOverlay.QueueFree();
+            activeOverlay = null;
+        }
+        layerComposite.Dispose();
+    }
 }

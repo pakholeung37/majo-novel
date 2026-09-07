@@ -12,13 +12,13 @@ using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Camera;
+using Majo.Runtime.Accessibility;
 using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Direction.Godot;
 using Majo.Runtime.Direction.Rendering;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Operations.Godot;
 using Majo.Runtime.Resources;
-using Majo.Runtime.Stage;
 using Majo.Runtime.Timing;
 using Majo.Runtime.Direction.Transitions;
 
@@ -48,21 +48,39 @@ public partial class HeadlessTestRunner
         var owner = new Node { Name = "DirectionRenderingProbe" };
         AddChild(owner);
         var customEasings = new EasingRegistry();
+        BuiltInEasings.RegisterDefaults(customEasings);
         customEasings.Register(new EasingDefinition("square", t => t * t));
+
         foreach (var driver in new ITransitionDriver[] { new FadeTransitionDriver(), new DissolveTransitionDriver() })
         {
             var surface = new Sprite2D();
             owner.AddChild(surface);
+            var easing = customEasings.GetRequired(new EasingId("square"));
+            using var inputImage = Image.CreateEmpty(2, 2, false, Image.Format.Rgba8);
+            using var inputTexture = ImageTexture.CreateFromImage(inputImage);
+            var prepared = driver.Prepare(new VisualTransitionContext(
+                surface,
+                new DirectionTransitionSpec(driver.Id, 1, new EasingId("square")), inputTexture, inputTexture));
             var tween = owner.CreateTween();
             tween.Pause();
-            GodotEasingAdapter.Configure(tween, "square", customEasings);
-            driver.Setup(new VisualTransitionContext(surface,
-                new DirectionTransitionSpec(driver.Id, 1, new EasingId("square")), tween,
-                MapProgress: progress => GodotEasingAdapter.SampleProgress("square", progress, customEasings)));
+            tween.TweenMethod(
+                Callable.From<double>(progress => prepared.ApplyProgress((float)easing.Evaluate(progress))),
+                0.0f,
+                1.0f,
+                1.0);
             tween.CustomStep(0.5);
-            Assert(Math.Abs(surface.Modulate.A - 0.75f) < 0.001f,
-                "Transition drivers must apply custom easing to their progress.");
+            if (surface.Material is ShaderMaterial mat)
+            {
+                Assert(Math.Abs((float)mat.GetShaderParameter("progress") - 0.25f) < 0.001f,
+                    "Dissolve driver must apply custom easing to its shader progress.");
+            }
+            else
+            {
+                Assert(Math.Abs(surface.Modulate.A - 0.75f) < 0.001f,
+                    "Transition drivers must apply custom easing to their progress.");
+            }
             tween.Kill();
+            prepared.Dispose();
             surface.Free();
         }
         var host = new GodotDirectionRenderHost(owner, new Vector2I(640, 360));
@@ -94,7 +112,7 @@ public partial class HeadlessTestRunner
             (viewId, delta) => host.ApplyViewModifierDelta(viewId, delta),
             viewId => host.ClearViewModifierDelta(viewId),
             actorScheduler,
-            new StageAccessibility(),
+            new DirectionAccessibility(),
             actorFrameClock);
         await cameraModifiers.InitializeAsync(CancellationToken.None);
         IActorManager CreateActorManager(Node2D actorRoot) => new ActorManager(
@@ -105,17 +123,24 @@ public partial class HeadlessTestRunner
                     actorRoot,
                     actorScheduler,
                     actorTextureLoader,
-                    new CharacterPositionMap(actorConfiguration)),
+                    new CharacterPositionMap(actorConfiguration),
+                    customEasings),
             });
+        var actorDrivers = new TransitionDriverRegistry();
+        var customActorDriver = new RecordingTransitionDriver();
+        actorDrivers.Register(customActorDriver);
         var stageBackend = new GodotDirectionStageBackend(
             host,
             textures,
-            CreateActorManager);
+            CreateActorManager,
+            drivers: actorDrivers, easings: customEasings);
         var composite = new CompositeDirectionPreparationBackend(
             stageBackend,
-            new GodotDirectionViewBackend(host),
-            new GodotDirectionScreenBackend(host),
-            new GodotDirectionEffectBackend(host));
+            new GodotDirectionViewBackend(host, easings: customEasings),
+            new GodotDirectionScreenBackend(host, easings: customEasings),
+            new GodotDirectionEffectBackend(host, easings: customEasings));
+
+
         var coordinator = new DirectionTransactionCoordinator(
             new DirectionPlanner(),
             composite);
@@ -160,16 +185,19 @@ public partial class HeadlessTestRunner
             {
                 ActorPatchFor("hero", new DirectionPoint(30, 0), "red", 1.25f, 7) with
                 {
-                    Transition = new DirectionTransitionSpec(DirectionTransitionId.Move, 1, new EasingId("square")),
+                    Transition = new DirectionTransitionSpec(DirectionTransitionId.Move, 1, new EasingId("unregistered_ease")),
                 },
             });
         }
         catch (DirectionException exception)
         {
-            rejectedCustomActorEase = exception.Message.Contains("square", StringComparison.Ordinal);
+            rejectedCustomActorEase = exception.Message.Contains("unregistered_ease", StringComparison.Ordinal);
         }
         Assert(rejectedCustomActorEase && coordinator.State.Revision == revisionBeforeUnsupportedEase,
             "Unsupported actor easing must fail preparation without publishing state.");
+
+
+
 
         var illustration = new StageId("illustration");
         var illustrationView = new ViewId("illustration");
@@ -317,7 +345,8 @@ public partial class HeadlessTestRunner
                     "red",
                     1,
                     0,
-                    new DirectionTransitionSpec(DirectionTransitionId.Move, 0.2)),
+                    new DirectionTransitionSpec(DirectionTransitionId.Move, 0.2, new EasingId("square"))),
+
             });
         var movedActorRoot = GetVisibleActorRoot(host);
         var movedActor = movedActorRoot.GetNode<Sprite2D>("hero");
@@ -341,20 +370,29 @@ public partial class HeadlessTestRunner
                     "blue",
                     1,
                     0,
-                    new DirectionTransitionSpec(DirectionTransitionId.Dissolve, 1.0)),
+                    new DirectionTransitionSpec(customActorDriver.Id, 1.0)),
             });
         var fadedActorRoot = GetLatestVisibleActorRoot(host);
         var fadedActor = fadedActorRoot.GetNode<Sprite2D>("hero");
-        Assert(!movedActorRoot.Visible && fadedActorRoot.GetChildCount() > 1,
+        Assert(!movedActorRoot.Visible && (fadedActorRoot.GetChildCount() > 1 || fadedActor.GetChildCount() > 0),
             "Direction dissolve did not publish the target Actor tree.");
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        Assert(fadedActorRoot.GetChildCount() > 1 && !movedActorRoot.Visible,
+        Assert((fadedActorRoot.GetChildCount() > 1 || fadedActor.GetChildCount() > 0) && !movedActorRoot.Visible,
             "Direction dissolve did not delegate to the Actor appearance transition.");
         await coordinator.FinishAsync(fadeTransaction);
         Assert(Mathf.IsEqualApprox(fadedActor.Modulate.A, 1) &&
                 (!IsInstanceValid(movedActorRoot) || !movedActorRoot.Visible),
             "Finishing Direction dissolve did not publish only the target Actor visual.");
+
+        Assert(customActorDriver.Preparations == 1, "Actor appearance did not execute the registered driver.");
+        await coordinator.ExecuteAsync(new IDirectionDirective[]
+        {
+            ActorPatchFor("hero", new DirectionPoint(50, 0), "blue", 1.1f, 0,
+                new DirectionTransitionSpec(customActorDriver.Id, .05)),
+        }, DirectionCompletionBarrier.Settle);
+        Assert(customActorDriver.Preparations == 2, "Actor visual changes bypassed the registered driver.");
+        var actorRootBeforeFailure = GetVisibleActorRoot(host);
 
         var revisionBeforeFailure = coordinator.State.Revision;
         var backdropBeforeFailure = host.PublishedBackdrop;
@@ -375,7 +413,7 @@ public partial class HeadlessTestRunner
             DirectionCompletionBarrier.Settle));
         Assert(coordinator.State.Revision == revisionBeforeFailure &&
                 Equals(host.PublishedBackdrop, backdropBeforeFailure) &&
-                ReferenceEquals(GetVisibleActorRoot(host), fadedActorRoot),
+                ReferenceEquals(GetVisibleActorRoot(host), actorRootBeforeFailure),
             "Failed Actor Prepare partially published Stage state.");
 
         _ = await AssertThrowsAsync<DirectionException>(() => coordinator.ExecuteAsync(
@@ -387,7 +425,7 @@ public partial class HeadlessTestRunner
                     new DirectionTransitionSpec(DirectionTransitionId.Move, 0.2)),
             },
             DirectionCompletionBarrier.Settle));
-        Assert(ReferenceEquals(GetVisibleActorRoot(host), fadedActorRoot),
+        Assert(ReferenceEquals(GetVisibleActorRoot(host), actorRootBeforeFailure),
             "Rejected move-leave changed the stable Actor tree.");
 
         var leaveTransaction = await coordinator.ExecuteAsync(
@@ -398,7 +436,7 @@ public partial class HeadlessTestRunner
                     new ActorId("hero"),
                     new DirectionTransitionSpec(DirectionTransitionId.Fade, 0.2)),
             });
-        Assert(fadedActorRoot.Visible && GetLatestVisibleActorRoot(host).GetChildCount() == 0,
+        Assert(actorRootBeforeFailure.Visible && GetLatestVisibleActorRoot(host).GetChildCount() == 0,
             "Direction fade-leave did not retain its source Actor during transition.");
         await coordinator.FinishAsync(leaveTransaction);
         Assert(GetVisibleActorRoot(host).GetChildCount() == 0,

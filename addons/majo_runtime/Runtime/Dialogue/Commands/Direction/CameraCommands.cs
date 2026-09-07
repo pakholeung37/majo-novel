@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
-using Majo.Runtime.Stage;
+using Majo.Runtime.Direction.Camera;
 
 namespace Majo.Runtime.Dialogue.Commands;
 

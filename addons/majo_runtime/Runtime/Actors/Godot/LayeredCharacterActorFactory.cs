@@ -9,8 +9,11 @@ using Godot;
 using Majo.Runtime.Actors.Layered;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Operations;
+using Majo.Runtime.Direction.Transitions;
+using Majo.Runtime.Timing;
 
 namespace Majo.Runtime.Actors.Godot;
+
 
 public sealed class LayeredCharacterActorFactory : IConventionActorFactory
 {
@@ -22,6 +25,8 @@ public sealed class LayeredCharacterActorFactory : IConventionActorFactory
     private readonly CharacterPositionMap positions;
     private readonly string charactersPath;
     private readonly ShaderMaterial multiplyMaterial;
+    private readonly IEasingRegistry? easings;
+    private readonly ITransitionDriverRegistry? transitions;
     private readonly Dictionary<string, Task<LayeredCharacterManifest>> manifestLoads =
         new(StringComparer.Ordinal);
     private readonly object manifestGate = new();
@@ -32,7 +37,8 @@ public sealed class LayeredCharacterActorFactory : IConventionActorFactory
         IActorTextureLoader textureLoader,
         CharacterPositionMap positions,
         string resourceRootPath,
-        string charactersPath)
+        string charactersPath,
+        IEasingRegistry? easings = null, ITransitionDriverRegistry? transitions = null)
         : this(
             host,
             runner,
@@ -40,7 +46,8 @@ public sealed class LayeredCharacterActorFactory : IConventionActorFactory
             null!,
             positions,
             resourceRootPath,
-            charactersPath)
+            charactersPath,
+            easings, transitions)
     {
     }
 
@@ -51,7 +58,8 @@ public sealed class LayeredCharacterActorFactory : IConventionActorFactory
         IFrameClock frameClock,
         CharacterPositionMap positions,
         string resourceRootPath,
-        string charactersPath)
+        string charactersPath,
+        IEasingRegistry? easings = null, ITransitionDriverRegistry? transitions = null)
     {
         this.host = host ?? throw new ArgumentNullException(nameof(host));
         this.runner = runner ?? throw new ArgumentNullException(nameof(runner));
@@ -62,7 +70,10 @@ public sealed class LayeredCharacterActorFactory : IConventionActorFactory
         ArgumentException.ThrowIfNullOrWhiteSpace(charactersPath);
         this.charactersPath = ResolveCharactersPath(resourceRootPath, charactersPath);
         multiplyMaterial = LayeredCharacterActor.CreateAlphaAwareMultiplyMaterial();
+        this.easings = easings;
+        this.transitions = transitions;
     }
+
 
     public string FactoryId => ActorFactoryIds.LayeredCharacter;
 
@@ -133,7 +144,8 @@ public sealed class LayeredCharacterActorFactory : IConventionActorFactory
                 manifest,
                 configuration.ManifestPath,
                 configuration.InitialPosition,
-                multiplyMaterial);
+                multiplyMaterial,
+                easings: easings, transitions: transitions);
         }
         catch
         {
@@ -189,7 +201,9 @@ public sealed class LayeredCharacterActorFactory : IConventionActorFactory
                 configuration.ManifestPath,
                 configuration.InitialPosition,
                 multiplyMaterial,
-                buildLayerViews: false);
+                buildLayerViews: false,
+                easings: easings, transitions: transitions);
+
             await actor.BuildLayerViewsAsync(
                 manifest,
                 atlases,

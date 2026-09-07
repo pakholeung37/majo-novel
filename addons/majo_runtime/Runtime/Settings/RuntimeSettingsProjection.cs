@@ -1,12 +1,12 @@
 #nullable enable
 
 using System;
+using Majo.Runtime.Accessibility;
 using Majo.Runtime.Audio;
 using Majo.Runtime.Auto;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Presentation;
 using Majo.Runtime.Localization;
-using Majo.Runtime.Stage;
 
 namespace Majo.Runtime.Settings;
 
@@ -16,20 +16,20 @@ public sealed class RuntimeSettingsProjection : ISettingsProjection
     private readonly IPlaybackModeManager playback;
     private readonly IDialoguePresentationSettings? presentation;
     private readonly ILocaleManager? localeManager;
-    private readonly IStageAccessibility? stageAccessibility;
+    private readonly IDirectionAccessibility? directionAccessibility;
 
     public RuntimeSettingsProjection(
         IAudioManager audio,
         IPlaybackModeManager playback,
         IDialoguePresentation presentation,
         ILocaleManager? localeManager = null,
-        IStageAccessibility? stageAccessibility = null)
+        IDirectionAccessibility? directionAccessibility = null)
     {
         this.audio = audio ?? throw new ArgumentNullException(nameof(audio));
         this.playback = playback ?? throw new ArgumentNullException(nameof(playback));
         this.presentation = presentation as IDialoguePresentationSettings;
         this.localeManager = localeManager;
-        this.stageAccessibility = stageAccessibility;
+        this.directionAccessibility = directionAccessibility;
     }
 
     public void Apply(RuntimeSettings settings)
@@ -65,9 +65,9 @@ public sealed class RuntimeSettingsProjection : ISettingsProjection
             audio.VoiceLocale = settings.VoiceLocale;
         }
 
-        if (stageAccessibility is not null)
+        if (directionAccessibility is not null)
         {
-            stageAccessibility.ReduceMotion = settings.ReduceMotion;
+            directionAccessibility.ReduceMotion = settings.ReduceMotion;
         }
     }
 }

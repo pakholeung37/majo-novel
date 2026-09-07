@@ -16,31 +16,20 @@ public enum TransitionDomains
     Actor = 8,
 }
 
+public interface IPreparedVisualTransition : IDisposable
+{
+    void ApplyProgress(float progress);
+}
+
 public sealed record VisualTransitionContext(
     CanvasItem Surface,
     DirectionTransitionSpec Spec,
-    Tween Tween,
-    Func<bool>? IsActive = null,
     Texture2D? SourceTexture = null,
     Texture2D? TargetTexture = null,
-    Func<float, float>? MapProgress = null,
-    Action<Exception>? OnFailure = null)
-{
-    public void AnimateProgress(Action<float> apply)
-    {
-        Tween.TweenMethod(Callable.From<float>(progress =>
-        {
-            if (IsActive?.Invoke() == false) return;
-            try { apply(MapProgress?.Invoke(progress) ?? progress); }
-            catch (Exception exception)
-            {
-                Tween.Kill();
-                if (OnFailure is null) throw;
-                OnFailure(exception);
-            }
-        }), 0.0f, 1.0f, Spec.DurationSeconds);
-    }
-}
+    bool SourceIsPremultiplied = false,
+    bool TargetIsPremultiplied = false,
+    Func<bool>? IsActive = null,
+    Action<Exception>? OnFailure = null);
 
 public interface ITransitionDriver
 {
@@ -48,7 +37,7 @@ public interface ITransitionDriver
 
     TransitionDomains Domains => TransitionDomains.View | TransitionDomains.Stage | TransitionDomains.Screen;
 
-    bool SupportsCustomEasing => false;
+    bool SupportsCustomEasing => true;
 
-    void Setup(VisualTransitionContext context);
+    IPreparedVisualTransition Prepare(VisualTransitionContext context);
 }

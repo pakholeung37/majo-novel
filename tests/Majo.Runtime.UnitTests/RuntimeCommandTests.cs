@@ -15,7 +15,6 @@ using Majo.Runtime.Diagnostics;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Operations;
-using Majo.Runtime.Stage;
 using Majo.Runtime.UnitTests.Testing;
 using Xunit;
 
@@ -23,6 +22,21 @@ namespace Majo.Runtime.UnitTests;
 
 public sealed class RuntimeCommandTests
 {
+    [Fact]
+    public async Task AppearanceWithPositionUsesDissolveByDefault()
+    {
+        var beats = new FakeDirectionBeatRuntime();
+        var command = new CharacterCommand(beats, new CatalogPositionResolver(),
+            new DirectionScopeResolver(), new DelegateDialogueNodeAccessor(() => "Start"),
+            new DirectionCommandPolicy(beats));
+        var bound = TestCatalogBuilder.CreateBound(command);
+        await bound.ExecuteAsync(new CommandInput("character",
+            new[] { "hero", "appearance:blue", "at:left" }), new CommandExecutionContext("default-appearance"));
+        var patch = Assert.IsType<ActorPatch>(beats.LastSubmitted);
+        Assert.Equal(DirectionTransitionId.Dissolve, patch.Transition.Kind);
+        Assert.True(patch.Position.HasValue);
+    }
+
     [Fact]
     public void BinderConvertsTypedArgumentsAndIgnoresNamedArgumentOrder()
     {
@@ -125,31 +139,31 @@ public sealed class RuntimeCommandTests
             switch (pieces[0])
             {
                 case "character":
-                {
-                    var cmd = new CharacterCommand(
-                        beats,
-                        new CatalogPositionResolver(),
-                        new DirectionScopeResolver(),
-                        nodeAccessor,
-                        policy);
-                    var input = new CommandInput("character", pieces[1..]);
-                    var bound = TestCatalogBuilder.CreateBound(cmd);
-                    bound.Bind(input);
-                    break;
-                }
+                    {
+                        var cmd = new CharacterCommand(
+                            beats,
+                            new CatalogPositionResolver(),
+                            new DirectionScopeResolver(),
+                            nodeAccessor,
+                            policy);
+                        var input = new CommandInput("character", pieces[1..]);
+                        var bound = TestCatalogBuilder.CreateBound(cmd);
+                        bound.Bind(input);
+                        break;
+                    }
                 case "backdrop":
-                {
-                    var cmd = new BackdropCommand(
-                        beats,
-                        new CatalogResourceResolver(),
-                        new DirectionScopeResolver(),
-                        nodeAccessor,
-                        policy);
-                    var input = new CommandInput("backdrop", pieces[1..]);
-                    var bound = TestCatalogBuilder.CreateBound(cmd);
-                    bound.Bind(input);
-                    break;
-                }
+                    {
+                        var cmd = new BackdropCommand(
+                            beats,
+                            new CatalogResourceResolver(),
+                            new DirectionScopeResolver(),
+                            nodeAccessor,
+                            policy);
+                        var input = new CommandInput("backdrop", pieces[1..]);
+                        var bound = TestCatalogBuilder.CreateBound(cmd);
+                        bound.Bind(input);
+                        break;
+                    }
             }
         });
 

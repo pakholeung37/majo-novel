@@ -9,7 +9,6 @@ using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Resources;
-using Majo.Runtime.Stage;
 
 namespace Majo.Runtime.HeadlessTests;
 
@@ -144,29 +143,6 @@ public partial class HeadlessTestRunner
         await fade.Completion;
         Assert(Mathf.IsEqualApprox(character.Opacity, 1),
             "Character opacity Tween did not reach its final value.");
-
-        var camera = bootstrap.Host.Services.Get<ICameraManager>();
-        var focusPose = new CameraState(new Vector2(37.384f, 74.816f), 3, 10);
-        camera.ApplyStableState(focusPose);
-        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        var cameraDissolve = camera.ResetCamera(new CameraViewTransitionSpec(
-            CameraViewTransitionKind.Dissolve,
-            new StageOperationSpec(0.2)));
-        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        var transitionSource = cameraOutput.GetNode<TextureRect>("TransitionSource");
-        Assert(transitionSource.Visible && transitionSource.Texture is ImageTexture,
-            "Camera dissolve did not retain a captured source Camera output.");
-        Assert(transitionSource.Modulate.A is > 0 and < 1,
-            "Camera dissolve did not expose an intermediate mix value.");
-        Assert(camera.TargetState == CameraState.Default,
-            "Camera dissolve did not publish its stable target pose.");
-        await cameraDissolve.Completion;
-        Assert(camera.State == CameraState.Default &&
-                !transitionSource.Visible &&
-                transitionSource.Texture is null,
-            "Camera dissolve did not commit its target and release the source capture.");
 
         var resetOperation = character.ChangePosition(
             CharacterPositionPreset.Left, 10);

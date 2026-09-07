@@ -3,6 +3,7 @@
 using System;
 using Godot;
 using Majo.Runtime.Operations;
+using Majo.Runtime.Direction.Transitions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -129,6 +130,14 @@ public interface ICharacterActor : IActor, IGodotActorView
     IOperationHandle ChangeAppearance(
         string appearance,
         double durationSeconds);
+
+    IOperationHandle ChangeAppearance(
+        string appearance,
+        AnimationSpec animation) => ChangeAppearance(
+            appearance, animation.DurationSeconds);
+
+    IOperationHandle ChangeAppearance(string appearance, AnimationSpec animation, ITransitionDriver driver) =>
+        throw new ActorException($"Actor '{Id}' does not provide visual transition inputs for '{driver.Id}'.");
 
     IOperationHandle ChangePosition(
         CharacterPositionPreset preset,

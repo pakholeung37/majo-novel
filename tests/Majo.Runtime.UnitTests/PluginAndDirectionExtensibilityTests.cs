@@ -12,10 +12,10 @@ using Majo.Runtime.Diagnostics;
 using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Direction.Camera;
 using Majo.Runtime.Direction.Core;
+using Majo.Runtime.Accessibility;
 using Majo.Runtime.Direction.Transitions;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Plugins;
-using Majo.Runtime.Stage;
 using Majo.Runtime.Timing;
 using Xunit;
 
@@ -119,7 +119,7 @@ public sealed class PluginAndDirectionExtensibilityTests
         using var lifetime = new TestRuntimeLifetime();
         var scheduler = new OperationRunner(clock, lifetime);
         await scheduler.InitializeAsync(CancellationToken.None);
-        var accessibility = new StageAccessibility(reduceMotion: false);
+        var accessibility = new DirectionAccessibility(reduceMotion: false);
 
         var manager = new CameraModifierManager(
             (viewId, delta) => appliedDeltas.Add(delta),
@@ -231,7 +231,13 @@ public sealed class PluginAndDirectionExtensibilityTests
 
         public DirectionTransitionId Id { get; }
 
-        public void Setup(VisualTransitionContext context) { }
+        public IPreparedVisualTransition Prepare(VisualTransitionContext context) => new DummyPreparedTransition();
+
+        private sealed class DummyPreparedTransition : IPreparedVisualTransition
+        {
+            public void ApplyProgress(float progress) { }
+            public void Dispose() { }
+        }
     }
 
     private sealed class TestPlugin : IMajoPlugin

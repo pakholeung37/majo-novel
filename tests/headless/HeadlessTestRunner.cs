@@ -65,6 +65,11 @@ public partial class HeadlessTestRunner : Node
             throw new InvalidOperationException("Intentional headless failure probe.");
         }
 
+        if (OS.GetCmdlineUserArgs().Contains("--transition-regressions", StringComparer.Ordinal))
+        {
+            await ValidateTransitionRegressionsAsync();
+            return;
+        }
         var dependencyStatus = YarnDependencyValidator.ValidateProject(
             ProjectSettings.GlobalizePath("res://"));
         Assert(dependencyStatus.IsCompatible, dependencyStatus.Message);
@@ -83,6 +88,7 @@ public partial class HeadlessTestRunner : Node
         await ValidateLifecycleTimeoutAsync();
         await ValidateOperationKernelAsync();
         await ValidateDirectionRenderingAsync();
+        await ValidateTransitionRegressionsAsync();
         await ValidateActorSystemAsync();
         await ValidateLayeredCharacterAsync();
         await ValidateYarnCommandAdapterAsync();

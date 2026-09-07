@@ -1,23 +1,32 @@
 #nullable enable
 
 using System;
+using System.Threading.Tasks;
 using Godot;
+using Majo.Runtime.Direction.Core;
+using Majo.Runtime.Direction.Transitions;
 using Majo.Runtime.Operations;
+using Majo.Runtime.Operations.Godot;
+using Majo.Runtime.Timing;
 
 namespace Majo.Runtime.Actors.Godot;
 
 public sealed class CharacterActor : ActorBase, ICharacterActor
 {
     private readonly CharacterPositionMap positions;
+    private readonly ITransitionDriverRegistry transitions;
 
     public CharacterActor(
         ActorDefinition definition,
         Sprite2D view,
         IOperationRunner runner,
         IActorTextureLoader textureLoader,
-        CharacterPositionMap positions)
-        : base(definition, view, runner, textureLoader)
+        CharacterPositionMap positions,
+        IEasingRegistry? easings = null, ITransitionDriverRegistry? transitions = null)
+        : base(definition, view, runner, textureLoader, definition.DefaultAppearance, easings)
     {
+
+        this.transitions = transitions ?? new TransitionDriverRegistry();
         this.positions = positions ?? throw new ArgumentNullException(nameof(positions));
         PositionPreset = definition.InitialPosition;
         ApplyPosition(positions.Get(PositionPreset));
@@ -51,16 +60,49 @@ public sealed class CharacterActor : ActorBase, ICharacterActor
 
     public IOperationHandle ChangeAppearance(
         string appearance,
-        double durationSeconds)
+        double durationSeconds) =>
+        ChangeAppearance(appearance, new AnimationSpec(durationSeconds));
+
+    public IOperationHandle ChangeAppearance(string appearance, AnimationSpec animation) =>
+        ChangeAppearance(appearance, animation, transitions.GetRequired(DirectionTransitionId.Dissolve));
+
+    public IOperationHandle ChangeAppearance(string appearance, AnimationSpec animation, ITransitionDriver driver)
     {
-        var texture = TextureLoader.Load(
-            Definition.GetAppearanceResourceKey(appearance),
+        EnsureAlive();
+        ArgumentException.ThrowIfNullOrWhiteSpace(appearance);
+        var easing = Easings.GetRequired(animation.Easing);
+        var texture = TextureLoader.Load(Definition.GetAppearanceResourceKey(appearance),
             Definition.GetAppearanceOverride(appearance));
-        return CrossFadeToAppearance(
-            appearance,
-            () => ApplyTexture(texture),
-            durationSeconds);
+        var epoch = AppearanceEpoch;
+        TargetAppearance = appearance;
+        var operation = GodotActorAppearanceTransition.CreateOperation(View, animation, easing,
+            token =>
+            {
+                var original = View.Texture;
+                var source = CreateAppearanceSprite(original);
+                var target = CreateAppearanceSprite(texture);
+                var bounds = source.GetRect().Merge(target.GetRect());
+                return GodotActorAppearanceTransition.PrepareAsync(View, source, target, bounds, 1,
+                    visible => { if (IsAlive && AppearanceEpoch == epoch) View.Texture = visible ? original : null; },
+                    _ => { }, driver, animation, token);
+            },
+            () =>
+            {
+                if (!IsAlive || AppearanceEpoch != epoch) return;
+                ApplyTexture(texture);
+                Appearance = appearance;
+            });
+        return StartSequencedOperation(AppearanceProperty, operation, animation.ConflictPolicy);
     }
+
+    private Sprite2D CreateAppearanceSprite(Texture2D? texture) => new()
+    {
+        Texture = texture,
+        Offset = View.Offset,
+        Centered = View.Centered,
+        FlipH = View.FlipH,
+        FlipV = View.FlipV,
+    };
 
     public IOperationHandle ChangePosition(
         CharacterPositionPreset preset,

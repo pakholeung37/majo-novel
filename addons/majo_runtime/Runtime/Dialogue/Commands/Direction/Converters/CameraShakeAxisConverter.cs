@@ -2,7 +2,7 @@
 
 using System;
 using System.Collections.Generic;
-using Majo.Runtime.Stage;
+using Majo.Runtime.Direction.Camera;
 
 namespace Majo.Runtime.Dialogue.Commands;
 

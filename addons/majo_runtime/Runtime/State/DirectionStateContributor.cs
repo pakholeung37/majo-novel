@@ -9,7 +9,6 @@ using System.Threading.Tasks;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Resources;
-using Majo.Runtime.Stage;
 
 namespace Majo.Runtime.State;
 

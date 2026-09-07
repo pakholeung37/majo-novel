@@ -5,10 +5,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Majo.Runtime.Accessibility;
 using Majo.Runtime.Core;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Operations;
-using Majo.Runtime.Stage;
 
 namespace Majo.Runtime.Direction.Camera;
 
@@ -79,7 +79,7 @@ public sealed class CameraModifierManager : ICameraModifierManager
     private readonly Action<ViewId, CameraPoseDelta> applyDeltaCallback;
     private readonly Action<ViewId> clearDeltaCallback;
     private readonly IOperationRunner operations;
-    private readonly IStageAccessibility accessibility;
+    private readonly IDirectionAccessibility accessibility;
     private readonly IFrameClock? frameClock;
     private readonly object gate = new();
     private readonly ICameraModifierRegistry registry;
@@ -91,7 +91,7 @@ public sealed class CameraModifierManager : ICameraModifierManager
         Action<ViewId, CameraPoseDelta> applyDeltaCallback,
         Action<ViewId> clearDeltaCallback,
         IOperationRunner operations,
-        IStageAccessibility accessibility,
+        IDirectionAccessibility accessibility,
         IFrameClock? frameClock = null,
         bool registerDefaults = true,
         ICameraModifierRegistry? registry = null)

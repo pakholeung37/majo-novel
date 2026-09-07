@@ -1,14 +1,14 @@
 #nullable enable
 
 using Godot;
+using Majo.Runtime.Accessibility;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Actors.Godot;
 using Majo.Runtime.Core;
 using Majo.Runtime.Localization;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Plugins;
-using Majo.Runtime.Stage;
-using Majo.Runtime.Stage.Godot;
+using Majo.Runtime.Timing;
 
 namespace Majo.Runtime;
 
@@ -24,38 +24,18 @@ public partial class MajoRuntimeBootstrap : Node
                     resolver.Get<IOperationRunner>(),
                     resolver.Get<IActorTextureLoader>(),
                     resolver.Get<IFrameClock>(),
-                    resolver.Get<ILocaleManager>()),
+                    resolver.Get<ILocaleManager>(),
+                    resolver.Get<IEasingRegistry>()),
                 typeof(GodotActorHost),
                 typeof(IOperationRunner),
                 typeof(IActorTextureLoader),
                 typeof(IFrameClock),
-                typeof(ILocaleManager))
+                typeof(ILocaleManager),
+                typeof(IEasingRegistry))
+
             .AddSingleton<IPluginManager>(_ => pluginManager)
-            .AddSingleton<IStageBackend>(
-                resolver => new GodotStageBackend(this, resolver.Get<GodotActorHost>()),
-                typeof(GodotActorHost))
-            .AddSingleton<IStageAccessibility>(
-                _ => new StageAccessibility(Configuration!.Stage!.ReduceMotion))
-            .AddSingleton<ICameraManager>(
-                resolver => new CameraManager(
-                    resolver.Get<IStageBackend>(),
-                    resolver.Get<IOperationRunner>(),
-                    resolver.Get<IStageAccessibility>()),
-                typeof(IStageBackend),
-                typeof(IOperationRunner),
-                typeof(IStageAccessibility))
-            .AddSingleton<IStageTransitionManager>(
-                resolver =>
-                {
-                    var registry = new StageTransitionProviderRegistry();
-                    ConfigureStageTransitionProviders?.Invoke(registry);
-                    return new StageTransitionManager(
-                        resolver.Get<IStageBackend>(),
-                        resolver.Get<IOperationRunner>(),
-                        registry.Providers);
-                },
-                typeof(IStageBackend),
-                typeof(IOperationRunner));
+            .AddSingleton<IDirectionAccessibility>(
+                _ => new DirectionAccessibility(Configuration!.Stage!.ReduceMotion));
     }
 
     private ActorManager CreateActorManager(
@@ -63,7 +43,8 @@ public partial class MajoRuntimeBootstrap : Node
         IOperationRunner scheduler,
         IActorTextureLoader textureLoader,
         IFrameClock frameClock,
-        ILocaleManager locales)
+        ILocaleManager locales,
+        IEasingRegistry easingRegistry)
     {
         var actorConfiguration = Configuration!.Actors!;
         var manager = new ActorManager(
@@ -74,7 +55,8 @@ public partial class MajoRuntimeBootstrap : Node
                     host.CharacterLayer,
                     scheduler,
                     textureLoader,
-                    new CharacterPositionMap(actorConfiguration)),
+                    new CharacterPositionMap(actorConfiguration),
+                    easingRegistry, transitionDrivers),
                 new LayeredCharacterActorFactory(
                     host.CharacterLayer,
                     scheduler,
@@ -82,12 +64,14 @@ public partial class MajoRuntimeBootstrap : Node
                     frameClock,
                     new CharacterPositionMap(actorConfiguration),
                     Configuration.Resources!.RootPath,
-                    Configuration.Resources.CharactersPath),
+                    Configuration.Resources.CharactersPath,
+                    easingRegistry, transitionDrivers),
                 new BackgroundActorFactory(
                     host.BackgroundLayer,
                     scheduler,
                     textureLoader),
             },
+
             locales,
             Logger,
             new ActorCreationConventions(

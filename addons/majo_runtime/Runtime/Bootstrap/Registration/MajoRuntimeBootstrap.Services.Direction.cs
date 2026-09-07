@@ -15,7 +15,7 @@ using Majo.Runtime.Direction.Transitions;
 using Majo.Runtime.Localization;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Resources;
-using Majo.Runtime.Stage;
+using Majo.Runtime.Accessibility;
 using Majo.Runtime.Timing;
 
 namespace Majo.Runtime;
@@ -43,9 +43,11 @@ public partial class MajoRuntimeBootstrap : Node
                         resolver.Get<IOperationRunner>(),
                         resolver.Get<IActorTextureLoader>(),
                         resolver.Get<IFrameClock>(),
-                        resolver.Get<ILocaleManager>()),
+                        resolver.Get<ILocaleManager>(),
+                        resolver.Get<IEasingRegistry>()),
                     resolver.Get<ITransitionDriverRegistry>(),
                     resolver.Get<IEasingRegistry>()),
+
                 typeof(GodotDirectionRenderHost),
                 typeof(IResourceManager),
                 typeof(IOperationRunner),
@@ -62,14 +64,14 @@ public partial class MajoRuntimeBootstrap : Node
                         (viewId, delta) => host.ApplyViewModifierDelta(viewId, delta),
                         viewId => host.ClearViewModifierDelta(viewId),
                         resolver.Get<IOperationRunner>(),
-                        resolver.Get<IStageAccessibility>(),
+                        resolver.Get<IDirectionAccessibility>(),
                         resolver.Get<IFrameClock>(),
                         registry: cameraModifiers);
                     return manager;
                 },
                 typeof(GodotDirectionRenderHost),
                 typeof(IOperationRunner),
-                typeof(IStageAccessibility),
+                typeof(IDirectionAccessibility),
                 typeof(IFrameClock))
             .AddSingleton<ITransientCueHandlerRegistry>(_ => transientCueHandlers)
             .AddSingleton<ITransientDirectionCueExecutor>(
@@ -92,14 +94,13 @@ public partial class MajoRuntimeBootstrap : Node
                     var backend = new CompositeDirectionPreparationBackend(
                         resolver.Get<GodotDirectionStageBackend>(),
                         new GodotDirectionViewBackend(host, drivers, easings),
-                        new GodotDirectionScreenBackend(host, easings),
+                        new GodotDirectionScreenBackend(host, drivers, easings),
                         new GodotDirectionEffectBackend(host, easings),
                         plan =>
                         {
                             foreach (var intent in plan.Transitions)
                             {
-                                drivers.TryGet(intent.Spec.Kind, out var driver);
-                                GodotEasingAdapter.Validate(intent.Spec.Easing, easings, driver);
+                                easings.GetRequired(intent.Spec.Easing);
                             }
                         });
                     return new DirectionTransactionCoordinator(
@@ -148,7 +149,8 @@ public partial class MajoRuntimeBootstrap : Node
         IOperationRunner scheduler,
         IActorTextureLoader textureLoader,
         IFrameClock frameClock,
-        ILocaleManager locales)
+        ILocaleManager locales,
+        IEasingRegistry easingRegistry)
     {
         var actorConfiguration = Configuration!.Actors!;
         var manager = new ActorManager(
@@ -164,7 +166,8 @@ public partial class MajoRuntimeBootstrap : Node
                     root,
                     scheduler,
                     textureLoader,
-                    new CharacterPositionMap(actorConfiguration)),
+                    new CharacterPositionMap(actorConfiguration),
+                    easingRegistry, transitionDrivers),
                 new LayeredCharacterActorFactory(
                     root,
                     scheduler,
@@ -172,8 +175,10 @@ public partial class MajoRuntimeBootstrap : Node
                     frameClock,
                     new CharacterPositionMap(actorConfiguration),
                     Configuration.Resources!.RootPath,
-                    Configuration.Resources.CharactersPath),
+                    Configuration.Resources.CharactersPath,
+                    easingRegistry, transitionDrivers),
             },
+
             locales,
             Logger,
             new ActorCreationConventions(

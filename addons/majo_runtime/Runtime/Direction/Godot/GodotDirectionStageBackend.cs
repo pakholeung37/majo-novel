@@ -13,6 +13,7 @@ using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Direction.Rendering;
 using Majo.Runtime.Direction.Transitions;
 using Majo.Runtime.Timing;
+using Majo.Runtime.Operations.Godot;
 
 namespace Majo.Runtime.Direction.Godot;
 
@@ -22,7 +23,7 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
     private readonly IDirectionTextureLoader textures;
     private readonly Func<Node2D, IActorManager>? createActorManager;
     private readonly ITransitionDriverRegistry drivers;
-    private readonly IEasingRegistry? easings;
+    private readonly IEasingRegistry easings;
     private readonly Dictionary<StageId, GodotDirectionActorTreeBackend> actors = new();
 
     public GodotDirectionStageBackend(
@@ -36,7 +37,7 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
         this.textures = textures ?? throw new ArgumentNullException(nameof(textures));
         this.createActorManager = createActorManager;
         this.drivers = drivers ?? new TransitionDriverRegistry();
-        this.easings = easings;
+        this.easings = easings ?? BuiltInEasings.CreateDefaultRegistry();
     }
 
     public Task InitializeAsync(CancellationToken cancellationToken)
@@ -128,8 +129,10 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
                     actorBackend = new GodotDirectionActorTreeBackend(
                         host,
                         surface.Actors,
-                        createActorManager);
+                        createActorManager,
+                        easings, drivers);
                     actors.Add(stageId, actorBackend);
+
                 }
 
                 preparedActors = await actorBackend.PrepareAsync(
@@ -200,9 +203,8 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
                 path,
                 $"stage/{stageId.Value}/backdrop",
                 StringComparison.Ordinal));
-        drivers.TryGet(transition.Kind, out var driver);
-        GodotEasingAdapter.Validate(transition.Easing, easings, driver);
-        return new PreparedBackdrop(
+        GodotDirectionRendering.ValidateTransition(transition, TransitionDomains.Stage, drivers, easings);
+        var prepared = new PreparedBackdrop(
             host,
             surface,
             surface.PublishedBackdrop,
@@ -212,6 +214,13 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
             transition,
             drivers,
             easings);
+        try
+        {
+            await prepared.PrepareInputsAsync(cancellationToken);
+            return prepared;
+        }
+        catch { await prepared.DisposeAsync(); throw; }
+
     }
 
     private static bool DirectionActorsEqual(StageState? before, StageState? target)
@@ -353,10 +362,13 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
         private readonly Texture2D? targetTexture;
         private readonly DirectionTransitionSpec transition;
         private readonly ITransitionDriverRegistry drivers;
-        private readonly IEasingRegistry? easings;
+        private readonly IEasingRegistry easings;
         private readonly TaskCompletionSource settlement = new(
             TaskCreationOptions.RunContinuationsAsynchronously);
-        private Tween? tween;
+        private GodotProgressTween? clock;
+        private IPreparedVisualTransition? preparedTransition;
+        private SubViewport? sourceInput;
+        private SubViewport? targetInput;
         private bool committed;
         private bool rolledBack;
         private bool disposed;
@@ -380,8 +392,26 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
             this.target = target;
             this.targetTexture = targetTexture;
             this.transition = transition;
-            this.drivers = drivers;
-            this.easings = easings;
+            this.drivers = drivers ?? new TransitionDriverRegistry();
+            this.easings = easings ?? BuiltInEasings.CreateDefaultRegistry();
+        }
+
+        public async Task PrepareInputsAsync(CancellationToken cancellationToken)
+        {
+            if (transition.DurationSeconds <= 0 || transition.Kind == DirectionTransitionId.Cut ||
+                transition.Kind == DirectionTransitionId.Fade) return;
+            sourceInput = host.PrepareBackdropInput(surface, source, sourceTexture);
+            targetInput = host.PrepareBackdropInput(surface, target, targetTexture);
+            await host.WaitForRenderFenceAsync(cancellationToken);
+            sourceInput.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
+            targetInput.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
+        }
+
+        private void ReleaseInputs()
+        {
+            if (sourceInput is not null && GodotObject.IsInstanceValid(sourceInput)) sourceInput.Free();
+            if (targetInput is not null && GodotObject.IsInstanceValid(targetInput)) targetInput.Free();
+            sourceInput = targetInput = null;
         }
 
         public Task Settlement => settlement.Task;
@@ -396,50 +426,40 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
                 host.ClearBackdropTransition(surface.Id);
             var animate = transition.DurationSeconds > 0 &&
                 transition.Kind != DirectionTransitionId.Cut &&
-                sourceTexture is not null &&
-                source is not null;
+                (source is not null || target is not null);
             if (animate)
             {
-                host.PublishBackdropTransition(surface.Id, source!, sourceTexture!);
+                if (sourceInput is not null)
+                {
+                    var inputState = (source ?? target)! with
+                    {
+                        Fit = BackdropFit.Stretch,
+                        Tint = new DirectionColor(1, 1, 1, 1),
+                    };
+                    host.PublishBackdropTransition(surface.Id, inputState, sourceInput.GetTexture());
+                }
+                else if (source is not null && sourceTexture is not null)
+                    host.PublishBackdropTransition(surface.Id, source, sourceTexture);
             }
 
             host.PublishBackdrop(surface.Id, target, targetTexture);
             if (!animate)
             {
+                ReleaseInputs();
                 settlement.TrySetResult();
                 return;
             }
 
-            tween = host.CreateTween();
-            GodotDirectionRendering.Configure(tween, transition.Easing, easings);
-            if (drivers.TryGet(transition.Kind, out var driver) && driver is not null)
+            var driver = drivers.GetRequired(transition.Kind);
+            var context = new VisualTransitionContext(surface.BackdropTransition, transition,
+                sourceInput?.GetTexture() ?? sourceTexture, targetInput?.GetTexture() ?? targetTexture,
+                SourceIsPremultiplied: sourceInput is not null, TargetIsPremultiplied: targetInput is not null, IsActive: () => host.IsCurrentStageGeneration(surface.Id, generation));
+            preparedTransition = driver.Prepare(context);
+            if (transition.Kind != DirectionTransitionId.Fade) surface.Backdrop.Visible = false;
+            clock = host.Animate(transition, easings.GetRequired(transition.Easing), p =>
             {
-                var context = new VisualTransitionContext(
-                    surface.BackdropTransition,
-                    transition,
-                    tween,
-                    () => host.IsCurrentStageGeneration(surface.Id, generation),
-                    sourceTexture,
-                    targetTexture,
-                    progress => GodotEasingAdapter.SampleProgress(transition.Easing, progress, easings),
-                    exception => settlement.TrySetException(exception));
-                driver.Setup(context);
-            }
-            else
-            {
-                tween.TweenMethod(Callable.From<float>(progress => GodotEasingAdapter.ApplyProgress(
-                    transition.Easing, progress, easings, effectiveProgress =>
-                {
-                    if (host.IsCurrentStageGeneration(surface.Id, generation))
-                        surface.BackdropTransition.Modulate = new Color(
-                            surface.BackdropTransition.Modulate, 1 - effectiveProgress);
-                }, exception =>
-                {
-                    GodotDirectionRendering.Kill(tween);
-                    settlement.TrySetException(exception);
-                })), 0.0f, 1.0f, transition.DurationSeconds);
-            }
-            tween.Finished += OnFinished;
+                if (host.IsCurrentStageGeneration(surface.Id, generation)) preparedTransition.ApplyProgress(p);
+            }, OnFinished, exception => settlement.TrySetException(exception));
         }
 
         public ValueTask FinishAsync(CancellationToken cancellationToken)
@@ -455,10 +475,11 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
         {
             if (rolledBack || disposed) return;
             rolledBack = true;
-            if (tween is not null && GodotObject.IsInstanceValid(tween))
-                tween.Finished -= OnFinished;
-            GodotDirectionRendering.Kill(tween);
-            tween = null;
+            clock?.Dispose();
+            clock = null;
+            preparedTransition?.Dispose();
+            preparedTransition = null;
+            ReleaseInputs();
             if (host.IsCurrentStageGeneration(surface.Id, generation))
             {
                 host.PublishBackdrop(surface.Id, source, sourceTexture);
@@ -472,10 +493,11 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
             if (disposed) return ValueTask.CompletedTask;
             disposed = true;
             if (!settlement.Task.IsCompleted) settlement.TrySetCanceled();
-            if (tween is not null && GodotObject.IsInstanceValid(tween))
-                tween.Finished -= OnFinished;
-            GodotDirectionRendering.Kill(tween);
-            tween = null;
+            clock?.Dispose();
+            clock = null;
+            preparedTransition?.Dispose();
+            preparedTransition = null;
+            ReleaseInputs();
             if (host.IsCurrentStageGeneration(surface.Id, generation))
                 host.ClearBackdropTransition(surface.Id);
             return ValueTask.CompletedTask;
@@ -486,15 +508,17 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
         private void Complete()
         {
             if (settlement.Task.IsCompleted || rolledBack || disposed) return;
-            if (tween is not null && GodotObject.IsInstanceValid(tween))
-                tween.Finished -= OnFinished;
-            GodotDirectionRendering.Kill(tween);
-            tween = null;
+            clock?.Dispose();
+            clock = null;
             if (host.IsCurrentStageGeneration(surface.Id, generation))
             {
+                preparedTransition?.ApplyProgress(1.0f);
                 host.PublishBackdrop(surface.Id, target, targetTexture);
                 host.ClearBackdropTransition(surface.Id);
             }
+            preparedTransition?.Dispose();
+            preparedTransition = null;
+            ReleaseInputs();
             settlement.TrySetResult();
         }
     }

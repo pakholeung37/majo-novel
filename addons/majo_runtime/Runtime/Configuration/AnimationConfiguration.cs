@@ -1,6 +1,5 @@
 using Godot;
 using Majo.Runtime.Direction.Core;
-using Majo.Runtime.Stage;
 using Majo.Runtime.Timing;
 
 namespace Majo.Runtime.Configuration;
@@ -17,6 +16,7 @@ public partial class AnimationConfiguration : Resource
     [Export] public double DefaultVoiceFadeDurationSeconds { get; set; } = RuntimeDefaults.ImmediateDurationSeconds;
 
     [Export] public string DefaultCharacterAnimationId { get; set; } = "fade";
+    [Export] public string DefaultCharacterAppearanceAnimationId { get; set; } = "dissolve";
     [Export] public string DefaultLeaveAnimationId { get; set; } = "fade";
     [Export] public string DefaultStageShowAnimationId { get; set; } = "cut";
     [Export] public string DefaultStageClearAnimationId { get; set; } = "cut";
@@ -26,10 +26,12 @@ public partial class AnimationConfiguration : Resource
     [Export] public string DefaultShotAnimationId { get; set; } = "cut";
     [Export] public string DefaultLayoutAnimationId { get; set; } = "cut";
     [Export] public string DefaultDirectionEasingId { get; set; } = "linear";
-    [Export] public MotionCurve DefaultStageAnimationCurve { get; set; } = MotionCurve.Linear;
 
     public DirectionTransitionId ResolveCharacterAnimationId() =>
         new(!string.IsNullOrWhiteSpace(DefaultCharacterAnimationId) ? DefaultCharacterAnimationId : "fade");
+
+    public DirectionTransitionId ResolveCharacterAppearanceAnimationId() =>
+        new(!string.IsNullOrWhiteSpace(DefaultCharacterAppearanceAnimationId) ? DefaultCharacterAppearanceAnimationId : "dissolve");
 
     public DirectionTransitionId ResolveLeaveAnimationId() =>
         new(!string.IsNullOrWhiteSpace(DefaultLeaveAnimationId) ? DefaultLeaveAnimationId : "fade");

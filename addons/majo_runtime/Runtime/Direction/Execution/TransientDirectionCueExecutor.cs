@@ -9,7 +9,6 @@ using Majo.Runtime.Core;
 using Majo.Runtime.Direction.Camera;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Operations;
-using Majo.Runtime.Stage;
 
 namespace Majo.Runtime.Direction.Execution;
 

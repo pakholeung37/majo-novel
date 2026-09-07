@@ -9,6 +9,7 @@ using Godot;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Timing;
+using Majo.Runtime.Direction.Transitions;
 
 namespace Majo.Runtime.Direction.Godot;
 
@@ -33,9 +34,21 @@ internal static class GodotDirectionRendering
         };
     }
 
-    public static void Configure(Tween tween, EasingId easing, IEasingRegistry? registry = null)
+    public static void ValidateTransition(DirectionTransitionSpec transition, TransitionDomains domain,
+        ITransitionDriverRegistry drivers, IEasingRegistry easings)
     {
-        GodotEasingAdapter.Configure(tween, easing, registry);
+        transition.Validate();
+        easings.GetRequired(transition.Easing);
+        if (transition.Kind == DirectionTransitionId.Move)
+        {
+            if (domain == TransitionDomains.Stage) throw new DirectionException("Backdrop cannot use a move transition.");
+            return;
+        }
+        if (!drivers.Supports(transition.Kind, domain))
+            throw new DirectionException($"Transition '{transition.Kind}' does not support {domain}.");
+        var driver = drivers.GetRequired(transition.Kind);
+        if (!driver.SupportsCustomEasing && !BuiltInEasings.All.Any(easing => easing.Id == transition.Easing))
+            throw new DirectionException($"Transition '{transition.Kind}' does not support custom easing '{transition.Easing}'.");
     }
 
     public static Color ToGodot(DirectionColor color, float? alpha = null) =>

@@ -7,7 +7,7 @@ using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Direction.Camera;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
-using Majo.Runtime.Direction.Godot;
+using Majo.Runtime.Operations.Godot;
 using Majo.Runtime.Direction.Transitions;
 using Majo.Runtime.Plugins;
 using Majo.Runtime.Timing;
@@ -420,24 +420,32 @@ public sealed class TimingRegistryTests
         var registry = new EasingRegistry();
         var id = new EasingId("square");
         registry.Register(new EasingDefinition(id, t => t * t));
-        Assert.Equal(0.0625f, GodotEasingAdapter.SampleProgress(id, 0.25f, registry));
-        Assert.Throws<DirectionException>(() => GodotEasingAdapter.SampleProgress("missing", 0.25f, registry));
-        registry.Register(new EasingDefinition("invalid-between-samples", t => t == 0.25 ? double.NaN : t));
-        Exception? failure = null;
-        var applied = false;
-        GodotEasingAdapter.ApplyProgress("invalid-between-samples", 0.25f, registry,
-            _ => applied = true, exception => failure = exception);
-        Assert.False(applied);
-        Assert.IsType<DirectionException>(failure);
-        Assert.Throws<DirectionException>(() => GodotEasingAdapter.Validate(id, registry,
-            new FakeTransitionDriver("legacy", TransitionDomains.Stage)));
-        GodotEasingAdapter.Validate(id, registry, new FadeTransitionDriver());
+        Assert.Equal(0.0625f, GodotProgressTween.Sample(registry.GetRequired(id), .25f));
+        Assert.Throws<KeyNotFoundException>(() => registry.GetRequired("missing"));
+        registry.Register(new EasingDefinition("invalid-between-samples", t => t == .25 ? double.NaN : t));
+        Assert.Throws<InvalidOperationException>(() =>
+            GodotProgressTween.Sample(registry.GetRequired("invalid-between-samples"), .25f));
+        Assert.Equal(.125f, GodotProgressTween.Sample(BuiltInEasings.CubicIn, .5f));
+    }
+
+    [Fact]
+    public void AppearanceCommandValidatesActorDomainForCustomDrivers()
+    {
+        var registry = new TransitionDriverRegistry();
+        registry.Register(new FakeTransitionDriver("actor-only", TransitionDomains.Actor));
+        registry.Register(new FakeTransitionDriver("stage-only", TransitionDomains.Stage));
+        var policy = new DirectionCommandPolicy(transitions: registry);
+        Assert.Equal(new DirectionTransitionId("actor-only"), policy.ResolveTransition("character appearance",
+            TransitionArguments.Create(via: CommandValue<DirectionTransitionId>.Explicit("actor-only")), null!).Kind);
+        Assert.Throws<DirectionException>(() => policy.ResolveTransition("character appearance",
+            TransitionArguments.Create(via: CommandValue<DirectionTransitionId>.Explicit("stage-only")), null!));
     }
 
     private sealed class FakeTransitionDriver : ITransitionDriver
     {
         public DirectionTransitionId Id { get; }
         public TransitionDomains Domains { get; }
+        public bool SupportsCustomEasing => false;
 
         public FakeTransitionDriver(DirectionTransitionId id, TransitionDomains domains)
         {
@@ -445,6 +453,12 @@ public sealed class TimingRegistryTests
             Domains = domains;
         }
 
-        public void Setup(VisualTransitionContext context) { }
+        public IPreparedVisualTransition Prepare(VisualTransitionContext context) => new DummyPreparedTransition();
+
+        private sealed class DummyPreparedTransition : IPreparedVisualTransition
+        {
+            public void ApplyProgress(float progress) { }
+            public void Dispose() { }
+        }
     }
 }

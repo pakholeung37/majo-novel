@@ -1,6 +1,6 @@
 # LayeredCharacter Dissolve 对比实验
 
-状态：用户已确认视觉效果可接受，重构方案已采用整图 Dissolve；本场景仍为对比原型，尚未替换运行时实现。
+状态：用户已确认视觉效果可接受，运行时已采用整图 Dissolve。本场景左侧调用当前生产实现，已不再代表历史差量层算法；如需历史对比，请运行迁移前版本。生产回归见 `tests/headless/HeadlessTestRunner.TransitionRegressions.cs`。
 
 打开 `LayeredDissolveExperiment.tscn`，在 Godot 编辑器按 F6 运行当前场景。需要本地 Ema 角色资产（与现有分层角色测试相同）。也可在仓库根目录运行：
 

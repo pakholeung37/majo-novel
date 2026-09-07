@@ -7,11 +7,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Actors;
+using Majo.Runtime.Actors.Godot;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Direction.Rendering;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Timing;
+using Majo.Runtime.Direction.Transitions;
 
 namespace Majo.Runtime.Direction.Godot;
 
@@ -25,17 +27,24 @@ internal sealed class GodotDirectionActorTreeBackend
     private readonly GodotDirectionRenderHost host;
     private readonly Node2D actorRoot;
     private readonly Func<Node2D, IActorManager> createManager;
+    private readonly IEasingRegistry easings;
+    private readonly ITransitionDriverRegistry drivers;
     private PreparedActorTreeState? active;
 
     public GodotDirectionActorTreeBackend(
         GodotDirectionRenderHost host,
         Node2D actorRoot,
-        Func<Node2D, IActorManager> createManager)
+        Func<Node2D, IActorManager> createManager,
+        IEasingRegistry? easings = null, ITransitionDriverRegistry? drivers = null)
     {
         this.host = host ?? throw new ArgumentNullException(nameof(host));
         this.actorRoot = actorRoot ?? throw new ArgumentNullException(nameof(actorRoot));
         this.createManager = createManager ?? throw new ArgumentNullException(nameof(createManager));
+        this.easings = easings ?? BuiltInEasings.CreateDefaultRegistry();
+        this.drivers = drivers ?? new TransitionDriverRegistry();
     }
+
+
 
     public async Task<IPreparedDirectionComponent> PrepareAsync(
         DirectionPlan plan,
@@ -157,7 +166,7 @@ internal sealed class GodotDirectionActorTreeBackend
         character.SetVisible(true);
     }
 
-    private static Dictionary<ActorId, DirectionTransitionSpec> ResolveTransitions(
+    private Dictionary<ActorId, DirectionTransitionSpec> ResolveTransitions(
         DirectionPlan plan,
         StageState? before,
         StageState? target)
@@ -187,15 +196,6 @@ internal sealed class GodotDirectionActorTreeBackend
                 _ => throw new DirectionException(
                     $"Direction Actor '{actorId.Value}' has multiple transition specifications."),
             };
-            // An appearance replacement must keep the old and new visuals on
-            // screen together. Treat a legacy/default fade as a dissolve for
-            // this case so there is no blank frame between expressions.
-            if (source is not null && destination is not null &&
-                !string.Equals(source.Appearance, destination.Appearance, StringComparison.Ordinal) &&
-                transition.Kind == DirectionTransitionId.Fade)
-            {
-                transition = transition with { Kind = DirectionTransitionId.Dissolve };
-            }
             ValidateTransition(actorId, source, destination, transition);
             transitions.Add(actorId, transition);
         }
@@ -203,15 +203,31 @@ internal sealed class GodotDirectionActorTreeBackend
         return transitions;
     }
 
-    private static void ValidateTransition(
+    private void ValidateTransition(
         ActorId actorId,
         ActorState? before,
         ActorState? target,
         DirectionTransitionSpec transition)
     {
         transition.Validate();
-        if (!GodotEasingAdapter.TryGetNativeTween(transition.Easing, out _, out _))
-            throw new DirectionException($"Direction Actor '{actorId}' does not support easing '{transition.Easing}'.");
+        if (transition.Kind != DirectionTransitionId.Move && !drivers.Supports(transition.Kind, TransitionDomains.Actor))
+            throw new DirectionException($"Transition '{transition.Kind}' does not support actors.");
+        if (!easings.Contains(transition.Easing))
+        {
+            throw new DirectionException(
+                $"Direction Actor '{actorId.Value}' does not support easing '{transition.Easing}'.");
+        }
+
+
+        if (before is not null && target is not null &&
+            !string.Equals(before.Appearance, target.Appearance, StringComparison.Ordinal) &&
+            transition.Kind == DirectionTransitionId.Fade)
+        {
+            throw new DirectionException(
+                $"Direction Actor '{actorId.Value}' appearance change from '{before.Appearance}' to '{target.Appearance}' does not support fade; use dissolve instead.");
+        }
+
+
         if (transition.Kind == DirectionTransitionId.Move &&
             (before is null || target is null))
         {
@@ -220,6 +236,8 @@ internal sealed class GodotDirectionActorTreeBackend
                 "the source and target states; use cut, fade, or dissolve for entrance and leave.");
         }
     }
+
+
 
     private static void ConfigurePreparedActors(
         PreparedActorTreeState prepared,
@@ -403,7 +421,9 @@ internal sealed class GodotDirectionActorTreeBackend
                         {
                             operations.Add(destination!.ChangeAppearance(
                                 targetAppearance,
-                                pair.Value.DurationSeconds));
+                                new AnimationSpec(pair.Value.DurationSeconds, pair.Value.Easing),
+                                backend.drivers.GetRequired(pair.Value.Kind == DirectionTransitionId.Move
+                                    ? DirectionTransitionId.Dissolve : pair.Value.Kind)));
                         }
                         else
                         {
@@ -423,18 +443,24 @@ internal sealed class GodotDirectionActorTreeBackend
                         destination.SetPosition(sourcePosition);
                         operations.Add(destination.ChangePosition(
                             targetPixelPosition,
-                            ToAnimationSpec(pair.Value)));
+                            new AnimationSpec(pair.Value.DurationSeconds, pair.Value.Easing)));
                     }
                     continue;
                 }
 
                 if (pair.Value.DurationSeconds <= 0) continue;
-                var animation = ToAnimationSpec(pair.Value);
-                if (pair.Value.Kind != DirectionTransitionId.Move &&
-                    pair.Value.Kind != DirectionTransitionId.Cut)
+                var animation = new AnimationSpec(pair.Value.DurationSeconds, pair.Value.Easing);
+                if (pair.Value.Kind == DirectionTransitionId.Fade)
                 {
                     if (hasSource) operations.Add(source!.ChangeOpacity(0, animation));
                     if (hasTarget) operations.Add(destination!.ChangeOpacity(1, animation));
+                }
+                else if (pair.Value.Kind != DirectionTransitionId.Move && pair.Value.Kind != DirectionTransitionId.Cut)
+                {
+                    var actor = (hasTarget ? destination : source) as ActorBase
+                        ?? throw new DirectionException("Actor factory does not provide visual transition inputs.");
+                    operations.Add(actor.TransitionVisual(hasSource ? source : null, hasTarget ? destination : null,
+                        animation, backend.drivers.GetRequired(pair.Value.Kind)));
                 }
                 else if (pair.Value.Kind == DirectionTransitionId.Move && hasTarget)
                 {
@@ -465,12 +491,12 @@ internal sealed class GodotDirectionActorTreeBackend
             foreach (var actor in replaced.Manager.Actors)
             {
                 var actorId = new ActorId(actor.Id);
-                var keepForCrossfade = !IsAppearanceChange(actorId) &&
+                var keepForDissolve = !IsAppearanceChange(actorId) &&
                     transitions.TryGetValue(actorId, out var transition) &&
                     transition.Kind != DirectionTransitionId.Move &&
                     transition.Kind != DirectionTransitionId.Cut &&
                     transition.DurationSeconds > 0;
-                if (keepForCrossfade)
+                if (keepForDissolve)
                     retainsVisibleSource = true;
                 else
                     actor.SetVisible(false);
@@ -498,34 +524,8 @@ internal sealed class GodotDirectionActorTreeBackend
             if (replaced is not null) replaced.Root.Visible = false;
             settlement.TrySetResult();
         }
-
-        private static AnimationSpec ToAnimationSpec(DirectionTransitionSpec transition)
-        {
-            var easing = transition.Easing;
-            if (easing == EasingId.Linear)
-                return new AnimationSpec(transition.DurationSeconds, AnimationTransition.Linear, AnimationEase.InOut);
-            if (easing == EasingId.SineIn)
-                return new AnimationSpec(transition.DurationSeconds, AnimationTransition.Sine, AnimationEase.In);
-            if (easing == EasingId.SineOut)
-                return new AnimationSpec(transition.DurationSeconds, AnimationTransition.Sine, AnimationEase.Out);
-            if (easing == EasingId.SineInOut)
-                return new AnimationSpec(transition.DurationSeconds, AnimationTransition.Sine, AnimationEase.InOut);
-            if (easing == EasingId.CubicIn)
-                return new AnimationSpec(transition.DurationSeconds, AnimationTransition.Cubic, AnimationEase.In);
-            if (easing == EasingId.CubicOut)
-                return new AnimationSpec(transition.DurationSeconds, AnimationTransition.Cubic, AnimationEase.Out);
-            if (easing == EasingId.CubicInOut)
-                return new AnimationSpec(transition.DurationSeconds, AnimationTransition.Cubic, AnimationEase.InOut);
-            if (easing == EasingId.BackIn)
-                return new AnimationSpec(transition.DurationSeconds, AnimationTransition.Back, AnimationEase.In);
-            if (easing == EasingId.BackOut)
-                return new AnimationSpec(transition.DurationSeconds, AnimationTransition.Back, AnimationEase.Out);
-            if (easing == EasingId.BackInOut)
-                return new AnimationSpec(transition.DurationSeconds, AnimationTransition.Back, AnimationEase.InOut);
-
-            throw new DirectionException($"Easing '{easing}' is not supported by actor animation backend.");
-        }
     }
+
 
     private sealed class PreparedActorTreeState
     {

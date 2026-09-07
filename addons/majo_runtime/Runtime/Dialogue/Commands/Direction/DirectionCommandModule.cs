@@ -22,8 +22,7 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
         const string providerId = "majo.direction";
 
         converters.AddDefault<Godot.Vector2>(_ => Vector2Converter.Instance, providerId);
-        converters.AddDefault<Stage.CameraShakeAxis>(_ => CameraShakeAxisConverter.Instance, providerId);
-        converters.AddDefault<Stage.MotionCurve>(_ => MotionCurveConverter.Instance, providerId);
+        converters.AddDefault<Direction.Camera.CameraShakeAxis>(_ => CameraShakeAxisConverter.Instance, providerId);
         converters.AddDefault<Direction.Core.DirectionTransitionId>(_ => DirectionTransitionIdConverter.Instance, providerId);
         converters.AddDefault<Direction.Core.CurtainPosition>(_ => new EnumCommandValueConverter<Direction.Core.CurtainPosition>(), providerId);
         converters.AddDefault(

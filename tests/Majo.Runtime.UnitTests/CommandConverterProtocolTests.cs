@@ -5,8 +5,8 @@ using System.Collections.Generic;
 using Godot;
 using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue.Commands;
+using Majo.Runtime.Direction.Camera;
 using Majo.Runtime.Direction.Core;
-using Majo.Runtime.Stage;
 using Majo.Runtime.Timing;
 using Xunit;
 
@@ -92,7 +92,7 @@ public sealed class CommandConverterProtocolTests
     }
 
     [Fact]
-    public void DomainConverters_CameraShakeAxis_Vector2_MotionCurve_ParseAccurately()
+    public void DomainConverters_CameraShakeAxis_Vector2_ParseAccurately()
     {
         // CameraShakeAxis
         Assert.Equal(CameraShakeAxis.All, CameraShakeAxisConverter.Instance.Parse("all"));
@@ -109,12 +109,6 @@ public sealed class CommandConverterProtocolTests
         Assert.Equal(-4.2f, v.Y);
         Assert.Throws<CommandValueFormatException>(() => Vector2Converter.Instance.Parse("12"));
         Assert.Throws<CommandValueFormatException>(() => Vector2Converter.Instance.Parse("12,NaN"));
-
-        // MotionCurve
-        Assert.Equal(MotionCurve.Linear, MotionCurveConverter.Instance.Parse("linear"));
-        Assert.Equal(MotionCurve.CubicOut, MotionCurveConverter.Instance.Parse("cubic-out"));
-        Assert.Equal(MotionCurve.BackOut, MotionCurveConverter.Instance.Parse("back-out"));
-        Assert.Throws<CommandValueFormatException>(() => MotionCurveConverter.Instance.Parse("nonexistent"));
     }
 
     [Fact]

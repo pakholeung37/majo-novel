@@ -86,4 +86,11 @@ public static class BuiltInEasings
             registry.Register(easing);
         }
     }
+
+    public static IEasingRegistry CreateDefaultRegistry()
+    {
+        var registry = new EasingRegistry();
+        RegisterDefaults(registry);
+        return registry;
+    }
 }

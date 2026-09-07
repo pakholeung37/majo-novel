@@ -46,40 +46,66 @@ public sealed class ShaderTransitionDriver : ITransitionDriver
 
     public bool SupportsCustomEasing => true;
 
-    public void Setup(VisualTransitionContext context)
+    public IPreparedVisualTransition Prepare(VisualTransitionContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
-        if (context.Spec.DurationSeconds <= 0)
-        {
-            return;
-        }
-
         var material = (ShaderMaterial)materialTemplate.Duplicate();
         material.SetShaderParameter("progress", 0.0f);
         if (ruleTexture is not null)
         {
             material.SetShaderParameter("rule_texture", ruleTexture);
         }
+
         material.SetShaderParameter("smoothness", smoothness);
         material.SetShaderParameter("invert", invert);
+        material.SetShaderParameter("source_is_premultiplied", context.SourceIsPremultiplied);
+        material.SetShaderParameter("target_is_premultiplied", context.TargetIsPremultiplied);
+        if (context.SourceTexture is not null)
+        {
+            material.SetShaderParameter("source_image", context.SourceTexture);
+        }
+
+        if (context.TargetTexture is not null)
+        {
+            material.SetShaderParameter("target_image", context.TargetTexture);
+        }
 
         context.Surface.Material = material;
+        return new ShaderPreparedTransition(context.Surface, material, context.IsActive);
+    }
 
-        context.AnimateProgress(progress =>
-            {
-                if (context.IsActive?.Invoke() != false && GodotObject.IsInstanceValid(context.Surface))
-                {
-                    material.SetShaderParameter("progress", progress);
-                }
-            });
+    private sealed class ShaderPreparedTransition : IPreparedVisualTransition
+    {
+        private readonly CanvasItem surface;
+        private readonly ShaderMaterial material;
+        private readonly Func<bool>? isActive;
+        private bool disposed;
 
-        context.Tween.Finished += () =>
+        public ShaderPreparedTransition(CanvasItem surface, ShaderMaterial material, Func<bool>? isActive)
         {
-            if (GodotObject.IsInstanceValid(context.Surface) &&
-                ReferenceEquals(context.Surface.Material, material))
+            this.surface = surface;
+            this.material = material;
+            this.isActive = isActive;
+        }
+
+        public void ApplyProgress(float progress)
+        {
+            if (disposed) return;
+            if (isActive?.Invoke() != false && GodotObject.IsInstanceValid(surface))
             {
-                context.Surface.Material = null;
+                material.SetShaderParameter("progress", Math.Clamp(progress, 0.0f, 1.0f));
             }
-        };
+        }
+
+        public void Dispose()
+        {
+            if (disposed) return;
+            disposed = true;
+            if (GodotObject.IsInstanceValid(surface) && ReferenceEquals(surface.Material, material))
+            {
+                surface.Material = null;
+            }
+            material.Dispose();
+        }
     }
 }

@@ -8,7 +8,6 @@ using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Operations;
-using Majo.Runtime.Stage;
 
 namespace Majo.Runtime.Direction.Camera;
 

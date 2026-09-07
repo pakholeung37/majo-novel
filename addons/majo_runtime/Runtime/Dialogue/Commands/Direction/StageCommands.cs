@@ -5,7 +5,6 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
-using Majo.Runtime.Stage;
 
 namespace Majo.Runtime.Dialogue.Commands;
 

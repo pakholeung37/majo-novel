@@ -1,11 +1,13 @@
+#nullable enable
+
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Majo.Runtime.Stage;
+namespace Majo.Runtime.Accessibility;
 
-public sealed class StageAccessibility : IStageAccessibility
+public sealed class DirectionAccessibility : IDirectionAccessibility
 {
-    public StageAccessibility(bool reduceMotion = false) => ReduceMotion = reduceMotion;
+    public DirectionAccessibility(bool reduceMotion = false) => ReduceMotion = reduceMotion;
 
     public bool ReduceMotion { get; set; }
 

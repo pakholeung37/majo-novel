@@ -439,6 +439,7 @@ public partial class MajoProjectConfiguration : Resource
         var animationIds = new[]
         {
             (nameof(Animation.DefaultCharacterAnimationId), Animation.DefaultCharacterAnimationId),
+            (nameof(Animation.DefaultCharacterAppearanceAnimationId), Animation.DefaultCharacterAppearanceAnimationId),
             (nameof(Animation.DefaultLeaveAnimationId), Animation.DefaultLeaveAnimationId),
             (nameof(Animation.DefaultStageShowAnimationId), Animation.DefaultStageShowAnimationId),
             (nameof(Animation.DefaultStageClearAnimationId), Animation.DefaultStageClearAnimationId),
@@ -455,8 +456,6 @@ public partial class MajoProjectConfiguration : Resource
         }
         if (string.IsNullOrWhiteSpace(Animation.DefaultDirectionEasingId))
             issues.Add(new ConfigurationIssue($"{nameof(Animation)}.{nameof(Animation.DefaultDirectionEasingId)}", "Default direction easing ID cannot be empty."));
-        if (!Enum.IsDefined(Animation.DefaultStageAnimationCurve))
-            issues.Add(new ConfigurationIssue(nameof(Animation), "Default animation curve is invalid."));
     }
 
     private void ValidateActors(

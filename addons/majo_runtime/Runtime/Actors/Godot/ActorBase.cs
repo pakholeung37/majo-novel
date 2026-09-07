@@ -7,6 +7,8 @@ using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Operations.Godot;
+using Majo.Runtime.Timing;
+using Majo.Runtime.Direction.Transitions;
 
 namespace Majo.Runtime.Actors.Godot;
 
@@ -14,23 +16,31 @@ public abstract class ActorBase : IActor, IGodotActorView
 {
     private const string PositionProperty = "position";
     protected const string OpacityProperty = "opacity";
-    private const string AppearanceProperty = "appearance";
+    protected const string AppearanceProperty = "appearance";
 
     private readonly Dictionary<string, IOperationHandle> propertyOperations =
         new(StringComparer.Ordinal);
+    private readonly IEasingRegistry easings;
     private bool isDestroyed;
+
+    protected IEasingRegistry Easings => easings;
+    protected long AppearanceEpoch { get; private set; }
+    protected void InvalidateAppearance() => AppearanceEpoch++;
+
 
     protected ActorBase(
         ActorDefinition definition,
         CanvasItem view,
         IOperationRunner runner,
-        IActorTextureLoader textureLoader)
+        IActorTextureLoader textureLoader,
+        IEasingRegistry? easings = null)
         : this(
             definition,
             view,
             runner,
             textureLoader,
-            definition.DefaultAppearance)
+            definition.DefaultAppearance,
+            easings)
     {
     }
 
@@ -39,7 +49,8 @@ public abstract class ActorBase : IActor, IGodotActorView
         CanvasItem view,
         IOperationRunner runner,
         IActorTextureLoader textureLoader,
-        string initialAppearance)
+        string initialAppearance,
+        IEasingRegistry? easings = null)
     {
         Definition = definition ?? throw new ArgumentNullException(nameof(definition));
         View = view ?? throw new ArgumentNullException(nameof(view));
@@ -51,7 +62,9 @@ public abstract class ActorBase : IActor, IGodotActorView
         TargetVisible = view.Visible;
         TargetPosition = Vector2.Zero;
         TargetOpacity = view.Modulate.A;
+        this.easings = easings ?? BuiltInEasings.CreateDefaultRegistry();
     }
+
 
     protected ActorDefinition Definition { get; }
 
@@ -100,6 +113,7 @@ public abstract class ActorBase : IActor, IGodotActorView
         var texture = TextureLoader.Load(
             Definition.GetAppearanceResourceKey(appearance),
             Definition.GetAppearanceOverride(appearance));
+        InvalidateAppearance();
         CancelProperty(AppearanceProperty);
         ApplyTexture(texture);
         Appearance = appearance;
@@ -142,13 +156,18 @@ public abstract class ActorBase : IActor, IGodotActorView
         View.Modulate = new Color(tint.R, tint.G, tint.B, current.A);
     }
 
+    protected virtual void ApplyOpacity(float opacity)
+    {
+        var current = View.Modulate;
+        View.Modulate = new Color(current.R, current.G, current.B, opacity);
+    }
+
     public virtual void SetOpacity(float opacity)
     {
         EnsureAlive();
         ValidateOpacity(opacity);
         CancelProperty(OpacityProperty);
-        var current = View.Modulate;
-        View.Modulate = new Color(current.R, current.G, current.B, opacity);
+        ApplyOpacity(opacity);
         TargetOpacity = opacity;
     }
 
@@ -172,17 +191,19 @@ public abstract class ActorBase : IActor, IGodotActorView
         EnsureAlive();
         ValidatePosition(position);
         TargetPosition = position;
-        var tween = GodotTweenOperation.CreatePropertyTween(
+        var startPos = Position;
+        var resolvedEasing = easings.GetRequired(animation.Easing);
+        var operation = GodotTweenOperation.CreateProgressOperation(
             View,
-            View,
-            new NodePath("position"),
-            position,
-            animation.DurationSeconds,
-            transition: GodotAnimationSpec.Transition(animation.Transition),
-            ease: GodotAnimationSpec.Ease(animation.Ease),
-            ignoreTimeScale: animation.TimeMode == AnimationTimeMode.Unscaled);
+            animation.Timing,
+            resolvedEasing,
+            applyProgress: e => ApplyPosition(startPos.Lerp(position, e)),
+            finish: () => ApplyPosition(position),
+            cancel: () => { });
         return StartSequencedOperation(
-            PositionProperty, tween, animation.ConflictPolicy);
+            PositionProperty, new OperationDefinition(
+                async context => { startPos = Position; await operation.ExecuteAsync(context); },
+                operation.FinishAsync, operation.CancelAsync), animation.ConflictPolicy);
     }
 
     public virtual IOperationHandle ChangeOpacity(
@@ -198,18 +219,26 @@ public abstract class ActorBase : IActor, IGodotActorView
         EnsureAlive();
         ValidateOpacity(opacity);
         TargetOpacity = opacity;
-        var tween = GodotTweenOperation.CreatePropertyTween(
+        var startOpacity = Opacity;
+        var resolvedEasing = easings.GetRequired(animation.Easing);
+
+        var operation = GodotTweenOperation.CreateProgressOperation(
             View,
-            View,
-            new NodePath("modulate:a"),
-            opacity,
-            animation.DurationSeconds,
-            transition: GodotAnimationSpec.Transition(animation.Transition),
-            ease: GodotAnimationSpec.Ease(animation.Ease),
-            ignoreTimeScale: animation.TimeMode == AnimationTimeMode.Unscaled);
+            animation.Timing,
+            resolvedEasing,
+            applyProgress: e =>
+            {
+                var clamped = Math.Clamp(e, 0.0f, 1.0f);
+                ApplyOpacity(Mathf.Lerp(startOpacity, opacity, clamped));
+            },
+            finish: () => ApplyOpacity(opacity),
+            cancel: () => { });
         return StartSequencedOperation(
-            OpacityProperty, tween, animation.ConflictPolicy);
+            OpacityProperty, new OperationDefinition(
+                async context => { startOpacity = Opacity; await operation.ExecuteAsync(context); },
+                operation.FinishAsync, operation.CancelAsync), animation.ConflictPolicy);
     }
+
 
     public virtual void Destroy()
     {
@@ -219,6 +248,7 @@ public abstract class ActorBase : IActor, IGodotActorView
         }
 
         isDestroyed = true;
+        InvalidateAppearance();
         foreach (var operation in propertyOperations.Values)
         {
             operation.Cancel();
@@ -276,107 +306,48 @@ public abstract class ActorBase : IActor, IGodotActorView
         return handle;
     }
 
-    protected void CancelPropertyAnimation(string property) => CancelProperty(property);
-
-    protected IOperationHandle CrossFadeToAppearance(
-        string appearance,
-        Action applyAppearance,
-        double durationSeconds,
-        CanvasItem? compositeView = null)
+    internal IOperationHandle TransitionVisual(ICharacterActor? source, ICharacterActor? target,
+        AnimationSpec animation, ITransitionDriver driver)
     {
         EnsureAlive();
-        ArgumentException.ThrowIfNullOrWhiteSpace(appearance);
-        ArgumentNullException.ThrowIfNull(applyAppearance);
-        var animation = new AnimationSpec(durationSeconds);
-        var transitionView = compositeView ?? View;
-        CanvasItem? previousView = null;
-        CanvasItem? previousTransitionView = null;
-        OperationDefinition? fadeOut = null;
-        OperationDefinition? fadeIn = null;
-        var appearanceApplied = false;
-
-        void PrepareTransition()
+        var easing = Easings.GetRequired(animation.Easing);
+        var owner = View.GetParent() as Node2D ?? throw new ActorException("Visual transition requires an actor root.");
+        void ShowTarget()
         {
-            if (appearanceApplied)
+            if (source is not null && GodotObject.IsInstanceValid(source.View)) source.View.Visible = false;
+            if (target is not null && GodotObject.IsInstanceValid(target.View)) target.View.Visible = true;
+        }
+        var operation = GodotActorAppearanceTransition.CreateOperation(owner, animation, easing, token =>
+        {
+            // The target tree is already fully prepared. Capture both actor-local trees in
+            // the same stage coordinates, including their independent scale, position and tint.
+            target?.SetOpacity(1);
+            CanvasItem Copy(ICharacterActor? actor)
             {
-                return;
+                if (actor is null) return new Node2D();
+                var copy = (Node2D)actor.View.Duplicate();
+                copy.Transform = owner.GetGlobalTransform().AffineInverse() * actor.View.GetGlobalTransform();
+                copy.Visible = true;
+                return copy;
             }
-
-            var parent = View.GetParent() ?? throw new ActorException(
-                $"Actor '{Id}' must be attached before changing appearance.");
-            previousView = View.Duplicate() as CanvasItem ?? throw new ActorException(
-                $"Actor '{Id}' could not duplicate its current appearance.");
-            previousView.Name = $"{View.Name}_CrossfadePrevious";
-            parent.AddChild(previousView);
-            previousTransitionView = ReferenceEquals(transitionView, View)
-                ? previousView
-                : previousView.GetNode<CanvasItem>(View.GetPathTo(transitionView));
-            applyAppearance();
-            Appearance = appearance;
-            var color = transitionView.Modulate;
-            transitionView.Modulate = new Color(color.R, color.G, color.B, 0);
-            View.Visible = true;
-            fadeOut = CreateOpacityTween(previousTransitionView, 0, animation);
-            fadeIn = CreateOpacityTween(transitionView, 1, animation);
-            appearanceApplied = true;
-        }
-
-        void CleanupPreviousView()
-        {
-            if (previousView is not null && GodotObject.IsInstanceValid(previousView))
-            {
-                previousView.Free();
-            }
-
-            previousView = null;
-        }
-
-        void RestoreFinalState()
-        {
-            PrepareTransition();
-            var color = transitionView.Modulate;
-            transitionView.Modulate = new Color(color.R, color.G, color.B, 1);
-            View.Visible = true;
-            CleanupPreviousView();
-        }
-
-        TargetAppearance = appearance;
-        TargetVisible = true;
-        TargetOpacity = 1;
-        var transition = new OperationDefinition(
-            async context =>
-            {
-                PrepareTransition();
-                await Task.WhenAll(
-                    fadeOut!.ExecuteAsync(context),
-                    fadeIn!.ExecuteAsync(context));
-                CleanupPreviousView();
-            },
-            onFinish: async cancellationToken =>
-            {
-                PrepareTransition();
-                await Task.WhenAll(
-                    fadeOut!.FinishAsync(cancellationToken),
-                    fadeIn!.FinishAsync(cancellationToken));
-                CleanupPreviousView();
-            },
-            onCancel: async cancellationToken =>
-            {
-                if (fadeOut is not null && fadeIn is not null)
+            var from = Copy(source);
+            var to = Copy(target);
+            target?.SetVisible(false);
+            return GodotActorAppearanceTransition.PrepareAsync(owner, from, to,
+                owner.GetViewport().GetVisibleRect(), 1, visible =>
                 {
-                    await Task.WhenAll(
-                        fadeOut.CancelAsync(cancellationToken),
-                        fadeIn.CancelAsync(cancellationToken));
-                }
-
-                RestoreFinalState();
-                TargetOpacity = 1;
-                TargetVisible = true;
-            });
-        return StartSequencedOperation(
-            OpacityProperty,
-            transition);
+                    if (visible) ShowTarget();
+                    else
+                    {
+                        if (source is not null && GodotObject.IsInstanceValid(source.View)) source.View.Visible = false;
+                        if (target is not null && GodotObject.IsInstanceValid(target.View)) target.View.Visible = false;
+                    }
+                }, _ => { }, driver, animation, token);
+        }, ShowTarget);
+        return StartSequencedOperation(AppearanceProperty, operation, animation.ConflictPolicy);
     }
+
+    protected void CancelPropertyAnimation(string property) => CancelProperty(property);
 
     private static async Task WaitForPredecessorAsync(
         IOperationHandle? predecessor,
@@ -407,13 +378,15 @@ public abstract class ActorBase : IActor, IGodotActorView
         }
     }
 
-    private void EnsureAlive()
+    protected void EnsureAlive()
     {
         if (isDestroyed || !GodotObject.IsInstanceValid(View))
         {
             throw new ActorException($"Actor '{Id}' has been destroyed.");
         }
     }
+
+    protected bool IsAlive => !isDestroyed && GodotObject.IsInstanceValid(View);
 
     protected static void ValidateOpacity(float opacity)
     {
@@ -442,14 +415,26 @@ public abstract class ActorBase : IActor, IGodotActorView
     private OperationDefinition CreateOpacityTween(
         CanvasItem target,
         float opacity,
-        AnimationSpec animation) =>
-        GodotTweenOperation.CreatePropertyTween(
+        AnimationSpec animation)
+    {
+        var startOpacity = target.Modulate.A;
+        var resolvedEasing = easings.GetRequired(animation.Easing);
+
+        return GodotTweenOperation.CreateProgressOperation(
             View,
-            target,
-            new NodePath("modulate:a"),
-            opacity,
-            animation.DurationSeconds,
-            transition: GodotAnimationSpec.Transition(animation.Transition),
-            ease: GodotAnimationSpec.Ease(animation.Ease),
-            ignoreTimeScale: animation.TimeMode == AnimationTimeMode.Unscaled);
+            animation.Timing,
+            resolvedEasing,
+            applyProgress: e =>
+            {
+                var clamped = Math.Clamp(e, 0.0f, 1.0f);
+                var current = target.Modulate;
+                target.Modulate = new Color(current.R, current.G, current.B, Mathf.Lerp(startOpacity, opacity, clamped));
+            },
+            finish: () =>
+            {
+                var current = target.Modulate;
+                target.Modulate = new Color(current.R, current.G, current.B, opacity);
+            },
+            cancel: () => { });
+    }
 }

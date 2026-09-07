@@ -2,7 +2,6 @@
 
 using System;
 using System.Collections.Generic;
-using Majo.Runtime.Stage;
 using Majo.Runtime.Timing;
 
 namespace Majo.Runtime.Direction.Core;

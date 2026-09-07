@@ -21,7 +21,6 @@ using Majo.Runtime.Save;
 using Majo.Runtime.Save.Godot;
 using Majo.Runtime.Script;
 using Majo.Runtime.State;
-using Majo.Runtime.Stage;
 using Majo.Runtime.UI.SaveLoad;
 using Majo.Runtime.Travel;
 
@@ -90,8 +89,6 @@ public partial class HeadlessTestRunner
         var variables = services.Get<IDialogueVariables>();
         var actors = services.Get<IActorManager>();
         var audio = services.Get<IAudioManager>();
-        var camera = services.Get<ICameraManager>();
-        var transitions = services.Get<IStageTransitionManager>();
         var direction = services.Get<IDirectionTransactionCoordinator>();
         var input = services.Get<IInputManager>();
         var operations = services.Get<IOperationRunner>();
@@ -116,10 +113,10 @@ public partial class HeadlessTestRunner
                     recursive: true,
                     owned: false) is CanvasLayer { Layer: 20 } &&
                 bootstrap.FindChild(
-                    "MajoStageEffects",
+                    "MajoDirectionScreen",
                     recursive: true,
-                    owned: false) is CanvasLayer { Layer: 90 },
-            "Dialogue and stage effect layers were not created.");
+                    owned: false) is CanvasLayer { Layer: 5 },
+            "Dialogue and direction screen layers were not created.");
         Assert(bootstrap.FindChild(
                     "MajoDialogueTravelOverlay",
                     recursive: true,
@@ -194,8 +191,6 @@ public partial class HeadlessTestRunner
         var room = actors.Create("state-room");
         room.SetAppearance("dark");
         await audio.PlayBgmAsync("calm", "music", volume: 0.7f);
-        camera.ApplyStableState(new CameraState(new Vector2(123, 234), 1.25f, 7));
-        transitions.ApplyStableAppearance("courtroom");
 
         var snapshot = await state.CaptureGameAsync();
         Assert(snapshot.Records.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(
@@ -233,8 +228,6 @@ public partial class HeadlessTestRunner
         await audio.PlayBgmAsync("battle", "music", volume: 0.2f);
         await audio.PlaySfxAsync("hit", "transient-sfx");
         await audio.PlayVoiceAsync("voice");
-        camera.ApplyStableState(CameraState.Default);
-        transitions.ApplyStableAppearance(null);
 
         var previousSessionId = bootstrap.Host.SessionId;
         await sessions.LoadGameAsync(durableEnvelope.Snapshot);

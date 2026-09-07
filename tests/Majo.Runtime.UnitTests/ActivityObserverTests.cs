@@ -19,7 +19,6 @@ using Majo.Runtime.Input;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Resources;
 using Majo.Runtime.Script;
-using Majo.Runtime.Stage;
 using Majo.Runtime.State;
 using Majo.Runtime.UnitTests.Testing;
 using Xunit;

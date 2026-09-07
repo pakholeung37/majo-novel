@@ -2,6 +2,7 @@ using Godot;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Resources;
+using Majo.Runtime.Timing;
 using Majo.Runtime.UnitTests.Testing;
 using Xunit;
 
@@ -14,15 +15,17 @@ public sealed class ActorManagerTests
     {
         var animation = new AnimationSpec(
             0.35,
-            AnimationTransition.Cubic,
-            AnimationEase.Out,
+            EasingId.CubicOut,
             AnimationTimeMode.Unscaled,
             AnimationConflictPolicy.CancelPrevious);
 
         Assert.Equal(0.35, animation.DurationSeconds);
+        Assert.Equal(EasingId.CubicOut, animation.Easing);
+        Assert.Equal(AnimationTimeMode.Unscaled, animation.TimeMode);
         Assert.Equal(AnimationConflictPolicy.CancelPrevious, animation.ConflictPolicy);
         Assert.Throws<ArgumentOutOfRangeException>(() => new AnimationSpec(double.NaN));
     }
+
 
     [Fact(Timeout = 5_000)]
     public async Task ManagerCreatesQueriesRemovesAndEnforcesUniqueActiveIds()

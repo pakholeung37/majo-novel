@@ -1,67 +1,37 @@
 #nullable enable
 
 using System;
+using Majo.Runtime.Operations;
+using Majo.Runtime.Timing;
 
 namespace Majo.Runtime.Actors;
-
-public enum AnimationTransition
-{
-    Linear,
-    Sine,
-    Cubic,
-    Quint,
-    Back,
-}
-
-public enum AnimationEase
-{
-    In,
-    Out,
-    InOut,
-    OutIn,
-}
-
-public enum AnimationTimeMode
-{
-    Scaled,
-    Unscaled,
-}
-
-public enum AnimationConflictPolicy
-{
-    CompletePrevious,
-    CancelPrevious,
-}
 
 public readonly record struct AnimationSpec
 {
     public AnimationSpec(
-        double durationSeconds,
-        AnimationTransition transition = AnimationTransition.Linear,
-        AnimationEase ease = AnimationEase.InOut,
-        AnimationTimeMode timeMode = AnimationTimeMode.Scaled,
+        AnimationTiming timing,
         AnimationConflictPolicy conflictPolicy = AnimationConflictPolicy.CompletePrevious)
     {
-        if (!double.IsFinite(durationSeconds) || durationSeconds < 0)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(durationSeconds), "Duration must be finite and non-negative.");
-        }
-
-        DurationSeconds = durationSeconds;
-        Transition = transition;
-        Ease = ease;
-        TimeMode = timeMode;
+        Timing = timing;
         ConflictPolicy = conflictPolicy;
     }
 
-    public double DurationSeconds { get; }
+    public AnimationSpec(
+        double durationSeconds,
+        EasingId easing = default,
+        AnimationTimeMode timeMode = AnimationTimeMode.Scaled,
+        AnimationConflictPolicy conflictPolicy = AnimationConflictPolicy.CompletePrevious)
+        : this(new AnimationTiming(durationSeconds, easing, timeMode), conflictPolicy)
+    {
+    }
 
-    public AnimationTransition Transition { get; }
-
-    public AnimationEase Ease { get; }
-
-    public AnimationTimeMode TimeMode { get; }
+    public AnimationTiming Timing { get; }
 
     public AnimationConflictPolicy ConflictPolicy { get; }
+
+    public double DurationSeconds => Timing.DurationSeconds;
+
+    public EasingId Easing => Timing.Easing;
+
+    public AnimationTimeMode TimeMode => Timing.TimeMode;
 }

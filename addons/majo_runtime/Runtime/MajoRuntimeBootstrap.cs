@@ -22,7 +22,6 @@ using Majo.Runtime.Localization;
 using Majo.Runtime.Plugins;
 using Majo.Runtime.Resources;
 using Majo.Runtime.Save;
-using Majo.Runtime.Stage;
 using Majo.Runtime.State;
 using Majo.Runtime.Timing;
 using Majo.Runtime.UI.Diagnostics;
@@ -124,8 +123,6 @@ public partial class MajoRuntimeBootstrap : Node
     public Action<StateContributorRegistry>? ConfigureStateContributors { get; set; }
 
     public Action<StateMigrationRegistry>? ConfigureStateMigrations { get; set; }
-
-    public Action<StageTransitionProviderRegistry>? ConfigureStageTransitionProviders { get; set; }
 
     public Func<Node, IAudioBackend>? AudioBackendFactory { get; set; }
 

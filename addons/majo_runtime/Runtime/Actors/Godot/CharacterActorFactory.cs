@@ -1,6 +1,11 @@
+#nullable enable
+
 using System;
 using Godot;
 using Majo.Runtime.Operations;
+using Majo.Runtime.Direction.Transitions;
+
+using Majo.Runtime.Timing;
 
 namespace Majo.Runtime.Actors.Godot;
 
@@ -10,17 +15,22 @@ public sealed class CharacterActorFactory : IActorFactory
     private readonly IOperationRunner runner;
     private readonly IActorTextureLoader textureLoader;
     private readonly CharacterPositionMap positions;
+    private readonly IEasingRegistry? easings;
+    private readonly ITransitionDriverRegistry? transitions;
 
     public CharacterActorFactory(
         Node2D host,
         IOperationRunner runner,
         IActorTextureLoader textureLoader,
-        CharacterPositionMap positions)
+        CharacterPositionMap positions,
+        IEasingRegistry? easings = null, ITransitionDriverRegistry? transitions = null)
     {
         this.host = host ?? throw new ArgumentNullException(nameof(host));
         this.runner = runner ?? throw new ArgumentNullException(nameof(runner));
         this.textureLoader = textureLoader ?? throw new ArgumentNullException(nameof(textureLoader));
         this.positions = positions ?? throw new ArgumentNullException(nameof(positions));
+        this.easings = easings;
+        this.transitions = transitions;
     }
 
     public string FactoryId => ActorFactoryIds.Character;
@@ -35,7 +45,7 @@ public sealed class CharacterActorFactory : IActorFactory
         try
         {
             return new CharacterActor(
-                definition, view, runner, textureLoader, positions);
+                definition, view, runner, textureLoader, positions, easings, transitions);
         }
         catch
         {

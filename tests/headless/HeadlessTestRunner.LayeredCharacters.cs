@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Godot;
@@ -7,7 +8,6 @@ using Majo.Runtime.Actors;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Preloading;
 using Majo.Runtime.Resources;
-using Majo.Runtime.Stage;
 
 namespace Majo.Runtime.HeadlessTests;
 
@@ -77,25 +77,6 @@ public partial class HeadlessTestRunner
                 character.Scale.IsEqualApprox(new Vector2(0.75f, 0.75f)),
             "Layered character did not map scene percentages, baseline offset, or root scale correctly.");
 
-        var camera = bootstrap.Host.Services.Get<ICameraManager>();
-        var cameraPose = new CameraState(new Vector2(37.384f, 74.816f), 3, 10);
-        camera.ApplyStableState(cameraPose);
-        var cameraBasis = new Transform2D(
-            Mathf.DegToRad(cameraPose.RotationDegrees),
-            new Vector2(cameraPose.Zoom, cameraPose.Zoom),
-            0,
-            Vector2.Zero);
-        var cameraSceneCenter = new Vector2(
-            2560 * cameraPose.Center.X / 100,
-            1440 * (1 - cameraPose.Center.Y / 100));
-        var expectedCameraTransform = new Transform2D(
-            cameraBasis.X,
-            cameraBasis.Y,
-            new Vector2(1280, 720) - cameraBasis * cameraSceneCenter);
-        Assert(bootstrap.GetNode<CanvasLayer>("MajoStageViewport/MajoActors")
-                .Transform.IsEqualApprox(expectedCameraTransform),
-            "Camera pose did not use the configured Stage reference resolution.");
-
         var previousAppearance = character.Appearance;
         var actorHost = character.View.GetParent();
         var nodesBeforeTransition = actorHost.GetChildren().ToHashSet();
@@ -103,23 +84,19 @@ public partial class HeadlessTestRunner
         var appearanceTransition = character.ChangeAppearance("Surprised1", 0.2);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        var normalEye = layers.Single(layer =>
-            layer.Name == "Angle01_Head01_Facial01_Eyes01_Eyes01_Normal_Open01");
-        var surprisedEye = layers.Single(layer =>
-            layer.Name == "Angle01_Head01_Facial01_Eyes01_Eyes01_Surprised_Open01");
         Assert(character.TargetAppearance != previousAppearance &&
                 Mathf.IsEqualApprox(layerComposite.SelfModulate.A, 1) &&
-                normalEye.Visible && surprisedEye.Visible &&
-                normalEye.SelfModulate.A is > 0 and < 1 &&
-                surprisedEye.SelfModulate.A is > 0 and < 1,
-            "Layered character appearance change did not fade only its changed layers.");
-        Assert(actorHost.GetChildren().All(nodesBeforeTransition.Contains) &&
-                character.View.GetChildren().All(actorChildrenBeforeTransition.Contains),
-            "Layered character appearance change allocated transient scene nodes.");
+                layers.All(l => Mathf.IsEqualApprox(l.SelfModulate.A, 1)) &&
+                character.View.GetNodeOrNull<Sprite2D>($"{character.View.Name}_DissolveOverlay") is not null,
+            "Layered character appearance change did not initialize endpoint dissolve.");
+        Assert(actorHost.GetChildren().All(nodesBeforeTransition.Contains),
+            "Layered character appearance change changed its actor host nodes.");
         await appearanceTransition.Completion;
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         Assert(Mathf.IsEqualApprox(character.Opacity, 1),
-            "Layered character appearance change did not finish its fade-in phase.");
+            "Layered character appearance change did not finish its dissolve phase.");
+        Assert(character.View.GetChildren().ToHashSet().SetEquals(actorChildrenBeforeTransition),
+            "Layered character appearance change left transient scene nodes.");
         Assert(actorHost.GetChildren().All(nodesBeforeTransition.Contains),
             "Layered character appearance change changed its actor host nodes.");
         Assert(LayerVisible(layers,
@@ -143,6 +120,29 @@ public partial class HeadlessTestRunner
             LayerVisible(layers,
                 "Angle01_Head01_Facial01_Eyes01_Eyes01_Fearful_Open01"),
             "Canonical layered appearance did not restore a stable actor state.");
+
+        var firstChange = character.ChangeAppearance("Surprised1", 1);
+        await WaitForTransitionAsync((Sprite2D)character.View);
+        var secondChange = character.ChangeAppearance("Normal1", 1);
+        await firstChange.Completion;
+        character.SetOpacity(.4f); // Also exercise a change while inputs are being prepared.
+        await WaitForTransitionAsync((Sprite2D)character.View);
+        var overlay = character.View.GetChildren().OfType<Sprite2D>().Single();
+        Assert(Mathf.IsEqualApprox(overlay.Modulate.A, .4f), "Capture preparation lost concurrent opacity.");
+        Assert(character.View.GetChildren().OfType<SubViewport>()
+            .SelectMany(viewport => viewport.GetChildren().OfType<Node2D>())
+            .SelectMany(offset => offset.GetChildren().OfType<CanvasGroup>()).All(group => group.Visible),
+            "Preemption cloned a hidden composite.");
+        secondChange.Finish(); await secondChange.Completion;
+        Assert(character.Appearance == character.TargetAppearance && LayerVisible(layers,
+            "Angle01_Head01_Facial01_Eyes01_Eyes01_Normal_Open01"), "Newest layered appearance was not committed.");
+        Assert(character.View.GetChildren().ToHashSet().SetEquals(actorChildrenBeforeTransition),
+            "Preempted layered appearances retained capture nodes.");
+        var cancelledChange = character.ChangeAppearance("Surprised1", 1);
+        character.SetAppearance(canonical);
+        await AssertThrowsAsync<OperationCanceledException>(() => cancelledChange.Completion);
+        Assert(character.Appearance == canonical, "Cancelled layered appearance overwrote an immediate SetAppearance.");
+        character.SetOpacity(1);
 
         var warden = (ICharacterActor)actors.GetOrCreate(new ActorSpawnRequest(
             "Warden",

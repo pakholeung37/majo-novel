@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Godot;
 using Majo.Demo;
@@ -218,6 +219,7 @@ public partial class HeadlessTestRunner
                 !activities.HasActiveActivities(RuntimeActivityOwner.Other),
             "Dialogue project load failure leaked Runner or Operation work.");
 
+        await direction.ResetAsync(CancellationToken.None);
         var lineCountBeforeStop = presenter.Lines.Count;
         var revisionBeforeStopRun = direction.State.Revision;
         await dialogue.StartAsync();

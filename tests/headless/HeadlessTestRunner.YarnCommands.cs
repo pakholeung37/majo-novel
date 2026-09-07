@@ -11,7 +11,6 @@ using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Direction.Godot;
 using Majo.Runtime.Operations;
-using Majo.Runtime.Stage;
 using YarnSpinnerGodot;
 
 namespace Majo.Runtime.HeadlessTests;

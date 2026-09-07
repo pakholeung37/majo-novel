@@ -5,7 +5,6 @@ using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Direction.Rendering;
 using Majo.Runtime.Resources;
-using Majo.Runtime.Stage;
 using Majo.Runtime.Timing;
 using Majo.Runtime.UnitTests.Testing;
 using Xunit;

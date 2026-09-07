@@ -17,12 +17,12 @@ using Majo.Runtime.History;
 using Majo.Runtime.Input;
 using Majo.Runtime.Localization;
 using Majo.Runtime.Operations;
+using Majo.Runtime.Accessibility;
 using Majo.Runtime.Played;
 using Majo.Runtime.Save;
 using Majo.Runtime.Save.Godot;
 using Majo.Runtime.Script;
 using Majo.Runtime.Settings;
-using Majo.Runtime.Stage;
 using Majo.Runtime.State;
 using Majo.Runtime.Travel;
 using Majo.Runtime.UI.SaveLoad;
@@ -78,7 +78,7 @@ public partial class MajoRuntimeBootstrap : Node
                         resolver.Get<IPlaybackModeManager>(),
                         resolver.Get<IDialoguePresentation>(),
                         resolver.Get<ILocaleManager>(),
-                        resolver.Get<IStageAccessibility>())],
+                        resolver.Get<IDirectionAccessibility>())],
                     resolver.Get<IStateSerializer>(),
                     resolver.Get<IStateStorage>(),
                     stateMigrations,
@@ -94,7 +94,7 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(IPlaybackModeManager),
                 typeof(IDialoguePresentation),
                 typeof(ILocaleManager),
-                typeof(IStageAccessibility));
+                typeof(IDirectionAccessibility));
         }
 
         if (Configuration.GlobalState?.Enabled == true)
