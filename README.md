@@ -2,6 +2,11 @@
 
 基于 Godot 4.7+ (C# / .NET 8) 与 Yarn Spinner 构建的高性能、模块化视觉小说（Visual Novel）运行时框架。
 
+## 文档
+
+- [Script Writing：脚本编写指南](docs/script-writing.md)：Yarn 语法、台词与分支、演出命令、等待与 Beat、场景切换、音频及完整示例。
+- [Direction 命令与场景入口](docs/direction-command-api.md)：演出接口约束与实现说明。
+
 ## 质量门禁
 
 - **代码格式化**：`./tools/quality.sh --format`（统一工程代码规范，CI 校验可使用 `--check`）
