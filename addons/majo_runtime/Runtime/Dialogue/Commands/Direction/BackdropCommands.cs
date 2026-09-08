@@ -38,6 +38,13 @@ public sealed partial class BackdropCommand : RuntimeCommand<BackdropCommand.Arg
         var node = nodeAccessor.RequireNode();
         var stageId = scopes.ResolveStage(node, arguments.Stage.GetValueOrDefault("main"));
         var backdropState = new BackdropState(arguments.Resource.ToResourceKey(backgroundsPath));
+        if (arguments.At.WasProvided || arguments.Origin.WasProvided || arguments.Scale.WasProvided)
+        {
+            var origin = arguments.Origin.GetValueOrDefault(new Godot.Vector2(0.5f, 0.5f));
+            backdropState = backdropState with { Placement = new BackdropPlacement(
+                arguments.At.WasProvided ? scopes.ResolvePosition(node, arguments.At.Value!) : new DirectionPoint(50, 50),
+                new DirectionPoint(origin.X, origin.Y), (float)arguments.Scale.GetValueOrDefault(1)).Validate() };
+        }
         var transition = policy.ResolveTransition("backdrop", arguments.Transition, context);
         var wait = arguments.Transition.Wait.GetValueOrDefault(false);
 
@@ -50,5 +57,8 @@ public sealed partial class BackdropCommand : RuntimeCommand<BackdropCommand.Arg
     public sealed record Arguments(
         [Primary] BackdropId Resource,
         [Option(DefaultText = "main")] CommandValue<string> Stage,
-        [Group] TransitionArguments Transition);
+        [Group] TransitionArguments Transition,
+        [Option] CommandValue<PositionRef> At,
+        [Option(ValueHint = "x,y")] CommandValue<Godot.Vector2> Origin,
+        [Option(Minimum = 0.001)] CommandValue<double> Scale);
 }

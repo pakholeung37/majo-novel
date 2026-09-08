@@ -8,6 +8,16 @@ namespace Majo.Runtime.Resources;
 
 public interface IResourceManager : IRuntimeService
 {
+    /// <summary>Register an already-created resource. Duplicate keys are rejected.
+    /// Retained across cache eviction and reset, until unregister or shutdown.
+    /// Omit release for borrowed resources; otherwise release runs exactly once.</summary>
+    void Register<TResource>(ResourceKey key, TResource resource, System.Action<TResource>? release = null)
+        where TResource : class => throw new System.NotSupportedException("Resource registration is not supported.");
+
+    /// <summary>Unregister a resource; fails while it is loading or leased.</summary>
+    bool Unregister(ResourceKey key) =>
+        throw new System.NotSupportedException("Resource registration is not supported.");
+
     int LoadedResourceCount { get; }
 
     System.Collections.Generic.IReadOnlyList<ResourceDiagnosticEntry> CaptureDiagnosticResources() =>

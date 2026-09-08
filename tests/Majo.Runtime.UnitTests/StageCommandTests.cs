@@ -47,8 +47,8 @@ public sealed class StageCommandTests
             ["ease"] = "back-out",
             ["wait"] = "true"
         }));
-        Assert.Equal(12, moveArgs.Center.Value.X);
-        Assert.Equal(-4, moveArgs.Center.Value.Y);
+        Assert.Equal(12, Assert.IsType<PositionRef.Literal>(moveArgs.Center.Value).Point.X);
+        Assert.Equal(-4, Assert.IsType<PositionRef.Literal>(moveArgs.Center.Value).Point.Y);
         Assert.Equal(EasingId.BackOut, moveArgs.Timing.Ease.Value);
         Assert.True(moveArgs.Timing.Wait.Value);
 
@@ -59,8 +59,8 @@ public sealed class StageCommandTests
             ["zoom"] = "3",
             ["rotation"] = "-10"
         }));
-        Assert.Equal(80, poseArguments.Center.Value.X);
-        Assert.Equal(-35, poseArguments.Center.Value.Y);
+        Assert.Equal(80, Assert.IsType<PositionRef.Literal>(poseArguments.Center.Value).Point.X);
+        Assert.Equal(-35, Assert.IsType<PositionRef.Literal>(poseArguments.Center.Value).Point.Y);
         Assert.Equal(3, poseArguments.Zoom.Value);
         Assert.Equal(-10, poseArguments.Rotation.Value);
         Assert.False(poseArguments.Via.WasProvided);

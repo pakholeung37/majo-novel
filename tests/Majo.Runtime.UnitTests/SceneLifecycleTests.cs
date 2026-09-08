@@ -4,12 +4,51 @@ using Majo.Runtime.Dialogue.Yarn.HotReload;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.UnitTests.Testing;
+using Majo.Runtime.State;
 using Xunit;
 
 namespace Majo.Runtime.UnitTests;
 
 public sealed class SceneLifecycleTests
 {
+    [Fact(Timeout = 5000)]
+    public async Task PreparationIsAwaitedOnEntryAndBeforeRestoringDirectionState()
+    {
+        using var direction = new DirectionTransactionCoordinator(new DirectionPlanner(), new FakeDirectionBackend { AutoSettle = true });
+        var beats = new DirectionBeatRuntime(direction);
+        var audio = new AudioManager(new FakeAudioBackend(), new DelayedLoader(), new DelayedLoader(), new DelayedLoader(), new AudioSettings());
+        await audio.InitializeAsync(default);
+        var pending = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var reasons = new List<ScenePreparationReason>();
+        var preparation = new ScenePreparationRegistry(new VersionStoreResourceManager());
+        preparation.Register("court", async (context, token) =>
+        {
+            reasons.Add(context.Reason);
+            await pending.Task.WaitAsync(token);
+        });
+        using var boundary = new SceneBoundaryCoordinator(direction, beats, audio, preparation);
+        var source = new YarnSourceSnapshot("project", "scene.yarnproject", 1, "en",
+            [new YarnSourceFileSnapshot("scene.yarn", "scene.yarn", "title: Court\nscene: court\n---\nHello\n===", "hash")], "hash");
+        var module = NodeDirectionCompiler.Compile(source)[0];
+        var entry = boundary.EnterNodeAsync(new NodeEntryRequest("project", "Court", 1, module, NodeEntryReason.Normal));
+        Assert.False(entry.IsCompleted);
+        pending.SetResult();
+        await entry;
+        var contributor = new DirectionStateContributor(direction, preparation);
+        var record = await contributor.CaptureAsync(default);
+        pending = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var restore = contributor.RestoreAsync(record, default).AsTask();
+        Assert.False(restore.IsCompleted);
+        Assert.Equal(new[] { ScenePreparationReason.Enter, ScenePreparationReason.Restore }, reasons);
+        pending.SetResult();
+        await restore;
+        using var cancelled = new CancellationTokenSource();
+        cancelled.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => preparation.PrepareAsync("project", "court", ScenePreparationReason.Enter, cancelled.Token));
+        Assert.Equal(2, reasons.Count);
+        await audio.ShutdownAsync(default);
+    }
+
     [Fact(Timeout = 5000)]
     public async Task SceneStopInvalidatesLateLoadsAndStopsEveryBgmTrack()
     {

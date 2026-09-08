@@ -166,14 +166,20 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(IDirectionBeatRuntime),
                 typeof(ITransitionDriverRegistry),
                 typeof(IEasingRegistry))
+            .AddSingleton<ScenePreparationRegistry>(resolver =>
+                {
+                    var preparation = new ScenePreparationRegistry(resolver.Get<IResourceManager>());
+                    ConfigureScenePreparation?.Invoke(preparation);
+                    return preparation;
+                }, typeof(IResourceManager))
             .AddSingleton<ISceneBoundaryCoordinator>(resolver =>
                 {
                     var coordinator = new SceneBoundaryCoordinator(resolver.Get<IDirectionTransactionCoordinator>(),
-                        resolver.Get<IDirectionBeatRuntime>(), resolver.Get<IAudioManager>());
+                        resolver.Get<IDirectionBeatRuntime>(), resolver.Get<IAudioManager>(), resolver.Get<ScenePreparationRegistry>());
                     if (resolver.Get<IYarnDialogueBackend>() is YarnDialogueBackend yarn)
                         yarn.BeforeNodeEntryAsync = coordinator.EnterNodeAsync;
                     return coordinator;
-                }, typeof(IDirectionTransactionCoordinator), typeof(IDirectionBeatRuntime), typeof(IAudioManager), typeof(IYarnDialogueBackend))
+                }, typeof(IDirectionTransactionCoordinator), typeof(IDirectionBeatRuntime), typeof(IAudioManager), typeof(IYarnDialogueBackend), typeof(ScenePreparationRegistry))
             .AddSingleton<DirectionBeatNodeBoundaryService>(
                 resolver => new DirectionBeatNodeBoundaryService(
                     resolver.Get<IYarnDialogueBackend>(),

@@ -417,12 +417,16 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
             this.easings = easings ?? BuiltInEasings.CreateDefaultRegistry();
         }
 
+        private Rect2 inputBounds;
+
         public async Task PrepareInputsAsync(CancellationToken cancellationToken)
         {
             if (transition.DurationSeconds <= 0 || transition.Kind == DirectionTransitionId.Cut ||
                 transition.Kind == DirectionTransitionId.Fade) return;
-            sourceInput = host.PrepareBackdropInput(surface, source, sourceTexture);
-            targetInput = host.PrepareBackdropInput(surface, target, targetTexture);
+            inputBounds = GodotDirectionRenderHost.BackdropBounds(surface, source, sourceTexture)
+                .Merge(GodotDirectionRenderHost.BackdropBounds(surface, target, targetTexture));
+            sourceInput = host.PrepareBackdropInput(surface, source, sourceTexture, inputBounds);
+            targetInput = host.PrepareBackdropInput(surface, target, targetTexture, inputBounds);
             await host.WaitForRenderFenceAsync(cancellationToken);
             sourceInput.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
             targetInput.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
@@ -457,6 +461,9 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
                     var inputState = (source ?? target)! with
                     {
                         Fit = BackdropFit.Stretch,
+                        Placement = new BackdropPlacement(new DirectionPoint(
+                            inputBounds.Position.X / surface.Viewport.Size.X * 100,
+                            100 - inputBounds.Position.Y / surface.Viewport.Size.Y * 100), new DirectionPoint(0, 0), 1),
                         Tint = new DirectionColor(1, 1, 1, 1),
                     };
                     host.PublishBackdropTransition(surface.Id, inputState, sourceInput.GetTexture());

@@ -15,8 +15,10 @@ namespace Majo.Runtime.State;
 public sealed class DirectionStateContributor : IStateContributor
 {
     private readonly IDirectionTransactionCoordinator direction;
-    public DirectionStateContributor(IDirectionTransactionCoordinator direction)
+    private readonly ScenePreparationRegistry? preparation;
+    public DirectionStateContributor(IDirectionTransactionCoordinator direction, ScenePreparationRegistry? preparation = null)
     {
+        this.preparation = preparation;
         this.direction = direction ?? throw new ArgumentNullException(nameof(direction));
     }
 
@@ -48,6 +50,8 @@ public sealed class DirectionStateContributor : IStateContributor
     {
         cancellationToken.ThrowIfCancellationRequested();
         var restored = Decode(record);
+        if (preparation is not null)
+            await preparation.PrepareAsync(restored.Scene.ProjectId, restored.Scene.SceneId, ScenePreparationReason.Restore, cancellationToken);
         await direction.RestoreAsync(restored, cancellationToken);
     }
 
@@ -65,7 +69,7 @@ public sealed class DirectionStateContributor : IStateContributor
                 : new BackdropPayload(
                     stage.Backdrop.Resource.ToString(),
                     stage.Backdrop.Fit,
-                    stage.Backdrop.Tint),
+                    stage.Backdrop.Tint, stage.Backdrop.Placement),
             new EffectPayload(stage.Effects.Tint),
             stage.Actors.Values.Select(actor => new ActorPayload(
                 actor.Id.Value,
@@ -86,7 +90,7 @@ public sealed class DirectionStateContributor : IStateContributor
         state.Revision,
         new StableEffectsPayload(new CurtainPayload(
             state.Effects.Curtain.Color,
-            state.Effects.Curtain.Opacity)), state.Scene);
+            state.Effects.Curtain.Opacity)), state.Scene, state.Screen.Split);
 
     private static DirectionState Decode(StateRecord record)
     {
@@ -151,7 +155,7 @@ public sealed class DirectionStateContributor : IStateContributor
                 new BackdropState(
                     new ResourceKey(stage.Backdrop.Resource),
                     stage.Backdrop.Fit,
-                    stage.Backdrop.Tint).Validate();
+                    stage.Backdrop.Tint) { Placement = stage.Backdrop.Placement }.Validate();
             }
             (stage.Effects?.Tint ?? DirectionColor.White).Validate();
             stages[id] = new StageState(
@@ -161,7 +165,7 @@ public sealed class DirectionStateContributor : IStateContributor
                     : new BackdropState(
                         new ResourceKey(stage.Backdrop.Resource),
                         stage.Backdrop.Fit,
-                        stage.Backdrop.Tint),
+                        stage.Backdrop.Tint) { Placement = stage.Backdrop.Placement },
                 actors,
                 new StageEffectState(stage.Effects?.Tint ?? DirectionColor.White));
         }
@@ -209,7 +213,7 @@ public sealed class DirectionStateContributor : IStateContributor
             views,
             new ScreenState(
                 new LayoutId(payload.Layout),
-                payload.Bindings.ToDictionary(pair => new LayoutSlotId(pair.Key), pair => new ViewId(pair.Value))),
+                payload.Bindings.ToDictionary(pair => new LayoutSlotId(pair.Key), pair => new ViewId(pair.Value))) { Split = payload.Split?.Validate() },
             new StableEffectState(new CurtainState(
                 curtain.Color,
                 curtain.Opacity)),
@@ -224,14 +228,15 @@ public sealed class DirectionStateContributor : IStateContributor
         Dictionary<string, string> Bindings,
         long Revision,
         StableEffectsPayload? Effects = null,
-        DirectionSceneContext? Scene = null);
+        DirectionSceneContext? Scene = null,
+        SplitLayout? Split = null);
 
     private sealed record StagePayload(
         string Id,
         BackdropPayload? Backdrop,
         EffectPayload? Effects,
         ActorPayload[] Actors);
-    private sealed record BackdropPayload(string Resource, BackdropFit Fit, DirectionColor Tint);
+    private sealed record BackdropPayload(string Resource, BackdropFit Fit, DirectionColor Tint, BackdropPlacement? Placement = null);
     private sealed record EffectPayload(DirectionColor Tint);
     private sealed record StableEffectsPayload(CurtainPayload Curtain);
     private sealed record CurtainPayload(DirectionColor Color, float Opacity);

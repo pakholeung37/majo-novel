@@ -8,6 +8,36 @@ namespace Majo.Runtime.UnitTests;
 
 public sealed class ResourceManagerTests
 {
+    [Fact(Timeout = 5000)]
+    public async Task RegisteredResourcesSurviveEvictionAndResetButCannotBeRemovedWhileLeased()
+    {
+        using var lifetime = new TestRuntimeLifetime();
+        var manager = new ResourceManager([], lifetime, releaseOnLastLease: true);
+        await manager.InitializeAsync(default);
+        var key = new ResourceKey("backgrounds/generated");
+        var asset = new TestAsset("generated");
+        var released = 0;
+        manager.Register(key, asset, _ => released++);
+        Assert.Throws<MajoResourceException>(() => manager.Register(key, asset));
+        var lease = manager.LeaseAsync<object>(key);
+        await lease.Completion;
+        Assert.Same(asset, lease.Resource);
+        Assert.Throws<MajoResourceException>(() => manager.Unregister(key));
+        lease.Release();
+        Assert.Equal(0, manager.LoadedResourceCount);
+        Assert.Same(asset, await manager.LoadAsync<TestAsset>(key));
+        await manager.ResetAsync(default);
+        Assert.Same(asset, manager.Load<TestAsset>(key));
+        Assert.Equal(0, released);
+        Assert.True(manager.Unregister(key));
+        Assert.False(manager.Exists<TestAsset>(key));
+        Assert.False(manager.Unregister(key));
+        Assert.Equal(1, released);
+        manager.Register(key, asset, _ => released++);
+        await manager.ShutdownAsync(default);
+        Assert.Equal(2, released);
+    }
+
     [Fact(Timeout = 5_000)]
     public async Task OwnershipModeEvictsOnlyAfterLastSharedLeaseWithoutByteBudget()
     {

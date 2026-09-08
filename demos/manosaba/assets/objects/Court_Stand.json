@@ -1,0 +1,5 @@
+{
+  "factory": "object",
+  "anchor": [0.5, 0],
+  "appearances": { "Default": "res://demos/manosaba/assets/backgrounds/Court_Stand.png" }
+}

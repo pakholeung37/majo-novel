@@ -99,7 +99,14 @@ public sealed partial class LayoutCommand : RuntimeCommand<LayoutCommand.Argumen
             new ScreenPatch(
                 new LayoutId(arguments.Layout),
                 bindings,
-                transition),
+                transition)
+            {
+                Split = arguments.Divider.WasProvided || arguments.Angle.WasProvided || arguments.MainAt.WasProvided || arguments.InsetAt.WasProvided
+                    ? new SplitLayout((float)arguments.Divider.GetValueOrDefault(50), (float)arguments.Angle.GetValueOrDefault(0),
+                        arguments.MainAt.WasProvided ? new DirectionPoint(arguments.MainAt.Value.X, arguments.MainAt.Value.Y) : null,
+                        arguments.InsetAt.WasProvided ? new DirectionPoint(arguments.InsetAt.Value.X, arguments.InsetAt.Value.Y) : null).Validate()
+                    : null,
+            },
             wait ? DirectionCompletionBarrier.Settle : DirectionCompletionBarrier.Commit,
             context.CancellationToken);
     }
@@ -108,6 +115,10 @@ public sealed partial class LayoutCommand : RuntimeCommand<LayoutCommand.Argumen
         [Primary] string Layout,
         [Option] CommandValue<string> Main,
         [Option] CommandValue<string> Inset,
+        [Option(Minimum = 0)] CommandValue<double> Divider,
+        [Option(ValueHint = "degrees")] CommandValue<double> Angle,
+        [Option] CommandValue<Godot.Vector2> MainAt,
+        [Option] CommandValue<Godot.Vector2> InsetAt,
         [Group] TransitionArguments Transition);
 }
 

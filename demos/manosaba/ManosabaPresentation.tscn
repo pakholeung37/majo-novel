@@ -161,7 +161,7 @@ anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
 offset_left = -549.0
-offset_top = -185.0
+offset_top = -213.0
 offset_right = 549.0
 offset_bottom = -25.0
 grow_horizontal = 2
@@ -186,9 +186,9 @@ autowrap_mode = 2
 visible = false
 layout_mode = 0
 offset_left = 270.0
-offset_top = 696.0
+offset_top = 684.0
 offset_right = 721.0
-offset_bottom = 913.0
+offset_bottom = 901.0
 mouse_filter = 2
 texture = ExtResource("15_name")
 expand_mode = 1
@@ -326,7 +326,6 @@ grow_vertical = 2
 theme_override_styles/panel = SubResource("StyleBox_option")
 
 [node name="OptionContainer" type="VBoxContainer" parent="OptionsPresenter/PresenterControl" unique_id=131816995]
-visible = false
 layout_mode = 2
 theme_override_constants/separation = 12
 

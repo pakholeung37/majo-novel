@@ -28,6 +28,7 @@ public partial class HeadlessTestRunner
 {
     private async Task ValidateDirectionRenderingAsync()
     {
+        await ValidateSpatialBackdropAsync();
         ValidateImportedDirectionData();
         using (var configuration = new AnimationConfiguration
         {

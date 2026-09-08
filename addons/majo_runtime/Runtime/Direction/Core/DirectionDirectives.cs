@@ -232,7 +232,10 @@ public sealed record ScreenPatch(
     LayoutId Layout,
     IReadOnlyDictionary<LayoutSlotId, ViewId> Bindings,
     DirectionTransitionSpec Transition,
-    DirectionSourceLocation? SourceLocation = null) : IDurableDirectionPatch;
+    DirectionSourceLocation? SourceLocation = null) : IDurableDirectionPatch
+{
+    public SplitLayout? Split { get; init; }
+}
 
 public sealed record DirectionCue(
     string Name,

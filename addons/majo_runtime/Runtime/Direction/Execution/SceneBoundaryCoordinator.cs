@@ -22,11 +22,12 @@ public sealed class SceneBoundaryCoordinator : ISceneBoundaryCoordinator, IDispo
     private readonly IDirectionTransactionCoordinator direction;
     private readonly IDirectionBeatRuntime beats;
     private readonly IAudioManager audio;
+    private readonly ScenePreparationRegistry? preparation;
     private readonly SemaphoreSlim boundary = new(1, 1);
     private long epoch;
 
-    public SceneBoundaryCoordinator(IDirectionTransactionCoordinator direction, IDirectionBeatRuntime beats, IAudioManager audio)
-    { this.direction = direction; this.beats = beats; this.audio = audio; }
+    public SceneBoundaryCoordinator(IDirectionTransactionCoordinator direction, IDirectionBeatRuntime beats, IAudioManager audio, ScenePreparationRegistry? preparation = null)
+    { this.direction = direction; this.beats = beats; this.audio = audio; this.preparation = preparation; }
 
     public Task EnterNodeAsync(NodeEntryRequest entry, CancellationToken cancellationToken = default)
     {
@@ -52,6 +53,8 @@ public sealed class SceneBoundaryCoordinator : ISceneBoundaryCoordinator, IDispo
             await direction.ClearSceneAsync(new DirectionSceneContext(projectId, sceneId, nextEpoch),
                 token => audio.StopBgmAsync(fade: default, cancellationToken: token), CancellationToken.None);
             epoch = nextEpoch;
+            if (preparation is not null)
+                await preparation.PrepareAsync(projectId, sceneId, ScenePreparationReason.Enter, cancellationToken);
             audio.OpenSceneRequests();
         }
         finally { boundary.Release(); }

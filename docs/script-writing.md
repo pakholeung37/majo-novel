@@ -121,6 +121,15 @@ title: Chapter01_Investigation
 
 `backdrop <资源ID>` 默认操作 `stage:main`。内建默认转场是 `cut`；需要交叉淡化时显式使用 `via:dissolve`。背景资源 ID 相对于配置的背景资源路径解析。
 
+```yarn
+<<backdrop Court_Trial00 at:0,100 origin:0,0 scale:1>>
+```
+
+指定 `at`、`origin`、`scale` 中任一个，就使用纹理原始像素尺寸进行空间摆放；省略全部三个参数仍使用原有 Cover 行为。默认 `at:50,50 origin:0.5,0.5 scale:1`。`at` 是舞台坐标（X 向右、Y 向上），支持 mark；`origin` 是纹理内锚点（0..1，X 向右、Y 向下）；`scale` 是正数，作用于纹理像素尺寸。舞台 `0..100` 对应固定参考尺寸，不是背景外接框，也不是位置限制。
+
+拼接、程序绘图等资源生成由开发者通过[场景资源准备接口](scene-resources.md)完成，不增加 backdrop 特有的 repeat 参数或额外配置 schema。
+
+
 ### 显示与更换外观
 
 ```yarn
@@ -246,17 +255,22 @@ Curtain 是例外：当前实现省略 `duration` 时固定用 0.35 秒、线性
 <<camera reset>>
 ```
 
-`camera` 至少指定 `center`、`zoom`、`rotation`、`as` 之一；内建默认 `cut`，可用 `dissolve`。`camera move` 至少指定 center/zoom/rotation 之一，不接受 `via`。`camera reset` 回到中心 `50,50`、zoom `1`、rotation `0`，默认直接设置，不会自动移动过去。
+`camera` 至少指定 `preset`、`center`、`zoom`、`rotation`、`as` 之一；内建默认 `cut`，可用 `dissolve`。`camera move` 至少指定 preset/center/zoom/rotation 之一，不接受 `via`。`camera reset` 回到中心 `50,50`、zoom `1`、rotation `0`，默认直接设置，不会自动移动过去。
 
 `stage:名称` 控制该 Stage 默认 View 的镜头；`view:名称` 控制指定 View。两者互斥，都省略时目标是 `main` View。
 
 ```yarn
-<<camera center:65,50 zoom:1.4 rotation:0 as:closeup>>
-<<camera reset>>
-<<shot use closeup via:dissolve duration:0.3 wait:true>>
+<<mark witness at:250,50>>
+<<camera preset define closeup center:witness zoom:1.4 rotation:0>>
+// 定义不改变画面；同一预设可以用于不同 View。
+<<camera preset:closeup>>
+<<camera view:reaction preset:closeup via:dissolve duration:0.3 wait:true>>
+<<camera move preset:closeup zoom:1.6 duration:0.8 wait:true>>
 ```
 
-`as` 在当前节点定义 shot 别名，同时应用这条 camera 指令；不是只声明一个模板。`shot use` 重用所记录字段，默认 cut，不产生连续运动。需要完整构图时显式记录 center、zoom、rotation。别名不跨节点保留。
+`camera preset define` 一次定义完整构图，省略字段默认 center `50,50`、zoom `1`、rotation `0`。使用时显式参数覆盖预设字段；View、转场、时长与缓动在使用处指定。`center` 可引用 mark，也可使用超出 `0..100` 的有限坐标。坐标始终相对于固定舞台参考尺寸，背景变宽不会重新归一化角色或镜头坐标。
+
+预设属于当前节点，声明参数必须是静态字面量或 mark 名称。编译元数据保存声明，直接读档时不必重新执行节点开头。旧的 `camera ... as:` 与 `shot use` 保留兼容；`as` 会同时应用镜头，而新预设声明不会。
 
 ```yarn
 <<character fx hero effect:shake strength:8 axis:x frequency:20 duration:0.3 wait:true>>
@@ -345,6 +359,20 @@ Stage 保存背景和实例，View 是观察 Stage 的镜头，layout 决定哪�
 ```
 
 `stage define <名称>` 同时创建其默认 View；`view define <名称> stage:<名称>` 创建额外 View。`stage show` 切换到 single 布局，并不修改以后命令的默认目标：不写 `stage` 的 Character/Backdrop 仍然作用于 main。`layout` 的 main/inset 参数绑定的是 View；本节点 Stage 名也可用于引用该 Stage 默认 View。
+
+分屏支持独立的裁切边界与画面摆放：
+
+```yarn
+<<layout split main:broadcast inset:reaction divider:35 angle:10 mainAt:20,50 insetAt:55,50 via:dissolve duration:0.2 wait:true>>
+```
+
+- `divider`：分割线与屏幕水平中线的交点 X，范围 0..100，默认 50。
+- `angle`：从竖直线顺时针旋转的角度，范围严格大于 -90、小于 90，默认 0。正角度时上端偏右、下端偏左；角度按屏幕像素计算，不随宽高比变形。
+- `mainAt / insetAt`：把对应 camera 的取景中心放在整个屏幕的指定位置。使用屏幕百分比坐标，X 向右、Y 向上；支持有限的屏幕外位置，不支持舞台 mark。省略时分别位于左右区域中心，即 `(divider / 2, 50)` 和 `((100 + divider) / 2, 50)`。
+
+main 显示分割线左侧，inset 显示右侧，两侧使用互补裁切。布局只平移镜头画面并裁切，不旋转画面，也不因为分屏宽度改变 zoom；画面旋转仍由 camera rotation 控制。摆放太远导致源镜头画面不能覆盖可见区域时，区域显示黑色，需要调整摆放或取景。
+
+这些参数只适用于 `layout split`，每条 layout 命令使用完整声明及默认值，不继承上一条的省略字段。参数进入存档与回滚状态；旧存档缺失这些字段时仍为原有五五分屏。`via:move` 可连续插值分割位置、倾角和摆放；`via:dissolve` 混合前后布局。切回 single/pip 会清除分屏配置。
 
 main 是公共名称，其他 Stage/View 符号属于定义节点。跳到其他普通节点并不会删除画面，但新节点的同名局部符号不自动指向旧节点实例。自定义 mark、shot 别名也不应当作全局名称使用。
 

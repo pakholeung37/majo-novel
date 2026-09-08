@@ -28,6 +28,9 @@ public interface IDirectionScopeResolver : IRuntimeService
 
     ViewPosePatch ResolveShot(string nodeId, string shotAlias);
 
+    void DefineCameraPreset(string nodeId, string name, ViewPosePatch patch);
+    ViewPosePatch ResolveCameraPreset(string nodeId, string name);
+
     void ApplyModule(NodeDirectionModule directionModule);
     void EnterNode(string nodeId);
     void ExitNode(string nodeId);
@@ -46,6 +49,7 @@ public sealed class DirectionScopeResolver : IDirectionScopeResolver
     private readonly Dictionary<(string Node, string Alias), StageId> stageImports = new();
     private readonly Dictionary<(string Node, string Alias), ViewId> viewImports = new();
     private readonly Dictionary<(string Node, string Alias), ViewPosePatch> shotAliases = new();
+    private readonly Dictionary<(string Node, string Alias), ViewPosePatch> cameraPresets = new();
     private readonly Dictionary<(string Node, string Name), DirectionPoint> marks = new();
     private readonly Dictionary<string, DirectionPoint> defaultMarks;
 
@@ -155,6 +159,20 @@ public sealed class DirectionScopeResolver : IDirectionScopeResolver
         return patch;
     }
 
+    public void DefineCameraPreset(string nodeId, string name, ViewPosePatch patch)
+    {
+        var key = Validate(nodeId, name);
+        if (cameraPresets.TryGetValue(key, out var existing) && existing == patch) return;
+        AddImport(cameraPresets, key, patch, "Camera preset");
+    }
+
+    public ViewPosePatch ResolveCameraPreset(string nodeId, string name)
+    {
+        var key = Validate(nodeId, name);
+        return cameraPresets.TryGetValue(key, out var preset) ? preset :
+            throw new DirectionReferenceException($"Camera preset '{name}' is not defined in Node '{nodeId}'.");
+    }
+
     public void DefineMark(string nodeId, string name, DirectionPoint position)
     {
         var (node, local) = Validate(nodeId, name);
@@ -197,6 +215,10 @@ public sealed class DirectionScopeResolver : IDirectionScopeResolver
         }
         foreach (var mark in directionModule.MarkDefinitions)
             DefineMark(directionModule.NodeId, mark.Name, mark.Position);
+        foreach (var preset in directionModule.CameraPresets)
+            DefineCameraPreset(directionModule.NodeId, preset.Name, new ViewPosePatch(ViewId.Main,
+                DirectionValue.From(ResolvePosition(directionModule.NodeId, PositionRefConverter.Instance.Parse(preset.Center))),
+                DirectionValue.From(preset.Zoom), DirectionValue.From(preset.Rotation), DirectionTransitionSpec.Cut));
         activeModule = directionModule;
     }
 
@@ -214,7 +236,7 @@ public sealed class DirectionScopeResolver : IDirectionScopeResolver
     {
         if (string.IsNullOrWhiteSpace(nodeId) ||
             !string.Equals(activeNode, nodeId.Trim(), StringComparison.Ordinal)) return;
-        RemoveNode(stageImports); RemoveNode(viewImports); RemoveNode(shotAliases);
+        RemoveNode(stageImports); RemoveNode(viewImports); RemoveNode(shotAliases); RemoveNode(cameraPresets);
         foreach (var key in marks.Keys.Where(key => key.Node == activeNode).ToArray()) marks.Remove(key);
         activeNode = null;
         activeModule = null;
@@ -232,6 +254,7 @@ public sealed class DirectionScopeResolver : IDirectionScopeResolver
         stageImports.Clear();
         viewImports.Clear();
         shotAliases.Clear();
+        cameraPresets.Clear();
         marks.Clear();
         activeNode = null;
         activeModule = null;

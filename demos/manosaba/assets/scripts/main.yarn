@@ -1,4 +1,7 @@
 title: Start
+scene: manosaba_demo_menu
 ---
-<<jump Act01_Chapter01_Adv01>>
+<<curtain closed duration:0>>
+// <<jump Act01_Chapter01_Adv01>>
+<<jump Act01_Chapter01_Trial00>>
 ===

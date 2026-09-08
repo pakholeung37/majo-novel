@@ -13,7 +13,7 @@ namespace Majo.Runtime.Dialogue.Commands;
 
 [Command("camera", Category = "Direction")]
 [AtMostOne(nameof(Arguments.Stage), nameof(Arguments.View))]
-[AtLeastOne(nameof(Arguments.Center), nameof(Arguments.Zoom), nameof(Arguments.Rotation), nameof(Arguments.As))]
+[AtLeastOne(nameof(Arguments.Center), nameof(Arguments.Zoom), nameof(Arguments.Rotation), nameof(Arguments.As), nameof(Arguments.Preset))]
 public sealed partial class CameraCommand : RuntimeCommand<CameraCommand.Arguments>
 {
     private readonly IDirectionBeatRuntime beats;
@@ -41,17 +41,18 @@ public sealed partial class CameraCommand : RuntimeCommand<CameraCommand.Argumen
         var wait = arguments.Timing.Wait.GetValueOrDefault(false);
 
         var targetView = ResolveTarget(node, arguments.Stage.Value, arguments.View.Value);
+        var preset = arguments.Preset.WasProvided ? scopes.ResolveCameraPreset(node, arguments.Preset.Value!) : null;
         var patch = new ViewPosePatch(
             targetView,
             arguments.Center.WasProvided
-                ? DirectionValue.From(new DirectionPoint(arguments.Center.Value.X, arguments.Center.Value.Y))
-                : default,
+                ? DirectionValue.From(scopes.ResolvePosition(node, arguments.Center.Value!))
+                : preset?.Center ?? default,
             arguments.Zoom.WasProvided
                 ? DirectionValue.From((float)arguments.Zoom.Value)
-                : default,
+                : preset?.Zoom ?? default,
             arguments.Rotation.WasProvided
                 ? DirectionValue.From((float)arguments.Rotation.Value)
-                : default,
+                : preset?.RotationDegrees ?? default,
             transition);
 
         if (arguments.As.WasProvided && !string.IsNullOrWhiteSpace(arguments.As.Value))
@@ -73,17 +74,18 @@ public sealed partial class CameraCommand : RuntimeCommand<CameraCommand.Argumen
     public sealed record Arguments(
         [Option] CommandValue<string> Stage,
         [Option] CommandValue<string> View,
-        [Option(ValueHint = "x,y")] CommandValue<Vector2> Center,
+        [Option] CommandValue<PositionRef> Center,
         [Option(Minimum = 0.001, ValueHint = "number")] CommandValue<double> Zoom,
         [Option(ValueHint = "degrees")] CommandValue<double> Rotation,
         [Option(ValueHint = "shot")] CommandValue<string> As,
         [Option(ValueHint = "kind")] CommandValue<DirectionTransitionId> Via,
-        [Group] TimingArguments Timing);
+        [Group] TimingArguments Timing,
+        [Option] CommandValue<string> Preset);
 }
 
 [Command("camera move", Category = "Direction")]
 [AtMostOne(nameof(Arguments.Stage), nameof(Arguments.View))]
-[AtLeastOne(nameof(Arguments.Center), nameof(Arguments.Zoom), nameof(Arguments.Rotation))]
+[AtLeastOne(nameof(Arguments.Center), nameof(Arguments.Zoom), nameof(Arguments.Rotation), nameof(Arguments.Preset))]
 public sealed partial class CameraMoveCommand : RuntimeCommand<CameraMoveCommand.Arguments>
 {
     private readonly IDirectionBeatRuntime beats;
@@ -110,17 +112,18 @@ public sealed partial class CameraMoveCommand : RuntimeCommand<CameraMoveCommand
         var wait = arguments.Timing.Wait.GetValueOrDefault(false);
 
         var targetView = ResolveTarget(node, arguments.Stage.Value, arguments.View.Value);
+        var preset = arguments.Preset.WasProvided ? scopes.ResolveCameraPreset(node, arguments.Preset.Value!) : null;
         var patch = new ViewPosePatch(
             targetView,
             arguments.Center.WasProvided
-                ? DirectionValue.From(new DirectionPoint(arguments.Center.Value.X, arguments.Center.Value.Y))
-                : default,
+                ? DirectionValue.From(scopes.ResolvePosition(node, arguments.Center.Value!))
+                : preset?.Center ?? default,
             arguments.Zoom.WasProvided
                 ? DirectionValue.From((float)arguments.Zoom.Value)
-                : default,
+                : preset?.Zoom ?? default,
             arguments.Rotation.WasProvided
                 ? DirectionValue.From((float)arguments.Rotation.Value)
-                : default,
+                : preset?.RotationDegrees ?? default,
             transition);
 
         await beats.SubmitAsync(
@@ -137,10 +140,11 @@ public sealed partial class CameraMoveCommand : RuntimeCommand<CameraMoveCommand
     public sealed record Arguments(
         [Option] CommandValue<string> Stage,
         [Option] CommandValue<string> View,
-        [Option(ValueHint = "x,y")] CommandValue<Vector2> Center,
+        [Option] CommandValue<PositionRef> Center,
         [Option(Minimum = 0.001, ValueHint = "number")] CommandValue<double> Zoom,
         [Option(ValueHint = "degrees")] CommandValue<double> Rotation,
-        [Group] TimingArguments Timing);
+        [Group] TimingArguments Timing,
+        [Option] CommandValue<string> Preset);
 }
 
 [Command("camera reset", Category = "Direction")]

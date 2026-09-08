@@ -1,0 +1,14 @@
+[remap]
+
+importer="yarnscript"
+type="Resource"
+uid="uid://qhvhp07qpp5a"
+path="res://.godot/imported/Act01_Chapter01_Trial00.yarn-6d870a1d4143a92e3e1ad6a644bbb88d.tres"
+
+[deps]
+
+source_file="res://demos/manosaba/assets/scripts/Act01_Chapter01/Act01_Chapter01_Trial00.yarn"
+dest_files=["res://.godot/imported/Act01_Chapter01_Trial00.yarn-6d870a1d4143a92e3e1ad6a644bbb88d.tres"]
+
+[params]
+

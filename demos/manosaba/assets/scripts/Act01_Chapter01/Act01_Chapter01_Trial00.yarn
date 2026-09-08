@@ -1,0 +1,202 @@
+title: Act01_Chapter01_Trial00
+scene: act01_chapter01_trial00
+---
+// Court_Trial00 is generated and registered by the scene preparation hook.
+// One seat = 1024 source pixels × 1.7578125 = 1800 stage pixels = 70.3125 X units.
+// Positions use the fixed 2560×1440 reference, not the full panorama width.
+// WitchBook, bad-end routing and trial-specific input/UI are outside this stage demo.
+<<curtain closed duration:0>>
+<<view define trial_b stage:main>>
+<<mark ema at:35.1562,35>>
+<<mark ema_frame at:35.1562,56>>
+<<mark hanna at:105.469,35>>
+<<mark hanna_frame at:105.469,56>>
+<<mark sherry at:175.781,35>>
+<<mark sherry_frame at:175.781,56>>
+<<mark leia at:246.094,35>>
+<<mark leia_frame at:246.094,56>>
+<<mark alisa at:316.406,35>>
+<<mark alisa_frame at:316.406,56>>
+<<mark coco at:386.719,35>>
+<<mark coco_frame at:386.719,56>>
+<<mark miria at:457.031,35>>
+<<mark miria_frame at:457.031,56>>
+<<mark margo at:667.969,35>>
+<<mark margo_frame at:667.969,56>>
+<<mark nanoka at:738.281,35>>
+<<mark nanoka_frame at:738.281,56>>
+<<mark anan at:808.594,35>>
+<<mark anan_frame at:808.594,56>>
+<<mark meruru at:-35.1562,35>>
+<<mark meruru_frame at:-35.1562,56>>
+// Original court radius is 16: subject depth is approximately 16 - distance.
+// Close shots use 14.4 / depth; the pair-wide shot is framed separately to fit both seats.
+// Unwrap seat 12 as seat -1 so Meruru and Ema remain adjacent across the circle seam.
+<<camera preset define ema_close center:35.1562,71 zoom:3.6 rotation:0>>
+<<camera preset define ema_medium center:35.1562,66 zoom:2.4 rotation:0>>
+<<camera preset define meruru_split center:-32,66 zoom:2.4 rotation:8>>
+<<camera preset define pair_wide center:0,56 zoom:1 rotation:0>>
+<<camera preset define sherry_close center:180.469,68 zoom:3.6 rotation:0>>
+<<camera preset define leia_close center:241.406,78 zoom:3.6 rotation:0>>
+<<camera preset define opening center:246.094,56 zoom:0.9 rotation:-1>>
+<<beat begin>>
+<<backdrop Court_Trial00 at:-140.625,115 origin:0,0 scale:1.7578125 via:cut>>
+<<character Ema appearance:Default at:ema scale:0.48 via:cut>>
+<<character Hanna appearance:Default at:hanna scale:0.48 via:cut>>
+<<character Sherry appearance:Default at:sherry scale:0.48 via:cut>>
+<<character Leia appearance:Default at:leia scale:0.48 via:cut>>
+<<character Alisa appearance:Default at:alisa scale:0.48 via:cut>>
+<<character Coco appearance:Default at:coco scale:0.48 via:cut>>
+<<character Miria appearance:Default at:miria scale:0.48 via:cut>>
+<<character Margo appearance:Default at:margo scale:0.48 via:cut>>
+<<character Nanoka appearance:Normal1 at:nanoka scale:0.48 via:cut>>
+<<character AnAn appearance:Default at:anan scale:0.48 via:cut>>
+<<character Meruru appearance:Default at:meruru scale:0.48 via:cut>>
+<<object stand_0 asset:Court_Stand at:35.1562,40 scale:1.8 z:100 via:cut>>
+<<object stand_1 asset:Court_Stand at:105.469,40 scale:1.8 z:100 via:cut>>
+<<object stand_2 asset:Court_Stand at:175.781,40 scale:1.8 z:100 via:cut>>
+<<object stand_3 asset:Court_Stand at:246.094,40 scale:1.8 z:100 via:cut>>
+<<object stand_4 asset:Court_Stand at:316.406,40 scale:1.8 z:100 via:cut>>
+<<object stand_5 asset:Court_Stand at:386.719,40 scale:1.8 z:100 via:cut>>
+<<object stand_6 asset:Court_Stand at:457.031,40 scale:1.8 z:100 via:cut>>
+<<object stand_7 asset:Court_Stand at:527.344,40 scale:1.8 z:100 via:cut>>
+<<object stand_8 asset:Court_Stand at:597.656,40 scale:1.8 z:100 via:cut>>
+<<object stand_9 asset:Court_Stand at:667.969,40 scale:1.8 z:100 via:cut>>
+<<object stand_10 asset:Court_Stand at:738.281,40 scale:1.8 z:100 via:cut>>
+<<object stand_11 asset:Court_Stand at:808.594,40 scale:1.8 z:100 via:cut>>
+<<object stand_12 asset:Court_Stand at:-35.1562,40 scale:1.8 z:100 via:cut>>
+<<camera view:main preset:ema_close>>
+<<camera view:trial_b preset:opening>>
+<<layout single main:trial_b via:cut>>
+<<beat end wait:false>>
+<<bgm Bgm_025_001_Loop volume:1 loop:true duration:0>>
+// Slow establishing drift continues under the opening exchange.
+<<camera move view:trial_b center:457.031,56 rotation:0 duration:25 ease:linear>>
+<<curtain open duration:0.9>>
+<<wait 0.6>>
+<<character Alisa appearance:Angry1,Option-ArmL-Off>>
+<<character AnAn appearance:Default,ArmR-Option-Off,Angle01/Option_Arms->>
+Leia: 接下来，我们要从什么话题开始讨论呢？ #line:0101Trial00_Leia001
+
+Sherry: 那当然是，能明确指出凶手的证据了！ #line:0101Trial00_Sherry001
+
+Alisa: 有那玩意也用不着我们想这么辛苦了。 #line:0101Trial00_Alisa001
+
+<<character Sherry appearance:Smile>>
+Sherry: 哼哼哼，如果我说存在这样的证据呢？ #line:0101Trial00_Sherry002
+
+<<character Alisa appearance:Angry1,Option-ArmL-Off>>
+Alisa: ……比如尸体上写了凶手的名字？ #line:0101Trial00_Alisa002
+
+<<character Coco appearance:Angry>>
+Coco: 要是有这种证据，大家早就发现了！ #line:0101Trial00_Coco001
+
+<<character Miria appearance:Surprised1,ArmR2,ArmL2>>
+Miria: 别急嘛。[br /]先听听小莉她[br /]是怎么讲的，好吗？ #line:0101Trial00_Miria001
+
+Miria: 反正我也不知道[br /]该从哪里开始讨论…… #line:0101Trial00_Miria002
+
+<<character Leia appearance:Normal1,ArmR3>>
+
+// Prepare A while B is displayed, then cut to the moving close-up.
+<<camera view:main preset:leia_close center:245.625,78 via:cut>>
+<<beat begin>>
+<<camera move view:main preset:leia_close duration:0.6 ease:cubic-out>>
+<<layout single main:main via:cut>>
+<<beat end wait:false>>
+<<wait 0.2>>
+Leia: 好，那就拜托雪莉你讲一下，[br /]你找到的证据是什么。 #line:0101Trial00_Leia002
+
+<<character Sherry appearance:Default,ArmR12>>
+
+<<camera view:trial_b preset:sherry_close center:176.25,78 via:cut>>
+<<beat begin>>
+<<camera view:trial_b preset:sherry_close via:cut>>
+<<layout single main:trial_b via:cut>>
+<<beat end wait:false>>
+<<wait 0.2>>
+Sherry: 好的！交给我吧！ #line:0101Trial00_Sherry003
+
+<<character Ema appearance:Pensive1,ArmR3>>
+
+<<camera view:main preset:ema_medium via:cut>>
+<<beat begin>>
+<<camera move view:main preset:ema_close duration:4 ease:sine-out>>
+<<layout single main:main via:cut>>
+<<beat end wait:false>>
+<<wait 0.2>>
+Ema: （接下来讨论要真正开始了……[br /]　我得认真听大家讲的话……） #line:0101Trial00_Ema001
+
+Ema: （可是我到底应该说什么话才好呢……？） #line:0101Trial00_Ema002
+
+<<sfx Sfx_Common_001 volume:1>>
+<<character Meruru appearance:Normal1,ArmR7_1,ArmL5,Eyes1_Normal_Open2,Mouth1_Normal_Open2>>
+
+// Meruru on the left, Ema on the right. Shared Stage, independent cameras.
+<<camera view:trial_b preset:meruru_split via:cut>>
+<<camera view:main preset:ema_close via:cut>>
+<<layout split main:trial_b inset:main divider:25 angle:10 mainAt:20,50 insetAt:50,50 via:dissolve duration:0.2 wait:true>>
+// Save at a settled dialogue boundary; active camera motion cannot be captured.
+// <<autoSave>>
+Meruru: ……啊，那个，艾玛小姐。 #line:0101Trial00_Meruru001
+
+<<character Ema appearance:Surprised1,Angle01/Head01/Facial01/Mouth01~Mouth01_Pensive_Open>>
+Ema: 啊……梅露露，[br /]你喊我有什么事？ #line:0101Trial00_Ema003
+
+<<character Meruru appearance:Normal1,ArmR8_1,ArmL8,Eyes1_Normal_Open2,Mouth1_Normal_Open2>>
+
+// The original camera pulls back from Ema to the adjacent pair over eight seconds.
+// Keep the current Ema pose when removing the split; do not cut to Meruru.
+<<beat begin id:meruru_explanation>>
+<<camera move view:main preset:pair_wide duration:8 ease:sine-in-out>>
+<<layout single main:main via:cut>>
+<<beat end wait:false>>
+<<wait 0.2>>
+Meruru: 我想，接下来大家要开始[br /]【讨论】了…… #line:0101Trial00_Meruru002
+
+<<character Meruru appearance:Normal1,ArmR8_1,ArmL8,Eyes1_Normal_Open2,Mouth1_Normal_Open2>>
+Meruru: 在大家的讲话内容之中……[br /]应该会出现一些[br /]你【在意的地方】。 #line:0101Trial00_Meruru003
+
+<<character Meruru appearance:Normal1,ArmR1_1,Eyes1_Normal_Open3,Mouth1_Smile_Closed1>>
+Meruru: 如果出现这样的地方……[br /]请你思考一下[br /]可不可以【指出】这些地方。 #line:0101Trial00_Meruru004
+
+<<character Meruru appearance:Normal1,ArmR1_1,Eyes1_Normal_Open3,Mouth1_Smile_Closed1>>
+Meruru: 如果是错误的见解，[br /]你应该可以反驳它们。 #line:0101Trial00_Meruru005
+
+<<character Meruru appearance:Normal1,ArmR5_1,ArmL2,Eyes1_Pensive_Open2,Mouth1_Normal_Open1>>
+Meruru: 大家可能会有[br /]认知或者理解错误的地方…… #line:0101Trial00_Meruru006
+
+<<character Meruru appearance:Normal1,ArmR5_1,ArmL2,Eyes1_Pensive_Open2,Mouth1_Normal_Open1>>
+Meruru: 或许连我也会[br /]说出一些不太对劲的发言…… #line:0101Trial00_Meruru007
+
+<<character Meruru appearance:Normal2,ArmR9_2,ArmL9,Eyes2_Smile_Closed1,Mouth2_Smile_Closed1>>
+Meruru: 但我相信，艾玛小姐你[br /]一定可以将大家的讨论[br /]引导至正确的方向……！ #line:0101Trial00_Meruru008
+
+<<sfx Sfx_Common_001 volume:1>>
+<<character Meruru appearance:Smile>>
+Meruru: ……虽然，这只是我的感觉。 #line:0101Trial00_Meruru009
+
+<<character Ema appearance:Normal1>>
+<<beat join meruru_explanation>>
+// <<autoSave>>
+Ema: 梅露露……！ #line:0101Trial00_Ema004
+
+<<character Ema appearance:Determined2,ArmR3,ArmL7 via:cut>>
+
+<<camera view:trial_b preset:ema_close via:cut>>
+<<beat begin>>
+<<camera move view:trial_b preset:ema_close zoom:2.88 duration:2 ease:sine-out>>
+<<layout single main:trial_b via:cut>>
+<<beat end wait:false>>
+<<wait 0.2>>
+Ema: （正如梅露露所说，如果出现了在意的地方，[br /]　就试着拿出勇气指出它们吧……！） #line:0101Trial00_Ema005
+
+<<stopBgm duration:0 wait:true>>
+// Trial01 is not adapted yet. Keep the final shot available for inspection.
+-> 重新播放审判开场 #line:trial00_replay #voice:none
+    <<curtain closed duration:0.3 wait:true>>
+    <<jump Act01_Chapter01_Trial00>>
+-> 返回演示选择 #line:trial00_menu #voice:none
+    <<curtain closed duration:0.3 wait:true>>
+    <<jump Start>>
+===

@@ -13,7 +13,7 @@ using Majo.Runtime.Direction.Core;
 
 namespace Majo.Runtime.Direction.Godot;
 
-internal sealed class GodotDirectionRenderHost : IRuntimeService
+internal sealed partial class GodotDirectionRenderHost : IRuntimeService
 {
     private readonly Dictionary<ActorFxTarget, IActorModifierTarget> actorModifierTargets = new();
     private readonly Dictionary<ActorFxTarget, long> actorTargetVersions = new();
@@ -311,7 +311,7 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
             : ToGodot(state.Tint);
         surface.Backdrop.Visible = state is not null && texture is not null;
         if (state is not null && texture is not null)
-            LayoutBackdrop(surface, surface.Backdrop, state.Fit);
+            LayoutBackdrop(surface, surface.Backdrop, state);
     }
 
     public void PublishBackdropTransition(
@@ -326,19 +326,20 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
         surface.BackdropTransition.Texture = texture ?? throw new ArgumentNullException(nameof(texture));
         surface.BackdropTransition.Modulate = ToGodot(state.Tint);
         surface.BackdropTransition.Visible = true;
-        LayoutBackdrop(surface, surface.BackdropTransition, state.Fit);
+        LayoutBackdrop(surface, surface.BackdropTransition, state);
     }
 
     internal SubViewport PrepareBackdropInput(GodotDirectionStageSurface surface,
-        BackdropState? state, Texture2D? texture)
+        BackdropState? state, Texture2D? texture, Rect2 bounds)
     {
         var input = CreateViewport("BackdropTransitionInput");
-        input.Size = surface.Viewport.Size;
+        input.Size = new Vector2I((int)Math.Ceiling(bounds.Size.X), (int)Math.Ceiling(bounds.Size.Y));
         var content = CreateTextureRect("BackdropInput");
         content.Texture = texture;
         content.Modulate = state is null ? Colors.White : ToGodot(state.Tint);
         content.Visible = state is not null && texture is not null;
-        LayoutBackdrop(surface, content, state?.Fit ?? BackdropFit.Stretch);
+        LayoutBackdrop(surface, content, state);
+        content.Position -= bounds.Position;
         input.AddChild(content);
         owner.AddChild(input);
         input.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
@@ -352,7 +353,11 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(texture);
         var surface = GetOrCreateView(viewId);
-        surface.Content.Texture = texture;
+        // Render the Stage world per camera so content outside the reference viewport remains visible.
+        // Keep the legacy content nodes available for host inspection, but do not draw the Stage texture.
+        surface.Content.Texture = null;
+        surface.Canvas.Visible = false;
+        surface.ContentViewport.World2D = GetStage(state.StageId).Viewport.World2D;
         surface.Content.Modulate = Colors.White;
         surface.PublishedView = state;
         ApplyViewPose(viewId, state.Pose);
@@ -403,7 +408,7 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
             var view = RequireView(pair.Value);
             output.Texture = view.Viewport.GetTexture();
             output.Visible = true;
-            LayoutSlot(output, state.Layout, pair.Key, ToSize(owner.GetViewport().GetVisibleRect().Size));
+            ApplyScreenSlot(output, state, pair.Key, ToSize(owner.GetViewport().GetVisibleRect().Size));
         }
     }
 
@@ -425,17 +430,7 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
             output.Texture = view.Viewport.GetTexture();
             var hasTarget = state.Bindings.ContainsKey(slot);
             output.Visible = hasTarget || progress < 1;
-            var from = before.Bindings.ContainsKey(slot)
-                ? SlotRect(before.Layout, slot, ToSize(owner.GetViewport().GetVisibleRect().Size))
-                : SlotRect(state.Layout, slot, ToSize(owner.GetViewport().GetVisibleRect().Size));
-            var to = hasTarget
-                ? SlotRect(state.Layout, slot, ToSize(owner.GetViewport().GetVisibleRect().Size))
-                : new Rect2(from.Position, Vector2.Zero);
-            var rect = new Rect2(
-                from.Position.Lerp(to.Position, progress),
-                from.Size.Lerp(to.Size, progress));
-            output.Position = rect.Position;
-            output.Size = rect.Size;
+            ApplyScreenSlot(output, state, slot, ToSize(owner.GetViewport().GetVisibleRect().Size), before, progress);
         }
     }
 
@@ -597,10 +592,11 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
         var sceneCenter = new Vector2(
             size.X * pose.Center.X / 100,
             size.Y * (1 - pose.Center.Y / 100));
-        surface.Transform.Transform = new Transform2D(
+        surface.ContentViewport.CanvasTransform = new Transform2D(
             basis.X,
             basis.Y,
             size / 2 - basis * sceneCenter + delta.CenterOffset);
+        surface.Transform.Transform = surface.ContentViewport.CanvasTransform;
     }
 
     public void ClearBackdropTransition(StageId stageId)
@@ -681,7 +677,7 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
 
         foreach (var pair in screenSlots)
             if (pair.Value.Visible)
-                LayoutSlot(pair.Value, PublishedScreen.Layout, pair.Key, screenSize);
+                ApplyScreenSlot(pair.Value, PublishedScreen, pair.Key, screenSize);
         if (screenLayoutBefore is not null && screenLayoutTarget is not null)
             PublishScreenLayout(screenLayoutTarget, screenLayoutBefore, screenLayoutProgress);
     }
@@ -900,36 +896,6 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
         return output;
     }
 
-    private static void LayoutSlot(
-        TextureRect output,
-        LayoutId layout,
-        LayoutSlotId slot,
-        Vector2I viewportSize)
-    {
-        var size = new Vector2(viewportSize.X, viewportSize.Y);
-        output.SetAnchorsPreset(Control.LayoutPreset.TopLeft);
-        output.Position = Vector2.Zero;
-        output.Size = new Vector2(1, 1);
-        if (layout.Value.Equals("split", StringComparison.OrdinalIgnoreCase))
-        {
-            output.Position = slot.Value == "inset" ? new Vector2(size.X / 2, 0) : Vector2.Zero;
-            output.Size = new Vector2(size.X / 2, size.Y);
-        }
-        else if (layout.Value.Equals("pip", StringComparison.OrdinalIgnoreCase))
-        {
-            if (slot.Value == "inset")
-            {
-                output.Position = new Vector2(size.X * .70f, size.Y * .06f);
-                output.Size = new Vector2(size.X * .25f, size.Y * .25f);
-            }
-            else
-            {
-                output.Size = size;
-            }
-        }
-        else output.Size = size;
-    }
-
     private static Rect2 SlotRect(LayoutId layout, LayoutSlotId slot, Vector2I viewportSize)
     {
         var size = new Vector2(viewportSize.X, viewportSize.Y);
@@ -947,27 +913,47 @@ internal sealed class GodotDirectionRenderHost : IRuntimeService
         SetFullRect(surface.Canvas, resolution);
         SetFullRect(surface.Background, resolution);
         if (surface.PublishedBackdrop is not null && surface.Backdrop.Texture is not null)
-            LayoutBackdrop(surface, surface.Backdrop, surface.PublishedBackdrop.Fit);
+            LayoutBackdrop(surface, surface.Backdrop, surface.PublishedBackdrop);
         else
             SetFullRect(surface.Backdrop, resolution);
         if (surface.TransitionBackdrop is not null && surface.BackdropTransition.Texture is not null)
-            LayoutBackdrop(surface, surface.BackdropTransition, surface.TransitionBackdrop.Fit);
+            LayoutBackdrop(surface, surface.BackdropTransition, surface.TransitionBackdrop);
         else
             SetFullRect(surface.BackdropTransition, resolution);
+    }
+
+    internal static Rect2 BackdropBounds(GodotDirectionStageSurface surface, BackdropState? state, Texture2D? texture)
+    {
+        if (state?.Placement is not { } placement || texture is null)
+            return new Rect2(Vector2.Zero, surface.Viewport.Size);
+        var size = texture.GetSize() * placement.Scale;
+        var at = Majo.Runtime.Actors.Godot.StageCoordinates.ToPixels(
+            new Vector2(placement.At.X, placement.At.Y), surface.Viewport.Size);
+        return new Rect2(at - new Vector2(placement.Origin.X, placement.Origin.Y) * size, size);
     }
 
     private static void LayoutBackdrop(
         GodotDirectionStageSurface surface,
         TextureRect view,
-        BackdropFit fit)
+        BackdropState? state)
     {
+        if (state?.Placement is { } placement && view.Texture is { } texture)
+        {
+            view.SetAnchorsPreset(Control.LayoutPreset.TopLeft);
+            var rect = BackdropBounds(surface, state, texture);
+            view.Position = rect.Position;
+            view.Size = rect.Size;
+            view.StretchMode = TextureRect.StretchModeEnum.Scale;
+            return;
+        }
+        var fit = state?.Fit ?? BackdropFit.Stretch;
         SetFullRect(view, surface.Viewport.Size);
         view.StretchMode = fit switch
         {
             BackdropFit.Cover => TextureRect.StretchModeEnum.KeepAspectCovered,
             BackdropFit.Contain => TextureRect.StretchModeEnum.KeepAspectCentered,
             BackdropFit.Stretch => TextureRect.StretchModeEnum.Scale,
-            _ => throw new ArgumentOutOfRangeException(nameof(fit)),
+            _ => throw new ArgumentOutOfRangeException(nameof(state)),
         };
     }
 

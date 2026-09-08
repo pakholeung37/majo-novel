@@ -38,10 +38,9 @@ public sealed class PositionRefConverter : ICommandValueConverter<PositionRef>, 
         if (parts.Length != 2 ||
             !float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var x) ||
             !float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var y) ||
-            !float.IsFinite(x) || !float.IsFinite(y) ||
-            x is < 0 or > 100 || y is < 0 or > 100)
+            !float.IsFinite(x) || !float.IsFinite(y))
             throw new CommandValueFormatException(
-                $"Invalid position '{text}'. Use finite x,y percentages between 0 and 100.");
+                $"Invalid position '{text}'. Use finite x,y stage coordinates.");
         return new PositionRef.Literal(new DirectionPoint(x, y));
     }
 }

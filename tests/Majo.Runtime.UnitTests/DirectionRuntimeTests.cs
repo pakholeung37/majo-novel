@@ -56,6 +56,7 @@ public sealed class DirectionRuntimeTests
                 "object fx",
                 "backdrop fx",
                 "view define",
+                "camera preset define",
                 "camera",
                 "camera move",
                 "camera reset",

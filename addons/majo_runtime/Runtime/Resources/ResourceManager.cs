@@ -14,6 +14,7 @@ public sealed class ResourceManager : IResourceManager
 {
     private static readonly MethodInfo CreateEntryLeaseMethod = typeof(ResourceManager)
         .GetMethod(nameof(CreateEntryLeaseCore), BindingFlags.Instance | BindingFlags.NonPublic)!;
+    private readonly RegisteredResourceProvider registered = new();
     private readonly object gate = new();
     private readonly IResourceProvider[] providers;
     private readonly IRuntimeLifetime lifetime;
@@ -40,7 +41,7 @@ public sealed class ResourceManager : IResourceManager
         bool releaseOnLastLease = false)
     {
         ArgumentNullException.ThrowIfNull(providers);
-        this.providers = providers.ToArray();
+        this.providers = new IResourceProvider[] { registered }.Concat(providers).ToArray();
         this.lifetime = lifetime ?? throw new ArgumentNullException(nameof(lifetime));
         this.logger = logger ?? NullRuntimeLogger.Instance;
         ArgumentOutOfRangeException.ThrowIfNegative(memoryBudgetBytes);
@@ -49,6 +50,27 @@ public sealed class ResourceManager : IResourceManager
         this.releaseOnLastLease = releaseOnLastLease;
         defaultEstimateBytes = defaultResourceEstimateBytes;
         ValidateProviders(this.providers);
+    }
+
+    public void Register<TResource>(ResourceKey key, TResource resource, Action<TResource>? release = null)
+        where TResource : class
+    {
+        EnsureInitialized();
+        registered.Register(key, resource, release);
+    }
+
+    public bool Unregister(ResourceKey key)
+    {
+        EnsureInitialized();
+        lock (gate)
+        {
+            var keys = loaded.Keys.Where(value => value.ProviderId == registered.Id && value.ResolvedPath == key.Path).ToArray();
+            if (pending.Keys.Any(value => value.ProviderId == registered.Id && value.ResolvedPath == key.Path) ||
+                keys.Any(value => loaded[value].LeaseCount > 0))
+                throw new MajoResourceException($"Cannot unregister leased or loading resource '{key}'.");
+            foreach (var cacheKey in keys) loaded.Remove(cacheKey);
+            return registered.Remove(key);
+        }
     }
 
     public bool IsPinned<TResource>(ResourceKey key, string? overridePath = null) where TResource : class

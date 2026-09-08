@@ -127,6 +127,9 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
             services.Get<IDirectionScopeResolver>(),
             services.Get<IDialogueNodeAccessor>()), providerId, version);
 
+        commands.Add("camera preset define", services => new CameraPresetDefineCommand(
+            services.Get<IDirectionScopeResolver>(), services.Get<IDialogueNodeAccessor>()), providerId, version);
+
         commands.Add("camera", services => new CameraCommand(
             services.Get<IDirectionBeatRuntime>(),
             services.Get<IDirectionScopeResolver>(),

@@ -528,6 +528,9 @@ public sealed class DirectionPlanner : IDirectionPlanner
         HashSet<DirectionResourceClaim> claims)
     {
         ArgumentNullException.ThrowIfNull(patch.Bindings);
+        patch.Split?.Validate();
+        if (patch.Split is not null && !patch.Layout.Value.Equals("split", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Split parameters require the split layout.");
         if (patch.Bindings.Count == 0)
             throw new ArgumentException("A Screen patch requires at least one View binding.");
 
@@ -563,7 +566,7 @@ public sealed class DirectionPlanner : IDirectionPlanner
         claims.Add(new DirectionResourceClaim(DirectionResourceKind.Layout, patch.Layout.Value));
         AddTransition(patch.Transition, paths, transitions, patch.SourceLocation);
         return new ScreenState(patch.Layout, DirectionCollections.Freeze(
-            patch.Bindings.ToDictionary(pair => pair.Key, pair => pair.Value)));
+            patch.Bindings.ToDictionary(pair => pair.Key, pair => pair.Value))) { Split = patch.Split };
     }
 
     private static StableEffectState ApplyCurtain(

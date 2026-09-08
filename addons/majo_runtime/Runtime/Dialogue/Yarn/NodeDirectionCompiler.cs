@@ -36,6 +36,8 @@ public sealed record DirectionImport(
 public sealed record DirectionMark(
     string Name, DirectionPoint Position, string File, int Line, int Column);
 
+public sealed record DirectionCameraPreset(string Name, string Center, float Zoom, float Rotation);
+
 public sealed record DirectionPreloadManifest(
     IReadOnlyList<TypedDirectionResourceReference> References)
 {
@@ -80,6 +82,7 @@ public sealed record NodeDirectionModule(
     }
 
     public SceneEntryMetadata? SceneEntry { get; init; }
+    public IReadOnlyList<DirectionCameraPreset> CameraPresets { get; init; } = Array.Empty<DirectionCameraPreset>();
 
     public DirectionPreloadManifest PreloadManifest => new(Resources);
 }
@@ -236,6 +239,7 @@ public sealed class NodeDirectionCompiler
         var views = new HashSet<string>(StringComparer.Ordinal);
         var aliases = new HashSet<string>(StringComparer.Ordinal);
         var marks = new HashSet<string>(StringComparer.Ordinal);
+        var presets = new List<DirectionCameraPreset>();
         var resources = new List<TypedDirectionResourceReference>();
         var imports = new List<DirectionImport>();
         var markDefinitions = new List<DirectionMark>();
@@ -280,6 +284,28 @@ public sealed class NodeDirectionCompiler
             else if (command.Is("mark") && command.Tokens.Length > 1)
             {
                 CompileMark(command, marks, markDefinitions, diagnostics);
+            }
+            else if (command.Is("camera", "preset") && command.Positional(2) == "define")
+            {
+                try
+                {
+                    var name = command.Positional(3);
+                    if (string.IsNullOrWhiteSpace(name)) throw new CommandValueFormatException("Camera preset requires a name.");
+                    var center = command.Options.GetValueOrDefault("center", "50,50");
+                    if (command.Raw.Contains('{')) throw new CommandValueFormatException("Camera preset definitions require literal parameters for deterministic restore.");
+                    _ = PositionRefConverter.Instance.Parse(center);
+                    var zoom = float.Parse(command.Options.GetValueOrDefault("zoom", "1"), System.Globalization.CultureInfo.InvariantCulture);
+                    var rotation = float.Parse(command.Options.GetValueOrDefault("rotation", "0"), System.Globalization.CultureInfo.InvariantCulture);
+                    if (!float.IsFinite(zoom) || zoom < 0.001f || !float.IsFinite(rotation)) throw new CommandValueFormatException("Invalid camera preset zoom or rotation.");
+                    if (presets.Any(value => value.Name == name)) throw new CommandValueFormatException($"Duplicate camera preset '{name}'.");
+                    presets.Add(new DirectionCameraPreset(name, center, zoom, rotation));
+                    aliases.Add(name);
+                }
+                catch (Exception error) when (error is FormatException or OverflowException or CommandValueFormatException)
+                {
+                    diagnostics.Add(new YarnCompilationDiagnostic("error", "MAJO_CAMERA_PRESET", command.File,
+                        command.Line, command.Column, command.Line, command.Column + command.Raw.Length, error.Message));
+                }
             }
             else if (command.Is("camera") &&
                 command.Options.TryGetValue("as", out var alias))
@@ -332,7 +358,7 @@ public sealed class NodeDirectionCompiler
             maps.ToArray(),
             imports,
             markDefinitions,
-            diagnostics);
+            diagnostics) { CameraPresets = presets };
     }
 
     private static void CompileMark(

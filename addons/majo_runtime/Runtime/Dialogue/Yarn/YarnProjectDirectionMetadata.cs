@@ -34,6 +34,7 @@ namespace Majo.Runtime.Dialogue.Yarn
         {
             NodeId = module.NodeId,
             SceneEntry = module.SceneEntry,
+            CameraPresets = module.CameraPresets.ToArray(),
             Version = module.Version,
             Symbols = new SymbolPayload
             {
@@ -107,12 +108,14 @@ namespace Majo.Runtime.Dialogue.Yarn
             value.Diagnostics ?? Array.Empty<YarnCompilationDiagnostic>())
         {
             SceneEntry = value.SceneEntry,
+            CameraPresets = value.CameraPresets ?? Array.Empty<DirectionCameraPreset>(),
         };
 
         private sealed class ModulePayload
         {
             public string? NodeId { get; set; }
             public SceneEntryMetadata? SceneEntry { get; set; }
+            public DirectionCameraPreset[]? CameraPresets { get; set; }
             public long Version { get; set; }
             public SymbolPayload? Symbols { get; set; }
             public ResourcePayload[]? Resources { get; set; }

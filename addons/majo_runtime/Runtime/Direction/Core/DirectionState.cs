@@ -44,11 +44,25 @@ public enum BackdropFit
     Stretch,
 }
 
+public sealed record BackdropPlacement(DirectionPoint At, DirectionPoint Origin, float Scale)
+{
+    public BackdropPlacement Validate()
+    {
+        At.Validate(); Origin.Validate();
+        if (Origin.X is < 0 or > 1 || Origin.Y is < 0 or > 1)
+            throw new ArgumentOutOfRangeException(nameof(Origin), "Backdrop origin uses normalized texture coordinates.");
+        if (!float.IsFinite(Scale) || Scale <= 0) throw new ArgumentOutOfRangeException(nameof(Scale));
+        return this;
+    }
+}
+
 public sealed record BackdropState(
     ResourceKey Resource,
     BackdropFit Fit,
     DirectionColor Tint)
 {
+    public BackdropPlacement? Placement { get; init; }
+
     public BackdropState(ResourceKey resource)
         : this(resource, BackdropFit.Cover, DirectionColor.White)
     {
@@ -58,6 +72,7 @@ public sealed record BackdropState(
     {
         if (!Enum.IsDefined(Fit)) throw new ArgumentOutOfRangeException(nameof(Fit));
         Tint.Validate();
+        Placement?.Validate();
         return this;
     }
 }
@@ -132,10 +147,28 @@ public sealed record ViewState(
     StageId StageId,
     ViewPose Pose);
 
+public sealed record SplitLayout(float Divider = 50, float Angle = 0,
+    DirectionPoint? MainAt = null, DirectionPoint? InsetAt = null)
+{
+    public SplitLayout Validate()
+    {
+        if (!float.IsFinite(Divider) || Divider < 0 || Divider > 100)
+            throw new ArgumentOutOfRangeException(nameof(Divider));
+        if (!float.IsFinite(Angle) || Angle <= -90 || Angle >= 90)
+            throw new ArgumentOutOfRangeException(nameof(Angle));
+        foreach (var point in new[] { MainAt, InsetAt })
+            if (point is { } value && (!float.IsFinite(value.X) || !float.IsFinite(value.Y)))
+                throw new ArgumentOutOfRangeException(nameof(MainAt));
+        return this;
+    }
+}
+
 public sealed record ScreenState(
     LayoutId Layout,
     IReadOnlyDictionary<LayoutSlotId, ViewId> Bindings)
 {
+    public SplitLayout? Split { get; init; }
+
     public static ScreenState Default { get; } = new(
         LayoutId.SingleLayout,
         DirectionCollections.Freeze(new Dictionary<LayoutSlotId, ViewId>
@@ -250,6 +283,9 @@ public sealed record DirectionState(
 
         if (string.IsNullOrWhiteSpace(Screen.Layout.Value) || Screen.Bindings is null)
             throw new DirectionException("Direction screen is incomplete.");
+        Screen.Split?.Validate();
+        if (Screen.Split is not null && !Screen.Layout.Value.Equals("split", StringComparison.OrdinalIgnoreCase))
+            throw new DirectionException("Split parameters require the split layout.");
         var requiredSlots = DirectionLayoutCatalog.RequiredSlots(Screen.Layout);
         if (
             requiredSlots.Any(slot => !Screen.Bindings.ContainsKey(slot)) ||

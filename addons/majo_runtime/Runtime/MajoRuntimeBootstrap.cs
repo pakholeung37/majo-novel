@@ -108,6 +108,8 @@ public partial class MajoRuntimeBootstrap : Node
     public Action<CommandRegistrationContext>? ConfigureCommands { get; set; }
 
 
+    public Action<Majo.Runtime.Direction.Execution.ScenePreparationRegistry>? ConfigureScenePreparation { get; set; }
+
     public Action<ResourceProviderRegistry>? ConfigureResourceProviders { get; set; }
 
     public IResourcePathResolver? ResourcePathResolver { get; set; }

@@ -58,6 +58,7 @@ public partial class ManosabaDemoController : Node
 			var runtime = new MajoRuntimeBootstrap
 			{
 				Name = "ManosabaRuntime",
+                ConfigureScenePreparation = scenes => scenes.Register("act01_chapter01_trial00", ManosabaCourtPreparation.PrepareAsync),
 				Configuration = configuration,
 				ResolveSpeakerName = characterNames.Resolve,
 				ConfigureServices = services =>

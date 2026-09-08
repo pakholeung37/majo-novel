@@ -16,6 +16,8 @@ public sealed class DirectionAuthoringValueTests
     [Theory]
     [InlineData("0,100", 0, 100)]
     [InlineData(" 30.5, 0 ", 30.5, 0)]
+    [InlineData("101,0", 101, 0)]
+    [InlineData("-1,0", -1, 0)]
     public void CoordinatesRoundTrip(string text, float x, float y)
     {
         var converter = PositionRefConverter.Instance;
@@ -28,8 +30,6 @@ public sealed class DirectionAuthoringValueTests
     [InlineData("30,abc")]
     [InlineData("NaN,0")]
     [InlineData("0,Infinity")]
-    [InlineData("101,0")]
-    [InlineData("-1,0")]
     [InlineData("1,2,3")]
     public void CompilerAndConverterRejectTheSameInvalidCoordinates(string text)
     {
