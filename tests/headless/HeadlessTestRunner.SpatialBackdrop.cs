@@ -61,6 +61,32 @@ public partial class HeadlessTestRunner
         Assert(((Vector2)rightMask.GetShaderParameter("anchor")).IsEqualApprox(new Vector2(.75f, .5f)), "Legacy inset must retain three-quarter-screen framing.");
         host.PublishScreen(ScreenState.Default);
         Assert(Mathf.IsEqualApprox((float)leftMask.GetShaderParameter("divider"), 1), "Returning to single must remove the split mask.");
+        if (DisplayServer.GetName() != "headless")
+        {
+            using var blue = SolidTexture(Colors.Blue);
+            foreach (var angle in new[] { -25f, 10f, 35f })
+            {
+                host.PublishScreen(splitState with { Split = new SplitLayout(50, angle) });
+                leftOutput.Texture = texture;
+                rightOutput.Texture = blue;
+                using var rendered = await ReadTransitionFrameAsync(host.ScreenViewport);
+                var mixed = 0;
+                for (var y = 1; y < rendered.GetHeight() - 1; y++)
+                {
+                    var boundary = rendered.GetWidth() * .5f -
+                        (y + .5f - rendered.GetHeight() * .5f) * Mathf.Tan(Mathf.DegToRad(angle));
+                    for (var x = Mathf.FloorToInt(boundary) - 2; x <= Mathf.CeilToInt(boundary) + 2; x++)
+                    {
+                        var pixel = rendered.GetPixel(x, y);
+                        Assert(pixel.R + pixel.B > .95f,
+                            "Antialiased split must not expose a dark clear-color seam.");
+                        if (pixel.R > .02f && pixel.B > .02f) mixed++;
+                    }
+                }
+                Assert(mixed > rendered.GetHeight() / 4,
+                    "Diagonal split must contain fractional pixel coverage, not a hard staircase.");
+            }
+        }
         await host.ShutdownAsync(CancellationToken.None);
         owner.QueueFree();
     }

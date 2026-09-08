@@ -408,7 +408,7 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService
             var view = RequireView(pair.Value);
             output.Texture = view.Viewport.GetTexture();
             output.Visible = true;
-            ApplyScreenSlot(output, state, pair.Key, ToSize(owner.GetViewport().GetVisibleRect().Size));
+            ApplyScreenSlot(output, state, pair.Key, ScreenViewport.Size);
         }
     }
 
@@ -430,7 +430,7 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService
             output.Texture = view.Viewport.GetTexture();
             var hasTarget = state.Bindings.ContainsKey(slot);
             output.Visible = hasTarget || progress < 1;
-            ApplyScreenSlot(output, state, slot, ToSize(owner.GetViewport().GetVisibleRect().Size), before, progress);
+            ApplyScreenSlot(output, state, slot, ScreenViewport.Size, before, progress);
         }
     }
 
@@ -666,14 +666,20 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService
             if (view.PublishedView is not null)
                 ApplyViewPose(view.Id, view.CurrentPose);
         }
-        var screenSize = visibleSize.X > 0 && visibleSize.Y > 0
+        var outputSize = visibleSize.X > 0 && visibleSize.Y > 0
             ? ToSize(visibleSize)
             : resolution;
+        // Keep composition at the view's pixel density, rather than downsampling to
+        // root canvas coordinates before the window stretches it back up. Preserve
+        // the output aspect ratio for expanded windows; only the final output uses
+        // logical canvas dimensions.
+        var screenSize = ToSize(new Vector2(
+            (float)outputSize.X / outputSize.Y * resolution.Y, resolution.Y));
         ScreenViewport.Size = screenSize;
         SetFullRect(ScreenCanvas, screenSize);
-        SetFullRect(LiveOutput, screenSize);
-        SetFullRect(ScreenTransitionSource, screenSize);
-        SetFullRect(Curtain, screenSize);
+        SetFullRect(LiveOutput, outputSize);
+        SetFullRect(ScreenTransitionSource, outputSize);
+        SetFullRect(Curtain, outputSize);
 
         foreach (var pair in screenSlots)
             if (pair.Value.Visible)

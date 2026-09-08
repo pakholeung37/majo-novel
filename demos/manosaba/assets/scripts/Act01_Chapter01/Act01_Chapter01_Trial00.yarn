@@ -181,10 +181,10 @@ Meruru: ……虽然，这只是我的感觉。 #line:0101Trial00_Meruru009
 // <<autoSave>>
 Ema: 梅露露……！ #line:0101Trial00_Ema004
 
-<<character Ema appearance:Determined2,ArmR3,ArmL7 via:cut>>
 
 <<camera view:trial_b preset:ema_close via:cut>>
 <<beat begin>>
+<<character Ema appearance:Determined2,ArmR3,ArmL7 via:cut>>
 <<camera move view:trial_b preset:ema_close zoom:2.88 duration:2 ease:sine-out>>
 <<screen show trial_b via:cut>>
 <<beat end wait:false>>

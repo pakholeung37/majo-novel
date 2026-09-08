@@ -10,28 +10,8 @@ internal sealed partial class GodotDirectionRenderHost
 {
     // Slots sample independently positioned full camera images. Both halves use the same
     // screen-space line; camera rotation and zoom never enter the mask calculation.
-    private const string ScreenSlotShader = """
-        shader_type canvas_item;
-        render_mode unshaded;
-        uniform vec2 screen_size;
-        uniform vec2 anchor;
-        uniform vec2 sample_size;
-        uniform vec4 clip_rect;
-        uniform float divider;
-        uniform float angle;
-        uniform bool right_side;
-        void fragment() {
-            vec2 p = UV;
-            float d = dot((p - vec2(divider, 0.5)) * screen_size, vec2(cos(angle), sin(angle)));
-            if ((right_side && d < 0.0) || (!right_side && d >= 0.0) ||
-                p.x < clip_rect.x || p.y < clip_rect.y ||
-                p.x >= clip_rect.z || p.y >= clip_rect.w) discard;
-            vec2 source_uv = (p - anchor) / sample_size + vec2(0.5);
-            if (any(lessThan(source_uv, vec2(0.0))) || any(greaterThan(source_uv, vec2(1.0))))
-                COLOR = vec4(0.0, 0.0, 0.0, 1.0);
-            else COLOR = texture(TEXTURE, source_uv);
-        }
-        """;
+    private const string ScreenSlotShaderPath =
+        "res://addons/majo_runtime/Runtime/Direction/Shaders/ScreenSlot.gdshader";
 
     private readonly record struct SlotPlacement(Vector2 Anchor, Vector2 SampleSize,
         Vector4 Clip, float Divider, float Angle);
@@ -69,10 +49,17 @@ internal sealed partial class GodotDirectionRenderHost
         var material = output.Material as ShaderMaterial;
         if (material is null)
         {
-            material = new ShaderMaterial { Shader = new Shader { Code = ScreenSlotShader } };
+            material = new ShaderMaterial
+            {
+                Shader = ResourceLoader.Load<Shader>(ScreenSlotShaderPath) ??
+                    throw new InvalidOperationException(
+                        $"Screen slot shader could not be loaded: '{ScreenSlotShaderPath}'."),
+            };
             output.Material = material;
         }
         SetFullRect(output, size);
+        // Inset must blend over main regardless of binding insertion order.
+        output.ZIndex = slot.Value == "inset" ? 1 : 0;
         output.StretchMode = TextureRect.StretchModeEnum.Scale;
         material.SetShaderParameter("screen_size", new Vector2(size.X, size.Y));
         material.SetShaderParameter("anchor", from.Anchor.Lerp(target.Anchor, progress));
