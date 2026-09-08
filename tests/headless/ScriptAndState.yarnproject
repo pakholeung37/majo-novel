@@ -1,0 +1,8 @@
+{
+    "projectFileVersion": 3,
+    "sourceFiles": [
+        "ScriptAndState.yarn"
+    ],
+    "excludeFiles": [],
+    "baseLanguage": "en"
+}

@@ -62,7 +62,7 @@ public partial class HeadlessTestRunner : Node
     {
         if (OS.GetCmdlineUserArgs().Contains("--majo-direction-slots"))
         {
-            await ValidateActorSlotsAsync();
+            await MeasureAsync(nameof(ValidateActorSlotsAsync), ValidateActorSlotsAsync);
             return;
         }
 
@@ -73,12 +73,12 @@ public partial class HeadlessTestRunner : Node
 
         if (OS.GetCmdlineUserArgs().Contains("--transition-regressions", StringComparer.Ordinal))
         {
-            await ValidateTransitionRegressionsAsync();
+            await MeasureAsync(nameof(ValidateTransitionRegressionsAsync), ValidateTransitionRegressionsAsync);
             return;
         }
         if (OS.GetCmdlineUserArgs().Contains("--preload-regressions", StringComparer.Ordinal))
         {
-            await ValidateWindowPreloadingAsync();
+            await MeasureAsync(nameof(ValidateWindowPreloadingAsync), ValidateWindowPreloadingAsync);
             return;
         }
         var dependencyStatus = YarnDependencyValidator.ValidateProject(
@@ -86,29 +86,48 @@ public partial class HeadlessTestRunner : Node
         Assert(dependencyStatus.IsCompatible, dependencyStatus.Message);
 
         ValidateConfigurationDiagnostics();
-        await ValidateAudioRuntimeAsync();
-        await ValidateInputRuntimeAsync();
-        await ValidateYarnVmStateBridgeAsync();
-        await ValidateYarnHotReloadAsync();
-        await ValidateScriptAndStateRuntimeAsync();
-        await ValidateAutoAndHistoryRuntimeAsync();
-        await ValidateSettingsRuntimeAsync();
-        await ValidateLocaleRuntimeAsync();
-        await ValidateDefaultPresentationAsync();
-        await ValidateSuccessfulRuntimeLifecycleAsync();
-        await ValidateLifecycleTimeoutAsync();
-        await ValidateOperationKernelAsync();
-        await ValidateDirectionRenderingAsync();
-        await ValidateTransitionRegressionsAsync();
-        await ValidateActorSystemAsync();
-        await ValidateLayeredCharacterAsync();
-        await ValidateWindowPreloadingAsync();
-        await ValidateActorSlotsAsync();
-        await ValidateSceneEntryBarrierAsync();
-        await ValidateYarnCommandAdapterAsync();
-        await ValidatePlayableDemoAsync();
-        await ValidateFailedConfigurationCleanupAsync();
-        await ValidateDiagnosticsRuntimeAsync();
+        await MeasureAsync(nameof(ValidateAudioRuntimeAsync), ValidateAudioRuntimeAsync);
+        await MeasureAsync(nameof(ValidateInputRuntimeAsync), ValidateInputRuntimeAsync);
+        await MeasureAsync(nameof(ValidateYarnVmStateBridgeAsync), ValidateYarnVmStateBridgeAsync);
+        await MeasureAsync(nameof(ValidateYarnHotReloadAsync), ValidateYarnHotReloadAsync);
+        await MeasureAsync(nameof(ValidateScriptAndStateRuntimeAsync), ValidateScriptAndStateRuntimeAsync);
+        await MeasureAsync(nameof(ValidateAutoAndHistoryRuntimeAsync), ValidateAutoAndHistoryRuntimeAsync);
+        await MeasureAsync(nameof(ValidateSettingsAndLocaleRuntimeAsync), ValidateSettingsAndLocaleRuntimeAsync);
+        await MeasureAsync(nameof(ValidateDefaultPresentationAsync), ValidateDefaultPresentationAsync);
+        await MeasureAsync(nameof(ValidateSuccessfulRuntimeLifecycleAsync), ValidateSuccessfulRuntimeLifecycleAsync);
+        await MeasureAsync(nameof(ValidateLifecycleTimeoutAsync), ValidateLifecycleTimeoutAsync);
+        await MeasureAsync(nameof(ValidateOperationKernelAsync), ValidateOperationKernelAsync);
+        await MeasureAsync(nameof(ValidateDirectionRenderingAsync), ValidateDirectionRenderingAsync);
+        await MeasureAsync(nameof(ValidateTransitionRegressionsAsync), ValidateTransitionRegressionsAsync);
+        await MeasureAsync(nameof(ValidateActorSystemAsync), ValidateActorSystemAsync);
+        await MeasureAsync(nameof(ValidateLayeredCharacterAsync), ValidateLayeredCharacterAsync);
+        await MeasureAsync(nameof(ValidateWindowPreloadingAsync), ValidateWindowPreloadingAsync);
+        await MeasureAsync(nameof(ValidateActorSlotsAsync), ValidateActorSlotsAsync);
+        await MeasureAsync(nameof(ValidateSceneEntryBarrierAsync), ValidateSceneEntryBarrierAsync);
+        await MeasureAsync(nameof(ValidateYarnCommandAdapterAsync), ValidateYarnCommandAdapterAsync);
+        await MeasureAsync(nameof(ValidateFailedConfigurationCleanupAsync), ValidateFailedConfigurationCleanupAsync);
+        await MeasureAsync(nameof(ValidateDiagnosticsRuntimeAsync), ValidateDiagnosticsRuntimeAsync);
+    }
+
+    private static MajoProjectConfiguration CreateHeadlessConfiguration()
+    {
+        var configuration = MajoProjectConfiguration.CreateDefault();
+        // Only the hot-reload regression opts into watchers and source scans.
+        configuration.Dialogue!.HotReload.Enabled = false;
+        return configuration;
+    }
+
+    private static async Task MeasureAsync(string name, Func<Task> test)
+    {
+        var timer = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            await test();
+        }
+        finally
+        {
+            GD.Print($"[headless timing] {name}: {timer.Elapsed.TotalMilliseconds:F0} ms");
+        }
     }
 
     private static ActorDefinitionConfiguration CreateActorDefinition(

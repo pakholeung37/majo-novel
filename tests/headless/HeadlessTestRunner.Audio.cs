@@ -15,7 +15,7 @@ public partial class HeadlessTestRunner
 {
     private async Task ValidateAudioRuntimeAsync()
     {
-        var configuration = MajoProjectConfiguration.CreateDefault();
+        var configuration = CreateHeadlessConfiguration();
         var loader = new HeadlessAudioClipLoader()
             .Register("calm")
             .Register("battle")

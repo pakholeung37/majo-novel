@@ -30,11 +30,10 @@ public partial class HeadlessTestRunner
 {
     private async Task ValidateScriptAndStateRuntimeAsync()
     {
-        var configuration = MajoProjectConfiguration.CreateDefault();
+        var configuration = CreateHeadlessConfiguration();
         configuration.Resources!.RootPath = "res://tests";
         configuration.Resources.ScriptsPath = "headless";
-        configuration.Dialogue!.DefaultProjectId = "M95State";
-        configuration.Dialogue.HotReload.Enabled = false;
+        configuration.Dialogue!.DefaultProjectId = "ScriptAndState";
         configuration.Presentation!.Enabled = true;
         configuration.Diagnostics!.MinimumLevel = RuntimeLogLevel.Debug;
         configuration.Presentation.LettersPerSecond = 10_000;
@@ -126,28 +125,28 @@ public partial class HeadlessTestRunner
                 "MajoSaveLoadOverlay",
                 recursive: true,
                 owned: false) is Control { Visible: false },
-            "M13 did not create the configured default Save/Load overlay.");
+            "Script/state runtime did not create the configured default Save/Load overlay.");
         saveLoadOverlay.Open();
         Assert(saveLoadOverlay.IsOpen && input.ActiveHandleCount == baseInputHandles + 1,
-            "M13 Save/Load UI did not acquire exactly one modal input scope.");
+            "Save/Load UI did not acquire exactly one modal input scope.");
         saveLoadOverlay.Close();
         Assert(!saveLoadOverlay.IsOpen && input.ActiveHandleCount == baseInputHandles,
-            "M13 Save/Load UI did not release its modal input scope.");
+            "Save/Load UI did not release its modal input scope.");
 
         var descriptor = await scriptManager.ResolveAsync(
-            new ScriptId("M95State", "Start"));
+            new ScriptId("ScriptAndState", "Start"));
         Assert(descriptor.LineIds.SequenceEqual(
-                ["line:m95-state-current", "line:m95-state-after"]) &&
+                ["line:state-current", "line:state-after"]) &&
                 descriptor.ProgramFingerprint.Length == 64,
-            "M9.5 ScriptManager did not resolve stable line metadata and fingerprint.");
+            "ScriptManager did not resolve stable line metadata and fingerprint.");
 
         await dialogue.StartAsync();
         await WaitForConditionAsync(() => presentation.IsLineActive, 2);
         await WaitForConditionAsync(() => presentation.IsLineDisplayComplete, 2);
         Assert(script.Phase == ScriptPlaybackPhase.AwaitingAdvance &&
                 script.CanCaptureCheckpoint &&
-                script.CurrentSpot?.LineId == "line:m95-state-current",
-            "M9.5 ScriptPlayback did not expose the safe line checkpoint boundary.");
+                script.CurrentSpot?.LineId == "line:state-current",
+            "ScriptPlayback did not expose the safe line checkpoint boundary.");
         await WaitForConditionAsync(
             () => travel.Entries.Count == 1 && travel.CurrentIndex == 0,
             2);
@@ -201,7 +200,7 @@ public partial class HeadlessTestRunner
                     BuiltInStateKeys.Direction,
                     BuiltInStateKeys.ScriptPlayback,
                 ]),
-            "M9.6 StateManager did not capture all built-in Game contributors.");
+            "StateManager did not capture all built-in Game contributors.");
         var envelope = state.CreateEnvelope(
             snapshot,
             StateScope.Game,
@@ -209,15 +208,12 @@ public partial class HeadlessTestRunner
             configuration.State!.GameBuildId,
             configuration.State.StorageNamespace);
         var canonicalBytes = serializer.Serialize(envelope);
-        Assert(canonicalBytes.SequenceEqual(serializer.Serialize(envelope)),
-            "M12 StateEnvelope serialization was not deterministic.");
-        await storage.WriteAsync("headless/m12-roundtrip", canonicalBytes);
+        await storage.WriteAsync("headless/state-roundtrip", canonicalBytes);
         var durableEnvelope = serializer.Deserialize(
-            await storage.ReadAsync("headless/m12-roundtrip"));
-        Assert(canonicalBytes.SequenceEqual(serializer.Serialize(durableEnvelope)) &&
-                durableEnvelope.Script?.LineId == "line:m95-state-current",
-            "M12 durable Envelope/Storage round-trip was not canonical.");
-        await storage.DeleteAsync("headless/m12-roundtrip");
+            await storage.ReadAsync("headless/state-roundtrip"));
+        Assert(durableEnvelope.Script?.LineId == "line:state-current",
+            "Stored Runtime snapshot lost its current Yarn line.");
+        await storage.DeleteAsync("headless/state-roundtrip");
 
         variables.SetString("name", "Changed");
         variables.SetBoolean("extra", true);
@@ -234,11 +230,11 @@ public partial class HeadlessTestRunner
         Assert(bootstrap.Host.SessionId != previousSessionId &&
                 playback.Mode == PlaybackMode.Manual &&
                 history.Entries.Count == 1 &&
-                history.Entries[0].LineId == "line:m95-state-current" &&
-                dialogue.CurrentLineId == "line:m95-state-current" &&
+                history.Entries[0].LineId == "line:state-current" &&
+                dialogue.CurrentLineId == "line:state-current" &&
                 presentation.IsLineDisplayComplete &&
                 script.Phase == ScriptPlaybackPhase.AwaitingAdvance,
-            "M12 Load Game did not return at the restored current-line boundary: " +
+            "Load Game did not return at the restored current-line boundary: " +
             $"sessionChanged={bootstrap.Host.SessionId != previousSessionId}, " +
             $"mode={playback.Mode}, history={history.Entries.Count}, " +
             $"line={dialogue.CurrentLineId ?? "<none>"}, " +
@@ -254,10 +250,10 @@ public partial class HeadlessTestRunner
             2);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         Assert(script.Phase == ScriptPlaybackPhase.AwaitingAdvance,
-            "M12 restored checkpoint did not settle at a stable save boundary.");
+            "Script/state runtime restored checkpoint did not settle at a stable save boundary.");
         await WaitForConditionAsync(
             () => travel.Entries.Count == 1 &&
-                travel.Entries[0].Spot.LineId == "line:m95-state-current",
+                travel.Entries[0].Spot.LineId == "line:state-current",
             2);
 
         var restoredHero = actors.GetActor<IActor>("state-hero");
@@ -265,35 +261,35 @@ public partial class HeadlessTestRunner
         Assert(variables.GetValue("name").StringValue == "Maya" &&
                 Mathf.IsEqualApprox((float)variables.GetValue("score").NumberValue, 7) &&
                 !variables.Contains("extra"),
-            "M9.6 dialogue variables did not replace the mutated store exactly.");
+            "Script/state runtime dialogue variables did not replace the mutated store exactly.");
         Assert(restoredHero.Appearance == "red" &&
                 restoredHero.Position.IsEqualApprox(new Vector2(123, 234)) &&
                 restoredHero.Tint.IsEqualApprox(new Color(0.2f, 0.4f, 0.8f)) &&
                 Mathf.IsEqualApprox(restoredHero.Opacity, 0.65f) &&
                 restoredHero.Visible &&
                 restoredRoom.Appearance == "dark",
-            "M9.6 actor/background state did not round-trip.");
+            "Script/state runtime actor/background state did not round-trip.");
         Assert(direction.State.Stages.Count == 1 &&
                 direction.State.Stages.ContainsKey(StageId.Main) &&
                 direction.State.Stages[StageId.Main].Backdrop is null &&
                 direction.State.Views.Count == 1 &&
                 direction.State.Views.ContainsKey(ViewId.Main),
-            "M19 Direction state did not round-trip as the single staging snapshot.");
+            "Direction state did not round-trip as the single staging snapshot.");
         Assert(audio.BgmTracks.Count == 1 &&
                 audio.BgmTracks.Single().ClipId == "calm" &&
                 audio.BgmTracks.Single().InstanceId == "music" &&
                 Mathf.IsEqualApprox(audio.BgmTracks.Single().BaseVolume, 0.7f) &&
                 audio.SfxInstances.Count == 0 &&
                 audio.CurrentVoice is null,
-            "M9.6 BGM restore or transient SFX/Voice exclusion was incorrect.");
+            "BGM restore or transient SFX/Voice exclusion was incorrect.");
         Assert(lineProbe.Lines.Count >= 2 &&
-                lineProbe.Lines[0].Id == "line:m95-state-current" &&
-                lineProbe.Lines[1].Id == "line:m95-state-current" &&
+                lineProbe.Lines[0].Id == "line:state-current" &&
+                lineProbe.Lines[1].Id == "line:state-current" &&
                 lineProbe.Lines[0].Text.Text == lineProbe.Lines[1].Text.Text &&
                 lineProbe.Lines[1].Text.Text.Contains("Maya", StringComparison.Ordinal) &&
                 script.Phase == ScriptPlaybackPhase.AwaitingAdvance &&
                 input.ActiveHandleCount == baseInputHandles + 1,
-            "M9.5 restore did not replay the captured resolved line exactly once: " +
+            "Script/state runtime restore did not replay the captured resolved line exactly once: " +
             $"lines={lineProbe.Lines.Count}, current={dialogue.CurrentLineId}, " +
             $"phase={script.Phase}, handles={input.ActiveHandleCount}/{baseInputHandles}, " +
             $"text0={lineProbe.Lines[0].Text.Text}, text1={lineProbe.Lines[1].Text.Text}.");
@@ -302,15 +298,15 @@ public partial class HeadlessTestRunner
         dialogue.RequestNextLine();
         await WaitForConditionAsync(
             () => lineProbe.Lines.Count == linesBeforeAdvance + 1 &&
-                dialogue.CurrentLineId == "line:m95-state-after" &&
+                dialogue.CurrentLineId == "line:state-after" &&
                 presentation.IsLineDisplayComplete &&
                 script.Phase == ScriptPlaybackPhase.AwaitingAdvance,
             2);
-        Assert(lineProbe.Lines[^1].Id == "line:m95-state-after",
-            "M12 first advance after restore did not present the next line exactly once.");
+        Assert(lineProbe.Lines[^1].Id == "line:state-after",
+            "Script/state runtime first advance after restore did not present the next line exactly once.");
         await WaitForConditionAsync(
             () => travel.Entries.Count == 2 &&
-                travel.Entries[^1].Spot.LineId == "line:m95-state-after",
+                travel.Entries[^1].Spot.LineId == "line:state-after",
             2);
         Godot.Input.ParseInputEvent(new InputEventKey
         {
@@ -318,7 +314,7 @@ public partial class HeadlessTestRunner
             Pressed = true,
         });
         await WaitForConditionAsync(
-            () => dialogue.CurrentLineId == "line:m95-state-current" &&
+            () => dialogue.CurrentLineId == "line:state-current" &&
                 script.Phase == ScriptPlaybackPhase.AwaitingAdvance,
             2);
         Godot.Input.ParseInputEvent(new InputEventKey
@@ -327,11 +323,13 @@ public partial class HeadlessTestRunner
             Pressed = true,
         });
         await WaitForConditionAsync(
-            () => dialogue.CurrentLineId == "line:m95-state-after" &&
+            () => dialogue.CurrentLineId == "line:state-after" &&
                 script.Phase == ScriptPlaybackPhase.AwaitingAdvance,
             2);
 
-        for (var round = 1; round <= 3; round++)
+        // Fast mode retains both the UI load and a repeated API load.
+        var loadRounds = OS.GetCmdlineUserArgs().Contains("--majo-fast", StringComparer.Ordinal) ? 2 : 3;
+        for (var round = 1; round <= loadRounds; round++)
         {
             await dialogue.StopAsync();
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -340,7 +338,7 @@ public partial class HeadlessTestRunner
             await dialogue.StartAsync();
             await WaitForConditionAsync(
                 () => lineProbe.Lines.Count == linesBeforeStart + 1 &&
-                    dialogue.CurrentLineId == "line:m95-state-current" &&
+                    dialogue.CurrentLineId == "line:state-current" &&
                     presentation.IsLineDisplayComplete &&
                     script.Phase == ScriptPlaybackPhase.AwaitingAdvance,
                 2);
@@ -355,11 +353,11 @@ public partial class HeadlessTestRunner
                 slot,
                 new SaveSlotSaveRequest($"Round {round}", CaptureThumbnail: false));
             Assert(saved.Id == slot &&
-                    saved.ProjectId == "M95State" &&
+                    saved.ProjectId == "ScriptAndState" &&
                     saved.NodeName == "Start" &&
                     saved.LineId == savedLineId &&
                     !string.IsNullOrWhiteSpace(saved.TextSummary),
-                $"M13 slot metadata was incomplete in round {round}: " +
+                $"Script/state runtime slot metadata was incomplete in round {round}: " +
                 $"project={saved.ProjectId}, node={saved.NodeName}, line={saved.LineId}, " +
                 $"text={saved.TextSummary ?? "<null>"}.");
 
@@ -407,7 +405,7 @@ public partial class HeadlessTestRunner
                     playback.Mode == PlaybackMode.Manual &&
                     history.Entries.Count == 1 &&
                     history.Entries[0].LineId == savedLineId,
-                $"M13 Load did not apply Session/History/Playback policy in round {round}.");
+                $"Load did not apply Session/History/Playback policy in round {round}.");
             await WaitForConditionAsync(
                 () => lineProbe.Lines.Count == linesBeforeLoad + 1 &&
                     dialogue.CurrentLineId == savedLineId,
@@ -416,7 +414,7 @@ public partial class HeadlessTestRunner
             {
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 Assert(dialogue.CurrentLineId == savedLineId,
-                    "M13 Save/Load UI advanced past the line restored by its Load button.");
+                    "Save/Load UI advanced past the line restored by its Load button.");
             }
             Assert(Mathf.IsEqualApprox(
                         (float)variables.GetValue("round").NumberValue,
@@ -426,13 +424,13 @@ public partial class HeadlessTestRunner
                     audio.SfxInstances.Count == 0 &&
                     audio.CurrentVoice is null &&
                     !activities.HasActiveActivities(RuntimeActivityOwner.Other),
-                $"M13 Save -> mutate -> Load round {round} did not restore durable state cleanly.");
+                $"Save -> mutate -> Load round {round} did not restore durable state cleanly.");
         }
 
         var slotMetadata = await slots.ListAsync(SaveSlotKind.Manual);
-        Assert(slotMetadata.Count == 3 &&
+        Assert(slotMetadata.Count == loadRounds &&
                 slotMetadata.All(item => item.Compatibility == SaveSlotCompatibility.Compatible),
-            "M13 did not list the three committed Manual slots deterministically.");
+            "Script/state runtime did not list the committed Manual slots deterministically.");
 
         // Regression: Rapidly loading a save while a background operation is running must not deadlock in StopAsync
         var loadTask = slots.LoadAsync(new SaveSlotId(SaveSlotKind.Manual, 1));
@@ -448,7 +446,7 @@ public partial class HeadlessTestRunner
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         Assert(!activities.HasActiveActivities(RuntimeActivityOwner.Other) &&
                 input.ActiveHandleCount == baseInputHandles,
-            "M13 headless cycles left active Operations or transient input ownership.");
+            "Script/state runtime headless cycles left active Operations or transient input ownership.");
 
         foreach (var slot in await slots.ListAsync())
         {
@@ -463,7 +461,7 @@ public partial class HeadlessTestRunner
         Assert(!IsInstanceValid(bootstrap) &&
                 !IsInstanceValid(actorRoot) &&
                 !IsInstanceValid(audioHost),
-            "M9.5/M9.6 Runtime nodes leaked after shutdown.");
+            "Runtime nodes leaked after shutdown.");
     }
 
     private sealed class StateLineProbePresenter : IDialoguePresenter

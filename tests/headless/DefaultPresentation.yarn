@@ -1,0 +1,10 @@
+title: Start
+tags: headless presentation
+---
+Narrator: [mystery count=3 enabled=true label="alpha"][b]A deliberately long first line[/b] for the native typewriter.[/mystery] #line:presentation-first
+<<wait 0.2>>
+-> First route
+    Narrator: first route selected #line:presentation-first-option
+-> Second route
+    Narrator: second route selected #line:presentation-second-option
+===

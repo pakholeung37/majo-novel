@@ -18,7 +18,7 @@ public partial class HeadlessTestRunner
         var bootstrap = new MajoRuntimeBootstrap
         {
             Name = "SuccessfulRuntime",
-            Configuration = MajoProjectConfiguration.CreateDefault(),
+            Configuration = CreateHeadlessConfiguration(),
             ConfigureServices = services =>
                 services.AddSingleton(_ => service),
         };
@@ -62,7 +62,7 @@ public partial class HeadlessTestRunner
     private async Task ValidateLifecycleTimeoutAsync()
     {
         var service = new NonCooperativeInitializationService();
-        var configuration = MajoProjectConfiguration.CreateDefault();
+        var configuration = CreateHeadlessConfiguration();
         // The production graph now includes the Direction render chain, whose
         // initial render fence can legitimately consume more than one 50 ms
         // frame in headless mode. Keep the deadline short while allowing the
@@ -144,7 +144,7 @@ public partial class HeadlessTestRunner
 
     private static void ValidateConfigurationDiagnostics()
     {
-        var configuration = MajoProjectConfiguration.CreateDefault();
+        var configuration = CreateHeadlessConfiguration();
         configuration.Actors!.Actors.Add(new ActorDefinitionConfiguration
         {
             Id = "hero",
@@ -209,7 +209,7 @@ public partial class HeadlessTestRunner
                     issue.Path.StartsWith("History", StringComparison.Ordinal)) == 1,
             "Invalid M10 Auto/History values were not diagnosed together.");
 
-        var customActorConfiguration = MajoProjectConfiguration.CreateDefault();
+        var customActorConfiguration = CreateHeadlessConfiguration();
         customActorConfiguration.Actors!.Actors.Add(new ActorDefinitionConfiguration
         {
             Id = "custom",

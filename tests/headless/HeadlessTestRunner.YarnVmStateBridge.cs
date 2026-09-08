@@ -17,7 +17,7 @@ public partial class HeadlessTestRunner
     private async Task ValidateYarnVmStateBridgeAsync()
     {
         var presenter = new BlockingBridgePresenter();
-        var configuration = MajoProjectConfiguration.CreateDefault();
+        var configuration = CreateHeadlessConfiguration();
         configuration.Resources!.RootPath = "res://tests";
         configuration.Resources.ScriptsPath = "headless";
         configuration.Dialogue!.DefaultProjectId = "YarnVmBridge";

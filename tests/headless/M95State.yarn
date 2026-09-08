@@ -1,7 +1,0 @@
-title: Start
-tags: headless state
----
-<<declare $name = "Maya">>
-Narrator: Hello, {$name}. #line:m95-state-current
-Narrator: State restored. #line:m95-state-after
-===

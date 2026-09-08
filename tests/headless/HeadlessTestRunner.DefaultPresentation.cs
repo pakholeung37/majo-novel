@@ -27,28 +27,28 @@ public partial class HeadlessTestRunner
         var customScene = new PackedScene();
         var defaultScene = ResourceLoader.Load<PackedScene>(
             DialoguePresentationConfiguration.DefaultScenePath);
-        Assert(defaultScene is not null, "M8 default Presenter scene could not be loaded.");
+        Assert(defaultScene is not null, "Default Presenter scene could not be loaded.");
         var templateRoot = defaultScene!.Instantiate<Control>();
-        templateRoot.SetMeta("m8_custom_scene", true);
+        templateRoot.SetMeta("presentation_custom_scene", true);
         var packResult = customScene.Pack(templateRoot);
         templateRoot.Free();
-        Assert(packResult == Error.Ok, "M8 custom Presenter scene could not be packed.");
+        Assert(packResult == Error.Ok, "Custom Presenter scene could not be packed.");
 
-        var configuration = MajoProjectConfiguration.CreateDefault();
+        var configuration = CreateHeadlessConfiguration();
         configuration.Resources!.RootPath = "res://tests";
         configuration.Resources.ScriptsPath = "headless";
-        configuration.Dialogue!.DefaultProjectId = "M8Presentation";
+        configuration.Dialogue!.DefaultProjectId = "DefaultPresentation";
         configuration.Presentation!.Enabled = true;
         configuration.Presentation.PresenterScene = customScene;
         configuration.Presentation.LettersPerSecond = 1;
         configuration.Presentation.UseFadeEffect = false;
 
         var handlerOrder = new List<string>();
-        var firstHandler = new M8MarkupProbe("first", handlerOrder);
-        var secondHandler = new M8MarkupProbe("second", handlerOrder);
+        var firstHandler = new PresentationMarkupProbe("first", handlerOrder);
+        var secondHandler = new PresentationMarkupProbe("second", handlerOrder);
         var bootstrap = new MajoRuntimeBootstrap
         {
-            Name = "M8Runtime",
+            Name = "DefaultPresentationRuntime",
             Configuration = configuration,
             ResolveSpeakerName = (speaker, _) => $"Resolved {speaker}",
         };
@@ -68,9 +68,9 @@ public partial class HeadlessTestRunner
             recursive: true,
             owned: false) as Control;
         Assert(presentationRoot is not null &&
-                presentationRoot.HasMeta("m8_custom_scene") &&
-                presentationRoot.GetMeta("m8_custom_scene").AsBool(),
-            "M8 ignored the configured Presenter PackedScene override.");
+                presentationRoot.HasMeta("presentation_custom_scene") &&
+                presentationRoot.GetMeta("presentation_custom_scene").AsBool(),
+            "Default presentation ignored the configured Presenter PackedScene override.");
         Assert(presentationRoot.GetParent() is CanvasLayer { Layer: 20 },
             "Default Dialogue Panel was not placed above Actor CanvasLayers.");
         var lineContent = presentationRoot.FindChild(
@@ -106,18 +106,18 @@ public partial class HeadlessTestRunner
                 nativeLineText?.BbcodeEnabled == true &&
                 nativeLinePresenter.presenterControl?.MouseFilter ==
                     Control.MouseFilterEnum.Ignore,
-            "M8 did not reuse Yarn's native letter Typewriter or allow panel clicks " +
+            "Default presentation did not reuse Yarn's native letter Typewriter or allow panel clicks " +
             "to reach Runtime input.");
         Assert(backend.Runner.dialoguePresenters is not null &&
                 !backend.Runner.dialoguePresenters.OfType<LineAdvancer>().Any(),
-            "M8 registered Yarn LineAdvancer and bypassed M7 input ownership.");
+            "Default presentation registered Yarn LineAdvancer and bypassed Runtime input ownership.");
 
         await dialogue.StartAsync();
         await WaitForConditionAsync(
             () => presentation.IsLineActive && !presentation.IsLineDisplayComplete,
             2);
-        Assert(dialogue.CurrentLineId == "line:m8-first",
-            "M8 did not publish the first line through the M6 facade.");
+        Assert(dialogue.CurrentLineId == "line:presentation-first",
+            "Default presentation did not publish the first line through the dialogue facade.");
         await WaitForConditionAsync(
             () => nativeLineText!.Text.Contains(
                 "[b]A deliberately long first line[/b]",
@@ -127,10 +127,10 @@ public partial class HeadlessTestRunner
                 "A deliberately long first line for the native typewriter.",
                 StringComparison.Ordinal) &&
                 !nativeLineText.GetParsedText().Contains("[b]", StringComparison.Ordinal),
-            "M8 did not project native Yarn style markup into RichTextLabel BBCode.");
+            "Default presentation did not project native Yarn style markup into RichTextLabel BBCode.");
         Assert(characterNamePanel?.Visible == true &&
                 characterNameText?.Text == "Resolved Narrator",
-            "M8 did not resolve the speaker name outside Yarn Spinner source.");
+            "Default presentation did not resolve the speaker name outside Yarn Spinner source.");
 
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         Godot.Input.ParseInputEvent(new InputEventKey
@@ -149,11 +149,11 @@ public partial class HeadlessTestRunner
             Pressed = false,
         });
         await WaitForConditionAsync(() => presentation.IsLineDisplayComplete, 2);
-        Assert(dialogue.CurrentLineId == "line:m8-first" &&
+        Assert(dialogue.CurrentLineId == "line:presentation-first" &&
                 !dialogue.IsPresentingOptions,
-            "M8 allowed one same-frame Advance to both hurry and dismiss a line.");
+            "Default presentation allowed one same-frame Advance to both hurry and dismiss a line.");
         Assert(firstHandler.SawCancelledCharacterToken,
-            "M8 markup handler did not receive Yarn's hurried-line cancellation token.");
+            "Default presentation markup handler did not receive Yarn's hurried-line cancellation token.");
 
         await InjectMouseClickAsync(
             nativeLinePresenter.presenterControl!.GetGlobalRect().GetCenter());
@@ -161,12 +161,12 @@ public partial class HeadlessTestRunner
             () => characterNamePanel?.Visible == false && !dialogue.IsPresentingOptions,
             1);
         Assert(characterNamePanel?.Visible == false,
-            "M8 retained the previous speaker panel during a command after its line ended.");
+            "Default presentation retained the previous speaker panel during a command after its line ended.");
         await WaitForConditionAsync(
             () => dialogue.IsPresentingOptions && presentation.IsPresentingOptions,
             2);
         Assert(characterNamePanel?.Visible == false,
-            "M8 retained the previous speaker panel after its dialogue line ended.");
+            "Default presentation retained the previous speaker panel after its dialogue line ended.");
         var visibleOptionItems = presentationRoot.FindChild(
                 "OptionContainer",
                 recursive: true,
@@ -185,14 +185,14 @@ public partial class HeadlessTestRunner
             optionButtons[index] is not null && optionButtons[index]!.IsConnected(
                 BaseButton.SignalName.Pressed,
                 Callable.From(visibleOptionItems[index].InvokeOptionSelected))),
-            "M8 option buttons were not connected to their native selection path.");
+            "Default presentation option buttons were not connected to their native selection path.");
         await InjectMouseClickAsync(Vector2.Zero);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         Assert(dialogue.IsPresentingOptions && presentation.IsPresentingOptions,
-            "M8 treated an unrelated left click as confirmation of the focused option.");
+            "Default presentation treated an unrelated left click as confirmation of the focused option.");
         optionButtons[1]!.EmitSignal(BaseButton.SignalName.Pressed);
         await WaitForConditionAsync(
-            () => dialogue.CurrentLineId == "line:m8-second-option" &&
+            () => dialogue.CurrentLineId == "line:presentation-second-option" &&
                 presentation.IsLineActive,
             2);
 
@@ -202,15 +202,15 @@ public partial class HeadlessTestRunner
         var completion = await dialogue.Completion.WaitAsync(TimeSpan.FromSeconds(2));
 
         Assert(completion.Kind == DialogueCompletionKind.Completed,
-            "M8 input-driven dialogue did not complete naturally.");
+            "Default presentation input-driven dialogue did not complete naturally.");
         Assert(!presentation.IsLineActive && !presentation.IsPresentingOptions,
-            "M8 retained active Presentation state after dialogue completion.");
+            "Default presentation retained active Presentation state after dialogue completion.");
         Assert(input.ActiveHandleCount == 3,
-            "M8 retained line or modal option input ownership after completion.");
+            "Default presentation retained line or modal option input ownership after completion.");
         Assert(handlerOrder.Take(2).SequenceEqual(ExpectedMarkupHandlerOrder),
-            "M8 markup handlers did not run in registration order.");
+            "Default presentation markup handlers did not run in registration order.");
         Assert(firstHandler.PreparedTexts.Count >= 2,
-            "M8 did not project Yarn markup for every displayed line.");
+            "Default presentation did not project Yarn markup for every displayed line.");
         var firstText = firstHandler.PreparedTexts[0];
         var unknownMarkup = firstText.Attributes.SingleOrDefault(
             attribute => attribute.Name == "mystery");
@@ -219,7 +219,7 @@ public partial class HeadlessTestRunner
                 unknownMarkup.Properties["enabled"].BooleanValue &&
                 unknownMarkup.Properties["label"].StringValue == "alpha" &&
                 !firstText.Text.Contains("mystery", StringComparison.Ordinal),
-            "M8 failed to preserve unknown Yarn markup information in its facade.");
+            "Default presentation failed to preserve unknown Yarn markup information in its facade.");
 
         await dialogue.StartAsync();
         await WaitForConditionAsync(() => presentation.IsLineActive, 2);
@@ -227,7 +227,7 @@ public partial class HeadlessTestRunner
         await dialogue.StopAsync();
         Assert((await stoppedLineCompletion).Kind == DialogueCompletionKind.Stopped &&
                 !presentation.IsLineActive && input.ActiveHandleCount == 3,
-            "M8 did not cancel and release an active native line Presenter.");
+            "Default presentation did not cancel and release an active native line Presenter.");
 
         await dialogue.StartAsync();
         await WaitForConditionAsync(() => presentation.IsLineActive, 2);
@@ -239,7 +239,7 @@ public partial class HeadlessTestRunner
         await dialogue.StopAsync();
         Assert((await stoppedOptionsCompletion).Kind == DialogueCompletionKind.Stopped &&
                 !presentation.IsPresentingOptions && input.ActiveHandleCount == 3,
-            "M8 did not cancel and release modal option Presentation.");
+            "Default presentation did not cancel and release modal option Presentation.");
 
         await dialogue.StartAsync();
         await WaitForConditionAsync(
@@ -250,7 +250,7 @@ public partial class HeadlessTestRunner
             () => presentation.IsPresentingOptions,
             2);
         Assert(playback.Mode == PlaybackMode.Manual,
-            "M15 Skip did not instantly finish the one-letter-per-second typewriter " +
+            "Skip did not instantly finish the one-letter-per-second typewriter " +
             "or return to Manual at an option boundary.");
         await dialogue.StopAsync();
 
@@ -259,8 +259,8 @@ public partial class HeadlessTestRunner
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         Assert(!IsInstanceValid(presentationNode),
-            "M8 Presenter PackedScene survived Runtime shutdown.");
-        Assert(!IsInstanceValid(bootstrap), "M8 Runtime node leaked after shutdown.");
+            "Presenter PackedScene survived Runtime shutdown.");
+        Assert(!IsInstanceValid(bootstrap), "Runtime node leaked after shutdown.");
         configuration.Presentation.PresenterScene = null;
         customScene.Dispose();
 
@@ -299,12 +299,12 @@ public partial class HeadlessTestRunner
         }
     }
 
-    private sealed class M8MarkupProbe : IDialogueMarkupHandler
+    private sealed class PresentationMarkupProbe : IDialogueMarkupHandler
     {
         private readonly string id;
         private readonly IList<string> order;
 
-        public M8MarkupProbe(string id, IList<string> order)
+        public PresentationMarkupProbe(string id, IList<string> order)
         {
             this.id = id;
             this.order = order;

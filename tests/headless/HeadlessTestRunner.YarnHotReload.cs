@@ -44,7 +44,7 @@ public partial class HeadlessTestRunner
                 """);
 
             var presenter = new HotReloadPresenter();
-            var configuration = MajoProjectConfiguration.CreateDefault();
+            var configuration = CreateHeadlessConfiguration();
             configuration.Resources!.RootPath = "res://tests";
             configuration.Resources.ScriptsPath = "headless";
             configuration.Dialogue!.DefaultProjectId = "YarnVmBridge";

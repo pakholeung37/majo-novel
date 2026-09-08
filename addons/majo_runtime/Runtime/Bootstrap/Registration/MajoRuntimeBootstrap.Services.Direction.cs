@@ -39,7 +39,7 @@ public partial class MajoRuntimeBootstrap : Node
             .AddSingleton<GodotDirectionStageBackend>(
                 resolver => new GodotDirectionStageBackend(
                     resolver.Get<GodotDirectionRenderHost>(),
-                    new DirectionTextureLoader(resolver.Get<IResourceManager>()),
+                    new DirectionTextureLoader(resolver.Get<IActorTextureLoader>()),
                     root => CreateDirectionActorManager(
                         root,
                         resolver.Get<IOperationRunner>(),
@@ -101,8 +101,6 @@ public partial class MajoRuntimeBootstrap : Node
                     var host = resolver.Get<GodotDirectionRenderHost>();
                     var drivers = resolver.Get<ITransitionDriverRegistry>();
                     var easings = resolver.Get<IEasingRegistry>();
-                    var textures = new DirectionTextureLoader(
-                        resolver.Get<IResourceManager>());
                     var backend = new CompositeDirectionPreparationBackend(
                         resolver.Get<GodotDirectionStageBackend>(),
                         new GodotDirectionViewBackend(host, drivers, easings),

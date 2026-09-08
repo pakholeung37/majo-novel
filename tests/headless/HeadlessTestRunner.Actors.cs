@@ -9,6 +9,9 @@ using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Resources;
+using Majo.Runtime.Direction.Core;
+using Majo.Runtime.Direction.Execution;
+using Majo.Runtime.Direction.Godot;
 
 namespace Majo.Runtime.HeadlessTests;
 
@@ -16,7 +19,8 @@ public partial class HeadlessTestRunner
 {
     private async Task ValidateActorSystemAsync()
     {
-        var configuration = MajoProjectConfiguration.CreateDefault();
+        var configuration = CreateHeadlessConfiguration();
+        configuration.Resources!.RootPath = "res://tests/headless/fixtures";
         configuration.Actors!.LeftPosition = new Vector2(100, 200);
         configuration.Actors.CenterPosition = new Vector2(200, 200);
         configuration.Actors.RightPosition = new Vector2(300, 200);
@@ -116,6 +120,34 @@ public partial class HeadlessTestRunner
             failOnMissingAssets: true);
         _ = AssertThrows<ResourceNotFoundException>(() => strictLoader.Load(
             new ResourceKey("characters/hero/strict-missing")));
+
+        var beats = bootstrap.Host.Services.Get<IDirectionBeatRuntime>();
+        var renderHost = bootstrap.Host.Services.Get<GodotDirectionRenderHost>();
+        var missingBackdrop = new ResourceKey("backgrounds/headless-missing");
+        beats.Begin("missing-backdrop", "test");
+        await beats.SubmitAsync(new BackdropPatch(StageId.Main,
+            new BackdropState(missingBackdrop), DirectionTransitionSpec.Cut));
+        await beats.EndAsync();
+        await beats.JoinAsync("missing-backdrop");
+        Assert(!beats.HasOpenBeat && renderHost.Backdrop.Texture is PlaceholderTexture2D,
+            "Missing backdrop must settle its beat with a placeholder.");
+        Assert(renderHost.PublishedBackdrop?.Resource == missingBackdrop &&
+            missingResources.Occurrences.Any(entry => entry.ResourceId == missingBackdrop.Path),
+            "Missing backdrop must preserve its logical resource and report the fallback.");
+        beats.Begin("after-missing-backdrop", "test");
+        await beats.SubmitAsync(new BackdropPatch(StageId.Main,
+            new BackdropState(new ResourceKey("background_dark.svg")),
+            DirectionTransitionSpec.Cut));
+        await beats.EndAsync();
+        Assert(renderHost.Backdrop.Texture is not null and not PlaceholderTexture2D,
+            "A subsequent beat must continue and load a valid backdrop.");
+        var strictDirectionLoader = new DirectionTextureLoader(strictLoader);
+        try
+        {
+            await strictDirectionLoader.LoadAsync(missingBackdrop);
+            throw new InvalidOperationException("Strict direction loading accepted a missing backdrop.");
+        }
+        catch (ResourceNotFoundException) { }
 
         character.SetPosition(configuration.Actors.LeftPosition);
         var firstMove = character.ChangePosition(

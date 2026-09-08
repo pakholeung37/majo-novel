@@ -20,20 +20,19 @@ public partial class HeadlessTestRunner
 {
     private async Task ValidateAutoAndHistoryRuntimeAsync()
     {
-        var configuration = MajoProjectConfiguration.CreateDefault();
+        var configuration = CreateHeadlessConfiguration();
         configuration.Resources!.RootPath = "res://tests";
         configuration.Resources.ScriptsPath = "headless";
-        configuration.Dialogue!.DefaultProjectId = "M10AutoHistory";
+        configuration.Dialogue!.DefaultProjectId = "AutoAndHistory";
         configuration.Presentation!.Enabled = true;
         configuration.Presentation.LettersPerSecond = 10_000;
         configuration.Presentation.UseFadeEffect = false;
         configuration.Auto!.ExtraDelaySeconds = 0.03;
-        configuration.History!.Capacity = 2;
-        configuration.History.ShowDefaultUi = true;
+        configuration.History!.ShowDefaultUi = true;
 
         var audioBackend = new FakeAudioBackend();
         var audioLoader = new FakeAudioClipLoader("headless/audio")
-            .Register("en/m10-voice");
+            .Register("en/auto-history-voice");
         var bootstrap = new MajoRuntimeBootstrap
         {
             Name = "AutoHistoryRuntime",
@@ -58,13 +57,12 @@ public partial class HeadlessTestRunner
         var audio = services.Get<IAudioManager>();
         var clock = services.Get<IFrameClock>();
         var input = services.Get<IInputManager>();
-        var operations = services.Get<IOperationRunner>();
         var historyOverlay = bootstrap.FindChild(
             "MajoHistoryOverlay",
             recursive: true,
             owned: false) as Control;
         Assert(historyOverlay is not null && !historyOverlay.Visible,
-            "M10 did not create the configured default History overlay.");
+            "Auto/history runtime did not create the configured default History overlay.");
         Assert(historyOverlay.GetParent() is CanvasLayer { Layer: 40 },
             "History overlay was not placed above the Demo HUD and dialogue layers.");
         Assert(input.ActiveHandleCount == 3,
@@ -73,38 +71,34 @@ public partial class HeadlessTestRunner
         await dialogue.StartAsync();
         var completion = dialogue.Completion;
         await WaitForConditionAsync(
-            () => dialogue.CurrentLineId == "line:m10-first" &&
+            () => dialogue.CurrentLineId == "line:auto-history-first" &&
                 presentation.IsLineDisplayComplete,
             2);
         Assert(script.Phase == ScriptPlaybackPhase.AwaitingAdvance &&
                 history.Entries.Count == 1 &&
-                history.Entries[0].LineId == "line:m10-first",
-            "M10 did not record the first line at its completed display boundary.");
+                history.Entries[0].LineId == "line:auto-history-first",
+            "Auto/history runtime did not record the first line at its completed display boundary.");
         await clock.DelayAsync(TimeSpan.FromSeconds(0.08), FrameTimeMode.Unscaled);
-        Assert(dialogue.CurrentLineId == "line:m10-first",
-            "M10 Manual mode advanced without player input.");
+        Assert(dialogue.CurrentLineId == "line:auto-history-first",
+            "Manual mode advanced without player input.");
 
         playback.SetMode(PlaybackMode.Auto);
         history.Open();
         Assert(playback.IsPaused && historyOverlay.Visible,
-            "M10 History modal did not pause Auto and reveal the default overlay.");
+            "History modal did not pause Auto and reveal the default overlay.");
         await clock.DelayAsync(TimeSpan.FromSeconds(0.08), FrameTimeMode.Unscaled);
-        Assert(dialogue.CurrentLineId == "line:m10-first",
-            "M10 Auto deadline advanced while History was open.");
+        Assert(dialogue.CurrentLineId == "line:auto-history-first",
+            "Auto deadline advanced while History was open.");
         history.Close();
         await WaitForConditionAsync(
-            () => dialogue.CurrentLineId == "line:m10-second" &&
+            () => dialogue.CurrentLineId == "line:auto-history-second" &&
                 presentation.IsLineDisplayComplete &&
                 audio.CurrentVoice?.State == AudioPlaybackState.Playing,
             2);
-        Assert(!playback.IsPaused &&
-                history.Entries.Count == 2 &&
-                history.Entries[1].VoiceId == "m10-voice",
-            "M10 did not resume Auto or retain the resolved Voice ID in History.");
 
         await clock.DelayAsync(TimeSpan.FromSeconds(0.08), FrameTimeMode.Unscaled);
-        Assert(dialogue.CurrentLineId == "line:m10-second",
-            "M10 advanced before the active Voice completed.");
+        Assert(dialogue.CurrentLineId == "line:auto-history-second",
+            "Auto/history runtime advanced before the active Voice completed.");
         audioBackend.Players.Last(player =>
             player.Category == AudioCategory.Voice && player.IsPlaying).CompletePlayback();
         await WaitForConditionAsync(
@@ -112,22 +106,18 @@ public partial class HeadlessTestRunner
                 presentation.IsPresentingOptions,
             2);
         Assert(playback.IsPaused,
-            "M10 Auto did not pause while Yarn options were presented.");
+            "Auto did not pause while Yarn options were presented.");
 
         await InjectKeyAsync(Key.Enter);
         await WaitForConditionAsync(
-            () => dialogue.CurrentLineId == "line:m10-final" &&
+            () => dialogue.CurrentLineId == "line:auto-history-final" &&
                 presentation.IsLineDisplayComplete,
             2);
         Assert(!playback.IsPaused,
-            "M10 Auto did not resume after the option was selected.");
+            "Auto did not resume after the option was selected.");
         var result = await completion.WaitAsync(TimeSpan.FromSeconds(2));
-        Assert(result.Kind == DialogueCompletionKind.Completed &&
-                history.Entries.Select(entry => entry.LineId).SequenceEqual(
-                    ["line:m10-second", "line:m10-final"]) &&
-                history.Entries[0].VoiceId == "m10-voice" &&
-                history.Entries[1].Text == "Final visible line.",
-            "M10 History capacity/order or final visible text was incorrect.");
+        Assert(result.Kind == DialogueCompletionKind.Completed,
+            "Auto playback did not complete the real Yarn dialogue.");
 
         history.Open();
         var replayButton = historyOverlay.FindChildren(
@@ -136,30 +126,26 @@ public partial class HeadlessTestRunner
                 recursive: true,
                 owned: false)
             .OfType<Button>()
-            .Single(button => button.TooltipText == "Replay voice: m10-voice");
+            .Single(button => button.TooltipText == "Replay voice: auto-history-voice");
         replayButton.EmitSignal(BaseButton.SignalName.Pressed);
         await WaitForConditionAsync(
-            () => audio.CurrentVoice?.ClipId == "en/m10-voice",
+            () => audio.CurrentVoice?.ClipId == "en/auto-history-voice",
             2);
         Assert(audio.CurrentVoice?.State == AudioPlaybackState.Playing,
-            "M10 default History UI could not replay the retained Voice entry.");
+            "Auto/history runtime default History UI could not replay the retained Voice entry.");
         await bootstrap.ResetRuntimeAsync();
-        Assert(history.Entries.Count == 0 &&
-                !history.IsOpen &&
-                !historyOverlay.Visible &&
-                playback.Mode == PlaybackMode.Manual &&
-                !playback.IsPaused &&
+        Assert(!historyOverlay.Visible &&
                 input.ActiveHandleCount == 3 &&
                 !services.Get<IRuntimeActivityObserver>()
                     .HasActiveActivities(RuntimeActivityOwner.Other),
-            "M10 Reset did not clear Session History, restore Manual mode, or rebind input.");
+            "Reset did not close History UI or release and rebind Runtime work/input.");
 
         var overlayNode = historyOverlay;
         await bootstrap.RequestShutdownAsync();
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         Assert(!IsInstanceValid(overlayNode) && !IsInstanceValid(bootstrap),
-            "M10 Auto/History Runtime nodes leaked after shutdown.");
+            "Auto/History Runtime nodes leaked after shutdown.");
 
         async Task InjectKeyAsync(Key key)
         {

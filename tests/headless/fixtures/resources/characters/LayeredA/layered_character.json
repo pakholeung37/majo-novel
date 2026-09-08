@@ -1,0 +1,255 @@
+{
+  "schemaVersion": 1,
+  "id": "LayeredA",
+  "canvas": {
+    "width": 1,
+    "height": 1,
+    "pixelsPerUnit": 100
+  },
+  "animated": true,
+  "defaultAppearance": "Default,ArmR1",
+  "compositionMap": {
+    "Default": "Eyes>Normal,Sweat-",
+    "Normal1": "Eyes>Normal,Sweat-",
+    "Surprised1": "Eyes>Surprised,Sweat>On",
+    "Fearful1": "Eyes>Fearful,Sweat-",
+    "ArmR1": "Arm>Rest",
+    "ArmR3": "Arm>Raised"
+  },
+  "layers": [
+    {
+      "path": "Body",
+      "sprite": "Body",
+      "atlas": "atlas.png",
+      "region": {
+        "x": 0,
+        "y": 0,
+        "width": 8,
+        "height": 8
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "position": {
+        "x": 0,
+        "y": 0.0
+      },
+      "scale": {
+        "x": 1,
+        "y": 1
+      },
+      "sortingOrder": 0,
+      "enabled": true,
+      "material": "Default"
+    },
+    {
+      "path": "Face/Outline",
+      "sprite": "Outline",
+      "atlas": "atlas.png",
+      "region": {
+        "x": 8,
+        "y": 0,
+        "width": 8,
+        "height": 8
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "position": {
+        "x": 0,
+        "y": 0.02
+      },
+      "scale": {
+        "x": 1,
+        "y": 1
+      },
+      "sortingOrder": 1,
+      "enabled": true,
+      "material": "Multiply"
+    },
+    {
+      "path": "Face/Cheeks",
+      "sprite": "Cheeks",
+      "atlas": "atlas.png",
+      "region": {
+        "x": 16,
+        "y": 0,
+        "width": 8,
+        "height": 8
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "position": {
+        "x": 0,
+        "y": 0.04
+      },
+      "scale": {
+        "x": 1,
+        "y": 1
+      },
+      "sortingOrder": 2,
+      "enabled": true,
+      "material": "Default"
+    },
+    {
+      "path": "Eyes/Normal",
+      "sprite": "Normal",
+      "atlas": "atlas.png",
+      "region": {
+        "x": 0,
+        "y": 8,
+        "width": 8,
+        "height": 8
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "position": {
+        "x": 0,
+        "y": 0.06
+      },
+      "scale": {
+        "x": 1,
+        "y": 1
+      },
+      "sortingOrder": 3,
+      "enabled": true,
+      "material": "Default"
+    },
+    {
+      "path": "Eyes/Surprised",
+      "sprite": "Surprised",
+      "atlas": "atlas.png",
+      "region": {
+        "x": 8,
+        "y": 8,
+        "width": 8,
+        "height": 8
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "position": {
+        "x": 0,
+        "y": 0.08
+      },
+      "scale": {
+        "x": 1,
+        "y": 1
+      },
+      "sortingOrder": 4,
+      "enabled": false,
+      "material": "Default"
+    },
+    {
+      "path": "Eyes/Fearful",
+      "sprite": "Fearful",
+      "atlas": "atlas.png",
+      "region": {
+        "x": 16,
+        "y": 8,
+        "width": 8,
+        "height": 8
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "position": {
+        "x": 0,
+        "y": 0.1
+      },
+      "scale": {
+        "x": 1,
+        "y": 1
+      },
+      "sortingOrder": 5,
+      "enabled": false,
+      "material": "Default"
+    },
+    {
+      "path": "Sweat/On",
+      "sprite": "On",
+      "atlas": "atlas.png",
+      "region": {
+        "x": 0,
+        "y": 16,
+        "width": 8,
+        "height": 8
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "position": {
+        "x": 0,
+        "y": 0.12
+      },
+      "scale": {
+        "x": 1,
+        "y": 1
+      },
+      "sortingOrder": 6,
+      "enabled": false,
+      "material": "Default"
+    },
+    {
+      "path": "Arm/Rest",
+      "sprite": "Rest",
+      "atlas": "atlas.png",
+      "region": {
+        "x": 8,
+        "y": 16,
+        "width": 8,
+        "height": 8
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "position": {
+        "x": 0,
+        "y": 0.14
+      },
+      "scale": {
+        "x": 1,
+        "y": 1
+      },
+      "sortingOrder": 7,
+      "enabled": true,
+      "material": "Default"
+    },
+    {
+      "path": "Arm/Raised",
+      "sprite": "Raised",
+      "atlas": "atlas.png",
+      "region": {
+        "x": 16,
+        "y": 16,
+        "width": 8,
+        "height": 8
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "position": {
+        "x": 0,
+        "y": 0.16
+      },
+      "scale": {
+        "x": 1,
+        "y": 1
+      },
+      "sortingOrder": 8,
+      "enabled": false,
+      "material": "Default"
+    }
+  ]
+}

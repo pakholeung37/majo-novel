@@ -23,11 +23,11 @@ public partial class HeadlessTestRunner
         var presenter = new HeadlessDialoguePresenter { Name = "ProbePresenter" };
         AddChild(presenter);
 
-        var configuration = MajoProjectConfiguration.CreateDefault();
+        var configuration = CreateHeadlessConfiguration();
         configuration.Resources!.RootPath = "res://tests";
         configuration.Resources.ScriptsPath = "headless";
         configuration.Resources.BackgroundsPath = "headless/fixtures";
-        configuration.Dialogue!.DefaultProjectId = "M4Commands";
+        configuration.Dialogue!.DefaultProjectId = "YarnCommands";
         configuration.Presentation!.Enabled = false;
         configuration.Actors!.ReferenceResolution = new Vector2I(1280, 720);
         configuration.Actors!.LeftPosition = new Vector2(100, 200);
@@ -67,7 +67,7 @@ public partial class HeadlessTestRunner
         var customCommandService = new HeadlessLifecycleService();
         var bootstrap = new MajoRuntimeBootstrap
         {
-            Name = "M4Runtime",
+            Name = "YarnCommandsRuntime",
             Configuration = configuration,
             ConfigureServices = services => services.AddSingleton(
                 _ => customCommandService),
@@ -129,7 +129,7 @@ public partial class HeadlessTestRunner
             state.Stages.TryGetValue(StageId.Main, out var mainStage);
             switch (line.Id)
             {
-                case "line:m4-direction-beat":
+                case "line:commands-direction-beat":
                     directionBeatCommitted =
                         state.Revision == 3 &&
                         mainStage?.Backdrop?.Resource ==
@@ -144,7 +144,7 @@ public partial class HeadlessTestRunner
                         directionHost.PublishedScreen.Bindings[LayoutSlotId.Main] == illustrationView &&
                         directionHost.PublishedBackdrop is not null;
                     break;
-                case "line:m4-direction-move":
+                case "line:commands-direction-move":
                     directionActorMoved =
                         state.Revision == 4 &&
                         mainStage?.Actors[new ActorId("hero")].Appearance == "blue" &&
@@ -153,7 +153,7 @@ public partial class HeadlessTestRunner
                                 300f / configuration.Actors.ReferenceResolution.X * 100f,
                                 (1f - 200f / configuration.Actors.ReferenceResolution.Y) * 100f);
                     break;
-                case "line:m4-direction-illustration":
+                case "line:commands-direction-illustration":
                     directionIllustrationShown =
                         state.Revision == 5 &&
                         state.Screen.Bindings[LayoutSlotId.Main] == illustrationView &&
@@ -161,21 +161,21 @@ public partial class HeadlessTestRunner
                             new DirectionPoint(40, 60), 1.5f, 10) &&
                         mainStage?.Actors.ContainsKey(new ActorId("hero")) == true;
                     break;
-                case "line:m4-direction-stage":
+                case "line:commands-direction-stage":
                     directionStageRestored =
                         state.Revision == 7 &&
                         state.Screen.Bindings[LayoutSlotId.Main] == ViewId.Main &&
                         state.Views[ViewId.Main].StageId == StageId.Main &&
                         state.Views[ViewId.Main].Pose == ViewPose.Default;
                     break;
-                case "line:m4-direction-reset":
+                case "line:commands-direction-reset":
                     directionIllustrationReset =
                         state.Revision == 6 &&
                         state.Screen.Bindings[LayoutSlotId.Main] == illustrationView &&
                         state.Views[illustrationView].Pose == ViewPose.Default &&
                         directionHost.PublishedScreen.Bindings[LayoutSlotId.Main] == illustrationView;
                     break;
-                case "line:m4-direction-leave":
+                case "line:commands-direction-leave":
                     directionActorLeft =
                         state.Revision == 8 &&
                         mainStage?.Actors[new ActorId("hero")].Visible == false;
@@ -207,7 +207,7 @@ public partial class HeadlessTestRunner
             var state = direction.State;
             switch (line.Id)
             {
-                case "line:m4-direction-broadcast":
+                case "line:commands-direction-broadcast":
                     directionBroadcastShown =
                         state.Revision == 9 &&
                         state.Stages[StageId.Main].Actors[new ActorId("hero")].Appearance == "red" &&
@@ -216,13 +216,13 @@ public partial class HeadlessTestRunner
                         state.Screen.Bindings[LayoutSlotId.Main] == broadcastView &&
                         directionHost.StageIds.Contains(broadcastStage);
                     break;
-                case "line:m4-direction-main-return":
+                case "line:commands-direction-main-return":
                     directionMainReturned =
                         state.Revision == 10 &&
                         state.Screen.Bindings[LayoutSlotId.Main] == ViewId.Main &&
                         state.Stages[broadcastStage].Actors[new ActorId("hero")].Appearance == "blue";
                     break;
-                case "line:m4-direction-split":
+                case "line:commands-direction-split":
                     directionSplitShown =
                         state.Revision == 12 &&
                         state.Screen.Layout == new LayoutId("split") &&
@@ -262,8 +262,8 @@ public partial class HeadlessTestRunner
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         Assert(presenter.Lines.Count(line => line == "custom command completed") == 1,
             "A stopped Yarn command continuation escaped into a later session.");
-        Assert(!IsInstanceValid(bootstrap), "M4 Runtime node leaked after shutdown.");
-        Assert(!IsInstanceValid(runner), "M4 DialogueRunner leaked after cleanup.");
+        Assert(!IsInstanceValid(bootstrap), "Runtime node leaked after shutdown.");
+        Assert(!IsInstanceValid(runner), "DialogueRunner leaked after cleanup.");
     }
 }
 

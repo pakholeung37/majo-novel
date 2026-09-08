@@ -1,0 +1,14 @@
+[remap]
+
+importer="yarnscript"
+type="Resource"
+uid="uid://bjtcp4s7jk4ph"
+path="res://.godot/imported/ScriptAndState.yarn-9d0ede7e57a61186890600d5175d3189.tres"
+
+[deps]
+
+source_file="res://tests/headless/ScriptAndState.yarn"
+dest_files=["res://.godot/imported/ScriptAndState.yarn-9d0ede7e57a61186890600d5175d3189.tres"]
+
+[params]
+

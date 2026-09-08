@@ -16,7 +16,7 @@ public partial class HeadlessTestRunner
         var bootstrap = new MajoRuntimeBootstrap
         {
             Name = "OperationRuntime",
-            Configuration = MajoProjectConfiguration.CreateDefault(),
+            Configuration = CreateHeadlessConfiguration(),
             ConfigureServices = services =>
                 services.AddSingleton(
                     resolver => new ShutdownStartsOperationService(

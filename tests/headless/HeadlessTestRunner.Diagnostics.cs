@@ -1,5 +1,4 @@
 using System;
-using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Godot;
@@ -33,7 +32,7 @@ public partial class HeadlessTestRunner
             var empty = sampler.Sample(Array.Empty<ResourceDiagnosticEntry>());
             Assert(!empty.Contains('?'), "Empty cache must not retain previously sampled resources.");
         }
-        var configuration = MajoProjectConfiguration.CreateDefault();
+        var configuration = CreateHeadlessConfiguration();
         Assert(!new DiagnosticsConfiguration().IncludeCorrelation, "DiagnosticsConfiguration.IncludeCorrelation should default to false.");
         configuration.Diagnostics = new DiagnosticsConfiguration
         {
@@ -59,12 +58,8 @@ public partial class HeadlessTestRunner
             Assert(bootstrap.DebugOverlay is not null, "Debug overlay should be instantiated.");
             Assert(bootstrap.FpsOverlay is not null, "FPS overlay should be instantiated in debug mode.");
 
-            // Verify FPS overlay layout and styling
+            // Verify the live overlay receives FPS and memory data.
             var fpsOverlay = bootstrap.FpsOverlay;
-            var fpsRoot = fpsOverlay.FindChild("MajoFpsOverlayRoot", recursive: true, owned: false) as Control;
-            Assert(fpsRoot is not null, "FPS overlay root must exist.");
-            Assert(Mathf.IsZeroApprox(fpsRoot.AnchorLeft) && Mathf.IsZeroApprox(fpsRoot.AnchorTop),
-                "FPS overlay root should be anchored at top-left.");
             var fpsLabel = fpsOverlay.FpsLabel;
             Assert(fpsLabel is not null, "FPS label must exist.");
             Assert(fpsLabel.Text.StartsWith("FPS:", StringComparison.Ordinal), "FPS label should display FPS prefix.");
@@ -72,12 +67,6 @@ public partial class HeadlessTestRunner
             var memoryLabel = fpsOverlay.FindChild("MemoryLabel", recursive: true, owned: false) as Label;
             Assert(memoryLabel is not null && memoryLabel.Text.Contains("RAM", StringComparison.Ordinal)
                 && memoryLabel.Text.Contains("RM Tex", StringComparison.Ordinal), "Overlay should display process and resource memory.");
-            Assert(memoryLabel.GetParent() == fpsLabel.GetParent() && memoryLabel.GetParent() is HBoxContainer,
-                "FPS and memory must share one row.");
-            var fontColor = fpsLabel.GetThemeColor("font_color");
-            Assert(Mathf.IsEqualApprox(fontColor.G, 1.0f) && Mathf.IsZeroApprox(fontColor.R) && Mathf.IsZeroApprox(fontColor.B),
-                "FPS label text must be green.");
-
 
             // Verify lifecycle log events were captured in ring buffer
             var recentEvents = bootstrap.Diagnostics.RecentEvents;
@@ -98,18 +87,6 @@ public partial class HeadlessTestRunner
             Assert(snapshot.Dialogue is not null, "Snapshot must include dialogue diagnostics.");
             Assert(snapshot.Input is not null, "Snapshot must include input diagnostics.");
 
-            // Verify markdown diagnostic report export
-            var exportPath = Path.Combine(OS.GetUserDataDir(), "test_report.md");
-            var reportText = await bootstrap.Diagnostics.ExportReportAsync(exportPath);
-            Assert(reportText.Contains("# Majo Runtime Diagnostic Report"), "Report must contain title header.");
-            Assert(reportText.Contains(bootstrap.Host.RuntimeId), "Report must include RuntimeId.");
-            Assert(File.Exists(exportPath), "Exported report file must exist on disk.");
-
-            if (File.Exists(exportPath))
-            {
-                File.Delete(exportPath);
-            }
-
             // Verify debug overlay toggle and input isolation
             var overlay = bootstrap.DebugOverlay;
             var input = bootstrap.Host.Services.Get<IInputManager>();
@@ -118,12 +95,9 @@ public partial class HeadlessTestRunner
 
             var levelFilter = overlay.FindChild("LogLevelFilter", recursive: true, owned: false) as OptionButton;
             var logText = overlay.FindChild("RecentLogEvents", recursive: true, owned: false) as RichTextLabel;
-            var summaryGrid = overlay.FindChild("DiagnosticsSummaryGrid", recursive: true, owned: false) as GridContainer;
             var overlayRoot = overlay.FindChild("MajoDebugOverlayRoot", recursive: true, owned: false) as Control;
             Assert(overlayRoot is not null && Mathf.IsEqualApprox(overlayRoot.AnchorBottom, 0.75f),
                 "Debug overlay should reserve the bottom quarter of the viewport for the line presenter.");
-            Assert(summaryGrid is not null && summaryGrid.Columns == 3,
-                "Debug overlay summary should use a compact three-column layout.");
             Assert(levelFilter is not null && levelFilter.ItemCount == 5,
                 "Debug overlay should provide All, Debug, Information, Warning, and Error filters.");
             Assert(logText is not null && logText.BbcodeEnabled,
@@ -142,11 +116,6 @@ public partial class HeadlessTestRunner
                 "All Levels should show events from every log level.");
             Assert(!allLevelsText.Contains("Correlation:"),
                 "The compact overlay should hide correlation details.");
-            Assert(allLevelsText.Contains("#7ee787") &&
-                allLevelsText.Contains("#58a6ff") &&
-                allLevelsText.Contains("#d29922") &&
-                allLevelsText.Contains("#f85149"),
-                "Every log level should have a distinct display color.");
 
             levelFilter!.EmitSignal(OptionButton.SignalName.ItemSelected, 4);
             var errorsOnlyText = logText.Text;

@@ -282,6 +282,20 @@ public sealed class DiagnosticsLoggingTests
         Assert.Contains("test-runtime-id", report);
         Assert.Contains("custom_test", report);
         Assert.Contains("Recent Log Events", report);
+
+        var directory = Path.Combine(Path.GetTempPath(), $"majo-report-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var path = Path.Combine(directory, "report.md");
+            var exported = await diagnosticsService.ExportReportAsync(path);
+            Assert.Equal(exported, await File.ReadAllTextAsync(path));
+            Assert.Contains("test-runtime-id", exported);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
     }
 
     [Fact]

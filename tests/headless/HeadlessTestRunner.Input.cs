@@ -28,7 +28,7 @@ public partial class HeadlessTestRunner
         var bootstrap = new MajoRuntimeBootstrap
         {
             Name = "InputRuntime",
-            Configuration = MajoProjectConfiguration.CreateDefault(),
+            Configuration = CreateHeadlessConfiguration(),
         };
         AddChild(bootstrap);
         await bootstrap.InitializationCompletion;
@@ -73,51 +73,6 @@ public partial class HeadlessTestRunner
             1);
         Assert(activations.Count == 0,
             "M7 allowed a GUI-handled click to bubble into Runtime input.");
-
-        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        Godot.Input.ParseInputEvent(new InputEventKey
-        {
-            PhysicalKeycode = Key.Space,
-            Pressed = true,
-        });
-        Godot.Input.ParseInputEvent(new InputEventKey
-        {
-            PhysicalKeycode = Key.Space,
-            Pressed = false,
-        });
-        Godot.Input.ParseInputEvent(new InputEventKey
-        {
-            PhysicalKeycode = Key.Space,
-            Pressed = true,
-        });
-        await WaitForConditionAsync(() => activations.Count == 1, 1);
-
-        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        Godot.Input.ParseInputEvent(new InputEventMouseButton
-        {
-            ButtonIndex = MouseButton.Left,
-            Pressed = true,
-        });
-        await WaitForConditionAsync(() => activations.Count == 2, 1);
-
-        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        Godot.Input.ParseInputEvent(new InputEventJoypadButton
-        {
-            ButtonIndex = JoyButton.A,
-            Pressed = true,
-        });
-        await WaitForConditionAsync(() => activations.Count == 3, 1);
-
-        Assert(activations.Select(activation => activation.Action).All(
-                action => action == MajoInputActions.Advance),
-            "M7 keyboard, mouse and gamepad did not resolve to the same logical action.");
-        Assert(activations.Select(activation => activation.Device).SequenceEqual(new[]
-            {
-                InputDeviceKind.Keyboard,
-                InputDeviceKind.Mouse,
-                InputDeviceKind.Gamepad,
-            }),
-            "M7 headless input injection reported incorrect device kinds.");
 
         var expectedSequence = new[]
         {
@@ -172,14 +127,16 @@ public partial class HeadlessTestRunner
             new InputEventJoypadButton { ButtonIndex = JoyButton.DpadDown, Pressed = true },
             new InputEventJoypadButton { ButtonIndex = JoyButton.X, Pressed = true },
         ]);
+        var expectedDevices = new[] { InputDeviceKind.Keyboard, InputDeviceKind.Mouse, InputDeviceKind.Gamepad };
         for (var deviceIndex = 0; deviceIndex < 3; deviceIndex++)
         {
             var sequence = activations
                 .Skip(deviceIndex * expectedSequence.Length)
                 .Take(expectedSequence.Length)
-                .Select(activation => activation.Action);
-            Assert(sequence.SequenceEqual(expectedSequence),
-                "M7 keyboard, mouse and gamepad produced different logical sequences.");
+                .ToArray();
+            Assert(sequence.Select(activation => activation.Action).SequenceEqual(expectedSequence) &&
+                    sequence.All(activation => activation.Device == expectedDevices[deviceIndex]),
+                "Keyboard, mouse and gamepad bindings produced incorrect actions or device kinds.");
         }
 
         var advanceAction = new StringName(

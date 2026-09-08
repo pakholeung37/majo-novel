@@ -1,0 +1,8 @@
+title: Start
+tags: headless auto history
+---
+Narrator: Manual first. #line:auto-history-first #voice:none
+Narrator: Voiced second. #line:auto-history-second #voice:auto-history-voice
+-> Continue
+    Narrator: Final visible line. #line:auto-history-final #voice:none
+===

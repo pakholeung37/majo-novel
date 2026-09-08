@@ -1,0 +1,14 @@
+[remap]
+
+importer="yarnscript"
+type="Resource"
+uid="uid://ca3x75hghvu4i"
+path="res://.godot/imported/AutoAndHistory.yarn-f641cce33afac21183f0cf78fb393ff9.tres"
+
+[deps]
+
+source_file="res://tests/headless/AutoAndHistory.yarn"
+dest_files=["res://.godot/imported/AutoAndHistory.yarn-f641cce33afac21183f0cf78fb393ff9.tres"]
+
+[params]
+

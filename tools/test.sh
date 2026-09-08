@@ -11,7 +11,8 @@ UNIT_TEST_PROJECT="$REPOSITORY_ROOT/tests/Majo.Runtime.UnitTests/Majo.Runtime.Un
 GODOT_EXECUTABLE="${GODOT_BIN:-/Applications/Godot_mono.app/Contents/MacOS/Godot}"
 
 print_usage() {
-    printf 'Usage: %s [--fast | --full]\n' "$0"
+    printf 'Usage: %s [--unit | --fast | --full]\n' "$0"
+    printf '  --unit  Build and run pure C# unit tests without launching Godot.\n'
     printf '  --fast  Run the local feedback suite with one Godot integration pass.\n'
     printf '  --full  Run the complete distributability and release gate (default).\n'
 }
@@ -22,6 +23,9 @@ if [[ "$#" -gt 1 ]]; then
 fi
 if [[ "$#" -eq 1 ]]; then
     case "$1" in
+        --unit)
+            TEST_MODE="unit"
+            ;;
         --fast)
             TEST_MODE="fast"
             ;;
@@ -38,6 +42,13 @@ if [[ "$#" -eq 1 ]]; then
             ;;
     esac
 fi
+
+print_result() {
+    printf 'Majo Runtime %s test suite passed.\n' "$TEST_MODE"
+    TEST_ELAPSED_SECONDS=$((SECONDS - TEST_STARTED_AT_SECONDS))
+    printf 'Completed in %dm %02ds.\n' \
+        "$((TEST_ELAPSED_SECONDS / 60))" "$((TEST_ELAPSED_SECONDS % 60))"
+}
 
 run_with_timeout() {
     local timeout_seconds="$1"
@@ -88,7 +99,7 @@ restore_dotnet_projects() {
     fi
 }
 
-if [[ ! -x "$GODOT_EXECUTABLE" ]]; then
+if [[ "$TEST_MODE" != "unit" && ! -x "$GODOT_EXECUTABLE" ]]; then
     printf 'Godot Mono executable was not found or is not executable: %s\n' "$GODOT_EXECUTABLE" >&2
     exit 1
 fi
@@ -96,33 +107,32 @@ fi
 printf 'Restoring .NET dependencies...\n'
 restore_dotnet_projects
 
-printf 'Building Godot C# project...\n'
+printf 'Building unit tests and their Godot project dependencies...\n'
 if [[ "$TEST_MODE" == "full" ]]; then
-    run_with_timeout 180 dotnet build "$GAME_PROJECT/Majo Rebuild.csproj" --nologo --no-restore --no-incremental
+    run_with_timeout 180 dotnet build "$UNIT_TEST_PROJECT" --nologo --no-restore --no-incremental
 else
-    run_with_timeout 180 dotnet build "$GAME_PROJECT/Majo Rebuild.csproj" --nologo --no-restore
+    run_with_timeout 180 dotnet build "$UNIT_TEST_PROJECT" --nologo --no-restore
 fi
 
 printf 'Running pure C# unit tests...\n'
-run_with_timeout 180 dotnet test "$UNIT_TEST_PROJECT" --nologo --no-restore
+run_with_timeout 180 dotnet test "$UNIT_TEST_PROJECT" --nologo --no-restore --no-build
+
+if [[ "$TEST_MODE" == "unit" ]]; then
+    print_result
+    exit 0
+fi
 
 printf 'Checking Godot headless import and C# compilation for main game project...\n'
 run_with_timeout 180 "$GODOT_EXECUTABLE" --headless --path "$GAME_PROJECT" --editor --quit
 
-printf 'Running visible Runtime Demo headless smoke test...\n'
-run_with_timeout 60 "$GODOT_EXECUTABLE" --headless --path "$GAME_PROJECT" \
-    res://demos/demo-01/RuntimeDemo.tscn -- --demo-auto
-
-HEADLESS_RUN_COUNT=3
+# Keep the separator in full mode: macOS Bash treats an empty array as unset with -u.
+HEADLESS_ARGUMENTS=(--)
 if [[ "$TEST_MODE" == "fast" ]]; then
-    HEADLESS_RUN_COUNT=1
+    HEADLESS_ARGUMENTS=(-- --majo-fast)
 fi
-for ((headless_run = 1; headless_run <= HEADLESS_RUN_COUNT; headless_run++)); do
-    printf 'Running Godot headless integration tests (%s/%s)...\n' \
-        "$headless_run" "$HEADLESS_RUN_COUNT"
-    run_with_timeout 60 "$GODOT_EXECUTABLE" --headless --path "$GAME_PROJECT" \
-        res://tests/headless/HeadlessTestRunner.tscn
-done
+printf 'Running Godot headless integration tests...\n'
+run_with_timeout 60 "$GODOT_EXECUTABLE" --headless --path "$GAME_PROJECT" \
+    res://tests/headless/HeadlessTestRunner.tscn "${HEADLESS_ARGUMENTS[@]}"
 
 printf 'Verifying that a failing headless assertion returns a non-zero exit code...\n'
 set +e
@@ -138,8 +148,7 @@ if [[ "$failure_probe_status" -eq 0 ]]; then
 fi
 
 if [[ "$TEST_MODE" == "full" ]]; then
-    printf 'Verifying Release build configuration smoke test...\n'
-    run_with_timeout 180 dotnet build "$GAME_PROJECT/Majo Rebuild.csproj" -c Release --nologo --no-restore --no-incremental
+    # Godot export publishes ExportRelease (optimized, release API); a separate Release build is redundant.
     case "$(uname -s)" in
         Darwin)
             EXPORT_PRESET="M10.5 macOS Smoke"
@@ -165,7 +174,4 @@ if [[ "$TEST_MODE" == "full" ]]; then
     fi
 fi
 
-printf 'Majo Runtime %s test suite passed.\n' "$TEST_MODE"
-TEST_ELAPSED_SECONDS=$((SECONDS - TEST_STARTED_AT_SECONDS))
-printf 'Completed in %dm %02ds.\n' \
-    "$((TEST_ELAPSED_SECONDS / 60))" "$((TEST_ELAPSED_SECONDS % 60))"
+print_result

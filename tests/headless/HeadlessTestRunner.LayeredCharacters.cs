@@ -15,8 +15,8 @@ public partial class HeadlessTestRunner
 {
     private async Task ValidateLayeredCharacterAsync()
     {
-        var configuration = MajoProjectConfiguration.CreateDefault();
-        configuration.Resources!.RootPath = "res://demos/manosaba/assets";
+        var configuration = CreateHeadlessConfiguration();
+        configuration.Resources!.RootPath = "res://tests/headless/fixtures/resources";
         configuration.Actors!.ReferenceResolution = new Vector2I(2560, 1440);
         configuration.Actors.ScenePositionOffset = new Vector2(0, 10);
         var bootstrap = new MajoRuntimeBootstrap
@@ -37,36 +37,36 @@ public partial class HeadlessTestRunner
             new ResourcePreloadManifest(
                 "headless-layered-character-resources",
                 [ResourcePreloadEntry.Create<Texture2D>(
-                    new ResourceKey("characters/Ema/Ema_Angle01"),
-                    estimatedBytes: 256L * 1024 * 1024)]),
+                    new ResourceKey("characters/LayeredA/atlas"),
+                    estimatedBytes: 1024L * 1024 * 4)]),
             [new ActorWarmupRequest(
-                "Ema",
+                "LayeredA",
                 ActorFactoryIds.Character,
                 ["Default", "Surprised1"],
                 CharacterPositionPreset.Center)]));
         var character = (ICharacterActor)await actors.GetOrCreateAsync(new ActorSpawnRequest(
-            "Ema",
+            "LayeredA",
             ActorFactoryIds.Character,
             "Default",
             CharacterPositionPreset.Center));
         Assert(!character.Visible &&
                 preloader.CurrentWindowId == "headless-layered-character",
             "Layered character preload did not create a dormant ready actor.");
-        Assert(actors.GetPreloadResources(new ActorSpawnRequest("Ema", ActorFactoryIds.Character, "Surprised1")).Count == 0,
+        Assert(actors.GetPreloadResources(new ActorSpawnRequest("LayeredA", ActorFactoryIds.Character, "Surprised1")).Count == 0,
             "An existing layered actor redundantly requested its resident atlases for preload.");
         character.SetVisible(true);
         var layerComposite = character.View.GetNode<CanvasGroup>("LayerComposite");
         var layers = layerComposite.GetChildren().OfType<Sprite2D>().ToArray();
         Assert(character.FactoryId == ActorFactoryIds.LayeredCharacter,
             "Layered character used the wrong actor factory.");
-        Assert(layers.Length == 126,
-            "Layered character did not create every extracted Ema layer.");
+        Assert(layers.Length == 9,
+            "Layered character did not create every synthetic fixture layer.");
         Assert(layers.All(layer => layer.ZIndex == 0),
             "Layered character layers escaped the CanvasGroup Z batch.");
         var facialLine = layers.Single(layer =>
-            layer.Name == "Angle01_Head01_FacialLineDrawing01");
+            layer.Name == "Face_Outline");
         var normalCheeks = layers.Single(layer =>
-            layer.Name == "Angle01_Head01_Facial01_Cheeks01_Cheeks01_Normal");
+            layer.Name == "Face_Cheeks");
         Assert(facialLine.Material is ShaderMaterial multiplyMaterial &&
                 multiplyMaterial.Shader?.Code.Contains(
                     "mix(vec3(1.0)", System.StringComparison.Ordinal) == true &&
@@ -102,25 +102,25 @@ public partial class HeadlessTestRunner
         Assert(actorHost.GetChildren().All(nodesBeforeTransition.Contains),
             "Layered character appearance change changed its actor host nodes.");
         Assert(LayerVisible(layers,
-                "Angle01_Head01_Facial01_Eyes01_Eyes01_Surprised_Open01") &&
+                "Eyes_Surprised") &&
             !LayerVisible(layers,
-                "Angle01_Head01_Facial01_Eyes01_Eyes01_Normal_Open01") &&
+                "Eyes_Normal") &&
             LayerVisible(layers,
-                "Angle01_Head01_Facial01_Sweat01_Sweat01_01"),
-            "Surprised1 did not select Ema's expected eye and sweat layers.");
+                "Sweat_On"),
+            "Surprised1 did not select LayeredA's expected eye and sweat layers.");
 
         character.SetAppearance("Normal1,ArmR3");
         character.SetAppearance("Fearful1");
-        Assert(LayerVisible(layers, "Angle01_ArmR_ArmR03") &&
-            !LayerVisible(layers, "Angle01_ArmR_ArmR01"),
+        Assert(LayerVisible(layers, "Arm_Raised") &&
+            !LayerVisible(layers, "Arm_Rest"),
             "Layered appearance did not preserve the prior ArmR3 mutation.");
 
         var canonical = character.Appearance;
         character.SetAppearance("Default,ArmR1");
         character.SetAppearance(canonical);
-        Assert(LayerVisible(layers, "Angle01_ArmR_ArmR03") &&
+        Assert(LayerVisible(layers, "Arm_Raised") &&
             LayerVisible(layers,
-                "Angle01_Head01_Facial01_Eyes01_Eyes01_Fearful_Open01"),
+                "Eyes_Fearful"),
             "Canonical layered appearance did not restore a stable actor state.");
 
         var firstChange = character.ChangeAppearance("Surprised1", 1);
@@ -137,7 +137,7 @@ public partial class HeadlessTestRunner
             "Preemption cloned a hidden composite.");
         secondChange.Finish(); await secondChange.Completion;
         Assert(character.Appearance == character.TargetAppearance && LayerVisible(layers,
-            "Angle01_Head01_Facial01_Eyes01_Eyes01_Normal_Open01"), "Newest layered appearance was not committed.");
+            "Eyes_Normal"), "Newest layered appearance was not committed.");
         Assert(character.View.GetChildren().ToHashSet().SetEquals(actorChildrenBeforeTransition),
             "Preempted layered appearances retained capture nodes.");
         var cancelledChange = character.ChangeAppearance("Surprised1", 1);
@@ -147,14 +147,14 @@ public partial class HeadlessTestRunner
         character.SetOpacity(1);
 
         var warden = (ICharacterActor)actors.GetOrCreate(new ActorSpawnRequest(
-            "Warden",
+            "Plain",
             ActorFactoryIds.Character,
             "1",
             CharacterPositionPreset.Center));
         Assert(warden.FactoryId == ActorFactoryIds.Character,
-            "Warden should use the ordinary character factory.");
-        Assert(((Sprite2D)warden.View).Texture?.GetSize() == new Vector2(1536, 1984),
-            "Warden appearance 1 was not loaded from the extracted diced-sprite PNG.");
+            "Plain should use the ordinary character factory.");
+        Assert(((Sprite2D)warden.View).Texture?.GetSize() == new Vector2(16, 24),
+            "Plain appearance 1 was not loaded from the synthetic PNG.");
 
         bootstrap.QueueFree();
         await bootstrap.ShutdownCompletion;

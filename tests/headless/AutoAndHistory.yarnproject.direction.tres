@@ -1,0 +1,11 @@
+[gd_resource type="Resource" format=3 uid="uid://cu7d5h0tri5yl"]
+
+[ext_resource type="Script" uid="uid://orqi0qstlslj" path="res://addons/majo_runtime/Runtime/Dialogue/Yarn/MajoDirectionData.cs" id="1_frh12"]
+
+[resource]
+script = ExtResource("1_frh12")
+SchemaVersion = 2
+ManifestPath = "res://tests/headless/AutoAndHistory.yarnproject"
+SourceFingerprint = "2a6e1d5664e0e981284da1512c71f3ade5ebfc38cc6961486796410b12baea54"
+ProgramFingerprint = "9bf9564f075b39ed2e34c6f6612fa7abf27ad066c2a8592183989047c1b2ab1c"
+ModulesJson = "[{\"NodeId\":\"Start\",\"SceneEntry\":null,\"Version\":1,\"Symbols\":{\"Stages\":[],\"Views\":[],\"ShotAliases\":[],\"Marks\":[]},\"Resources\":[],\"SourceMaps\":[],\"Imports\":[],\"Marks\":[],\"Diagnostics\":[]}]"

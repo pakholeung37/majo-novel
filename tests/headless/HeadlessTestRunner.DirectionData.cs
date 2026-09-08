@@ -12,7 +12,7 @@ public partial class HeadlessTestRunner
 {
     private static void ValidateImportedDirectionData()
     {
-        var imported = ResourceLoader.Load<YarnProject>("res://demos/demo-01/assets/scripts/main.yarnproject");
+        var imported = ResourceLoader.Load<YarnProject>("res://tests/headless/YarnCommands.yarnproject");
         var modules = MajoDirectionData.LoadModules(imported);
         Assert(modules.Count > 0, "Imported Direction modules were unavailable without hot reload.");
         Assert(modules.All(module => imported.Program.Nodes.ContainsKey(module.NodeId)),
