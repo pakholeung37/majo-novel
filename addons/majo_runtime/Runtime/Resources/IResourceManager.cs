@@ -10,6 +10,9 @@ public interface IResourceManager : IRuntimeService
 {
     int LoadedResourceCount { get; }
 
+    System.Collections.Generic.IReadOnlyList<ResourceDiagnosticEntry> CaptureDiagnosticResources() =>
+        System.Array.Empty<ResourceDiagnosticEntry>();
+
     ResourceCacheSnapshot CaptureCacheSnapshot() => new(
         LoadedResourceCount,
         0,

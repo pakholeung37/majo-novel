@@ -226,6 +226,13 @@ public sealed class ResourceManager : IResourceManager
         lock (gate) return EvictToBudgetLocked(null, "explicit_trim", true);
     }
 
+    public IReadOnlyList<ResourceDiagnosticEntry> CaptureDiagnosticResources()
+    {
+        lock (gate)
+            return loaded.Values.Select(entry => new ResourceDiagnosticEntry(
+                entry.Resource, entry.LeaseCount, entry.PinnedLeaseCount)).ToArray();
+    }
+
     public ResourceCacheSnapshot CaptureCacheSnapshot()
     {
         lock (gate)

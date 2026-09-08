@@ -2,6 +2,7 @@
 
 using System;
 using Godot;
+using Majo.Runtime.Resources;
 using Majo.Runtime.Configuration;
 
 namespace Majo.Runtime.UI.Diagnostics;
@@ -12,6 +13,11 @@ public partial class DefaultFpsOverlay : CanvasLayer, IDisposable
     private readonly DiagnosticsConfiguration configuration;
     private Control? rootControl;
     private Label? fpsLabel;
+    private Label? memoryLabel;
+    private readonly IResourceManager? resources;
+    private readonly ResourceMemorySampler memorySampler = new();
+    private readonly System.Diagnostics.Process process = System.Diagnostics.Process.GetCurrentProcess();
+    private double memoryElapsed = 1;
     private bool isDisposed;
     private double elapsedSinceUpdate;
 
@@ -19,8 +25,10 @@ public partial class DefaultFpsOverlay : CanvasLayer, IDisposable
 
     public DefaultFpsOverlay(
         Node hostNode,
-        DiagnosticsConfiguration? configuration = null)
+        DiagnosticsConfiguration? configuration = null,
+        IResourceManager? resources = null)
     {
+        this.resources = resources;
         this.hostNode = hostNode ?? throw new ArgumentNullException(nameof(hostNode));
         this.configuration = configuration ?? new DiagnosticsConfiguration();
         Layer = 128;
@@ -39,6 +47,12 @@ public partial class DefaultFpsOverlay : CanvasLayer, IDisposable
         }
 
 
+        memoryElapsed += delta;
+        if (memoryElapsed >= 1)
+        {
+            memoryElapsed = 0;
+            UpdateMemory();
+        }
         elapsedSinceUpdate += delta;
         if (elapsedSinceUpdate >= UpdateIntervalSeconds)
         {
@@ -56,6 +70,21 @@ public partial class DefaultFpsOverlay : CanvasLayer, IDisposable
 
         var fps = Engine.GetFramesPerSecond();
         fpsLabel.Text = $"FPS: {Mathf.RoundToInt(fps)}";
+    }
+
+    private void UpdateMemory()
+    {
+        if (memoryLabel is null) return;
+        var ram = "N/A";
+        try
+        {
+            process.Refresh();
+            ram = FormattableString.Invariant($"{process.WorkingSet64 / 1048576.0,4:0}M");
+        }
+        catch (System.ComponentModel.Win32Exception) { }
+        catch (InvalidOperationException) { }
+        catch (PlatformNotSupportedException) { }
+        memoryLabel.Text = $" | RAM {ram} | " + (resources is null ? "RM N/A" : memorySampler.Sample(resources));
     }
 
     private void BuildUi()
@@ -86,7 +115,21 @@ public partial class DefaultFpsOverlay : CanvasLayer, IDisposable
         fpsLabel.AddThemeColorOverride("font_outline_color", new Color(0.0f, 0.0f, 0.0f, 0.85f));
         fpsLabel.AddThemeConstantOverride("outline_size", 3);
         fpsLabel.AddThemeFontSizeOverride("font_size", 16);
-        rootControl.AddChild(fpsLabel);
+        var row = new HBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+        row.AddThemeConstantOverride("separation", 0);
+        rootControl.AddChild(row);
+        fpsLabel.CustomMinimumSize = new Vector2(64, 0);
+        row.AddChild(fpsLabel);
+        memoryLabel = new Label { Name = "MemoryLabel", MouseFilter = Control.MouseFilterEnum.Ignore };
+        memoryLabel.AddThemeColorOverride("font_color", Colors.White);
+        memoryLabel.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0, 0.85f));
+        memoryLabel.AddThemeConstantOverride("outline_size", 3);
+        memoryLabel.AddThemeFontSizeOverride("font_size", 16);
+        var font = new SystemFont { FontNames = new[] { "Menlo", "Consolas", "DejaVu Sans Mono", "monospace" } };
+        fpsLabel.AddThemeFontOverride("font", font);
+        memoryLabel.AddThemeFontOverride("font", font);
+        row.AddChild(memoryLabel);
+        UpdateMemory();
     }
 
     protected override void Dispose(bool disposing)
@@ -94,6 +137,7 @@ public partial class DefaultFpsOverlay : CanvasLayer, IDisposable
         if (disposing && !isDisposed)
         {
             isDisposed = true;
+            process.Dispose();
             if (IsInsideTree())
             {
                 QueueFree();

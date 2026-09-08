@@ -7,6 +7,8 @@ using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
 using Majo.Runtime.Diagnostics;
 using Majo.Runtime.Input;
+using Majo.Runtime.Resources;
+using Majo.Runtime.UI.Diagnostics;
 
 namespace Majo.Runtime.HeadlessTests;
 
@@ -14,6 +16,23 @@ public partial class HeadlessTestRunner
 {
     private async Task ValidateDiagnosticsRuntimeAsync()
     {
+        using (var image = Image.CreateEmpty(512, 512, false, Image.Format.Rgba8))
+        using (var texture = ImageTexture.CreateFromImage(image))
+        using (var atlas = new AtlasTexture { Atlas = texture })
+        using (var wav = new AudioStreamWav { Data = new byte[1048576] })
+        {
+            var sampler = new ResourceMemorySampler();
+            var summary = sampler.Sample(new ResourceDiagnosticEntry[]
+            {
+                new(texture, 1, 0), new(texture, 1, 1), new(atlas, 0, 0),
+                new(wav, 1, 0), new(new object(), 0, 0),
+            });
+            Assert(summary.Contains("Tex ≈   1M", StringComparison.Ordinal), "Shared atlas texture must only count once.");
+            Assert(summary.Contains("Aud ≈  1M", StringComparison.Ordinal), "Audio should count payload bytes.");
+            Assert(summary.Contains("Res   4 (P 1/L 1/C 2) · ?1", StringComparison.Ordinal), "Resource identity and ownership buckets must be deduplicated.");
+            var empty = sampler.Sample(Array.Empty<ResourceDiagnosticEntry>());
+            Assert(!empty.Contains('?'), "Empty cache must not retain previously sampled resources.");
+        }
         var configuration = MajoProjectConfiguration.CreateDefault();
         Assert(!new DiagnosticsConfiguration().IncludeCorrelation, "DiagnosticsConfiguration.IncludeCorrelation should default to false.");
         configuration.Diagnostics = new DiagnosticsConfiguration
@@ -50,6 +69,11 @@ public partial class HeadlessTestRunner
             Assert(fpsLabel is not null, "FPS label must exist.");
             Assert(fpsLabel.Text.StartsWith("FPS:", StringComparison.Ordinal), "FPS label should display FPS prefix.");
 
+            var memoryLabel = fpsOverlay.FindChild("MemoryLabel", recursive: true, owned: false) as Label;
+            Assert(memoryLabel is not null && memoryLabel.Text.Contains("RAM", StringComparison.Ordinal)
+                && memoryLabel.Text.Contains("RM Tex", StringComparison.Ordinal), "Overlay should display process and resource memory.");
+            Assert(memoryLabel.GetParent() == fpsLabel.GetParent() && memoryLabel.GetParent() is HBoxContainer,
+                "FPS and memory must share one row.");
             var fontColor = fpsLabel.GetThemeColor("font_color");
             Assert(Mathf.IsEqualApprox(fontColor.G, 1.0f) && Mathf.IsZeroApprox(fontColor.R) && Mathf.IsZeroApprox(fontColor.B),
                 "FPS label text must be green.");

@@ -178,3 +178,6 @@ public sealed record ResourceCacheSnapshot(
 {
     public bool IsOverBudget => BudgetBytes > 0 && EstimatedBytes > BudgetBytes;
 }
+
+/// <summary>Short-lived diagnostic view; consumers must not retain resource references.</summary>
+public sealed record ResourceDiagnosticEntry(object Resource, int LeaseCount, int PinnedLeaseCount);

@@ -6,6 +6,7 @@ using Godot;
 using Majo.Runtime.Core;
 using Majo.Runtime.Diagnostics;
 using Majo.Runtime.Input;
+using Majo.Runtime.Resources;
 using Majo.Runtime.UI.Diagnostics;
 
 namespace Majo.Runtime;
@@ -59,7 +60,8 @@ public partial class MajoRuntimeBootstrap : Node
         var showFps = Configuration?.Diagnostics?.ShowFpsOverlay ?? true;
         if (showFps && OS.IsDebugBuild())
         {
-            FpsOverlay = new DefaultFpsOverlay(this, Configuration?.Diagnostics);
+            var resources = Host?.Services.TryGet<IResourceManager>(out var manager) == true ? manager : null;
+            FpsOverlay = new DefaultFpsOverlay(this, Configuration?.Diagnostics, resources);
         }
     }
 
