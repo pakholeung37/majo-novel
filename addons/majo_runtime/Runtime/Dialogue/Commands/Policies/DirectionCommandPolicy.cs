@@ -18,13 +18,12 @@ public sealed record DirectionAnimationDefaults(
     DirectionTransitionId DefaultCharacterAnimationKind,
     DirectionTransitionId DefaultCharacterAppearanceAnimationKind = default,
     DirectionTransitionId DefaultActorHideAnimationKind = default,
-    DirectionTransitionId DefaultStageShowAnimationKind = default,
     DirectionTransitionId DefaultStageClearAnimationKind = default,
     DirectionTransitionId DefaultBackdropAnimationKind = default,
     DirectionTransitionId DefaultCameraAnimationKind = default,
     DirectionTransitionId DefaultCameraResetAnimationKind = default,
     DirectionTransitionId DefaultShotAnimationKind = default,
-    DirectionTransitionId DefaultLayoutAnimationKind = default,
+    DirectionTransitionId DefaultScreenAnimationKind = default,
     double DefaultCurtainDurationSeconds = RuntimeDefaults.CurtainDurationSeconds,
     EasingId DefaultEasing = default)
 {
@@ -45,13 +44,12 @@ public sealed record DirectionAnimationDefaults(
             animation.ResolveCharacterAnimationId(),
             animation.ResolveCharacterAppearanceAnimationId(),
             animation.ResolveActorHideAnimationId(),
-            animation.ResolveStageShowAnimationId(),
             animation.ResolveStageClearAnimationId(),
             animation.ResolveBackdropAnimationId(),
             animation.ResolveCameraAnimationId(),
             animation.ResolveCameraResetAnimationId(),
             animation.ResolveShotAnimationId(),
-            animation.ResolveLayoutAnimationId(),
+            animation.ResolveScreenAnimationId(),
             animation.DefaultCurtainDurationSeconds,
             animation.ResolveDirectionEasingId());
     }
@@ -59,13 +57,12 @@ public sealed record DirectionAnimationDefaults(
     public DirectionTransitionId ResolveDefaultAnimationKind(string commandName) => commandName switch
     {
         "character hide" => DefaultActorHideAnimationKind.IsEmpty ? DirectionTransitionId.Fade : DefaultActorHideAnimationKind,
-        "stage show" => DefaultStageShowAnimationKind.IsEmpty ? DirectionTransitionId.Cut : DefaultStageShowAnimationKind,
         "stage clear" => DefaultStageClearAnimationKind.IsEmpty ? DirectionTransitionId.Fade : DefaultStageClearAnimationKind,
         "backdrop" => DefaultBackdropAnimationKind.IsEmpty ? DirectionTransitionId.Cut : DefaultBackdropAnimationKind,
         "camera" => DefaultCameraAnimationKind.IsEmpty ? DirectionTransitionId.Cut : DefaultCameraAnimationKind,
         "camera reset" => DefaultCameraResetAnimationKind.IsEmpty ? DirectionTransitionId.Cut : DefaultCameraResetAnimationKind,
         "shot use" => DefaultShotAnimationKind.IsEmpty ? DirectionTransitionId.Cut : DefaultShotAnimationKind,
-        "layout" => DefaultLayoutAnimationKind.IsEmpty ? DirectionTransitionId.Cut : DefaultLayoutAnimationKind,
+        "screen show" or "screen split" or "screen pip" => DefaultScreenAnimationKind.IsEmpty ? DirectionTransitionId.Cut : DefaultScreenAnimationKind,
         "character space" or "object space" => DirectionTransitionId.Cut,
         "object hide" => DefaultActorHideAnimationKind.IsEmpty ? DirectionTransitionId.Fade : DefaultActorHideAnimationKind,
         "character appearance" or "object appearance" => DefaultCharacterAppearanceAnimationKind.IsEmpty ? DirectionTransitionId.Dissolve : DefaultCharacterAppearanceAnimationKind,
@@ -131,13 +128,12 @@ public sealed class DirectionCommandPolicy : IDirectionCommandPolicy
             ValidateDefaultTransition(defaults.DefaultCharacterAnimationKind, "character", TransitionDomains.Actor);
             ValidateDefaultTransition(defaults.DefaultCharacterAppearanceAnimationKind, "character appearance", TransitionDomains.Actor);
             ValidateDefaultTransition(defaults.DefaultActorHideAnimationKind, "character hide", TransitionDomains.Actor);
-            ValidateDefaultTransition(defaults.DefaultStageShowAnimationKind, "stage show", TransitionDomains.Stage);
             ValidateDefaultTransition(defaults.DefaultStageClearAnimationKind, "stage clear", TransitionDomains.Stage);
             ValidateDefaultTransition(defaults.DefaultBackdropAnimationKind, "backdrop", TransitionDomains.Stage);
             ValidateDefaultTransition(defaults.DefaultCameraAnimationKind, "camera", TransitionDomains.View);
             ValidateDefaultTransition(defaults.DefaultCameraResetAnimationKind, "camera reset", TransitionDomains.View);
             ValidateDefaultTransition(defaults.DefaultShotAnimationKind, "shot use", TransitionDomains.View);
-            ValidateDefaultTransition(defaults.DefaultLayoutAnimationKind, "layout", TransitionDomains.Screen);
+            ValidateDefaultTransition(defaults.DefaultScreenAnimationKind, "screen show", TransitionDomains.Screen);
         }
         return Task.CompletedTask;
     }
@@ -150,7 +146,7 @@ public sealed class DirectionCommandPolicy : IDirectionCommandPolicy
         "character" or "character appearance" or "character hide" or "character space" or
         "object" or "object appearance" or "object hide" or "object space" => TransitionDomains.Actor,
         "camera" or "camera reset" or "camera move" or "camera fx" or "shot use" => TransitionDomains.View,
-        "curtain" or "layout" => TransitionDomains.Screen,
+        "curtain" or "screen show" or "screen split" or "screen pip" => TransitionDomains.Screen,
         _ => TransitionDomains.Stage,
     };
 

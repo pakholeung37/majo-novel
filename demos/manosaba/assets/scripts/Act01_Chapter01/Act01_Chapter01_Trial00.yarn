@@ -67,7 +67,7 @@ scene: act01_chapter01_trial00
 <<object stand_12 asset:Court_Stand at:-35.1562,40 scale:1.8 z:100 via:cut>>
 <<camera view:main preset:ema_close>>
 <<camera view:trial_b preset:opening>>
-<<layout single main:trial_b via:cut>>
+<<screen show trial_b via:cut>>
 <<beat end wait:false>>
 <<bgm Bgm_025_001_Loop volume:1 loop:true duration:0>>
 // Slow establishing drift continues under the opening exchange.
@@ -102,7 +102,7 @@ Miria: 反正我也不知道[br /]该从哪里开始讨论…… #line:0101Trial
 <<camera view:main preset:leia_close center:245.625,78 via:cut>>
 <<beat begin>>
 <<camera move view:main preset:leia_close duration:0.6 ease:cubic-out>>
-<<layout single main:main via:cut>>
+<<screen show main via:cut>>
 <<beat end wait:false>>
 <<wait 0.2>>
 Leia: 好，那就拜托雪莉你讲一下，[br /]你找到的证据是什么。 #line:0101Trial00_Leia002
@@ -112,7 +112,7 @@ Leia: 好，那就拜托雪莉你讲一下，[br /]你找到的证据是什么�
 <<camera view:trial_b preset:sherry_close center:176.25,78 via:cut>>
 <<beat begin>>
 <<camera view:trial_b preset:sherry_close via:cut>>
-<<layout single main:trial_b via:cut>>
+<<screen show trial_b via:cut>>
 <<beat end wait:false>>
 <<wait 0.2>>
 Sherry: 好的！交给我吧！ #line:0101Trial00_Sherry003
@@ -122,7 +122,7 @@ Sherry: 好的！交给我吧！ #line:0101Trial00_Sherry003
 <<camera view:main preset:ema_medium via:cut>>
 <<beat begin>>
 <<camera move view:main preset:ema_close duration:4 ease:sine-out>>
-<<layout single main:main via:cut>>
+<<screen show main via:cut>>
 <<beat end wait:false>>
 <<wait 0.2>>
 Ema: （接下来讨论要真正开始了……[br /]　我得认真听大家讲的话……） #line:0101Trial00_Ema001
@@ -135,7 +135,7 @@ Ema: （可是我到底应该说什么话才好呢……？） #line:0101Trial00
 // Meruru on the left, Ema on the right. Shared Stage, independent cameras.
 <<camera view:trial_b preset:meruru_split via:cut>>
 <<camera view:main preset:ema_close via:cut>>
-<<layout split main:trial_b inset:main divider:25 angle:10 mainAt:20,50 insetAt:50,50 via:dissolve duration:0.2 wait:true>>
+<<screen split left:trial_b right:main divider:25 angle:10 leftAt:20,50 rightAt:50,50 via:dissolve duration:0.2 wait:true>>
 // Save at a settled dialogue boundary; active camera motion cannot be captured.
 // <<autoSave>>
 Meruru: ……啊，那个，艾玛小姐。 #line:0101Trial00_Meruru001
@@ -149,7 +149,7 @@ Ema: 啊……梅露露，[br /]你喊我有什么事？ #line:0101Trial00_Ema00
 // Keep the current Ema pose when removing the split; do not cut to Meruru.
 <<beat begin id:meruru_explanation>>
 <<camera move view:main preset:pair_wide duration:8 ease:sine-in-out>>
-<<layout single main:main via:cut>>
+<<screen show main via:cut>>
 <<beat end wait:false>>
 <<wait 0.2>>
 Meruru: 我想，接下来大家要开始[br /]【讨论】了…… #line:0101Trial00_Meruru002
@@ -186,7 +186,7 @@ Ema: 梅露露……！ #line:0101Trial00_Ema004
 <<camera view:trial_b preset:ema_close via:cut>>
 <<beat begin>>
 <<camera move view:trial_b preset:ema_close zoom:2.88 duration:2 ease:sine-out>>
-<<layout single main:trial_b via:cut>>
+<<screen show trial_b via:cut>>
 <<beat end wait:false>>
 <<wait 0.2>>
 Ema: （正如梅露露所说，如果出现了在意的地方，[br /]　就试着拿出勇气指出它们吧……！） #line:0101Trial00_Ema005

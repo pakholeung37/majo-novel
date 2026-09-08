@@ -21,7 +21,7 @@ title: DirectionCommands
 <<beat end wait:false>>
 <<camera move stage:illustration center:44.438,71.950 duration:0.4 ease:back-out>>
 <<beat begin>>
-<<stage show illustration via:cut>>
+<<screen show illustration via:cut>>
 <<beat end wait:true>>
 Narrator: direction beat committed #line:commands-direction-beat
 <<beat begin>>
@@ -33,7 +33,7 @@ Narrator: direction actor moved #line:commands-direction-move
 Narrator: direction illustration shown #line:commands-direction-illustration
 <<camera reset stage:illustration via:dissolve duration:0.08 wait:true>>
 Narrator: direction illustration pose reset #line:commands-direction-reset
-<<stage show main via:cut wait:true>>
+<<screen show main via:cut wait:true>>
 Narrator: direction stage restored #line:commands-direction-stage
 <<character hide hero via:fade duration:0.08 wait:true>>
 Narrator: direction actor left #line:commands-direction-leave
@@ -49,13 +49,13 @@ title: DirectionMultiStage
 <<backdrop background_light stage:broadcast>>
 <<character hero stage:broadcast at:right appearance:blue>>
 <<camera stage:broadcast center:50,50 zoom:1>>
-<<stage show broadcast via:cut>>
+<<screen show broadcast via:cut>>
 <<beat end wait:true>>
-Narrator: broadcast stage shown #line:commands-direction-broadcast
-<<stage show main via:cut wait:true>>
+Narrator: broadcast screen shown #line:commands-direction-broadcast
+<<screen show main via:cut wait:true>>
 Narrator: main stage restored #line:commands-direction-main-return
 <<camera view:reaction center:65,50 zoom:1.8 via:cut>>
-<<layout split main:main inset:reaction via:cut wait:true>>
+<<screen split left:main right:reaction via:cut wait:true>>
 Narrator: split layout shown #line:commands-direction-split
 ===
 

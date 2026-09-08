@@ -43,7 +43,6 @@ public sealed class DirectionRuntimeTests
         Assert.Equal(
             [
                 "stage define",
-                "stage show",
                 "stage clear",
                 "backdrop",
                 "character",
@@ -62,7 +61,9 @@ public sealed class DirectionRuntimeTests
                 "camera reset",
                 "camera fx",
                 "shot use",
-                "layout",
+                "screen show",
+                "screen split",
+                "screen pip",
                 "import",
                 "mark",
                 "curtain",
@@ -74,7 +75,7 @@ public sealed class DirectionRuntimeTests
             ],
             names);
         Assert.DoesNotContain(names, name => name is
-            "back" or "char" or "hide" or "place" or
+            "layout" or "stage show" or "back" or "char" or "hide" or "place" or
             "shot pose" or "shake" or "camera zoom" or "camera rotate");
     }
 

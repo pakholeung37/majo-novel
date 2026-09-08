@@ -45,50 +45,6 @@ public sealed partial class StageDefineCommand : RuntimeCommand<StageDefineComma
     public sealed record Arguments([Primary] string Stage);
 }
 
-[Command("stage show", Category = "Direction")]
-public sealed partial class StageShowCommand : RuntimeCommand<StageShowCommand.Arguments>
-{
-    private readonly IDirectionBeatRuntime beats;
-    private readonly IDirectionScopeResolver scopes;
-    private readonly IDialogueNodeAccessor nodeAccessor;
-    private readonly IDirectionCommandPolicy policy;
-
-    public StageShowCommand(
-        IDirectionBeatRuntime beats,
-        IDirectionScopeResolver scopes,
-        IDialogueNodeAccessor nodeAccessor,
-        IDirectionCommandPolicy policy)
-    {
-        this.beats = beats ?? throw new ArgumentNullException(nameof(beats));
-        this.scopes = scopes ?? throw new ArgumentNullException(nameof(scopes));
-        this.nodeAccessor = nodeAccessor ?? throw new ArgumentNullException(nameof(nodeAccessor));
-        this.policy = policy ?? throw new ArgumentNullException(nameof(policy));
-    }
-
-    protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
-    {
-        var node = nodeAccessor.RequireNode();
-        var defaultView = scopes.ResolveDefaultView(node, arguments.Stage);
-        var transition = policy.ResolveTransition("stage show", arguments.Transition, context);
-        var wait = arguments.Transition.Wait.GetValueOrDefault(false);
-
-        await beats.SubmitAsync(
-            new ScreenPatch(
-                LayoutId.SingleLayout,
-                new Dictionary<LayoutSlotId, ViewId>
-                {
-                    [LayoutSlotId.Main] = defaultView,
-                },
-                transition),
-            wait ? DirectionCompletionBarrier.Settle : DirectionCompletionBarrier.Commit,
-            context.CancellationToken);
-    }
-
-    public sealed record Arguments(
-        [Primary] string Stage,
-        [Group] TransitionArguments Transition);
-}
-
 [Command("stage clear", Category = "Direction")]
 public sealed partial class StageClearCommand : RuntimeCommand<StageClearCommand.Arguments>
 {

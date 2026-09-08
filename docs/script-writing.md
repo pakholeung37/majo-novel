@@ -343,36 +343,43 @@ scene 清场发生在目标节点正文之前，因此只在目标正文第一�
 
 ## 10. 多舞台与多视图（进阶）
 
-Stage 保存背景和实例，View 是观察 Stage 的镜头，layout 决定哪些 View 出现在屏幕上。默认只有 main；同一 Stage 可被多个 View 观察，同名 Actor 可分别存在于不同 Stage。
+Stage 保存背景和实例，View 是观察 Stage 的镜头，screen 决定哪些 View 出现在屏幕上。默认只有 main；同一 Stage 可被多个 View 观察，同名 Actor 可分别存在于不同 Stage。
 
 ```yarn
 <<stage define broadcast>>
 <<backdrop backdrop/spotlight stage:broadcast>>
 <<character hero stage:broadcast appearance:determined at:center wait:true>>
 <<camera stage:broadcast center:50,50 zoom:1>>
-<<stage show broadcast via:cut wait:true>>
+<<screen show broadcast via:cut wait:true>>
 
 <<view define reaction stage:main>>
 <<camera view:reaction center:65,50 zoom:1.8>>
-<<layout split main:broadcast inset:reaction via:cut wait:true>>
-<<stage show main via:cut wait:true>>
+<<screen split left:broadcast right:reaction via:cut wait:true>>
+<<screen show main via:cut wait:true>>
 ```
 
-`stage define <名称>` 同时创建其默认 View；`view define <名称> stage:<名称>` 创建额外 View。`stage show` 切换到 single 布局，并不修改以后命令的默认目标：不写 `stage` 的 Character/Backdrop 仍然作用于 main。`layout` 的 main/inset 参数绑定的是 View；本节点 Stage 名也可用于引用该 Stage 默认 View。
+`stage define <名称>` 同时创建其默认 View；`view define <名称> stage:<名称>` 创建额外 View。`screen show` 切换到 single 布局，并不修改以后命令的默认目标：不写 `stage` 的 Character/Backdrop 仍然作用于 main。`screen show <view>` 全屏显示指定 View，退出分屏或画中画，但保留镜头取景和正在进行的运镜。`screen split` 的 left/right 和 `screen pip` 的 background/inset 参数绑定的是 View；本节点 Stage 名也可用于引用该 Stage 默认 View。
+
+所有 `screen` 命令立即切换屏幕组合，不定义可复用布局；省略 `wait` 默认 false。`camera` 只调整指定镜头，不切换屏幕；省略目标仍操作 main，不跟随当前显示的 View。屏幕切换的 `via/duration/wait` 与 `camera move` 的运动时序相互独立，可通过 beat 同时提交。
+
+```yarn
+<<screen show main>>
+<<screen pip background:main inset:reaction via:dissolve duration:0.2>>
+```
 
 分屏支持独立的裁切边界与画面摆放：
 
 ```yarn
-<<layout split main:broadcast inset:reaction divider:35 angle:10 mainAt:20,50 insetAt:55,50 via:dissolve duration:0.2 wait:true>>
+<<screen split left:broadcast right:reaction divider:35 angle:10 leftAt:20,50 rightAt:55,50 via:dissolve duration:0.2 wait:true>>
 ```
 
 - `divider`：分割线与屏幕水平中线的交点 X，范围 0..100，默认 50。
 - `angle`：从竖直线顺时针旋转的角度，范围严格大于 -90、小于 90，默认 0。正角度时上端偏右、下端偏左；角度按屏幕像素计算，不随宽高比变形。
-- `mainAt / insetAt`：把对应 camera 的取景中心放在整个屏幕的指定位置。使用屏幕百分比坐标，X 向右、Y 向上；支持有限的屏幕外位置，不支持舞台 mark。省略时分别位于左右区域中心，即 `(divider / 2, 50)` 和 `((100 + divider) / 2, 50)`。
+- `leftAt / rightAt`：把对应 camera 的取景中心放在整个屏幕的指定位置。使用屏幕百分比坐标，X 向右、Y 向上；支持有限的屏幕外位置，不支持舞台 mark。省略时分别位于左右区域中心，即 `(divider / 2, 50)` 和 `((100 + divider) / 2, 50)`。
 
-main 显示分割线左侧，inset 显示右侧，两侧使用互补裁切。布局只平移镜头画面并裁切，不旋转画面，也不因为分屏宽度改变 zoom；画面旋转仍由 camera rotation 控制。摆放太远导致源镜头画面不能覆盖可见区域时，区域显示黑色，需要调整摆放或取景。
+left 显示分割线左侧，right 显示右侧，两侧使用互补裁切。布局只平移镜头画面并裁切，不旋转画面，也不因为分屏宽度改变 zoom；画面旋转仍由 camera rotation 控制。摆放太远导致源镜头画面不能覆盖可见区域时，区域显示黑色，需要调整摆放或取景。
 
-这些参数只适用于 `layout split`，每条 layout 命令使用完整声明及默认值，不继承上一条的省略字段。参数进入存档与回滚状态；旧存档缺失这些字段时仍为原有五五分屏。`via:move` 可连续插值分割位置、倾角和摆放；`via:dissolve` 混合前后布局。切回 single/pip 会清除分屏配置。
+这些参数只适用于 `screen split`，每条 screen 命令使用完整声明及默认值，不继承上一条的省略字段。参数进入存档与回滚状态；旧存档缺失这些字段时仍为原有五五分屏。`via:dissolve` 混合前后布局。使用 `screen show` 或 `screen pip` 会清除分屏配置。
 
 main 是公共名称，其他 Stage/View 符号属于定义节点。跳到其他普通节点并不会删除画面，但新节点的同名局部符号不自动指向旧节点实例。自定义 mark、shot 别名也不应当作全局名称使用。
 
@@ -425,7 +432,7 @@ Maya: 我们开始吧。 #line:writing_guide_001 #voice:none
 | 同 Beat 创建后 move 失败 | 把创建先提交，再另起一组移动 |
 | 切节点后立绘/BGM 还在 | 普通节点保留场景；新场景入口加唯一 scene |
 | 新场景出现空白闪帧 | 在旧节点关幕并等完成后再跳转 |
-| stage show 后角色出现在其他画面 | 命令默认目标仍是 main，显式写 stage |
+| screen show 后角色出现在其他画面 | 命令默认目标仍是 main，显式写 stage |
 | 有台词但没有立绘 | 姓名栏不控制角色显示，检查 character 命令与资源 |
 | 有台词但没有语音 | 检查 line ID、voice 标记、资源 ID 和 Voice locale |
 | 脚本继续了但某条命令没效果 | 检查 command 诊断；可恢复内容错误在非严格模式下可能被跳过 |

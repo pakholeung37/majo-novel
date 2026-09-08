@@ -91,7 +91,7 @@ public sealed class NodeDirectionCompiler
 {
     private static readonly HashSet<string> DirectionCommands = new(
         new[] { "stage", "view", "backdrop", "character", "object", "camera", "shot",
-            "layout", "import", "mark", "curtain", "beat" },
+            "screen", "import", "mark", "curtain", "beat" },
         StringComparer.OrdinalIgnoreCase);
     private static readonly Regex NodeHeader = new(
         "^title:\\s*(?<id>.+?)\\s*$",

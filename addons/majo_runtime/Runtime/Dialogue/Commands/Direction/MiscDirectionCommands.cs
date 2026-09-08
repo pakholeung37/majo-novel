@@ -59,69 +59,6 @@ public sealed partial class ShotUseCommand : RuntimeCommand<ShotUseCommand.Argum
         [Group] TransitionArguments Transition);
 }
 
-[Command("layout", Category = "Direction")]
-public sealed partial class LayoutCommand : RuntimeCommand<LayoutCommand.Arguments>
-{
-    private readonly IDirectionBeatRuntime beats;
-    private readonly IDirectionScopeResolver scopes;
-    private readonly IDialogueNodeAccessor nodeAccessor;
-    private readonly IDirectionCommandPolicy policy;
-
-    public LayoutCommand(
-        IDirectionBeatRuntime beats,
-        IDirectionScopeResolver scopes,
-        IDialogueNodeAccessor nodeAccessor,
-        IDirectionCommandPolicy policy)
-    {
-        this.beats = beats ?? throw new ArgumentNullException(nameof(beats));
-        this.scopes = scopes ?? throw new ArgumentNullException(nameof(scopes));
-        this.nodeAccessor = nodeAccessor ?? throw new ArgumentNullException(nameof(nodeAccessor));
-        this.policy = policy ?? throw new ArgumentNullException(nameof(policy));
-    }
-
-    protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
-    {
-        var node = nodeAccessor.RequireNode();
-        var bindings = new Dictionary<LayoutSlotId, ViewId>
-        {
-            [LayoutSlotId.Main] = scopes.ResolveView(node, arguments.Main.GetValueOrDefault("main")),
-        };
-
-        if (arguments.Inset.WasProvided && !string.IsNullOrWhiteSpace(arguments.Inset.Value))
-        {
-            bindings[new LayoutSlotId("inset")] = scopes.ResolveView(node, arguments.Inset.Value);
-        }
-
-        var transition = policy.ResolveTransition("layout", arguments.Transition, context);
-        var wait = arguments.Transition.Wait.GetValueOrDefault(false);
-
-        await beats.SubmitAsync(
-            new ScreenPatch(
-                new LayoutId(arguments.Layout),
-                bindings,
-                transition)
-            {
-                Split = arguments.Divider.WasProvided || arguments.Angle.WasProvided || arguments.MainAt.WasProvided || arguments.InsetAt.WasProvided
-                    ? new SplitLayout((float)arguments.Divider.GetValueOrDefault(50), (float)arguments.Angle.GetValueOrDefault(0),
-                        arguments.MainAt.WasProvided ? new DirectionPoint(arguments.MainAt.Value.X, arguments.MainAt.Value.Y) : null,
-                        arguments.InsetAt.WasProvided ? new DirectionPoint(arguments.InsetAt.Value.X, arguments.InsetAt.Value.Y) : null).Validate()
-                    : null,
-            },
-            wait ? DirectionCompletionBarrier.Settle : DirectionCompletionBarrier.Commit,
-            context.CancellationToken);
-    }
-
-    public sealed record Arguments(
-        [Primary] string Layout,
-        [Option] CommandValue<string> Main,
-        [Option] CommandValue<string> Inset,
-        [Option(Minimum = 0)] CommandValue<double> Divider,
-        [Option(ValueHint = "degrees")] CommandValue<double> Angle,
-        [Option] CommandValue<Godot.Vector2> MainAt,
-        [Option] CommandValue<Godot.Vector2> InsetAt,
-        [Group] TransitionArguments Transition);
-}
-
 [Command("import", Category = "Direction")]
 public sealed partial class DirectionImportCommand : RuntimeCommand<DirectionImportCommand.Arguments>
 {

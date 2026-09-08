@@ -60,12 +60,6 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
             services.Get<IDirectionScopeResolver>(),
             services.Get<IDialogueNodeAccessor>()), providerId, version);
 
-        commands.Add("stage show", services => new StageShowCommand(
-            services.Get<IDirectionBeatRuntime>(),
-            services.Get<IDirectionScopeResolver>(),
-            services.Get<IDialogueNodeAccessor>(),
-            services.Get<IDirectionCommandPolicy>()), providerId, version);
-
         commands.Add("stage clear", services => new StageClearCommand(
             services.Get<IDirectionBeatRuntime>(),
             services.Get<IDirectionScopeResolver>(),
@@ -159,7 +153,19 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
             services.Get<IDialogueNodeAccessor>(),
             services.Get<IDirectionCommandPolicy>()), providerId, version);
 
-        commands.Add("layout", services => new LayoutCommand(
+        commands.Add("screen show", services => new ScreenShowCommand(
+            services.Get<IDirectionBeatRuntime>(),
+            services.Get<IDirectionScopeResolver>(),
+            services.Get<IDialogueNodeAccessor>(),
+            services.Get<IDirectionCommandPolicy>()), providerId, version);
+
+        commands.Add("screen split", services => new ScreenSplitCommand(
+            services.Get<IDirectionBeatRuntime>(),
+            services.Get<IDirectionScopeResolver>(),
+            services.Get<IDialogueNodeAccessor>(),
+            services.Get<IDirectionCommandPolicy>()), providerId, version);
+
+        commands.Add("screen pip", services => new ScreenPipCommand(
             services.Get<IDirectionBeatRuntime>(),
             services.Get<IDirectionScopeResolver>(),
             services.Get<IDialogueNodeAccessor>(),

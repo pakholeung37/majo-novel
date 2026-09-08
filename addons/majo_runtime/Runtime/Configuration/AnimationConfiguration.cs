@@ -18,13 +18,12 @@ public partial class AnimationConfiguration : Resource
     [Export] public string DefaultCharacterAnimationId { get; set; } = "fade";
     [Export] public string DefaultCharacterAppearanceAnimationId { get; set; } = "dissolve";
     [Export] public string DefaultActorHideAnimationId { get; set; } = "fade";
-    [Export] public string DefaultStageShowAnimationId { get; set; } = "cut";
     [Export] public string DefaultStageClearAnimationId { get; set; } = "cut";
     [Export] public string DefaultBackdropAnimationId { get; set; } = "cut";
     [Export] public string DefaultCameraAnimationId { get; set; } = "cut";
     [Export] public string DefaultCameraResetAnimationId { get; set; } = "cut";
     [Export] public string DefaultShotAnimationId { get; set; } = "cut";
-    [Export] public string DefaultLayoutAnimationId { get; set; } = "cut";
+    [Export] public string DefaultScreenAnimationId { get; set; } = "cut";
     [Export] public string DefaultDirectionEasingId { get; set; } = "linear";
 
     public DirectionTransitionId ResolveCharacterAnimationId() =>
@@ -35,9 +34,6 @@ public partial class AnimationConfiguration : Resource
 
     public DirectionTransitionId ResolveActorHideAnimationId() =>
         new(!string.IsNullOrWhiteSpace(DefaultActorHideAnimationId) ? DefaultActorHideAnimationId : "fade");
-
-    public DirectionTransitionId ResolveStageShowAnimationId() =>
-        new(!string.IsNullOrWhiteSpace(DefaultStageShowAnimationId) ? DefaultStageShowAnimationId : "cut");
 
     public DirectionTransitionId ResolveStageClearAnimationId() =>
         new(!string.IsNullOrWhiteSpace(DefaultStageClearAnimationId) ? DefaultStageClearAnimationId : "cut");
@@ -54,8 +50,8 @@ public partial class AnimationConfiguration : Resource
     public DirectionTransitionId ResolveShotAnimationId() =>
         new(!string.IsNullOrWhiteSpace(DefaultShotAnimationId) ? DefaultShotAnimationId : "cut");
 
-    public DirectionTransitionId ResolveLayoutAnimationId() =>
-        new(!string.IsNullOrWhiteSpace(DefaultLayoutAnimationId) ? DefaultLayoutAnimationId : "cut");
+    public DirectionTransitionId ResolveScreenAnimationId() =>
+        new(!string.IsNullOrWhiteSpace(DefaultScreenAnimationId) ? DefaultScreenAnimationId : "cut");
 
     public EasingId ResolveDirectionEasingId() =>
         new(!string.IsNullOrWhiteSpace(DefaultDirectionEasingId) ? DefaultDirectionEasingId : "linear");

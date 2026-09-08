@@ -30,7 +30,7 @@ public sealed class NodeDirectionCompilerTests
                 new YarnSourceFileSnapshot(
                     "main.yarn",
                     "main.yarn",
-                    "title: Opening\n---\n<<stage define cell>>\n<<view define reaction stage:cell>>\n<<backdrop Background_001>>\n<<camera pose view:reaction zoom:2>>\n<<backdrop Still_001 stage:cell>>\n<<layout split main:main inset:reaction>>\n===\n",
+                    "title: Opening\n---\n<<stage define cell>>\n<<view define reaction stage:cell>>\n<<backdrop Background_001>>\n<<camera pose view:reaction zoom:2>>\n<<backdrop Still_001 stage:cell>>\n<<screen split left:main right:reaction>>\n===\n",
                     "hash"),
             },
             "fingerprint");

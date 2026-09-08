@@ -403,7 +403,7 @@ public sealed class TimingRegistryTests
     {
         var defaults = DirectionAnimationDefaults.FromConfiguration(null) with
         {
-            DefaultLayoutAnimationKind = DirectionTransitionId.Move,
+            DefaultScreenAnimationKind = DirectionTransitionId.Move,
         };
         var policy = new DirectionCommandPolicy(defaults: defaults, transitions: new TransitionDriverRegistry());
         await Assert.ThrowsAsync<DirectionException>(() => policy.InitializeAsync(CancellationToken.None));

@@ -18,46 +18,6 @@
       ]
     },
     {
-      "yarnName": "stage show",
-      "definitionName": "Majo.Runtime.Dialogue.Commands.StageShowCommand",
-      "language": "csharp",
-      "documentation": "stage show \u003Cstage\u003E [via:\u003Ckind\u003E] [duration:\u003Cnumber\u003E] [ease:\u003Ceasing-id\u003E] [wait:\u003Cbool\u003E]\nstage: value\nvia: kind\nduration: seconds\nease: curve\nwait: bool (default false)",
-      "async": true,
-      "containsErrors": false,
-      "parameters": [
-        {
-          "name": "stage",
-          "type": "string",
-          "isOptional": false,
-          "isParamsArray": false
-        },
-        {
-          "name": "via:value",
-          "type": "string",
-          "isOptional": true,
-          "isParamsArray": false
-        },
-        {
-          "name": "duration:value",
-          "type": "string",
-          "isOptional": true,
-          "isParamsArray": false
-        },
-        {
-          "name": "ease:value",
-          "type": "string",
-          "isOptional": true,
-          "isParamsArray": false
-        },
-        {
-          "name": "wait:value",
-          "type": "string",
-          "isOptional": true,
-          "isParamsArray": false
-        }
-      ]
-    },
-    {
       "yarnName": "stage clear",
       "definitionName": "Majo.Runtime.Dialogue.Commands.StageClearCommand",
       "language": "csharp",
@@ -1054,29 +1014,63 @@
       ]
     },
     {
-      "yarnName": "layout",
-      "definitionName": "Majo.Runtime.Dialogue.Commands.LayoutCommand",
+      "yarnName": "screen show",
+      "definitionName": "Majo.Runtime.Dialogue.Commands.ScreenShowCommand",
       "language": "csharp",
-      "documentation": "layout \u003Clayout\u003E [main:\u003Cstring\u003E] [inset:\u003Cstring\u003E] [divider:\u003Cnumber\u003E] [angle:\u003Cnumber\u003E] [mainAt:\u003Cx,y\u003E] [insetAt:\u003Cx,y\u003E] [via:\u003Ckind\u003E] [duration:\u003Cnumber\u003E] [ease:\u003Ceasing-id\u003E] [wait:\u003Cbool\u003E]\nlayout: value\nmain: value\ninset: value\ndivider: value\nangle: degrees\nmainAt: value\ninsetAt: value\nvia: kind\nduration: seconds\nease: curve\nwait: bool (default false)",
+      "documentation": "screen show \u003Cview\u003E [via:\u003Ckind\u003E] [duration:\u003Cnumber\u003E] [ease:\u003Ceasing-id\u003E] [wait:\u003Cbool\u003E]\nview: value\nvia: kind\nduration: seconds\nease: curve\nwait: bool (default false)",
       "async": true,
       "containsErrors": false,
       "parameters": [
         {
-          "name": "layout",
+          "name": "view",
           "type": "string",
           "isOptional": false,
           "isParamsArray": false
         },
         {
-          "name": "main:value",
+          "name": "via:value",
           "type": "string",
           "isOptional": true,
           "isParamsArray": false
         },
         {
-          "name": "inset:value",
+          "name": "duration:value",
           "type": "string",
           "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "ease:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "wait:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        }
+      ]
+    },
+    {
+      "yarnName": "screen split",
+      "definitionName": "Majo.Runtime.Dialogue.Commands.ScreenSplitCommand",
+      "language": "csharp",
+      "documentation": "screen split \u003Cleft:\u003Cstring\u003E\u003E \u003Cright:\u003Cstring\u003E\u003E [divider:\u003Cnumber\u003E] [angle:\u003Cnumber\u003E] [leftAt:\u003Cx,y\u003E] [rightAt:\u003Cx,y\u003E] [via:\u003Ckind\u003E] [duration:\u003Cnumber\u003E] [ease:\u003Ceasing-id\u003E] [wait:\u003Cbool\u003E]\nleft: value\nright: value\ndivider: value\nangle: degrees\nleftAt: value\nrightAt: value\nvia: kind\nduration: seconds\nease: curve\nwait: bool (default false)",
+      "async": true,
+      "containsErrors": false,
+      "parameters": [
+        {
+          "name": "left:value",
+          "type": "string",
+          "isOptional": false,
+          "isParamsArray": false
+        },
+        {
+          "name": "right:value",
+          "type": "string",
+          "isOptional": false,
           "isParamsArray": false
         },
         {
@@ -1092,15 +1086,61 @@
           "isParamsArray": false
         },
         {
-          "name": "mainAt:value",
+          "name": "leftAt:value",
           "type": "string",
           "isOptional": true,
           "isParamsArray": false
         },
         {
-          "name": "insetAt:value",
+          "name": "rightAt:value",
           "type": "string",
           "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "via:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "duration:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "ease:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "wait:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        }
+      ]
+    },
+    {
+      "yarnName": "screen pip",
+      "definitionName": "Majo.Runtime.Dialogue.Commands.ScreenPipCommand",
+      "language": "csharp",
+      "documentation": "screen pip \u003Cbackground:\u003Cstring\u003E\u003E \u003Cinset:\u003Cstring\u003E\u003E [via:\u003Ckind\u003E] [duration:\u003Cnumber\u003E] [ease:\u003Ceasing-id\u003E] [wait:\u003Cbool\u003E]\nbackground: value\ninset: value\nvia: kind\nduration: seconds\nease: curve\nwait: bool (default false)",
+      "async": true,
+      "containsErrors": false,
+      "parameters": [
+        {
+          "name": "background:value",
+          "type": "string",
+          "isOptional": false,
+          "isParamsArray": false
+        },
+        {
+          "name": "inset:value",
+          "type": "string",
+          "isOptional": false,
           "isParamsArray": false
         },
         {

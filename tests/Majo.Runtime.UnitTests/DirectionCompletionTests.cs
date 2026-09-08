@@ -23,12 +23,19 @@ public sealed class DirectionCompletionTests
         var registry = new RuntimeCommandRegistry();
         registry.RegisterModule(new DirectionCommandModule());
         var catalog = registry.BuildCatalog(services);
-        foreach (var removed in new[] { "camera pose", "leave", "stage release", "view release" })
+        foreach (var removed in new[] { "layout", "stage show", "camera switch", "camera pose", "leave", "stage release", "view release" })
             Assert.False(catalog.TryGet(removed, out _));
         Assert.Throws<RuntimeCommandException>(() => catalog.Get("camera").BindUntyped(new CommandInput("camera", new[] { "pose", "zoom:2" })));
         Assert.NotNull(catalog.Get("character").BindUntyped(new CommandInput("character", new[] { "hero" })));
         Assert.NotNull(catalog.Get("object fx").BindUntyped(new CommandInput("object fx", new[] { "knife", "effect:shake" })));
         Assert.NotNull(catalog.Get("backdrop fx").BindUntyped(new CommandInput("backdrop fx", new[] { "shake" })));
+        Assert.NotNull(catalog.Get("screen show").BindUntyped(new CommandInput("screen show", ["main"])));
+        Assert.NotNull(catalog.Get("screen split").BindUntyped(new CommandInput("screen split", ["left:main", "right:main"])));
+        Assert.NotNull(catalog.Get("screen pip").BindUntyped(new CommandInput("screen pip", ["background:main", "inset:main"])));
+        Assert.Throws<RuntimeCommandException>(() => catalog.Get("screen show").BindUntyped(new CommandInput("screen show", [])));
+        Assert.Throws<RuntimeCommandException>(() => catalog.Get("screen split").BindUntyped(new CommandInput("screen split", ["left:main"])));
+        Assert.Throws<RuntimeCommandException>(() => catalog.Get("screen pip").BindUntyped(new CommandInput("screen pip", ["inset:main"])));
+        Assert.Throws<RuntimeCommandException>(() => catalog.Get("screen show").BindUntyped(new CommandInput("screen show", ["main", "divider:25"])));
         var payload = new
         {
             version = 2,

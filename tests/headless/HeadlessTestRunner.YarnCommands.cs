@@ -193,7 +193,7 @@ public partial class HeadlessTestRunner
         Assert(directionIllustrationReset,
             "Yarn camera reset changed the Screen binding instead of only resetting the illustration View Pose.");
         Assert(directionStageRestored,
-            "Yarn stage show main did not restore the main Stage View.");
+            "Yarn screen show main did not restore the main Stage View.");
         Assert(directionActorLeft,
             "Yarn leave did not settle the target Actor state.");
 
