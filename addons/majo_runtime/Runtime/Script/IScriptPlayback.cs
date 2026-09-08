@@ -40,3 +40,11 @@ public interface IScriptPlayback : IRuntimeService
         ScriptCheckpoint checkpoint,
         CancellationToken cancellationToken = default);
 }
+
+public interface ILineBoundarySource
+{
+    event Action<bool>? PreparationChanged;
+    bool IsCurrentBoundary(LineBoundaryContext boundary);
+    Task WaitForPreparationAsync(CancellationToken token);
+    Func<LineBoundaryContext, CancellationToken, Task>? CommitLineBoundaryAsync { get; set; }
+}

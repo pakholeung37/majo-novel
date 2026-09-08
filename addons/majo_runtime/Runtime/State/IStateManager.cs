@@ -97,3 +97,13 @@ public interface IStateManager : IRuntimeService
         StateSnapshot snapshot,
         CancellationToken cancellationToken = default);
 }
+
+public sealed record CommittedLineBoundary(
+    Majo.Runtime.Script.LineBoundaryContext Context,
+    StateSnapshot Snapshot);
+
+public interface IStateBoundarySource
+{
+    event Action<CommittedLineBoundary>? BoundaryCommitted;
+    CommittedLineBoundary? CurrentBoundary { get; }
+}

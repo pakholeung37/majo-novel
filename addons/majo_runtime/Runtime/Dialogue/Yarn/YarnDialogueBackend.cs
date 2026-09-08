@@ -21,7 +21,7 @@ using YarnSpinnerGodot;
 
 namespace Majo.Runtime.Dialogue.Yarn;
 
-public sealed class YarnDialogueBackend : IYarnDialogueBackend,
+public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySource,
     IScriptCatalogBackend,
     IScriptCheckpointBackend,
     IDisposable
@@ -151,6 +151,13 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
         {
             Name = "MajoPresenterAdapter",
             PrepareLineAsync = preloader is null ? null : preloader.BeforeLineAsync,
+            CommitLineBoundaryAsync = EstablishLineBoundaryAsync,
+            PreparationChanged = preparing => PreparationChanged?.Invoke(preparing),
+            BoundaryFailed = failure =>
+            {
+                lock (sync) pendingFailure = failure;
+                Failed?.Invoke(failure);
+            },
             OptionsStarting = preloader is null ? null : preloader.OptionsStarting,
         };
         variableStore.Name = "MajoDialogueVariables";
@@ -197,6 +204,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
         }
 
         DisconnectSignals();
+        presenterAdapter?.ReleaseBoundaryResources();
         if (GodotObject.IsInstanceValid(runner))
         {
             runner!.QueueFree();
@@ -272,6 +280,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
             currentStartNode = startNode;
             currentNodeName = startNode;
             currentLineId = string.Empty;
+            currentEntryCheckpoint = null;
             currentSubstitutions = Array.Empty<string>();
             pendingFailure = null;
             isStopping = false;
@@ -375,12 +384,15 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
     {
         if (isInitialized && !hotReloadProgressionFrozen)
         {
+            if (presenterAdapter?.DeferAdvance(hurryUp: true) == true) return;
             Runner.RequestHurryUpLine();
         }
     }
 
     public void RequestNextLine()
     {
+        if (isInitialized && !hotReloadProgressionFrozen &&
+            presenterAdapter?.DeferAdvance() == true) return;
         if (isInitialized && !hotReloadProgressionFrozen && Runner.IsDialogueRunning &&
             Interlocked.Exchange(ref nextLineRequested, 1) == 0)
         {
@@ -474,7 +486,11 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
         return CreateDescriptor(project, id);
     }
 
-    public ScriptCheckpoint CaptureCheckpoint()
+    public ScriptCheckpoint CaptureCheckpoint() => currentEntryCheckpoint ?? CaptureCheckpointCore(false);
+
+    private ScriptCheckpoint? currentEntryCheckpoint;
+
+    private ScriptCheckpoint CaptureCheckpointCore(bool atEntry)
     {
         EnsureInitialized();
         var project = Runner.YarnProject ?? throw new ScriptCheckpointException(
@@ -488,10 +504,9 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
 
         var id = new ScriptId(currentProjectId, currentNodeName);
         var descriptor = CreateDescriptor(project, id);
-        var snapshot = stateBridge.CaptureAtLine(
-            Runner.Dialogue,
-            currentLineId,
-            currentSubstitutions);
+        var snapshot = atEntry
+            ? stateBridge.CaptureAtLineEntry(Runner.Dialogue, currentLineId, currentSubstitutions)
+            : stateBridge.CaptureAtLine(Runner.Dialogue, currentLineId, currentSubstitutions);
         return new ScriptCheckpoint(
             ScriptCheckpoint.CurrentFormatVersion,
             descriptor.ProgramFingerprint,
@@ -511,7 +526,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
                 $"expected '{ScriptCheckpoint.CurrentFormatVersion}'.");
         }
 
-        if (checkpoint.Spot.Boundary != ScriptCheckpointBoundary.AwaitingLineAdvance)
+        if (checkpoint.Spot.Boundary != ScriptCheckpointBoundary.LineEntry)
         {
             throw new ScriptCheckpointException(
                 $"Unsupported script checkpoint boundary '{checkpoint.Spot.Boundary}'.");
@@ -574,6 +589,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
         }
 
         pendingRestore = checkpoint;
+        pendingPresentationOrigin = DialoguePresentationOrigin.CheckpointRestore;
     }
 
     public void CancelPreparedRestore(ScriptCheckpoint checkpoint)
@@ -582,6 +598,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
         if (ReferenceEquals(pendingRestore, checkpoint) || pendingRestore == checkpoint)
         {
             pendingRestore = null;
+            pendingPresentationOrigin = DialoguePresentationOrigin.Normal;
         }
     }
 
@@ -596,25 +613,15 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
                 $"{nameof(DialoguePresenterBase)}.");
         }
 
-        Runner.dialoguePresenters ??= new Godot.Collections.Array<Node?>();
-        if (Runner.dialoguePresenters.Contains(presenter))
-        {
-            throw new DialogueException(
-                $"Native presenter '{presenter.Name}' is already registered.");
-        }
-
-        Runner.dialoguePresenters.Add(presenter);
+        if (presenterAdapter!.NativePresenters.Contains((DialoguePresenterBase)presenter))
+            throw new DialogueException($"Native presenter '{presenter.Name}' is already registered.");
+        presenterAdapter.NativePresenters.Add((DialoguePresenterBase)presenter);
     }
 
     public void UnregisterNativePresenter(Node presenter)
     {
         ArgumentNullException.ThrowIfNull(presenter);
-        if (!isInitialized || Runner.dialoguePresenters is null)
-        {
-            return;
-        }
-
-        Runner.dialoguePresenters.Remove(presenter);
+        if (presenter is DialoguePresenterBase native) presenterAdapter?.NativePresenters.Remove(native);
     }
 
     public void SetPresentationQuiescenceWaiter(Func<CancellationToken, Task>? waiter) =>
@@ -736,6 +743,36 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
             Runner.Dialogue,
             project.Program,
             bridgeSnapshot);
+    }
+
+    private LineBoundaryContext? activeBoundary;
+    public bool IsCurrentBoundary(LineBoundaryContext boundary) => ReferenceEquals(activeBoundary, boundary);
+    public Task WaitForPreparationAsync(CancellationToken token) =>
+        presenterAdapter?.WaitForPreparationAsync(token) ?? Task.CompletedTask;
+    public event Action<bool>? PreparationChanged;
+
+    public Func<LineBoundaryContext, CancellationToken, Task>? CommitLineBoundaryAsync { get; set; }
+
+    private async Task EstablishLineBoundaryAsync(
+        DialogueLine line,
+        IReadOnlyList<string> substitutions,
+        long generation,
+        long sequence,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        currentLineId = line.Id;
+        currentSubstitutions = substitutions;
+        currentLine = line;
+        currentOptions = Array.Empty<DialogueOption>();
+        Volatile.Write(ref nextLineRequested, 0);
+        currentEntryCheckpoint = CaptureCheckpointCore(true);
+        if (CommitLineBoundaryAsync is not null)
+        {
+            activeBoundary = new LineBoundaryContext(generation, sequence, CaptureCheckpoint(), line);
+            try { await CommitLineBoundaryAsync(activeBoundary, cancellationToken); }
+            finally { activeBoundary = null; }
+        }
     }
 
     private void HandleLinePresented(

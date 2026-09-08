@@ -8,8 +8,17 @@ using Majo.Runtime.State;
 
 namespace Majo.Runtime.UnitTests.Testing;
 
-public sealed class FakeStateManager : IStateManager
+public sealed class FakeStateManager : IStateManager, IStateBoundarySource
 {
+    public event Action<CommittedLineBoundary>? BoundaryCommitted;
+    public CommittedLineBoundary? CurrentBoundary { get; private set; }
+    public async Task CommitBoundaryAsync(Majo.Runtime.Script.LineBoundaryContext context)
+    {
+        var snapshot = await CaptureGameAsync();
+        CurrentBoundary = new CommittedLineBoundary(context, snapshot);
+        BoundaryCommitted?.Invoke(CurrentBoundary);
+    }
+
     public event Action<StateStatusChanged>? StatusChanged { add { } remove { } }
     public event Action<StateSnapshot>? Captured;
     public event Action<StateSnapshot>? Restored;

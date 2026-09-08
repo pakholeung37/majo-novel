@@ -70,9 +70,9 @@ public partial class HeadlessTestRunner
             fade: new AudioFade(1));
         await audio.CancelTransitionsAsync("music");
         try { await cancelled.Settlement; } catch (OperationCanceledException) { }
-        Assert(cancelled.Playback.State == AudioPlaybackState.Stopped &&
-                audio.BgmTracks.Single().ClipId == "battle",
-            "M9 cancel did not restore the pre-crossfade BGM terminal state.");
+        Assert(cancelled.Playback.State == AudioPlaybackState.Playing &&
+                audio.BgmTracks.Single().ClipId == "calm",
+            "Cancelling a BGM animation did not preserve its committed target.");
 
         var completed = await audio.PlayBgmAsync(
             "calm",

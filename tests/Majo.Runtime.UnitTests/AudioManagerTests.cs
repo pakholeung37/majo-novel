@@ -36,7 +36,7 @@ public sealed class AudioManagerTests
     }
 
     [Fact(Timeout = 5_000)]
-    public async Task CrossfadeCancelRestoresOldTrackWhileCompleteAppliesNewTrack()
+    public async Task CrossfadeCancellationPreservesTheCommittedTarget()
     {
         var harness = await AudioHarness.CreateAsync(autoCompleteFades: false);
         var original = (await harness.Audio.PlayBgmAsync("calm", "music")).Playback;
@@ -47,9 +47,9 @@ public sealed class AudioManagerTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => cancelled.Settlement);
 
-        Assert.Equal(AudioPlaybackState.Stopped, cancelled.Playback.State);
-        Assert.Same(original, Assert.Single(harness.Audio.BgmTracks));
-        Assert.Equal(AudioPlaybackState.Playing, original.State);
+        Assert.Equal(AudioPlaybackState.Playing, cancelled.Playback.State);
+        Assert.Same(cancelled.Playback, Assert.Single(harness.Audio.BgmTracks));
+        Assert.Equal(AudioPlaybackState.Stopped, original.State);
 
         var completed = await harness.Audio.PlayBgmAsync(
             "battle", "music", fade: new AudioFade(1));
@@ -59,6 +59,26 @@ public sealed class AudioManagerTests
         Assert.Equal(AudioPlaybackState.Stopped, original.State);
         Assert.Same(completed.Playback, Assert.Single(harness.Audio.BgmTracks));
         Assert.Equal(1, completed.Playback.Volume);
+        await harness.Host.ShutdownAsync();
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task BgmSnapshotsCaptureFadeTargetsAndExcludeLogicallyStoppedTracks()
+    {
+        var harness = await AudioHarness.CreateAsync(autoCompleteFades: false);
+        var contributor = new Majo.Runtime.State.AudioStateContributor(harness.Audio);
+        var playing = await harness.Audio.PlayBgmAsync("calm", "music", volume: 0.7f,
+            fade: new AudioFade(10));
+        var snapshot = await contributor.CaptureAsync(CancellationToken.None);
+        Assert.False(playing.Settlement.IsCompleted);
+        Assert.Equal(0.7f, snapshot.Payload.GetProperty("tracks")[0].GetProperty("volume").GetSingle());
+        await harness.Audio.FinishTransitionsAsync("music");
+        var stopping = harness.Audio.StopBgmAsync("music", fade: new AudioFade(10));
+        Assert.Empty((await contributor.CaptureAsync(CancellationToken.None)).Payload
+            .GetProperty("tracks").EnumerateArray());
+        await harness.Audio.CancelTransitionsAsync("music");
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => stopping);
+        Assert.Empty(harness.Audio.BgmTracks);
         await harness.Host.ShutdownAsync();
     }
 

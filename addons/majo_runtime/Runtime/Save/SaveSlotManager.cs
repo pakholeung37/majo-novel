@@ -357,7 +357,7 @@ public sealed class SaveSlotManager : ISaveSlotManager, IDisposable
         var oldMetadata = await ReadMetadataOrNullAsync(slot, cancellationToken);
         SetPhase(operation, SaveSlotOperationPhase.Capture);
         var snapshot = await state.CaptureGameAsync(cancellationToken);
-        var display = BuildDisplayMetadata(slot, request);
+        var display = BuildDisplayMetadata(slot, request, snapshot);
         string? capturedThumbnail = null;
         if (request?.CaptureThumbnail != false)
         {
@@ -590,7 +590,8 @@ public sealed class SaveSlotManager : ISaveSlotManager, IDisposable
 
     private SortedDictionary<string, string> BuildDisplayMetadata(
         SaveSlotId slot,
-        SaveSlotSaveRequest? request)
+        SaveSlotSaveRequest? request,
+        StateSnapshot snapshot)
     {
         var display = new SortedDictionary<string, string>(StringComparer.Ordinal)
         {
@@ -602,20 +603,23 @@ public sealed class SaveSlotManager : ISaveSlotManager, IDisposable
         {
             display[SaveSlotMetadataKeys.PlayerName] = playerName;
         }
-        if (history.Entries.Count > 0 && history.Entries[^1] is { } entry)
+        var boundary = (state as IStateBoundarySource)?.CurrentBoundary;
+        if (boundary is not null && ReferenceEquals(boundary.Snapshot, snapshot))
+        {
+            var line = boundary.Context.Line;
+            if (!string.IsNullOrWhiteSpace(line.Speaker))
+                display[SaveSlotMetadataKeys.Speaker] = NormalizeRequired(line.Speaker, 80);
+            display[SaveSlotMetadataKeys.TextSummary] = NormalizeRequired(line.Text.Text, 240);
+            if (!string.IsNullOrWhiteSpace(line.ResolvedLocale))
+                display[SaveSlotMetadataKeys.Locale] = NormalizeRequired(line.ResolvedLocale, 40);
+        }
+        else if (history.Entries.Count > 0 && history.Entries[^1] is { } entry)
         {
             if (!string.IsNullOrWhiteSpace(entry.Speaker))
-            {
-                display[SaveSlotMetadataKeys.Speaker] =
-                    NormalizeRequired(entry.Speaker, 80);
-            }
-            display[SaveSlotMetadataKeys.TextSummary] =
-                NormalizeRequired(entry.Text, 240);
+                display[SaveSlotMetadataKeys.Speaker] = NormalizeRequired(entry.Speaker, 80);
+            display[SaveSlotMetadataKeys.TextSummary] = NormalizeRequired(entry.Text, 240);
             if (!string.IsNullOrWhiteSpace(entry.Locale))
-            {
-                display[SaveSlotMetadataKeys.Locale] =
-                    NormalizeRequired(entry.Locale, 40);
-            }
+                display[SaveSlotMetadataKeys.Locale] = NormalizeRequired(entry.Locale, 40);
         }
         foreach (var pair in request?.DeveloperMetadata ??
                      new Dictionary<string, string>())

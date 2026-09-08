@@ -19,13 +19,26 @@ public sealed class YarnVmStateBridge
     public YarnVmLineSnapshot CaptureAtLine(
         Dialogue dialogue,
         string lineId,
-        IReadOnlyList<string>? resolvedSubstitutions = null)
+        IReadOnlyList<string>? resolvedSubstitutions = null) =>
+        CaptureLine(dialogue, lineId, resolvedSubstitutions, allowDelivery: false);
+
+    public YarnVmLineSnapshot CaptureAtLineEntry(
+        Dialogue dialogue,
+        string lineId,
+        IReadOnlyList<string>? resolvedSubstitutions = null) =>
+        CaptureLine(dialogue, lineId, resolvedSubstitutions, allowDelivery: true);
+
+    private static YarnVmLineSnapshot CaptureLine(
+        Dialogue dialogue,
+        string lineId,
+        IReadOnlyList<string>? resolvedSubstitutions,
+        bool allowDelivery)
     {
         ArgumentNullException.ThrowIfNull(dialogue);
         ArgumentException.ThrowIfNullOrWhiteSpace(lineId);
 
         ref var vm = ref YarnPrivateAccess.GetVirtualMachine(dialogue);
-        var delivered = EnsureSafeLineBoundary(vm, lineId);
+        var delivered = EnsureSafeLineBoundary(vm, lineId, allowDelivery);
         resolvedSubstitutions ??= Array.Empty<string>();
         if (resolvedSubstitutions.Count != delivered.RunLine.SubstitutionCount)
         {
@@ -46,8 +59,8 @@ public sealed class YarnVmStateBridge
         return new YarnVmLineSnapshot(
             vm.state.currentNodeName!,
             lineId,
-            vm.state.programCounter,
-            vm.CurrentExecutionState.ToString(),
+            vm.state.programCounter + (YarnPrivateAccess.GetIsContinuing(vm) ? 1 : 0),
+            VirtualMachine.ExecutionState.WaitingForContinue.ToString(),
             vm.state.stack.Count,
             callStack.Count,
             vm.state.currentOptions.Count,
@@ -128,15 +141,17 @@ public sealed class YarnVmStateBridge
         vm._executionState = VirtualMachine.ExecutionState.WaitingForContinue;
     }
 
-    private static Instruction EnsureSafeLineBoundary(VirtualMachine vm, string lineId)
+    private static Instruction EnsureSafeLineBoundary(VirtualMachine vm, string lineId, bool allowDelivery)
     {
-        if (YarnPrivateAccess.GetIsContinuing(vm))
+        var delivering = allowDelivery && YarnPrivateAccess.GetIsContinuing(vm) &&
+            vm.CurrentExecutionState == VirtualMachine.ExecutionState.DeliveringContent;
+        if (YarnPrivateAccess.GetIsContinuing(vm) && !delivering)
         {
             throw new InvalidOperationException(
                 "Yarn VM state cannot be captured while Continue is executing.");
         }
 
-        if (vm.CurrentExecutionState != VirtualMachine.ExecutionState.WaitingForContinue)
+        if (!delivering && vm.CurrentExecutionState != VirtualMachine.ExecutionState.WaitingForContinue)
         {
             throw new InvalidOperationException(
                 $"Expected Yarn VM to be waiting for continue, but it was {vm.CurrentExecutionState}.");
@@ -147,7 +162,7 @@ public sealed class YarnVmStateBridge
             throw new InvalidOperationException("Yarn VM has no current node.");
         }
 
-        var deliveredInstructionIndex = vm.state.programCounter - 1;
+        var deliveredInstructionIndex = vm.state.programCounter - (delivering ? 0 : 1);
         if (deliveredInstructionIndex < 0 ||
             deliveredInstructionIndex >= vm.currentNode.Instructions.Count)
         {

@@ -39,6 +39,26 @@ public sealed class YarnVmStateBridgeTests
     }
 
     [Fact]
+    public void EntryCaptureWorksInsideTheSynchronousVmLineCallback()
+    {
+        var program = CreateProgram("line:first", "line:second");
+        var dialogue = CreateDialogue(program, out _);
+        var bridge = new YarnVmStateBridge();
+        YarnVmLineSnapshot? entry = null;
+        dialogue.LineHandler = line =>
+        {
+            Assert.Throws<InvalidOperationException>(() => bridge.CaptureAtLine(dialogue, line.ID));
+            entry = bridge.CaptureAtLineEntry(dialogue, line.ID, line.Substitutions);
+        };
+        dialogue.Continue();
+        var settled = bridge.CaptureAtLine(dialogue, "line:first");
+        Assert.NotNull(entry);
+        Assert.Equal(settled.CapturedProgramCounter, entry.CapturedProgramCounter);
+        Assert.Equal(settled.ExecutionState, entry.ExecutionState);
+        Assert.Equal(settled.LineId, entry.LineId);
+    }
+
+    [Fact]
     public void RestoreUsesLineIdWhenInstructionIndexChanges()
     {
         var original = CreateProgram("line:target", "line:after");
@@ -152,6 +172,53 @@ public sealed class YarnVmStateBridgeTests
             delivered.Select(line => line.Id));
         Assert.Equal(delivered[0].Substitutions, delivered[1].Substitutions);
         Assert.Empty(delivered[2].Substitutions);
+    }
+
+    [Fact]
+    public void LineEntryReplayDoesNotExecutePreludeOrRepeatVariableMutation()
+    {
+        const string source = """
+            title: Start
+            ---
+            <<declare $visits = 0>>
+            <<set $visits = $visits + 1>>
+            <<play_once>>
+            Narrator: Visit {$visits}. #line:entry-target
+            <<set $visits = $visits + 1>>
+            Narrator: After {$visits}. #line:entry-after
+            ===
+            """;
+        var compilation = Compiler.Compile(CompilationJob.CreateFromString("entry.yarn", source));
+        Assert.DoesNotContain(compilation.Diagnostics,
+            diagnostic => diagnostic.Severity == Diagnostic.DiagnosticSeverity.Error);
+        var program = Assert.IsType<Program>(compilation.Program);
+        var storage = new FakeVariableStorage();
+        storage.SetValue("$visits", 0f);
+        var lines = new List<Line>();
+        var commands = new List<string>();
+        var dialogue = new YarnDialogue(storage)
+        {
+            LineHandler = lines.Add,
+            CommandHandler = command => commands.Add(command.Text),
+            OptionsHandler = _ => { },
+        };
+        dialogue.SetProgram(program);
+        dialogue.SetNode("Start");
+        dialogue.Continue();
+        dialogue.Continue();
+        var original = Assert.Single(lines);
+        var bridge = new YarnVmStateBridge();
+        var snapshot = bridge.CaptureAtLine(dialogue, original.ID, original.Substitutions);
+        Assert.Equal("1", Assert.Single(original.Substitutions));
+        dialogue.Stop();
+        bridge.PrepareReplay(dialogue, program, snapshot);
+        dialogue.Continue();
+        dialogue.Continue();
+        Assert.Equal(new[] { "line:entry-target", "line:entry-target", "line:entry-after" },
+            lines.Select(line => line.ID));
+        Assert.Equal(original.Substitutions, lines[1].Substitutions);
+        Assert.Equal("2", Assert.Single(lines[2].Substitutions));
+        Assert.Equal("play_once", Assert.Single(commands));
     }
 
     [Fact]

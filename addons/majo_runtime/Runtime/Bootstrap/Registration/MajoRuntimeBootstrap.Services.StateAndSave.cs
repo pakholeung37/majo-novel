@@ -332,7 +332,8 @@ public partial class MajoRuntimeBootstrap : Node
             restoreBoundary,
             eligibility,
             migrations,
-            Logger);
+            Logger,
+            (scriptPlayback as ScriptPlayback)?.BoundarySource);
     }
 
     private RuntimeSettings CreateSettingsDefaults()

@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Godot;
 using YarnSpinnerGodot;
+using Majo.Runtime.Script;
 using MajoDialogueOption = Majo.Runtime.Dialogue.DialogueOption;
 using YarnDialogueOption = YarnSpinnerGodot.DialogueOption;
 
@@ -25,6 +26,7 @@ internal sealed partial class YarnDialoguePresenterAdapter : Node, DialoguePrese
     private bool stopRequested;
     private int activePresentations;
     private TaskCompletionSource? localeBoundary;
+    private readonly LineBoundaryGate boundaries = new();
 
     public YarnDialoguePresenterAdapter(
         IReadOnlyList<IDialoguePresenter> presenters,
@@ -46,14 +48,30 @@ internal sealed partial class YarnDialoguePresenterAdapter : Node, DialoguePrese
         this.lineConverter = lineConverter ?? (line => YarnLineConverter.Convert(line));
     }
 
+    public List<DialoguePresenterBase> NativePresenters { get; } = new();
+
+    public Action<bool>? PreparationChanged { get; set; }
+    public Action<Exception>? BoundaryFailed { get; set; }
+
     public Action? OptionsStarting { get; set; }
 
     public Func<DialogueLine, CancellationToken, Task>? PrepareLineAsync { get; set; }
+
+    public Func<DialogueLine, IReadOnlyList<string>, long, long, CancellationToken, Task>?
+        CommitLineBoundaryAsync
+    { get; set; }
+
+    internal void ReleaseBoundaryResources() => boundaries.Dispose();
+
+    public Task WaitForPreparationAsync(CancellationToken token) => boundaries.WaitForPreparationAsync(token);
+
+    public bool DeferAdvance(bool hurryUp = false) => boundaries.DeferAdvance(hurryUp);
 
     public List<IActionMarkupHandler> ActionMarkupHandlers { get; } = new();
 
     public void BeginSession()
     {
+        boundaries.BeginSession();
         lock (stopGate)
         {
             stopRequested = false;
@@ -64,6 +82,7 @@ internal sealed partial class YarnDialoguePresenterAdapter : Node, DialoguePrese
 
     public Task PrepareToStop()
     {
+        boundaries.Stop();
         lock (stopGate)
         {
             stopRequested = true;
@@ -78,6 +97,7 @@ internal sealed partial class YarnDialoguePresenterAdapter : Node, DialoguePrese
 
     public async YarnTask OnDialogueStartedAsync()
     {
+        foreach (var presenter in NativePresenters.ToArray()) await presenter.OnDialogueStartedAsync();
         foreach (var presenter in presenters)
         {
             await presenter.OnDialogueStartedAsync(CancellationToken.None);
@@ -105,12 +125,22 @@ internal sealed partial class YarnDialoguePresenterAdapter : Node, DialoguePrese
             return;
         }
 
-        var converted = lineConverter(line);
+        using var boundary = boundaries.Enter();
+        var activated = false;
         try
         {
-            if (PrepareLineAsync is not null) await PrepareLineAsync(converted, token.NextLineToken);
-            token.NextLineToken.ThrowIfCancellationRequested();
-            linePresented(converted, Array.AsReadOnly(line.Substitutions.ToArray()));
+            PreparationChanged?.Invoke(true);
+            var converted = lineConverter(line);
+            if (PrepareLineAsync is not null) await PrepareLineAsync(converted, boundary.Token);
+            boundary.Token.ThrowIfCancellationRequested();
+            var substitutions = Array.AsReadOnly(line.Substitutions.ToArray());
+            if (CommitLineBoundaryAsync is not null)
+            {
+                await CommitLineBoundaryAsync(
+                    converted, substitutions, boundary.Generation, boundary.Sequence, boundary.Token);
+            }
+            boundary.Token.ThrowIfCancellationRequested();
+            linePresented(converted, substitutions);
             var context = new DialoguePresentationContext(
                 requestHurryUp,
                 requestNextLine,
@@ -118,6 +148,11 @@ internal sealed partial class YarnDialoguePresenterAdapter : Node, DialoguePrese
                 token.NextLineToken);
             var presentation = Task.WhenAll(presenters.Select(
                 presenter => presenter.PresentLineAsync(converted, context)));
+            var nativePresentation = Task.WhenAll(NativePresenters.ToArray().Select(
+                async presenter => await presenter.RunLineAsync(line, token)));
+            activated = true;
+            PreparationChanged?.Invoke(false);
+            boundary.Activate(requestNextLine, requestHurryUp);
             try
             {
                 await presentation.WaitAsync(token.NextLineToken);
@@ -126,12 +161,24 @@ internal sealed partial class YarnDialoguePresenterAdapter : Node, DialoguePrese
             {
                 _ = ObserveDetachedAsync(new[] { presentation });
             }
+            // Native presenters own dismissal animations and must drain before a replacement line.
+            await nativePresentation;
         }
-        catch (OperationCanceledException) when (token.NextLineToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (
+            boundary.Token.IsCancellationRequested || token.NextLineToken.IsCancellationRequested)
         {
+        }
+        catch (Exception failure) when (!activated)
+        {
+            boundaries.Stop();
+            BoundaryFailed?.Invoke(failure);
+            // Yarn catches presenter exceptions and continues; keep this line blocked until Stop.
+            try { await Task.Delay(Timeout.InfiniteTimeSpan, token.NextLineToken); }
+            catch (OperationCanceledException) when (token.NextLineToken.IsCancellationRequested) { }
         }
         finally
         {
+            if (!activated) PreparationChanged?.Invoke(false);
             ExitPresentation();
         }
     }
@@ -178,7 +225,7 @@ internal sealed partial class YarnDialoguePresenterAdapter : Node, DialoguePrese
             option.IsAvailable,
             Array.AsReadOnly(option.Line.Substitutions.ToArray()))).ToArray();
         optionsPresented(converted);
-        if (presenters.Count == 0)
+        if (presenters.Count == 0 && NativePresenters.Count == 0)
         {
             return await DialogueRunner.NoOptionSelected;
         }
@@ -199,6 +246,19 @@ internal sealed partial class YarnDialoguePresenterAdapter : Node, DialoguePrese
                 return null;
             }
         }).ToList();
+        pending.AddRange(NativePresenters.ToArray().Select(async presenter =>
+        {
+            try
+            {
+                var selection = await presenter.RunOptionsAsync(dialogueOptions, selectionCancellation.Token);
+                return selection is null ? null : converted.FirstOrDefault(
+                    option => option.Id == selection.DialogueOptionID);
+            }
+            catch (OperationCanceledException) when (selectionCancellation.IsCancellationRequested)
+            {
+                return null;
+            }
+        }));
 
         while (pending.Count > 0)
         {
@@ -238,6 +298,7 @@ internal sealed partial class YarnDialoguePresenterAdapter : Node, DialoguePrese
     public async YarnTask OnDialogueCompleteAsync()
     {
         SignalStopBoundary();
+        foreach (var presenter in NativePresenters.ToArray()) await presenter.OnDialogueCompleteAsync();
         foreach (var presenter in presenters)
         {
             await presenter.OnDialogueCompletedAsync(CancellationToken.None);
@@ -246,6 +307,7 @@ internal sealed partial class YarnDialoguePresenterAdapter : Node, DialoguePrese
 
     public void OnNodeEnter(string nodeName)
     {
+        foreach (var presenter in NativePresenters.ToArray()) presenter.OnNodeEnter(nodeName);
         foreach (var presenter in presenters)
         {
             presenter.OnNodeEntered(nodeName);
@@ -254,6 +316,7 @@ internal sealed partial class YarnDialoguePresenterAdapter : Node, DialoguePrese
 
     public void OnNodeExit(string nodeName)
     {
+        foreach (var presenter in NativePresenters.ToArray()) presenter.OnNodeExit(nodeName);
         foreach (var presenter in presenters)
         {
             presenter.OnNodeExited(nodeName);

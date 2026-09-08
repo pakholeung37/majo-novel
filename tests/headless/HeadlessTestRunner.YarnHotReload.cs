@@ -77,7 +77,7 @@ public partial class HeadlessTestRunner
             var runner = services.Get<IYarnDialogueBackend>().Runner;
             var delayedPresenter = new DelayedDismissalPresenter();
             runner.AddChild(delayedPresenter);
-            runner.dialoguePresenters!.Add(delayedPresenter);
+            services.Get<IYarnDialogueBackend>().RegisterNativePresenter(delayedPresenter);
             await dialogue.StartAsync();
             await WaitForConditionAsync(() => presenter.Lines.Count == 1, 2);
             var sessionId = ((DialoguePlayer)dialogue).CurrentDialogueSessionId;
@@ -91,7 +91,7 @@ public partial class HeadlessTestRunner
 
             Assert(!delayedPresenter.OverlappedDismissal && delayedPresenter.DismissalCompleted,
                 "Yarn hot reload replayed before the previous line finished dismissing.");
-            var linePresenter = runner.dialoguePresenters.OfType<LinePresenter>().Single();
+            var linePresenter = runner.FindChildren("*", nameof(LinePresenter), recursive: true, owned: false).OfType<LinePresenter>().Single();
             Assert(linePresenter.presenterControl!.Visible &&
                     linePresenter.presenterControl.Modulate.A > 0,
                 "Yarn hot reload left the line presenter hidden.");

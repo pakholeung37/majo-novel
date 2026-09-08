@@ -31,6 +31,8 @@ public sealed class ScriptPlayback : IScriptPlayback
         this.logger = logger ?? NullRuntimeLogger.Instance;
     }
 
+    internal ILineBoundarySource? BoundarySource => checkpointBackend as ILineBoundarySource;
+
     public event Action<ScriptPlaybackPhaseChanged>? PhaseChanged;
 
     public ScriptPlaybackPhase Phase { get; private set; } = ScriptPlaybackPhase.Idle;
@@ -54,6 +56,7 @@ public sealed class ScriptPlayback : IScriptPlayback
             return Task.CompletedTask;
         }
 
+        if (BoundarySource is { } source) source.PreparationChanged += HandlePreparationChanged;
         dialogue.StateChanged += HandleDialogueStateChanged;
         dialogue.LinePresented += HandleLinePresented;
         dialogue.OptionsPresented += HandleOptionsPresented;
@@ -79,6 +82,7 @@ public sealed class ScriptPlayback : IScriptPlayback
             return Task.CompletedTask;
         }
 
+        if (BoundarySource is { } source) source.PreparationChanged -= HandlePreparationChanged;
         dialogue.StateChanged -= HandleDialogueStateChanged;
         dialogue.LinePresented -= HandleLinePresented;
         dialogue.OptionsPresented -= HandleOptionsPresented;
@@ -221,6 +225,14 @@ public sealed class ScriptPlayback : IScriptPlayback
         }
     }
 
+    private bool preparingBoundary;
+
+    private void HandlePreparationChanged(bool preparing)
+    {
+        preparingBoundary = preparing;
+        ProjectDialogueState();
+    }
+
     private void HandleDialogueStateChanged(DialogueStateChanged _) => ProjectDialogueState();
 
     private void HandleLinePresented(DialogueLine _) => ProjectDialogueState();
@@ -238,6 +250,7 @@ public sealed class ScriptPlayback : IScriptPlayback
         {
             DialogueSessionState.Idle => ScriptPlaybackPhase.Idle,
             DialogueSessionState.Loading => ScriptPlaybackPhase.Loading,
+            DialogueSessionState.Running when preparingBoundary => ScriptPlaybackPhase.PreparingLineBoundary,
             DialogueSessionState.Running when dialogue.IsPresentingOptions =>
                 ScriptPlaybackPhase.PresentingOptions,
             DialogueSessionState.Running when presentation.IsLineDisplayComplete =>

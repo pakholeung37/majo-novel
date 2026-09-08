@@ -11,6 +11,20 @@ namespace Majo.Runtime.UnitTests;
 public sealed class DialogueTravelTests
 {
     [Fact(Timeout = 5_000)]
+    public async Task RepeatedLineIdsRegisterEveryOccurrence()
+    {
+        var harness = await TravelHarness.CreateAsync(capacity: 100);
+        for (var occurrence = 1; occurrence <= 100; occurrence++)
+            await harness.CaptureLineAsync("line:loop", occurrence.ToString());
+        Assert.Equal(100, harness.Manager.Entries.Count);
+        Assert.Equal(Enumerable.Range(1, 100).Select(value => (long)value),
+            harness.Manager.Entries.Select(entry => entry.Sequence));
+        Assert.Equal(Enumerable.Range(1, 100).Select(value => value.ToString()),
+            harness.Manager.Entries.Select(entry => entry.Text));
+        await harness.ShutdownAsync();
+    }
+
+    [Fact(Timeout = 5_000)]
     public async Task CapturesStableLinesAndSupportsBackwardForwardAndBranchingTravel()
     {
         var harness = await TravelHarness.CreateAsync(capacity: 4);
@@ -186,12 +200,15 @@ public sealed class DialogueTravelTests
             Script.Spot = new ScriptPlaybackSpot(
                 new ScriptId("main", "Start"),
                 lineId);
-            Dialogue.Present(new DialogueLine(
+            var line = new DialogueLine(
                 lineId,
                 "Narrator",
                 new DialogueText(text, []),
                 [],
-                Origin: origin));
+                Origin: origin);
+            await State.CommitBoundaryAsync(new LineBoundaryContext(1, Manager.Entries.Count + 1,
+                new ScriptCheckpoint(ScriptCheckpoint.CurrentFormatVersion, "test", Script.Spot), line));
+            Dialogue.Present(line);
             Script.SetPhase(ScriptPlaybackPhase.AwaitingAdvance);
             if (origin == DialoguePresentationOrigin.Normal)
             {

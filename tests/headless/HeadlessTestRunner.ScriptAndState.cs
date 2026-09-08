@@ -140,6 +140,18 @@ public partial class HeadlessTestRunner
                 descriptor.ProgramFingerprint.Length == 64,
             "ScriptManager did not resolve stable line metadata and fingerprint.");
 
+        variables.SetString("name", "Maya");
+        variables.SetNumber("score", 7);
+        var hero = actors.Create("state-hero");
+        hero.SetAppearance("red");
+        hero.SetPosition(new Vector2(123, 234));
+        hero.SetTint(new Color(0.2f, 0.4f, 0.8f));
+        hero.SetOpacity(0.65f);
+        hero.SetVisible(true);
+        var room = actors.Create("state-room");
+        room.SetAppearance("dark");
+        await audio.PlayBgmAsync("calm", "music", volume: 0.7f);
+
         await dialogue.StartAsync();
         await WaitForConditionAsync(() => presentation.IsLineActive, 2);
         await WaitForConditionAsync(() => presentation.IsLineDisplayComplete, 2);
@@ -178,18 +190,6 @@ public partial class HeadlessTestRunner
         }
         Assert(rejectedIncompatibleSubstitutions,
             "Checkpoint validation should reject a changed Yarn line substitution shape.");
-
-        variables.SetString("name", "Maya");
-        variables.SetNumber("score", 7);
-        var hero = actors.Create("state-hero");
-        hero.SetAppearance("red");
-        hero.SetPosition(new Vector2(123, 234));
-        hero.SetTint(new Color(0.2f, 0.4f, 0.8f));
-        hero.SetOpacity(0.65f);
-        hero.SetVisible(true);
-        var room = actors.Create("state-room");
-        room.SetAppearance("dark");
-        await audio.PlayBgmAsync("calm", "music", volume: 0.7f);
 
         var snapshot = await state.CaptureGameAsync();
         Assert(snapshot.Records.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(
@@ -334,6 +334,10 @@ public partial class HeadlessTestRunner
             await dialogue.StopAsync();
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            variables.SetNumber("round", round);
+            var roundHero = actors.GetActor<IActor>("state-hero");
+            roundHero.SetAppearance("red");
+            await audio.PlayBgmAsync("calm", "music", volume: 0.7f);
             var linesBeforeStart = lineProbe.Lines.Count;
             await dialogue.StartAsync();
             await WaitForConditionAsync(
@@ -343,10 +347,6 @@ public partial class HeadlessTestRunner
                     script.Phase == ScriptPlaybackPhase.AwaitingAdvance,
                 2);
 
-            variables.SetNumber("round", round);
-            var roundHero = actors.GetActor<IActor>("state-hero");
-            roundHero.SetAppearance("red");
-            await audio.PlayBgmAsync("calm", "music", volume: 0.7f);
             var savedLineId = script.CurrentSpot?.LineId;
             var slot = new SaveSlotId(SaveSlotKind.Manual, round);
             var saved = await slots.SaveAsync(

@@ -41,9 +41,12 @@ public sealed partial class BackdropCommand : RuntimeCommand<BackdropCommand.Arg
         if (arguments.At.WasProvided || arguments.Origin.WasProvided || arguments.Scale.WasProvided)
         {
             var origin = arguments.Origin.GetValueOrDefault(new Godot.Vector2(0.5f, 0.5f));
-            backdropState = backdropState with { Placement = new BackdropPlacement(
+            backdropState = backdropState with
+            {
+                Placement = new BackdropPlacement(
                 arguments.At.WasProvided ? scopes.ResolvePosition(node, arguments.At.Value!) : new DirectionPoint(50, 50),
-                new DirectionPoint(origin.X, origin.Y), (float)arguments.Scale.GetValueOrDefault(1)).Validate() };
+                new DirectionPoint(origin.X, origin.Y), (float)arguments.Scale.GetValueOrDefault(1)).Validate()
+            };
         }
         var transition = policy.ResolveTransition("backdrop", arguments.Transition, context);
         var wait = arguments.Transition.Wait.GetValueOrDefault(false);

@@ -358,7 +358,8 @@ public sealed class NodeDirectionCompiler
             maps.ToArray(),
             imports,
             markDefinitions,
-            diagnostics) { CameraPresets = presets };
+            diagnostics)
+        { CameraPresets = presets };
     }
 
     private static void CompileMark(

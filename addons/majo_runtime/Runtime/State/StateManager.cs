@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using Majo.Runtime.Script;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -10,7 +11,7 @@ using Majo.Runtime.Input;
 
 namespace Majo.Runtime.State;
 
-public sealed class StateManager : IStateManager, IStateRestoreTransaction, IDisposable
+public sealed class StateManager : IStateManager, IStateBoundarySource, IStateRestoreTransaction, IDisposable
 {
     private readonly SemaphoreSlim transactions = new(1, 1);
     private readonly IReadOnlyList<IStateContributor> contributors;
@@ -29,8 +30,10 @@ public sealed class StateManager : IStateManager, IStateRestoreTransaction, IDis
         IRuntimeRestoreBoundary restoreBoundary,
         IStateEligibility? eligibility = null,
         StateMigrationRegistry? migrations = null,
-        IRuntimeLogger? logger = null)
+        IRuntimeLogger? logger = null,
+        ILineBoundarySource? boundarySource = null)
     {
+        this.boundarySource = boundarySource;
         this.contributors = contributors ?? throw new ArgumentNullException(nameof(contributors));
         this.input = input ?? throw new ArgumentNullException(nameof(input));
         this.restoreBoundary = restoreBoundary ?? throw new ArgumentNullException(nameof(restoreBoundary));
@@ -42,6 +45,11 @@ public sealed class StateManager : IStateManager, IStateRestoreTransaction, IDis
             concreteEligibility.Attach(() => Status, contributors);
         }
     }
+
+    private readonly ILineBoundarySource? boundarySource;
+    private LineBoundaryContext? restoredBoundary;
+    public event Action<CommittedLineBoundary>? BoundaryCommitted;
+    public CommittedLineBoundary? CurrentBoundary { get; private set; }
 
     public event Action<StateStatusChanged>? StatusChanged;
     public event Action<StateSnapshot>? Captured;
@@ -60,6 +68,7 @@ public sealed class StateManager : IStateManager, IStateRestoreTransaction, IDis
     {
         cancellationToken.ThrowIfCancellationRequested();
         isInitialized = true;
+        if (boundarySource is not null) boundarySource.CommitLineBoundaryAsync = CommitLineBoundaryAsync;
         SetStatus(StateManagerStatus.Idle);
         return Task.CompletedTask;
     }
@@ -81,6 +90,8 @@ public sealed class StateManager : IStateManager, IStateRestoreTransaction, IDis
             }
 
             CurrentSnapshot = null;
+            CurrentBoundary = null;
+            restoredBoundary = null;
             LastFailureMessage = null;
             LastMigrationChain = Array.Empty<string>();
             ReleaseFaultMuter();
@@ -103,8 +114,12 @@ public sealed class StateManager : IStateManager, IStateRestoreTransaction, IDis
         try
         {
             CurrentSnapshot = null;
+            CurrentBoundary = null;
+            restoredBoundary = null;
             LastMigrationChain = Array.Empty<string>();
             ReleaseFaultMuter();
+            if (boundarySource is not null) boundarySource.CommitLineBoundaryAsync = null;
+            CurrentBoundary = null;
             isInitialized = false;
             SetStatus(StateManagerStatus.Idle);
         }
@@ -117,6 +132,20 @@ public sealed class StateManager : IStateManager, IStateRestoreTransaction, IDis
     public Task<StateSnapshot> CaptureGameAsync(
         CancellationToken cancellationToken = default) =>
         CaptureAsync(StateScope.Game, cancellationToken);
+
+    private async Task CommitLineBoundaryAsync(LineBoundaryContext boundary, CancellationToken token)
+    {
+        if (boundarySource?.IsCurrentBoundary(boundary) != true)
+            throw new StateSnapshotException("The line boundary does not belong to the active playback preparation.");
+        token.ThrowIfCancellationRequested();
+        // Restores already own the State transaction and activate only after applying its records.
+        if (boundary.Line.Origin == Majo.Runtime.Dialogue.DialoguePresentationOrigin.CheckpointRestore)
+        {
+            restoredBoundary = boundary;
+            return;
+        }
+        await CaptureCoreAsync(StateScope.Game, boundary, token);
+    }
 
     public StateEnvelope CreateEnvelope(
         StateSnapshot snapshot,
@@ -185,6 +214,16 @@ public sealed class StateManager : IStateManager, IStateRestoreTransaction, IDis
         StateScope scope,
         CancellationToken cancellationToken = default)
     {
+        if (scope == StateScope.Game && boundarySource is not null)
+            await boundarySource.WaitForPreparationAsync(cancellationToken);
+        return await CaptureCoreAsync(scope, null, cancellationToken);
+    }
+
+    private async Task<StateSnapshot> CaptureCoreAsync(
+        StateScope scope,
+        LineBoundaryContext? boundary,
+        CancellationToken cancellationToken)
+    {
         EnsureInitialized();
         if (scope == StateScope.Session)
         {
@@ -195,18 +234,26 @@ public sealed class StateManager : IStateManager, IStateRestoreTransaction, IDis
         try
         {
             EnsureReadyForTransaction("capture");
-            if (scope == StateScope.Game)
+            if (scope == StateScope.Game && boundary is null)
             {
+                if (boundarySource is not null)
+                    return CurrentBoundary?.Snapshot ?? throw new StateEligibilityException(
+                        new StateEligibilityResult(StateOperationKind.Save,
+                            [new StateEligibilityReason(StateEligibilityReasonCode.ScriptUnsafePhase,
+                                "No committed line boundary is available to save.")]));
                 EnsureEligible(StateOperationKind.Save);
             }
 
+            var startedAt = System.Diagnostics.Stopwatch.GetTimestamp();
             SetStatus(StateManagerStatus.Capturing);
             logger.Info("state", "state.capture_started", $"State capture started for scope '{scope}'.");
             var records = new List<StateRecord>();
             foreach (var contributor in PersistentContributors(scope))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var record = await contributor.CaptureAsync(cancellationToken);
+                var record = boundary is not null && contributor is ScriptStateContributor script
+                    ? script.CaptureBoundary(boundary.Script)
+                    : await contributor.CaptureAsync(cancellationToken);
                 ValidateRecord(contributor, record);
                 records.Add(record);
             }
@@ -215,7 +262,11 @@ public sealed class StateManager : IStateManager, IStateRestoreTransaction, IDis
                 StateSnapshot.CurrentFormatVersion,
                 DateTimeOffset.UtcNow,
                 records);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (boundary is not null && boundarySource?.IsCurrentBoundary(boundary) != true)
+                throw new StateSnapshotException("The line boundary expired during capture.");
             CurrentSnapshot = snapshot;
+            if (boundary is not null) CurrentBoundary = new CommittedLineBoundary(boundary, snapshot);
             LastFailureMessage = null;
             LastMigrationChain = Array.Empty<string>();
             SetStatus(StateManagerStatus.Idle);
@@ -223,16 +274,31 @@ public sealed class StateManager : IStateManager, IStateRestoreTransaction, IDis
                 "state",
                 "state.capture_completed",
                 $"State capture completed with {records.Count} records for scope '{scope}'.");
+            if (boundary is not null)
+            {
+                logger.Info("state", "state.boundary_committed", "Committed a line entry snapshot.",
+                    properties: new Dictionary<string, object?>
+                    {
+                        ["sessionGeneration"] = boundary.SessionGeneration,
+                        ["occurrenceSequence"] = boundary.OccurrenceSequence,
+                        ["lineId"] = boundary.Script.Spot.LineId,
+                        ["elapsedMs"] = System.Diagnostics.Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds,
+                    });
+                BoundaryCommitted?.Invoke(CurrentBoundary!);
+            }
             Captured?.Invoke(snapshot);
             return snapshot;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            SetStatus(StateManagerStatus.Idle);
+            throw;
         }
         catch (StateEligibilityException exception)
         {
             LastFailureMessage = exception.Message;
             SetStatus(StateManagerStatus.Idle);
-            // Eligibility rejection is an expected result for opportunistic
-            // saves/checkpoints racing an active command or transition; keep
-            // it out of the warning channel to avoid misleading console noise.
+            // A missing committed boundary or rejected save is an expected caller result.
             logger.Debug("state", "state.capture_rejected", exception.Message);
             throw;
         }
@@ -297,6 +363,8 @@ public sealed class StateManager : IStateManager, IStateRestoreTransaction, IDis
                 await contributor.ResetAsync(cancellationToken);
             }
             CurrentSnapshot = null;
+            CurrentBoundary = null;
+            restoredBoundary = null;
             LastFailureMessage = null;
             LastMigrationChain = Array.Empty<string>();
             SetStatus(StateManagerStatus.Idle);
@@ -436,6 +504,9 @@ public sealed class StateManager : IStateManager, IStateRestoreTransaction, IDis
             }
 
             CurrentSnapshot = plan.Snapshot;
+            if (restoredBoundary is not null)
+                CurrentBoundary = new CommittedLineBoundary(restoredBoundary, plan.Snapshot);
+            restoredBoundary = null;
             LastFailureMessage = null;
             LastMigrationChain = plan.MigrationChain;
             SetStatus(StateManagerStatus.Idle);

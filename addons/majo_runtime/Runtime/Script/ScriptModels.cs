@@ -87,6 +87,7 @@ public enum ScriptPlaybackPhase
     Idle,
     Loading,
     Executing,
+    PreparingLineBoundary,
     PresentingLine,
     AwaitingAdvance,
     PresentingOptions,
@@ -100,7 +101,7 @@ public sealed record ScriptPlaybackPhaseChanged(
 
 public enum ScriptCheckpointBoundary
 {
-    AwaitingLineAdvance,
+    LineEntry,
 }
 
 public sealed record ScriptPlaybackSpot
@@ -108,7 +109,7 @@ public sealed record ScriptPlaybackSpot
     public ScriptPlaybackSpot(
         ScriptId script,
         string lineId,
-        ScriptCheckpointBoundary boundary = ScriptCheckpointBoundary.AwaitingLineAdvance)
+        ScriptCheckpointBoundary boundary = ScriptCheckpointBoundary.LineEntry)
     {
         Script = script ?? throw new ArgumentNullException(nameof(script));
         ArgumentException.ThrowIfNullOrWhiteSpace(lineId);
@@ -125,7 +126,7 @@ public sealed record ScriptPlaybackSpot
 
 public sealed record ScriptCheckpoint
 {
-    public const int CurrentFormatVersion = 1;
+    public const int CurrentFormatVersion = 2;
 
     public ScriptCheckpoint(
         int formatVersion,
@@ -155,3 +156,10 @@ public sealed record ScriptCheckpoint
 
     public IReadOnlyList<string> ResolvedSubstitutions { get; }
 }
+
+/// <summary>A frozen script identity established before any presenter runs.</summary>
+public sealed record LineBoundaryContext(
+    long SessionGeneration,
+    long OccurrenceSequence,
+    ScriptCheckpoint Script,
+    Majo.Runtime.Dialogue.DialogueLine Line);

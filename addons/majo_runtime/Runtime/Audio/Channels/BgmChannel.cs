@@ -11,6 +11,7 @@ namespace Majo.Runtime.Audio;
 
 internal sealed class BgmChannel : AudioChannelBase
 {
+    private readonly HashSet<AudioPlayback> stopping = new();
     private readonly Dictionary<string, AudioPlayback> tracks = new(StringComparer.Ordinal);
 
     public BgmChannel(
@@ -30,7 +31,7 @@ internal sealed class BgmChannel : AudioChannelBase
         {
             lock (gate)
             {
-                return tracks.Values.Cast<IAudioPlayback>().ToArray();
+                return tracks.Values.Where(track => !stopping.Contains(track)).Cast<IAudioPlayback>().ToArray();
             }
         }
     }
@@ -53,8 +54,6 @@ internal sealed class BgmChannel : AudioChannelBase
 
         if (previous is not null && previous.ClipId == clipId)
         {
-            var previousVolume = previous.BaseVolume;
-            var previousLoop = previous.Backend.IsLooping;
             previous.BaseVolume = volume;
             previous.Backend.IsLooping = looping;
             previous.IsLooping = looping;
@@ -64,9 +63,6 @@ internal sealed class BgmChannel : AudioChannelBase
                 complete: () => ApplyVolume(previous),
                 cancel: () =>
                 {
-                    previous.BaseVolume = previousVolume;
-                    previous.Backend.IsLooping = previousLoop;
-                    previous.IsLooping = previousLoop;
                     ApplyVolume(previous);
                 });
             transitions.TrackTransition(AudioCategory.Bgm, trackId, modifyTransition);
@@ -101,16 +97,8 @@ internal sealed class BgmChannel : AudioChannelBase
             },
             cancel: () =>
             {
-                StopPlayback(current);
-                if (previous is not null)
-                {
-                    lock (gate) { tracks[trackId] = previous; }
-                    ApplyVolume(previous);
-                }
-                else
-                {
-                    lock (gate) { tracks.Remove(trackId); }
-                }
+                if (previous is not null) StopPlayback(previous);
+                ApplyVolume(current);
             });
         transitions.TrackTransition(AudioCategory.Bgm, trackId, transition);
         return new AudioPlaybackResult(current, transition.Settlement);
@@ -132,6 +120,7 @@ internal sealed class BgmChannel : AudioChannelBase
             return null;
         }
 
+        lock (gate) stopping.UnionWith(entries);
         var transition = transitions.StartFade(
             entries.Select(entry => new AudioFadeTarget(entry, 0)).ToArray(),
             fade,
@@ -141,7 +130,7 @@ internal sealed class BgmChannel : AudioChannelBase
             },
             cancel: () =>
             {
-                foreach (var entry in entries) ApplyVolume(entry);
+                foreach (var entry in entries) StopPlayback(entry);
             });
         foreach (var entry in entries)
         {
@@ -181,6 +170,7 @@ internal sealed class BgmChannel : AudioChannelBase
         {
             snapshot = tracks.Values.ToArray();
             tracks.Clear();
+            stopping.Clear();
         }
 
         foreach (var playback in snapshot)
@@ -191,6 +181,7 @@ internal sealed class BgmChannel : AudioChannelBase
 
     protected override AudioTransition? RemoveOnNaturalEnd(AudioPlayback playback)
     {
+        stopping.Remove(playback);
         if (tracks.GetValueOrDefault(playback.InstanceId) == playback)
         {
             tracks.Remove(playback.InstanceId);
@@ -201,6 +192,7 @@ internal sealed class BgmChannel : AudioChannelBase
 
     protected override void RemoveOnStop(AudioPlayback playback)
     {
+        stopping.Remove(playback);
         if (tracks.GetValueOrDefault(playback.InstanceId) == playback)
         {
             tracks.Remove(playback.InstanceId);

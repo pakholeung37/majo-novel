@@ -566,7 +566,8 @@ public sealed class DirectionPlanner : IDirectionPlanner
         claims.Add(new DirectionResourceClaim(DirectionResourceKind.Layout, patch.Layout.Value));
         AddTransition(patch.Transition, paths, transitions, patch.SourceLocation);
         return new ScreenState(patch.Layout, DirectionCollections.Freeze(
-            patch.Bindings.ToDictionary(pair => pair.Key, pair => pair.Value))) { Split = patch.Split };
+            patch.Bindings.ToDictionary(pair => pair.Key, pair => pair.Value)))
+        { Split = patch.Split };
     }
 
     private static StableEffectState ApplyCurtain(

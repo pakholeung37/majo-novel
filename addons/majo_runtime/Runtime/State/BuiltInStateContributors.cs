@@ -192,16 +192,16 @@ public sealed class ActorStateContributor : IStateContributor
                 actor.Id,
                 actor.FactoryId,
                 actor is IBackgroundActor background ? background.Slot : null,
-                actor.Appearance,
-                actor.Visible,
-                actor.Position.X,
-                actor.Position.Y,
+                actor.TargetAppearance,
+                actor.TargetVisible,
+                actor.TargetPosition.X,
+                actor.TargetPosition.Y,
                 actor is ICharacterActor character ? character.Scale.X : null,
                 actor is ICharacterActor scaledCharacter ? scaledCharacter.Scale.Y : null,
                 actor.Tint.R,
                 actor.Tint.G,
                 actor.Tint.B,
-                actor.Opacity,
+                actor.TargetOpacity,
                 actor.ZIndex))
             .ToArray();
         return ValueTask.FromResult(new StateRecord(
@@ -432,7 +432,7 @@ public sealed class ScriptStateContributor : IStateContributor
 
     public StateScope Scope => StateScope.Game;
 
-    public int SchemaVersion => 1;
+    public int SchemaVersion => 2;
 
     public StateContributorCapability Capability =>
         StateContributorCapability.DurableRollback;
@@ -442,7 +442,11 @@ public sealed class ScriptStateContributor : IStateContributor
     public ValueTask<StateRecord> CaptureAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var checkpoint = playback.CaptureCheckpoint();
+        return ValueTask.FromResult(CaptureBoundary(playback.CaptureCheckpoint()));
+    }
+
+    internal StateRecord CaptureBoundary(ScriptCheckpoint checkpoint)
+    {
         var payload = new ScriptPayload(
             checkpoint.FormatVersion,
             checkpoint.ProgramFingerprint,
@@ -451,11 +455,11 @@ public sealed class ScriptStateContributor : IStateContributor
             checkpoint.Spot.LineId,
             checkpoint.Spot.Boundary,
             checkpoint.ResolvedSubstitutions.ToArray());
-        return ValueTask.FromResult(new StateRecord(
+        return new StateRecord(
             Key,
             Scope,
             SchemaVersion,
-            StateJson.Serialize(payload)));
+            StateJson.Serialize(payload));
     }
 
     public async ValueTask PreflightAsync(StateRecord record, CancellationToken cancellationToken) =>
