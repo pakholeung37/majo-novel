@@ -157,11 +157,13 @@ public partial class HeadlessTestRunner
 
         await InjectMouseClickAsync(
             nativeLinePresenter.presenterControl!.GetGlobalRect().GetCenter());
+        Assert(characterNamePanel?.Visible == true,
+            "Default presentation hid the speaker panel without its debounce buffer.");
         await WaitForConditionAsync(
             () => characterNamePanel?.Visible == false && !dialogue.IsPresentingOptions,
             1);
         Assert(characterNamePanel?.Visible == false,
-            "Default presentation retained the previous speaker panel during a command after its line ended.");
+            "Default presentation did not hide the speaker after the debounce expired during a command.");
         await WaitForConditionAsync(
             () => dialogue.IsPresentingOptions && presentation.IsPresentingOptions,
             2);

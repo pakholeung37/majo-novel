@@ -115,53 +115,32 @@ public partial class ManosabaPresentation : Control
         StartInputIndicatorBlink();
         SetFrameMode(CurrentFrameMode, duration: 0);
 
-        // // The ADV presenter owns a full-screen input scope. Keep the interactive
-        // // art above it and stop GUI clicks before they can become Advance input.
-        // foreach (var button in new[]
-        // 		 {
-        // 			 menuButton, closeButton, saveButton, loadButton,
-        // 			 historyButton, optionsButton, titleButton, autoButton,
-        // 		 })
-        // {
-        // 	button.MouseFilter = MouseFilterEnum.Stop;
-        // 	button.ZIndex = 100;
-        // }
+        // Let GUI hit testing respect overlay ordering and consume button clicks.
+        foreach (var button in new[]
+                 {
+                     menuButton, closeButton, saveButton, loadButton,
+                     historyButton, optionsButton, titleButton, autoButton,
+                 })
+        {
+            if (button is not null)
+            {
+                button.MouseFilter = MouseFilterEnum.Stop;
+            }
+        }
 
         menuPanel.Visible = false;
     }
 
     public override void _Input(InputEvent @event)
     {
+        // Modal overlays own their close shortcuts while they are open.
+        if (saveLoad?.IsOpen == true || settings?.IsOpen == true || history?.IsOpen == true)
+        {
+            return;
+        }
+
         if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true } ||
             @event.IsActionPressed("ui_cancel"))
-        {
-            ToggleMenu();
-            GetViewport().SetInputAsHandled();
-            return;
-        }
-
-        if (@event is not InputEventMouseButton
-            {
-                ButtonIndex: MouseButton.Left,
-                Pressed: true,
-            } mouse)
-        {
-            return;
-        }
-
-        if (menuPanel?.Visible == true)
-        {
-            if (IsPointerOver(closeButton, mouse.Position)) CloseMenu();
-            else if (IsPointerOver(saveButton, mouse.Position)) OnMenuPanelButtonPressed(OpenSaveLoad);
-            else if (IsPointerOver(loadButton, mouse.Position)) OnMenuPanelButtonPressed(OpenSaveLoad);
-            else if (IsPointerOver(historyButton, mouse.Position)) OnMenuPanelButtonPressed(OpenHistory);
-            else if (IsPointerOver(optionsButton, mouse.Position)) OnMenuPanelButtonPressed(OpenSettings);
-            else if (IsPointerOver(titleButton, mouse.Position)) OnMenuPanelButtonPressed(ShowTitleNotice);
-            else return;
-
-            GetViewport().SetInputAsHandled();
-        }
-        else if (IsPointerOver(menuButton, mouse.Position))
         {
             ToggleMenu();
             GetViewport().SetInputAsHandled();
@@ -511,15 +490,4 @@ public partial class ManosabaPresentation : Control
         frameTransitionTween = tween;
     }
 
-    private static bool IsPointerOver(Control? control, Vector2 viewportPosition)
-    {
-        if (control is null || !control.IsVisibleInTree())
-        {
-            return false;
-        }
-
-        var localPosition = control.GetGlobalTransformWithCanvas()
-            .AffineInverse() * viewportPosition;
-        return new Rect2(Vector2.Zero, control.Size).HasPoint(localPosition);
-    }
 }

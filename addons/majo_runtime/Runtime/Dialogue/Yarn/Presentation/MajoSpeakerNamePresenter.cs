@@ -12,6 +12,9 @@ namespace Majo.Runtime.Dialogue.Yarn.Presentation;
 
 internal sealed partial class MajoSpeakerNamePresenter : Node, DialoguePresenterBase
 {
+    private const ulong HideDebounceMilliseconds = 50;
+    private ulong? pendingHideDeadline;
+    private int presentationVersion;
     private readonly CanvasItem container;
     private readonly RichTextLabel text;
     private readonly ILocaleManager? localeManager;
@@ -39,6 +42,8 @@ internal sealed partial class MajoSpeakerNamePresenter : Node, DialoguePresenter
 
     public async YarnTask RunLineAsync(LocalizedLine line, LineCancellationToken token)
     {
+        pendingHideDeadline = null;
+        var version = ++presentationVersion;
         var speaker = line.CharacterName;
         if (!string.IsNullOrWhiteSpace(speaker) && resolver is not null)
         {
@@ -58,7 +63,12 @@ internal sealed partial class MajoSpeakerNamePresenter : Node, DialoguePresenter
         }
         finally
         {
-            Hide();
+            // Do not await the buffer: Yarn must be able to start the next line,
+            // which cancels this hide before it can flash the speaker panel.
+            if (version == presentationVersion)
+            {
+                pendingHideDeadline = Time.GetTicksMsec() + HideDebounceMilliseconds;
+            }
         }
     }
 
@@ -78,8 +88,24 @@ internal sealed partial class MajoSpeakerNamePresenter : Node, DialoguePresenter
 
     public void Reset() => Hide();
 
+    public override void _Process(double delta)
+    {
+        if (pendingHideDeadline is ulong deadline && Time.GetTicksMsec() >= deadline)
+        {
+            Hide();
+        }
+    }
+
+    public override void _ExitTree()
+    {
+        pendingHideDeadline = null;
+        presentationVersion++;
+    }
+
     private void Hide()
     {
+        pendingHideDeadline = null;
+        presentationVersion++;
         if (GodotObject.IsInstanceValid(container))
         {
             container.Visible = false;
