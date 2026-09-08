@@ -7,7 +7,7 @@ using YarnSpinnerGodot;
 
 namespace Majo.Runtime.Dialogue.Yarn.Preloading;
 
-public sealed record YarnPreloadReference(string Kind, string Id);
+public sealed record YarnPreloadReference(string Kind, string Id, string? Asset = null, string? Appearance = null);
 
 /// <summary>Reads only straight-line instructions; never evaluates Yarn expressions.</summary>
 public sealed class YarnPreloadPlanner
@@ -76,6 +76,15 @@ public sealed class YarnPreloadPlanner
     {
         if (tokens.Count < 2 || string.IsNullOrWhiteSpace(tokens[1])) return Array.Empty<YarnPreloadReference>();
         var kind = tokens[0].ToLowerInvariant();
+        if ((kind is "character" or "object") && (tokens[1] is "move" or "fx" or "hide") ||
+            kind == "backdrop" && tokens[1] == "fx") return Array.Empty<YarnPreloadReference>();
+        if (kind == "object")
+        {
+            var asset = tokens.Skip(2).FirstOrDefault(token => token.StartsWith("asset:", StringComparison.OrdinalIgnoreCase));
+            var appearance = tokens.Skip(2).FirstOrDefault(token => token.StartsWith("appearance:", StringComparison.OrdinalIgnoreCase));
+            if (asset is not null)
+                return new[] { new YarnPreloadReference(kind, tokens[1], asset[6..], appearance?[11..] ?? "Default") };
+        }
         if (kind is "backdrop" or "bgm" or "sfx" or "voice")
             return new[] { new YarnPreloadReference(kind, tokens[1]) };
         if (kind == "character")

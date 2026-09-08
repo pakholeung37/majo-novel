@@ -41,6 +41,8 @@ public sealed record ActorSpawnRequest
 
     public string ActorId { get; }
 
+    public string? DefinitionId { get; init; }
+
     /// <summary>
     /// Factory used only when no explicit actor definition exists.
     /// </summary>

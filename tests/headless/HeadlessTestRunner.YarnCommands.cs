@@ -131,7 +131,7 @@ public partial class HeadlessTestRunner
             {
                 case "line:m4-direction-beat":
                     directionBeatCommitted =
-                        state.Revision == 1 &&
+                        state.Revision == 3 &&
                         mainStage?.Backdrop?.Resource ==
                             new Resources.ResourceKey(
                                 "headless/fixtures/background_dark") &&
@@ -146,7 +146,7 @@ public partial class HeadlessTestRunner
                     break;
                 case "line:m4-direction-move":
                     directionActorMoved =
-                        state.Revision == 2 &&
+                        state.Revision == 4 &&
                         mainStage?.Actors[new ActorId("hero")].Appearance == "blue" &&
                         mainStage.Actors[new ActorId("hero")].Position ==
                             new DirectionPoint(
@@ -155,7 +155,7 @@ public partial class HeadlessTestRunner
                     break;
                 case "line:m4-direction-illustration":
                     directionIllustrationShown =
-                        state.Revision == 3 &&
+                        state.Revision == 5 &&
                         state.Screen.Bindings[LayoutSlotId.Main] == illustrationView &&
                         state.Views[illustrationView].Pose == new ViewPose(
                             new DirectionPoint(40, 60), 1.5f, 10) &&
@@ -163,22 +163,22 @@ public partial class HeadlessTestRunner
                     break;
                 case "line:m4-direction-stage":
                     directionStageRestored =
-                        state.Revision == 5 &&
+                        state.Revision == 7 &&
                         state.Screen.Bindings[LayoutSlotId.Main] == ViewId.Main &&
                         state.Views[ViewId.Main].StageId == StageId.Main &&
                         state.Views[ViewId.Main].Pose == ViewPose.Default;
                     break;
                 case "line:m4-direction-reset":
                     directionIllustrationReset =
-                        state.Revision == 4 &&
+                        state.Revision == 6 &&
                         state.Screen.Bindings[LayoutSlotId.Main] == illustrationView &&
                         state.Views[illustrationView].Pose == ViewPose.Default &&
                         directionHost.PublishedScreen.Bindings[LayoutSlotId.Main] == illustrationView;
                     break;
                 case "line:m4-direction-leave":
                     directionActorLeft =
-                        state.Revision == 6 &&
-                        mainStage?.Actors.Count == 0;
+                        state.Revision == 8 &&
+                        mainStage?.Actors[new ActorId("hero")].Visible == false;
                     break;
             }
         };
@@ -209,7 +209,7 @@ public partial class HeadlessTestRunner
             {
                 case "line:m4-direction-broadcast":
                     directionBroadcastShown =
-                        state.Revision == 7 &&
+                        state.Revision == 9 &&
                         state.Stages[StageId.Main].Actors[new ActorId("hero")].Appearance == "red" &&
                         state.Stages[broadcastStage].Actors[new ActorId("hero")].Appearance == "blue" &&
                         state.Views[broadcastView].StageId == broadcastStage &&
@@ -218,13 +218,13 @@ public partial class HeadlessTestRunner
                     break;
                 case "line:m4-direction-main-return":
                     directionMainReturned =
-                        state.Revision == 8 &&
+                        state.Revision == 10 &&
                         state.Screen.Bindings[LayoutSlotId.Main] == ViewId.Main &&
                         state.Stages[broadcastStage].Actors[new ActorId("hero")].Appearance == "blue";
                     break;
                 case "line:m4-direction-split":
                     directionSplitShown =
-                        state.Revision == 10 &&
+                        state.Revision == 12 &&
                         state.Screen.Layout == new LayoutId("split") &&
                         state.Screen.Bindings.TryGetValue(new LayoutSlotId("inset"), out var insetView) &&
                         insetView == scopes.ResolveView("DirectionMultiStage", "reaction") &&
@@ -240,6 +240,22 @@ public partial class HeadlessTestRunner
             "Returning main View to main Stage did not preserve the dormant broadcast Stage.");
         Assert(directionSplitShown,
             "Yarn layout did not bind a second View into the split Screen.");
+
+        var backendWithBarrier = (YarnDialogueBackend)yarnBackend;
+        var originalBarrier = backendWithBarrier.BeforeNodeEntryAsync;
+        backendWithBarrier.BeforeNodeEntryAsync = (entry, token) => entry.NodeId == "SceneEntryFailure"
+            ? Task.FromException(new InvalidOperationException("scene cleanup failure probe"))
+            : originalBarrier?.Invoke(entry, token) ?? Task.CompletedTask;
+        var entryFailed = false;
+        try
+        {
+            await dialogue.StartAsync(new DialogueStartRequest(StartNode: "SceneEntryFailure"));
+            await dialogue.Completion;
+        }
+        catch (InvalidOperationException error) { entryFailed = error.Message.Contains("scene cleanup failure probe", StringComparison.Ordinal); }
+        finally { backendWithBarrier.BeforeNodeEntryAsync = originalBarrier; }
+        Assert(entryFailed && (!runner.VariableStorage.TryGetValue<bool>("$blocked_entry_body", out var blockedBody) || !blockedBody),
+            "A failed scene entry must fault the real dialogue session before its first authored set.");
 
         await bootstrap.RequestShutdownAsync();
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);

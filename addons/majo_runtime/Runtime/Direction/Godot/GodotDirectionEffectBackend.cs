@@ -42,6 +42,7 @@ internal sealed class GodotDirectionEffectBackend : IDirectionEffectBackend
 
     private sealed class PreparedEffect : IPreparedDirectionComponent
     {
+        public DirectionOperationOwner Owner => DirectionOperationOwner.Global;
         private readonly GodotDirectionRenderHost host;
         private readonly StableEffectState before;
         private readonly StableEffectState target;

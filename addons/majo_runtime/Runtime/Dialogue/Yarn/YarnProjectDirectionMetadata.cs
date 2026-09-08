@@ -33,6 +33,7 @@ namespace Majo.Runtime.Dialogue.Yarn
         private static ModulePayload ToPayload(NodeDirectionModule module) => new()
         {
             NodeId = module.NodeId,
+            SceneEntry = module.SceneEntry,
             Version = module.Version,
             Symbols = new SymbolPayload
             {
@@ -103,11 +104,15 @@ namespace Majo.Runtime.Dialogue.Yarn
                     mark.Name ?? string.Empty,
                     new DirectionPoint(mark.X, mark.Y),
                     mark.File ?? string.Empty, mark.Line, mark.Column)).ToArray(),
-            value.Diagnostics ?? Array.Empty<YarnCompilationDiagnostic>());
+            value.Diagnostics ?? Array.Empty<YarnCompilationDiagnostic>())
+        {
+            SceneEntry = value.SceneEntry,
+        };
 
         private sealed class ModulePayload
         {
             public string? NodeId { get; set; }
+            public SceneEntryMetadata? SceneEntry { get; set; }
             public long Version { get; set; }
             public SymbolPayload? Symbols { get; set; }
             public ResourcePayload[]? Resources { get; set; }

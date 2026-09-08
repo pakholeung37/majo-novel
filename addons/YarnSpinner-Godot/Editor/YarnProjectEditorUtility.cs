@@ -28,6 +28,9 @@ namespace YarnSpinnerGodot;
 [Tool]
 public static class YarnProjectEditorUtility
 {
+    /// <summary>Optional host compilation pipeline; also used by importer and inspector rebuilds.</summary>
+    public static Func<CompilationJob, CompilationResult>? CompilationPipeline { get; set; }
+
     /// <summary>
     /// The contents of a .csv.import file to avoid importing it as a Godot localization csv file
     /// </summary>
@@ -551,7 +554,7 @@ public static class YarnProjectEditorUtility
                 job.LanguageVersion = project.JSONProject.FileVersion;
                 job.Declarations = functionDeclarationReceiver.FunctionDeclarations;
 
-                compilationResult = Yarn.Compiler.Compiler.Compile(job);
+                compilationResult = CompilationPipeline?.Invoke(job) ?? Yarn.Compiler.Compiler.Compile(job);
 
                 errors = compilationResult.Diagnostics.Where(d =>
                     d.Severity == Diagnostic.DiagnosticSeverity.Error);

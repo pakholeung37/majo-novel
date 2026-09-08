@@ -18,6 +18,7 @@ namespace Majo.Runtime.Direction.Godot;
 
 internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
 {
+    private readonly Dictionary<ViewId, PreparedView> active = new();
     private readonly GodotDirectionRenderHost host;
     private readonly ITransitionDriverRegistry drivers;
     private readonly IEasingRegistry easings;
@@ -37,8 +38,7 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
         ViewId viewId,
         ViewState? before,
         ViewState? target,
-        CancellationToken cancellationToken,
-        IReadOnlyList<DirectionViewTransitionSequence>? viewSequences = null)
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(plan);
         if (target is null)
@@ -58,9 +58,7 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
             Texture2D targetTexture = host.GetStageTexture(target.StageId);
 
             await host.WaitForRenderFenceAsync(cancellationToken);
-            var sequence = (viewSequences ?? Array.Empty<DirectionViewTransitionSequence>()).FirstOrDefault(
-                candidate => candidate.ViewId == viewId);
-            var transition = sequence?.Transition ?? GodotDirectionRendering.ResolveTransition(
+            var transition = GodotDirectionRendering.ResolveTransition(
                 plan,
                 path => path.StartsWith($"view/{viewId.Value}/", StringComparison.Ordinal));
             GodotDirectionRendering.ValidateTransition(transition, TransitionDomains.View, drivers, easings);
@@ -69,16 +67,19 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
                 transition.Kind != DirectionTransitionId.Cut &&
                 transition.Kind != DirectionTransitionId.Move)
             {
-                capture = await host.CaptureViewAsync(viewId, cancellationToken);
+                capture = await host.CaptureViewAsync(viewId, cancellationToken,
+                    active.TryGetValue(viewId, out var previous) && !previous.IsMotion);
             }
 
-            var source = sequence?.StartState ?? before ?? target;
+            var source = before ?? target;
             if (before is not null)
                 source = source with
                 {
-                    Pose = sequence?.StartState.Pose ?? host.GetCurrentViewPose(viewId),
+                    Pose = host.GetCurrentViewPose(viewId),
                 };
             var prepared = new PreparedView(
+                this,
+                plan,
                 host,
                 viewId,
                 before,
@@ -88,7 +89,6 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
                 targetTexture,
                 capture,
                 transition,
-                sequence is not null,
                 drivers,
                 easings);
             return createdView ? new PreparedViewLifecycle(host, viewId, prepared) : prepared;
@@ -135,13 +135,16 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
             return ValueTask.CompletedTask;
         }
 
-        public ValueTask DisposeAsync()
+        public async ValueTask DisposeAsync()
         {
-            if (disposed) return ValueTask.CompletedTask;
+            if (disposed) return;
             disposed = true;
             if (!settlement.Task.IsCompleted) settlement.TrySetCanceled();
-            if (committed) host.ReleasePreparedView(viewId);
-            return ValueTask.CompletedTask;
+            if (committed)
+            {
+                if (host.ReleaseViewEffectsAsync is { } release) await release(viewId);
+                host.ReleasePreparedView(viewId);
+            }
         }
     }
 
@@ -150,13 +153,15 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
         private readonly GodotDirectionRenderHost host;
         private readonly ViewId viewId;
         private readonly ViewState? restoreState;
-        private readonly ViewState before;
+        private readonly GodotDirectionViewBackend backend;
+        private readonly DirectionPlan plan;
+        private ViewState before;
         private readonly Texture2D? restoreTexture;
-        private readonly ViewState target;
+        private ViewState target;
         private readonly Texture2D targetTexture;
         private readonly ImageTexture? capture;
+        public bool IsMotion => transition.Kind == DirectionTransitionId.Move;
         private readonly DirectionTransitionSpec transition;
-        private readonly bool publishTransitionStart;
         private readonly ITransitionDriverRegistry drivers;
         private readonly IEasingRegistry easings;
         private readonly TaskCompletionSource settlement = new(
@@ -169,6 +174,8 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
         private long generation;
 
         public PreparedView(
+            GodotDirectionViewBackend backend,
+            DirectionPlan plan,
             GodotDirectionRenderHost host,
             ViewId viewId,
             ViewState? restoreState,
@@ -178,12 +185,13 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
             Texture2D targetTexture,
             ImageTexture? capture,
             DirectionTransitionSpec transition,
-            bool publishTransitionStart,
             ITransitionDriverRegistry drivers,
             IEasingRegistry? easings = null)
         {
             this.host = host;
             this.viewId = viewId;
+            this.backend = backend;
+            this.plan = plan;
             this.restoreState = restoreState;
             this.before = before;
             this.restoreTexture = restoreTexture;
@@ -191,7 +199,6 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
             this.targetTexture = targetTexture;
             this.capture = capture;
             this.transition = transition;
-            this.publishTransitionStart = publishTransitionStart;
             this.drivers = drivers ?? new TransitionDriverRegistry();
             this.easings = easings ?? BuiltInEasings.CreateDefaultRegistry();
         }
@@ -203,6 +210,28 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
             if (committed || rolledBack || disposed)
                 throw new InvalidOperationException("View is no longer preparable.");
             committed = true;
+            if (backend.active.TryGetValue(viewId, out var previous))
+            {
+                // A visual mix is completed before replacement; motion is sampled in place.
+                if (previous.transition.Kind == DirectionTransitionId.Move) previous.Supersede();
+                else previous.Complete();
+            }
+            before = before with { Pose = host.GetCurrentViewPose(viewId) };
+            var intent = plan.ViewIntents.SingleOrDefault(patch => patch.ViewId == viewId);
+            if (intent is not null)
+            {
+                target = target with
+                {
+                    Pose = before.Pose with
+                    {
+                        Center = intent.Center.HasValue ? intent.Center.Value : before.Pose.Center,
+                        Zoom = intent.Zoom.HasValue ? intent.Zoom.Value : before.Pose.Zoom,
+                        RotationDegrees = intent.RotationDegrees.HasValue ? intent.RotationDegrees.Value : before.Pose.RotationDegrees,
+                    }
+                };
+                plan.CommitViews[viewId] = target;
+            }
+            backend.active[viewId] = this;
             generation = host.BeginViewGeneration(viewId);
             host.ClearViewTransition(viewId);
             var transitionSource = host.GetViewTransitionSource(viewId);
@@ -214,11 +243,9 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
                 transitionSource.Visible = true;
             }
 
-            // A sequenced pose starts from the cut baseline captured in
-            // `before`; the normal case uses the actual current pose there.
             host.PublishView(
                 viewId,
-                publishTransitionStart ? before : target,
+                target,
                 targetTexture);
             if (transition.DurationSeconds <= 0 || transition.Kind == DirectionTransitionId.Cut)
             {
@@ -286,8 +313,25 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
             preparedTransition = null;
             if (host.IsCurrentViewGeneration(viewId, generation))
                 host.ClearViewTransition(viewId);
+            Retire();
             capture?.Dispose();
             return ValueTask.CompletedTask;
+        }
+
+        private void Supersede()
+        {
+            clock?.Dispose();
+            clock = null;
+            preparedTransition?.Dispose();
+            preparedTransition = null;
+            Retire();
+            settlement.TrySetResult();
+        }
+
+        private void Retire()
+        {
+            if (backend.active.TryGetValue(viewId, out var current) && ReferenceEquals(current, this))
+                backend.active.Remove(viewId);
         }
 
         private void OnFinished() => Complete();
@@ -305,6 +349,7 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
             }
             preparedTransition?.Dispose();
             preparedTransition = null;
+            Retire();
             settlement.TrySetResult();
         }
     }

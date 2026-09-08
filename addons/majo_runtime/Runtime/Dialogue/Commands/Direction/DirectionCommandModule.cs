@@ -30,6 +30,7 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
 
         const string providerId = "majo.direction";
 
+        converters.AddDefault<Direction.Actors.ActorShakeAxis>(_ => new EnumCommandValueConverter<Direction.Actors.ActorShakeAxis>(), providerId);
         converters.AddDefault<PositionRef>(_ => PositionRefConverter.Instance, providerId);
         converters.AddDefault<BackdropId>(text => new BackdropId(text), providerId);
         converters.AddDefault<Godot.Vector2>(_ => Vector2Converter.Instance, providerId);
@@ -71,11 +72,6 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
             services.Get<IDialogueNodeAccessor>(),
             services.Get<IDirectionCommandPolicy>()), providerId, version);
 
-        commands.Add("stage release", services => new StageReleaseCommand(
-            services.Get<IDirectionBeatRuntime>(),
-            services.Get<IDirectionScopeResolver>(),
-            services.Get<IDialogueNodeAccessor>()), providerId, version);
-
         commands.Add("backdrop", services => new BackdropCommand(
             services.Get<IDirectionBeatRuntime>(),
             services.Get<IDirectionScopeResolver>(),
@@ -86,25 +82,52 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
             services.Get<IDirectionBeatRuntime>(),
             services.Get<IDirectionScopeResolver>(),
             services.Get<IDialogueNodeAccessor>(),
-            services.Get<IDirectionCommandPolicy>()), providerId, version);
+            services.Get<IDirectionCommandPolicy>(),
+            services.Get<IDirectionTransactionCoordinator>()), providerId, version);
 
-        commands.Add("leave", services => new LeaveCommand(
+        commands.Add("character hide", services => new CharacterHideCommand(
             services.Get<IDirectionBeatRuntime>(),
             services.Get<IDirectionScopeResolver>(),
             services.Get<IDialogueNodeAccessor>(),
             services.Get<IDirectionCommandPolicy>()), providerId, version);
+
+        commands.Add("object", services => new ObjectCommand(
+            services.Get<IDirectionBeatRuntime>(),
+            services.Get<IDirectionScopeResolver>(),
+            services.Get<IDialogueNodeAccessor>(),
+            services.Get<IDirectionCommandPolicy>(),
+            services.Get<IDirectionTransactionCoordinator>()), providerId, version);
+
+        commands.Add("character move", services => new CharacterMoveCommand(
+            services.Get<IDirectionBeatRuntime>(), services.Get<IDirectionScopeResolver>(),
+            services.Get<IDialogueNodeAccessor>(), services.Get<IDirectionCommandPolicy>()), providerId, version);
+
+        commands.Add("object move", services => new ObjectMoveCommand(
+            services.Get<IDirectionBeatRuntime>(), services.Get<IDirectionScopeResolver>(),
+            services.Get<IDialogueNodeAccessor>(), services.Get<IDirectionCommandPolicy>()), providerId, version);
+
+        commands.Add("object hide", services => new ObjectHideCommand(
+            services.Get<IDirectionBeatRuntime>(), services.Get<IDirectionScopeResolver>(),
+            services.Get<IDialogueNodeAccessor>(), services.Get<IDirectionCommandPolicy>()), providerId, version);
+
+        commands.Add("character fx", services => new CharacterFxCommand(
+            services.Get<IDirectionBeatRuntime>(), services.Get<IDirectionScopeResolver>(),
+            services.Get<IDialogueNodeAccessor>(), services.Get<IDirectionCommandPolicy>()), providerId, version);
+
+        commands.Add("object fx", services => new ObjectFxCommand(
+            services.Get<IDirectionBeatRuntime>(), services.Get<IDirectionScopeResolver>(),
+            services.Get<IDialogueNodeAccessor>(), services.Get<IDirectionCommandPolicy>()), providerId, version);
+
+        commands.Add("backdrop fx", services => new BackdropFxCommand(
+            services.Get<IDirectionBeatRuntime>(), services.Get<IDirectionScopeResolver>(),
+            services.Get<IDialogueNodeAccessor>(), services.Get<IDirectionCommandPolicy>()), providerId, version);
 
         commands.Add("view define", services => new ViewDefineCommand(
             services.Get<IDirectionBeatRuntime>(),
             services.Get<IDirectionScopeResolver>(),
             services.Get<IDialogueNodeAccessor>()), providerId, version);
 
-        commands.Add("view release", services => new ViewReleaseCommand(
-            services.Get<IDirectionBeatRuntime>(),
-            services.Get<IDirectionScopeResolver>(),
-            services.Get<IDialogueNodeAccessor>()), providerId, version);
-
-        commands.Add("camera pose", services => new CameraPoseCommand(
+        commands.Add("camera", services => new CameraCommand(
             services.Get<IDirectionBeatRuntime>(),
             services.Get<IDirectionScopeResolver>(),
             services.Get<IDialogueNodeAccessor>(),

@@ -375,10 +375,11 @@ public sealed class ActorManager : IActorManager, IDisposable
 
     private ActorDefinition ResolveDefinition(ActorSpawnRequest request)
     {
-        if (definitions.TryGetValue(request.ActorId, out var definition))
+        if (definitions.TryGetValue(request.DefinitionId ?? request.ActorId, out var definition))
         {
             ValidateRequiredFactory(request, definition.FactoryId);
-            return definition;
+            return request.DefinitionId is null ? definition :
+                new ActorDefinition(request.ActorId, definition.FactoryId, definition.FactoryData);
         }
 
         if (TryResolveConventionDefinition(request, out var conventionalDefinition))
@@ -438,7 +439,7 @@ public sealed class ActorManager : IActorManager, IDisposable
                 continue;
             }
 
-            if (!string.Equals(
+            if (request.FallbackFactoryId != ActorFactoryIds.SceneObject && !string.Equals(
                     definition.FactoryId,
                     factory.FactoryId,
                     StringComparison.Ordinal))

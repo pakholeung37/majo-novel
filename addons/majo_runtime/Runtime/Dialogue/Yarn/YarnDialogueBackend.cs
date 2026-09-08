@@ -27,6 +27,13 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
     IDisposable
 {
     private readonly YarnWindowPreloader? preloader;
+    private CancellationTokenSource nodeEntryCancellation = new();
+    private long nodeActivation;
+    private long enteredActivation = -1;
+    private NodeEntryReason nodeEntryReason;
+
+    public Func<NodeEntryRequest, CancellationToken, Task>? BeforeNodeEntryAsync { get; set; }
+
     private readonly Node owner;
     private readonly IYarnProjectVersionStore projectVersions;
     private readonly IDirectionScopeResolver? directionScopes;
@@ -152,6 +159,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
         runner.AddChild(presenterAdapter);
         runner.dialoguePresenters = new Godot.Collections.Array<Node?> { presenterAdapter };
         runner.LineProvider.RegisterMarkerProcessor("br", lineBreakMarkupReplacer);
+        runner.AddCommandHandler(YarnNodeEntryTransform.CommandName, (Func<Task>)EnterPendingNodeAsync);
         owner.AddChild(runner);
         configuredLocale = localeManager?.DialogueLocale ?? TranslationServer.GetLocale();
 
@@ -253,6 +261,11 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
     private void BeginProjectSession(string projectId, string startNode, bool resetCompletion)
     {
         directionScopes?.ExitNode(currentNodeName);
+        nodeEntryCancellation.Cancel();
+        nodeEntryCancellation.Dispose();
+        nodeEntryCancellation = new CancellationTokenSource();
+        nodeEntryReason = pendingRestore is not null ? NodeEntryReason.Restore :
+            isInternalMigration ? NodeEntryReason.InternalRebuild : NodeEntryReason.Normal;
         lock (sync)
         {
             currentProjectId = projectId;
@@ -300,6 +313,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
             return;
         }
 
+        nodeEntryCancellation.Cancel();
         preloader?.Clear();
         lock (sync)
         {
@@ -609,20 +623,66 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
     private void HandleNodeStarted(string nodeName)
     {
         currentNodeName = nodeName;
-        if (Runner.YarnProject is { } project) preloader?.EnterNode(project, nodeName);
-        var module = projectVersions.GetActiveVersion(currentProjectId)?.DirectionModules
+        nodeActivation++;
+        // Checkpoint replay skips the source prelude. Restore only the module here;
+        // restoring stable state must never execute a normal scene boundary.
+        if (nodeEntryReason != NodeEntryReason.Normal)
+            ApplyPendingModule(nodeName);
+    }
+
+    private async Task EnterPendingNodeAsync()
+    {
+        var activation = nodeActivation;
+        if (enteredActivation == activation) return;
+        var nodeName = currentNodeName;
+        var token = nodeEntryCancellation.Token;
+        try
+        {
+            if (pendingFailure is { } boundaryFailure) throw boundaryFailure;
+            var module = FindModule(nodeName);
+            if (module is not null && module.Diagnostics.Any(value =>
+                value.Severity.Equals("error", StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException($"Node '{nodeName}' has invalid Direction metadata.");
+            if (BeforeNodeEntryAsync is { } enter)
+                await enter(new NodeEntryRequest(currentProjectId, nodeName, activation, module, nodeEntryReason), token);
+            token.ThrowIfCancellationRequested();
+            if (activation != nodeActivation) return;
+            ApplyPendingModule(nodeName);
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        catch (Exception error)
+        {
+            pendingFailure = error;
+            Failed?.Invoke(error);
+            await Runner.Stop();
+        }
+    }
+
+    private NodeDirectionModule? FindModule(string nodeName) =>
+        projectVersions.GetActiveVersion(currentProjectId)?.DirectionModules
             .FirstOrDefault(candidate => candidate.NodeId.Equals(nodeName, StringComparison.Ordinal));
-        if (module is not null)
-            directionScopes?.ApplyModule(module);
-        else
-            directionScopes?.EnterNode(nodeName);
+
+    private void ApplyPendingModule(string nodeName)
+    {
+        if (enteredActivation == nodeActivation) return;
+        var module = FindModule(nodeName);
+        if (module is not null) directionScopes?.ApplyModule(module);
+        else directionScopes?.EnterNode(nodeName);
+        if (Runner.YarnProject is { } project) preloader?.EnterNode(project, nodeName);
+        enteredActivation = nodeActivation;
         NodeEntered?.Invoke(nodeName);
+        nodeEntryReason = NodeEntryReason.Normal;
     }
 
     private void HandleNodeCompleted(string nodeName)
     {
-        NodeExited?.Invoke(nodeName);
-        directionScopes?.ExitNode(nodeName);
+        try { NodeExited?.Invoke(nodeName); }
+        catch (Exception error)
+        {
+            pendingFailure = error;
+            Failed?.Invoke(error);
+        }
+        finally { directionScopes?.ExitNode(nodeName); }
     }
 
     private void HandleDialogueCompleted()
@@ -1012,6 +1072,8 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend,
 
     public void Dispose()
     {
+        nodeEntryCancellation.Cancel();
+        nodeEntryCancellation.Dispose();
         preloader?.Dispose();
         presenterAdapter?.Dispose();
         if (GodotObject.IsInstanceValid(runner))

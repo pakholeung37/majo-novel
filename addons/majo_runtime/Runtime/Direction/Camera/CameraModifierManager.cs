@@ -17,6 +17,7 @@ public interface ICameraModifierManager : IRuntimeService
     bool Contains(string effectName);
 
     IOperationHandle ApplyEffect(CameraFxCue cue);
+    Task ClearViewAsync(ViewId viewId, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
 public interface ICameraModifierRegistry
@@ -76,177 +77,37 @@ public sealed class CameraModifierRegistry : ICameraModifierRegistry
 
 public sealed class CameraModifierManager : ICameraModifierManager
 {
-    private readonly Action<ViewId, CameraPoseDelta> applyDeltaCallback;
-    private readonly Action<ViewId> clearDeltaCallback;
-    private readonly IOperationRunner operations;
-    private readonly IDirectionAccessibility accessibility;
-    private readonly IFrameClock? frameClock;
-    private readonly object gate = new();
     private readonly ICameraModifierRegistry registry;
-    private readonly Dictionary<ViewId, Dictionary<Guid, CameraPoseDelta>> activeDeltas = new();
-    private readonly Dictionary<ViewId, Dictionary<Guid, IOperationHandle>> activeOperations = new();
-    private bool isInitialized;
+    private readonly Majo.Runtime.Direction.Execution.ModifierOperationRunner<ViewId, CameraPoseDelta> operations;
+    private bool initialized;
 
-    public CameraModifierManager(
-        Action<ViewId, CameraPoseDelta> applyDeltaCallback,
-        Action<ViewId> clearDeltaCallback,
-        IOperationRunner operations,
-        IDirectionAccessibility accessibility,
-        IFrameClock? frameClock = null,
-        bool registerDefaults = true,
-        ICameraModifierRegistry? registry = null)
+    public CameraModifierManager(Action<ViewId, CameraPoseDelta> applyDeltaCallback,
+        Action<ViewId> clearDeltaCallback, IOperationRunner operations, IDirectionAccessibility accessibility,
+        IFrameClock? frameClock = null, bool registerDefaults = true, ICameraModifierRegistry? registry = null)
     {
-        this.applyDeltaCallback = applyDeltaCallback ?? throw new ArgumentNullException(nameof(applyDeltaCallback));
-        this.clearDeltaCallback = clearDeltaCallback ?? throw new ArgumentNullException(nameof(clearDeltaCallback));
-        this.operations = operations ?? throw new ArgumentNullException(nameof(operations));
-        this.accessibility = accessibility ?? throw new ArgumentNullException(nameof(accessibility));
-        this.frameClock = frameClock;
-
         this.registry = registry ?? new CameraModifierRegistry(registerDefaults);
+        this.operations = new(operations, accessibility, frameClock, CameraPoseDelta.Identity,
+            (left, right) => left.Combine(right), (view, delta) =>
+            {
+                if (delta == CameraPoseDelta.Identity) clearDeltaCallback(view);
+                else applyDeltaCallback(view, delta);
+            });
     }
-
-    public Task InitializeAsync(CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        isInitialized = true;
-        return Task.CompletedTask;
-    }
-
-    public async Task ResetAsync(CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        IOperationHandle[] snapshot;
-        ViewId[] affectedViews;
-        lock (gate)
-        {
-            snapshot = activeOperations.Values.SelectMany(value => value.Values).ToArray();
-            affectedViews = activeOperations.Keys.ToArray();
-            activeOperations.Clear();
-            activeDeltas.Clear();
-        }
-
-        foreach (var handle in snapshot) handle.Cancel();
-        foreach (var viewId in affectedViews)
-            clearDeltaCallback(viewId);
-        await AwaitTerminationAsync(snapshot, cancellationToken);
-    }
-
-    public async Task ShutdownAsync(CancellationToken cancellationToken)
-    {
-        if (!isInitialized) return;
-        await ResetAsync(cancellationToken);
-        isInitialized = false;
-    }
-
+    public bool Contains(string effectName) => registry.Contains(effectName);
     public IOperationHandle ApplyEffect(CameraFxCue cue)
     {
-        ArgumentNullException.ThrowIfNull(cue);
-        EnsureInitialized();
-
+        if (!initialized) throw new DirectionException("Camera modifier manager is not initialized.");
         if (!registry.TryGet(cue.EffectName, out var modifier) || modifier is null)
-        {
             throw new DirectionException($"Unknown camera modifier effect: '{cue.EffectName}'.");
-        }
-
         modifier.Validate(cue.Parameters, cue.DurationSeconds);
-        var instanceId = Guid.NewGuid();
-        async Task ExecuteAsync(OperationContext context)
-        {
-            try
-            {
-                if (accessibility.ReduceMotion)
-                    await context.FrameClock.DelayAsync(
-                        TimeSpan.FromSeconds(cue.DurationSeconds), context.CancellationToken);
-                else
-                    await modifier.ExecuteAsync(
-                        cue.ViewId, cue.Parameters, cue.DurationSeconds,
-                        delta => UpdateDelta(cue.ViewId, instanceId, delta),
-                        frameClock ?? context.FrameClock, context.CancellationToken);
-            }
-            finally
-            {
-                RemoveDelta(cue.ViewId, instanceId);
-            }
-        }
-
-        var handle = operations.Start(new OperationDefinition(ExecuteAsync));
-
-        lock (gate)
-        {
-            if (!activeOperations.TryGetValue(cue.ViewId, out var viewOperations))
-                activeOperations[cue.ViewId] = viewOperations = new();
-            viewOperations[instanceId] = handle;
-        }
-
-        _ = RemoveWhenDoneAsync(cue.ViewId, instanceId, handle);
-        return handle;
+        return operations.Start(cue.ViewId, cue.DurationSeconds, (apply, clock, token) =>
+            modifier.ExecuteAsync(cue.ViewId, cue.Parameters, cue.DurationSeconds, apply, clock, token));
     }
-
-    public bool Contains(string effectName) => registry.Contains(effectName);
-
-    private async Task RemoveWhenDoneAsync(ViewId viewId, Guid instanceId, IOperationHandle handle)
-    {
-        try { await handle.Completion; }
-        catch { }
-        lock (gate)
-        {
-            if (activeOperations.TryGetValue(viewId, out var viewOperations) &&
-                viewOperations.TryGetValue(instanceId, out var current) &&
-                ReferenceEquals(current, handle))
-            {
-                viewOperations.Remove(instanceId);
-                if (viewOperations.Count == 0) activeOperations.Remove(viewId);
-            }
-        }
-    }
-
-    private void UpdateDelta(ViewId viewId, Guid instanceId, CameraPoseDelta delta)
-    {
-        lock (gate)
-        {
-            if (!activeDeltas.TryGetValue(viewId, out var viewDeltas))
-                activeDeltas[viewId] = viewDeltas = new();
-            viewDeltas[instanceId] = delta;
-            applyDeltaCallback(viewId, viewDeltas.Values.Aggregate(
-                CameraPoseDelta.Identity, (current, value) => current.Combine(value)));
-        }
-    }
-
-    private void RemoveDelta(ViewId viewId, Guid instanceId)
-    {
-        lock (gate)
-        {
-            if (!activeDeltas.TryGetValue(viewId, out var viewDeltas))
-            {
-                clearDeltaCallback(viewId);
-                return;
-            }
-            if (!viewDeltas.Remove(instanceId)) return;
-            if (viewDeltas.Count == 0)
-            {
-                activeDeltas.Remove(viewId);
-                clearDeltaCallback(viewId);
-                return;
-            }
-            applyDeltaCallback(viewId, viewDeltas.Values.Aggregate(
-                CameraPoseDelta.Identity, (current, value) => current.Combine(value)));
-        }
-    }
-
-    private static async Task AwaitTerminationAsync(
-        IEnumerable<IOperationHandle> handles,
-        CancellationToken cancellationToken)
-    {
-        foreach (var handle in handles)
-        {
-            try { await handle.Completion.WaitAsync(cancellationToken); }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { }
-        }
-    }
-
-    private void EnsureInitialized()
-    {
-        if (!isInitialized)
-            throw new DirectionException("Camera modifier manager is not initialized.");
-    }
+    public Task InitializeAsync(CancellationToken cancellationToken)
+    { cancellationToken.ThrowIfCancellationRequested(); initialized = true; return Task.CompletedTask; }
+    public Task ResetAsync(CancellationToken cancellationToken) => operations.ResetAsync(cancellationToken);
+    public async Task ShutdownAsync(CancellationToken cancellationToken)
+    { await ResetAsync(cancellationToken); initialized = false; }
+    public Task ClearViewAsync(ViewId viewId, CancellationToken cancellationToken = default) =>
+        operations.ClearTargetAsync(viewId, cancellationToken);
 }

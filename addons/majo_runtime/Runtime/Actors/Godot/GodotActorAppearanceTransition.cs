@@ -74,6 +74,71 @@ internal sealed class GodotActorAppearanceTransition : IPreparedVisualTransition
         catch { result.Dispose(); throw; }
     }
 
+    public static async Task<IPreparedActorAppearance> PrepareForCommitAsync(Node2D owner,
+        CanvasItem sourceContent, CanvasItem targetContent, Rect2 bounds,
+        Action<bool> showOriginal, Action<Sprite2D?> publishOverlay, Action publishTarget, Action finish,
+        ITransitionDriver driver, AnimationSpec animation, CancellationToken cancellationToken)
+    {
+        var staging = new Node2D { Name = "PreparedAppearance", Visible = false };
+        owner.GetParent().AddChild(staging);
+        try
+        {
+            var effect = (GodotActorAppearanceTransition)await PrepareAsync(staging,
+                sourceContent, targetContent, bounds, 1, _ => { }, _ => { }, driver, animation, cancellationToken);
+            return new PreparedAppearance(owner, staging, effect, showOriginal, publishOverlay, publishTarget, finish);
+        }
+        catch { staging.QueueFree(); throw; }
+    }
+
+    private sealed class PreparedAppearance : IPreparedActorAppearance
+    {
+        private readonly Node2D owner;
+        private readonly Node2D staging;
+        private readonly GodotActorAppearanceTransition effect;
+        private readonly Action<bool> showOriginal;
+        private readonly Action<Sprite2D?> publishOverlay;
+        private readonly Action publishTarget;
+        private readonly Action finish;
+        private bool committed;
+        private bool disposed;
+
+        public PreparedAppearance(Node2D owner, Node2D staging, GodotActorAppearanceTransition effect,
+            Action<bool> showOriginal, Action<Sprite2D?> publishOverlay, Action publishTarget, Action finish)
+        {
+            this.owner = owner; this.staging = staging; this.effect = effect;
+            this.showOriginal = showOriginal; this.publishOverlay = publishOverlay;
+            this.publishTarget = publishTarget; this.finish = finish;
+        }
+
+        public void Commit()
+        {
+            if (disposed || committed) throw new InvalidOperationException("Appearance is no longer preparable.");
+            effect.source.Reparent(owner, false);
+            effect.target.Reparent(owner, false);
+            effect.overlay.Reparent(owner, false);
+            committed = true;
+            publishTarget();
+            showOriginal(false);
+            publishOverlay(effect.overlay);
+        }
+
+        public void ApplyProgress(float progress) { if (!disposed) effect.ApplyProgress(progress); }
+        public void Finish()
+        {
+            if (disposed) return;
+            Dispose();
+            finish();
+        }
+        public void Dispose()
+        {
+            if (disposed) return;
+            disposed = true;
+            effect.Dispose();
+            if (committed) { showOriginal(true); publishOverlay(null); }
+            if (GodotObject.IsInstanceValid(staging)) staging.QueueFree();
+        }
+    }
+
     private static async Task NextFrameAsync(SceneTree tree)
     {
         if (DisplayServer.GetName() == "headless")

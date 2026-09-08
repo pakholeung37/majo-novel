@@ -22,7 +22,7 @@ public sealed class DirectionStateContributor : IStateContributor
 
     public string Key => BuiltInStateKeys.Direction;
     public StateScope Scope => StateScope.Game;
-    public int SchemaVersion => 2;
+    public int SchemaVersion => 3;
     public StateContributorCapability Capability => StateContributorCapability.DurableRollback;
 
     public ValueTask<StateRecord> CaptureAsync(CancellationToken cancellationToken)
@@ -73,7 +73,7 @@ public sealed class DirectionStateContributor : IStateContributor
                 actor.Position.Y,
                 actor.Appearance,
                 actor.Scale,
-                actor.Z)).ToArray())).ToArray(),
+                actor.Z, actor.Kind, actor.DefinitionId, actor.Visible, actor.RotationDegrees)).ToArray())).ToArray(),
         state.Views.Values.Select(view => new ViewPayload(
             view.Id.Value,
             view.StageId.Value,
@@ -86,7 +86,7 @@ public sealed class DirectionStateContributor : IStateContributor
         state.Revision,
         new StableEffectsPayload(new CurtainPayload(
             state.Effects.Curtain.Color,
-            state.Effects.Curtain.Opacity)));
+            state.Effects.Curtain.Opacity)), state.Scene);
 
     private static DirectionState Decode(StateRecord record)
     {
@@ -94,7 +94,7 @@ public sealed class DirectionStateContributor : IStateContributor
         {
             if (record.Key != BuiltInStateKeys.Direction ||
                 record.Scope != StateScope.Game ||
-                record.SchemaVersion != 2)
+                record.SchemaVersion != 3)
             {
                 throw new StateSnapshotException(
                     $"State record '{BuiltInStateKeys.Direction}' has incompatible metadata.");
@@ -138,7 +138,13 @@ public sealed class DirectionStateContributor : IStateContributor
                     new DirectionPoint(actor.X, actor.Y),
                     actor.Appearance,
                     actor.Scale,
-                    actor.Z));
+                    actor.Z)
+                {
+                    Kind = actor.Kind,
+                    DefinitionId = actor.DefinitionId,
+                    Visible = actor.Visible,
+                    RotationDegrees = actor.RotationDegrees,
+                });
             foreach (var actor in actors.Values) actor.Validate();
             if (stage.Backdrop is not null)
             {
@@ -207,7 +213,8 @@ public sealed class DirectionStateContributor : IStateContributor
             new StableEffectState(new CurtainState(
                 curtain.Color,
                 curtain.Opacity)),
-            payload.Revision).Validate();
+            payload.Revision)
+        { Scene = payload.Scene ?? new DirectionSceneContext(null, null, 0) }.Validate();
     }
 
     private sealed record Payload(
@@ -216,7 +223,8 @@ public sealed class DirectionStateContributor : IStateContributor
         string Layout,
         Dictionary<string, string> Bindings,
         long Revision,
-        StableEffectsPayload? Effects = null);
+        StableEffectsPayload? Effects = null,
+        DirectionSceneContext? Scene = null);
 
     private sealed record StagePayload(
         string Id,
@@ -227,7 +235,8 @@ public sealed class DirectionStateContributor : IStateContributor
     private sealed record EffectPayload(DirectionColor Tint);
     private sealed record StableEffectsPayload(CurtainPayload Curtain);
     private sealed record CurtainPayload(DirectionColor Color, float Opacity);
-    private sealed record ActorPayload(string Id, float X, float Y, string? Appearance, float Scale, int Z);
+    private sealed record ActorPayload(string Id, float X, float Y, string? Appearance, float Scale, int Z,
+        DirectionActorKind Kind, string? DefinitionId, bool Visible, float RotationDegrees);
     private sealed record ViewPayload(
         string Id,
         string StageId,

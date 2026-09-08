@@ -447,11 +447,11 @@ public partial class MajoProjectConfiguration : Resource
         {
             (nameof(Animation.DefaultCharacterAnimationId), Animation.DefaultCharacterAnimationId),
             (nameof(Animation.DefaultCharacterAppearanceAnimationId), Animation.DefaultCharacterAppearanceAnimationId),
-            (nameof(Animation.DefaultLeaveAnimationId), Animation.DefaultLeaveAnimationId),
+            (nameof(Animation.DefaultActorHideAnimationId), Animation.DefaultActorHideAnimationId),
             (nameof(Animation.DefaultStageShowAnimationId), Animation.DefaultStageShowAnimationId),
             (nameof(Animation.DefaultStageClearAnimationId), Animation.DefaultStageClearAnimationId),
             (nameof(Animation.DefaultBackdropAnimationId), Animation.DefaultBackdropAnimationId),
-            (nameof(Animation.DefaultCameraPoseAnimationId), Animation.DefaultCameraPoseAnimationId),
+            (nameof(Animation.DefaultCameraAnimationId), Animation.DefaultCameraAnimationId),
             (nameof(Animation.DefaultCameraResetAnimationId), Animation.DefaultCameraResetAnimationId),
             (nameof(Animation.DefaultShotAnimationId), Animation.DefaultShotAnimationId),
             (nameof(Animation.DefaultLayoutAnimationId), Animation.DefaultLayoutAnimationId),

@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Majo.Runtime.Direction.Core;
+using Majo.Runtime.Direction.Actors;
 
 namespace Majo.Runtime.Direction.Execution;
 
@@ -50,13 +51,10 @@ public sealed class DirectionPlanner : IDirectionPlanner
         var screen = beforeState.Screen;
         var effects = beforeState.Effects;
         var writes = new Dictionary<string, DirectionSourceLocation?>(StringComparer.Ordinal);
-        var leavePaths = new HashSet<string>(StringComparer.Ordinal);
+        var removePaths = new HashSet<string>(StringComparer.Ordinal);
         var transitions = new List<DirectionTransition>();
         var cues = new List<ITransientDirectionCue>();
         var claims = new HashSet<DirectionResourceClaim>();
-        var viewCutBaselines = new Dictionary<ViewId, ViewState>();
-        var viewSequences = new Dictionary<ViewId, DirectionViewTransitionSequence>();
-        var sequencedViews = new HashSet<ViewId>();
 
         foreach (var directive in directiveList)
         {
@@ -75,45 +73,22 @@ public sealed class DirectionPlanner : IDirectionPlanner
                     ApplyBackdrop(patch, stages, writes, transitions, claims);
                     break;
                 case ActorPatch patch:
-                    ApplyActor(patch, stages, writes, leavePaths, transitions, claims);
+                    ApplyActor(patch, beforeState, stages, writes, removePaths, transitions, claims);
                     break;
-                case ActorLeavePatch patch:
-                    ApplyLeave(patch, stages, writes, leavePaths, transitions);
+                case ActorMovePatch patch:
+                    ApplyActorMove(patch, beforeState, stages, writes, transitions);
+                    break;
+                case ActorHidePatch patch:
+                    ApplyActorHide(patch, beforeState, stages, writes, transitions);
+                    break;
+                case ActorRemovePatch patch:
+                    ApplyRemove(patch, stages, writes, removePaths, transitions);
                     break;
                 case ViewCreatePatch patch:
                     ApplyViewCreate(patch, stages, views, writes);
                     break;
                 case ViewPosePatch patch:
-                    ViewState? cutBaseline = null;
-                    var canSequencePose = patch.Transition.Kind == DirectionTransitionId.Move &&
-                        !sequencedViews.Contains(patch.ViewId) &&
-                        viewCutBaselines.TryGetValue(patch.ViewId, out cutBaseline);
-                    ApplyViewPose(
-                        patch,
-                        views,
-                        writes,
-                        transitions,
-                        canSequencePose,
-                        sequencedViews);
-                    if (canSequencePose)
-                    {
-                        if (!viewSequences.TryAdd(
-                                patch.ViewId,
-                                new DirectionViewTransitionSequence(
-                                    patch.ViewId,
-                                    cutBaseline!,
-                                    patch.Transition)))
-                        {
-                            throw new DirectionBeatException(
-                                $"View '{patch.ViewId}' contains more than one sequential pose transition in the same beat.");
-                        }
-                        sequencedViews.Add(patch.ViewId);
-                    }
-                    if (patch.Transition.Kind == DirectionTransitionId.Cut &&
-                        views.TryGetValue(patch.ViewId, out var cutState))
-                    {
-                        viewCutBaselines[patch.ViewId] = cutState;
-                    }
+                    ApplyViewPose(patch, views, writes, transitions);
                     break;
                 case ViewReleasePatch patch:
                     ApplyViewRelease(patch, views, screen, writes);
@@ -134,15 +109,36 @@ public sealed class DirectionPlanner : IDirectionPlanner
             }
         }
 
+        foreach (var cue in cues.OfType<ActorFxCue>())
+        {
+            cue.Validate();
+            if (!stages.TryGetValue(cue.Target.StageId, out var stage))
+                throw new DirectionReferenceException($"FX Stage '{cue.Target.StageId}' does not exist.");
+            if (cue.Target.Slot == ActorFxSlot.Backdrop)
+            {
+                if (stage.Backdrop is null) throw new DirectionReferenceException("Backdrop FX requires an existing backdrop.");
+                continue;
+            }
+            var id = cue.Target.ActorId!.Value;
+            if (!stage.Actors.TryGetValue(id, out var actor))
+                throw new DirectionReferenceException($"Actor FX target '{id}' does not exist.");
+            ValidateActorIdentity(actor, cue.Kind);
+            ActorState? original = null;
+            beforeState.Stages.GetValueOrDefault(cue.Target.StageId)?.Actors.TryGetValue(id, out original);
+            if (!actor.Visible && original?.Visible != true)
+                throw new DirectionReferenceException($"Actor FX target '{id}' is hidden.");
+        }
+
         ValidateReferences(stages, views, screen);
-        ValidateTransitionConflicts(transitions, viewSequences);
+        ValidateTransitionConflicts(transitions);
 
         var targetState = new DirectionState(
             DirectionCollections.Freeze(stages),
             DirectionCollections.Freeze(views),
             screen,
             effects,
-            checked(beforeState.Revision + 1));
+            checked(beforeState.Revision + 1))
+        { Scene = beforeState.Scene };
         targetState.Validate();
 
         var domainPlan = new DirectionPlan(
@@ -150,15 +146,17 @@ public sealed class DirectionPlanner : IDirectionPlanner
             beforeState,
             targetState,
             transitions.AsReadOnly(),
-            cues.AsReadOnly(),
-            viewSequences.Values.Select(sequence => new DirectionViewPoseIntent(
-                sequence.ViewId, sequence.StartState, sequence.Transition)).ToArray());
+            cues.AsReadOnly())
+        {
+            ViewIntents = directiveList.OfType<ViewPosePatch>().ToArray(),
+            ActorIntents = directiveList.OfType<IDurableDirectionPatch>()
+                .Where(patch => patch is ActorPatch or ActorMovePatch or ActorHidePatch).ToArray(),
+        };
 
         return new DirectionExecutionPlan(
             domainPlan,
             claims.OrderBy(claim => claim.Kind).ThenBy(claim => claim.SemanticId).ToArray(),
-            completion,
-            viewSequences.Values.ToArray());
+            completion);
     }
 
     private static void ApplyStageCreate(
@@ -280,9 +278,10 @@ public sealed class DirectionPlanner : IDirectionPlanner
 
     private static void ApplyActor(
         ActorPatch patch,
+        DirectionState beforeState,
         Dictionary<StageId, StageState> stages,
         Dictionary<string, DirectionSourceLocation?> writes,
-        HashSet<string> leavePaths,
+        HashSet<string> removePaths,
         List<DirectionTransition> transitions,
         HashSet<DirectionResourceClaim> claims)
     {
@@ -290,10 +289,14 @@ public sealed class DirectionPlanner : IDirectionPlanner
             throw new DirectionReferenceException($"Stage '{patch.StageId}' is not defined.");
         var actors = stage.Actors.ToDictionary(pair => pair.Key, pair => pair.Value);
         var actorExists = actors.TryGetValue(patch.ActorId, out var actor);
-        actor ??= ActorState.CreateDefault(patch.ActorId);
+        actor ??= ActorState.CreateDefault(patch.ActorId) with { Kind = patch.Kind, DefinitionId = patch.DefinitionId };
+        ValidateActorIdentity(actor, patch.Kind, patch.DefinitionId);
+        ActorState? original = null;
+        beforeState.Stages.GetValueOrDefault(patch.StageId)?.Actors.TryGetValue(patch.ActorId, out original);
+        var showing = original is null || !original.Visible;
         var prefix = ActorPath(patch.StageId, patch.ActorId, string.Empty);
         var presencePath = ActorPath(patch.StageId, patch.ActorId, "presence");
-        if (leavePaths.Contains(presencePath))
+        if (removePaths.Contains(presencePath))
         {
             throw new DirectionConflictException(
                 presencePath,
@@ -304,11 +307,18 @@ public sealed class DirectionPlanner : IDirectionPlanner
         var paths = new List<string>();
         if (!actorExists)
             RegisterWrite(presencePath, patch.SourceLocation, writes, paths);
+        if (showing)
+        {
+            RegisterWrite(prefix + "visibility", patch.SourceLocation, writes, paths);
+            actor = actor with { Visible = true };
+        }
+        var hasSpace = patch.Position.HasValue || patch.Scale.HasValue || patch.RotationDegrees.HasValue;
+        if (hasSpace) RegisterWrite(prefix + "space", patch.SourceLocation, writes, paths);
 
         if (patch.Position.HasValue)
         {
             patch.Position.Value.Validate();
-            RegisterWrite(prefix + "position", patch.SourceLocation, writes, paths);
+
             actor = actor with { Position = patch.Position.Value };
         }
         if (patch.Appearance.HasValue)
@@ -327,26 +337,94 @@ public sealed class DirectionPlanner : IDirectionPlanner
         }
         if (patch.Scale.HasValue)
         {
-            RegisterWrite(prefix + "scale", patch.SourceLocation, writes, paths);
+
             actor = actor with { Scale = patch.Scale.Value };
         }
+        if (patch.RotationDegrees.HasValue)
+            actor = actor with { RotationDegrees = patch.RotationDegrees.Value };
         if (patch.Z.HasValue)
         {
             RegisterWrite(prefix + "z", patch.SourceLocation, writes, paths);
             actor = actor with { Z = patch.Z.Value };
         }
 
+        if (patch.Kind == DirectionActorKind.SceneObject)
+            claims.Add(new DirectionResourceClaim(DirectionResourceKind.ObjectDefinition, actor.DefinitionId!));
         actor.Validate();
         actors[patch.ActorId] = actor;
         stages[patch.StageId] = stage with { Actors = DirectionCollections.Freeze(actors) };
         AddTransition(patch.Transition, paths, transitions, patch.SourceLocation);
     }
 
-    private static void ApplyLeave(
-        ActorLeavePatch patch,
+    private static void ValidateActorIdentity(ActorState actor, DirectionActorKind kind, string? definitionId = null)
+    {
+        if (actor.Kind != kind)
+            throw new DirectionReferenceException($"Actor '{actor.Id}' is {actor.Kind}, not {kind}.");
+        if (definitionId is not null && actor.DefinitionId != definitionId)
+            throw new DirectionReferenceException($"Actor '{actor.Id}' cannot change its definition.");
+    }
+
+    private static ActorState RequireExistingActor(DirectionState state, StageId stage, ActorId id,
+        DirectionActorKind kind, bool visible)
+    {
+        if (!state.Stages.TryGetValue(stage, out var target) || !target.Actors.TryGetValue(id, out var actor))
+            throw new DirectionReferenceException($"Actor '{id}' does not exist on Stage '{stage}'.");
+        ValidateActorIdentity(actor, kind);
+        if (visible && !actor.Visible)
+            throw new DirectionReferenceException($"Actor '{id}' must be visible before this beat starts.");
+        return actor;
+    }
+
+    private static void ApplyActorMove(ActorMovePatch patch, DirectionState before,
+        Dictionary<StageId, StageState> stages, Dictionary<string, DirectionSourceLocation?> writes,
+        List<DirectionTransition> transitions)
+    {
+        RequireExistingActor(before, patch.StageId, patch.ActorId, patch.Kind, true);
+        if (!patch.Position.HasValue && !patch.Scale.HasValue && !patch.RotationDegrees.HasValue)
+            throw new ArgumentException("Actor move requires at, scale or rotation.");
+        if (patch.Transition.Kind != DirectionTransitionId.Move)
+            throw new ArgumentException("Actor move requires a movement transition.");
+        var stage = stages[patch.StageId];
+        var actor = stage.Actors[patch.ActorId];
+        var paths = new List<string>();
+        RegisterWrite(ActorPath(patch.StageId, patch.ActorId, "space"), patch.SourceLocation, writes, paths);
+        actor = actor with
+        {
+            Position = patch.Position.HasValue ? patch.Position.Value : actor.Position,
+            Scale = patch.Scale.HasValue ? patch.Scale.Value : actor.Scale,
+            RotationDegrees = patch.RotationDegrees.HasValue ? patch.RotationDegrees.Value : actor.RotationDegrees,
+        };
+        actor.Validate();
+        var actors = stage.Actors.ToDictionary(pair => pair.Key, pair => pair.Value);
+        actors[patch.ActorId] = actor;
+        stages[patch.StageId] = stage with { Actors = DirectionCollections.Freeze(actors) };
+        AddTransition(patch.Transition, paths, transitions, patch.SourceLocation);
+    }
+
+    private static void ApplyActorHide(ActorHidePatch patch, DirectionState before,
+        Dictionary<StageId, StageState> stages, Dictionary<string, DirectionSourceLocation?> writes,
+        List<DirectionTransition> transitions)
+    {
+        if (patch.Transition.Kind != DirectionTransitionId.Cut && patch.Transition.Kind != DirectionTransitionId.Fade)
+            throw new DirectionException("Actor hide supports only cut or fade.");
+        var visibilityPath = ActorPath(patch.StageId, patch.ActorId, "visibility");
+        if (writes.TryGetValue(visibilityPath, out var writer))
+            throw new DirectionConflictException(visibilityPath, writer, patch.SourceLocation);
+        var original = RequireExistingActor(before, patch.StageId, patch.ActorId, patch.Kind, false);
+        var stage = stages[patch.StageId];
+        var paths = new List<string>();
+        RegisterWrite(ActorPath(patch.StageId, patch.ActorId, "visibility"), patch.SourceLocation, writes, paths);
+        var actors = stage.Actors.ToDictionary(pair => pair.Key, pair => pair.Value);
+        actors[patch.ActorId] = actors[patch.ActorId] with { Visible = false };
+        stages[patch.StageId] = stage with { Actors = DirectionCollections.Freeze(actors) };
+        if (original.Visible) AddTransition(patch.Transition, paths, transitions, patch.SourceLocation);
+    }
+
+    private static void ApplyRemove(
+        ActorRemovePatch patch,
         Dictionary<StageId, StageState> stages,
         Dictionary<string, DirectionSourceLocation?> writes,
-        HashSet<string> leavePaths,
+        HashSet<string> removePaths,
         List<DirectionTransition> transitions)
     {
         if (!stages.TryGetValue(patch.StageId, out var stage))
@@ -365,7 +443,7 @@ public sealed class DirectionPlanner : IDirectionPlanner
             patch.SourceLocation,
             writes,
             paths);
-        leavePaths.Add(ActorPath(patch.StageId, patch.ActorId, "presence"));
+        removePaths.Add(ActorPath(patch.StageId, patch.ActorId, "presence"));
         var actors = stage.Actors.ToDictionary(pair => pair.Key, pair => pair.Value);
         actors.Remove(patch.ActorId);
         stages[patch.StageId] = stage with { Actors = DirectionCollections.Freeze(actors) };
@@ -399,53 +477,19 @@ public sealed class DirectionPlanner : IDirectionPlanner
         ViewPosePatch patch,
         Dictionary<ViewId, ViewState> views,
         Dictionary<string, DirectionSourceLocation?> writes,
-        List<DirectionTransition> transitions,
-        bool allowSequencedPose,
-        HashSet<ViewId> sequencedViews)
+        List<DirectionTransition> transitions)
     {
         if (!views.TryGetValue(patch.ViewId, out var view))
             throw new DirectionReferenceException($"View '{patch.ViewId}' is not defined.");
-
         var paths = new List<string>();
-        var pose = view.Pose;
-        if (patch.Center.HasValue)
+        if (!patch.Center.HasValue && !patch.Zoom.HasValue && !patch.RotationDegrees.HasValue) return;
+        RegisterWrite(ViewPath(patch.ViewId, "pose"), patch.SourceLocation, writes, paths);
+        var pose = view.Pose with
         {
-            patch.Center.Value.Validate();
-            RegisterViewPoseWrite(
-                ViewPath(patch.ViewId, "center"),
-                patch.SourceLocation,
-                writes,
-                paths,
-                allowSequencedPose,
-                sequencedViews,
-                patch.ViewId);
-            pose = pose with { Center = patch.Center.Value };
-        }
-        if (patch.Zoom.HasValue)
-        {
-            RegisterViewPoseWrite(
-                ViewPath(patch.ViewId, "zoom"),
-                patch.SourceLocation,
-                writes,
-                paths,
-                allowSequencedPose,
-                sequencedViews,
-                patch.ViewId);
-            pose = pose with { Zoom = patch.Zoom.Value };
-        }
-        if (patch.RotationDegrees.HasValue)
-        {
-            RegisterViewPoseWrite(
-                ViewPath(patch.ViewId, "rotation"),
-                patch.SourceLocation,
-                writes,
-                paths,
-                allowSequencedPose,
-                sequencedViews,
-                patch.ViewId);
-            pose = pose with { RotationDegrees = patch.RotationDegrees.Value };
-        }
-
+            Center = patch.Center.HasValue ? patch.Center.Value : view.Pose.Center,
+            Zoom = patch.Zoom.HasValue ? patch.Zoom.Value : view.Pose.Zoom,
+            RotationDegrees = patch.RotationDegrees.HasValue ? patch.RotationDegrees.Value : view.Pose.RotationDegrees,
+        };
         pose.Validate();
         views[patch.ViewId] = view with { Pose = pose };
         AddTransition(patch.Transition, paths, transitions, patch.SourceLocation);
@@ -560,8 +604,7 @@ public sealed class DirectionPlanner : IDirectionPlanner
     }
 
     private static void ValidateTransitionConflicts(
-        IReadOnlyList<DirectionTransition> transitions,
-        IReadOnlyDictionary<ViewId, DirectionViewTransitionSequence> viewSequences)
+        IReadOnlyList<DirectionTransition> transitions)
     {
         var seen = new List<(string Component, DirectionTransitionSpec Spec, DirectionSourceLocation? Location)>();
         foreach (var transition in transitions)
@@ -574,8 +617,7 @@ public sealed class DirectionPlanner : IDirectionPlanner
                 var previous = seen.FirstOrDefault(item =>
                     item.Component == "*" || component == "*" ||
                     item.Component == component);
-                if (previous.Component is not null && previous.Spec != transition.Spec &&
-                    !IsAllowedViewSequence(component, previous.Spec, transition.Spec, viewSequences))
+                if (previous.Component is not null && previous.Spec != transition.Spec)
                 {
                     throw new DirectionBeatException(
                         $"Direction component '{component}' has conflicting transition specifications " +
@@ -596,26 +638,12 @@ public sealed class DirectionPlanner : IDirectionPlanner
         var kind = kindSeparator > 0 ? path[..kindSeparator] : path;
         return kind switch
         {
-            "stage" or "view" or "actor" => path[..separator],
+            "stage" or "view" => path[..separator],
+            "actor" => path,
             "screen" => "screen",
             "effect" => "effect",
             _ => path,
         };
-    }
-
-    private static bool IsAllowedViewSequence(
-        string component,
-        DirectionTransitionSpec previous,
-        DirectionTransitionSpec current,
-        IReadOnlyDictionary<ViewId, DirectionViewTransitionSequence> viewSequences)
-    {
-        if (!component.StartsWith("view/", StringComparison.Ordinal) ||
-            previous.Kind != DirectionTransitionId.Cut ||
-            current.Kind != DirectionTransitionId.Move)
-            return false;
-        var viewId = component["view/".Length..];
-        return !string.IsNullOrWhiteSpace(viewId) &&
-            viewSequences.ContainsKey(new ViewId(viewId));
     }
 
     private static void EnsureNoWritesWithPrefix(
@@ -651,25 +679,6 @@ public sealed class DirectionPlanner : IDirectionPlanner
             throw new DirectionConflictException(path, previous, location);
         writes.Add(path, location);
         directivePaths.Add(path);
-    }
-
-    private static void RegisterViewPoseWrite(
-        string path,
-        DirectionSourceLocation? location,
-        Dictionary<string, DirectionSourceLocation?> writes,
-        List<string> directivePaths,
-        bool allowSequencedPose,
-        HashSet<ViewId> sequencedViews,
-        ViewId viewId)
-    {
-        if (writes.ContainsKey(path))
-        {
-            if (!allowSequencedPose)
-                throw new DirectionConflictException(path, writes[path], location);
-            directivePaths.Add(path);
-            return;
-        }
-        RegisterWrite(path, location, writes, directivePaths);
     }
 
     private static string StagePath(StageId stageId, string property) =>

@@ -22,6 +22,8 @@ public sealed class AudioManager : IAudioManager, IDisposable
     private readonly SfxChannel sfx;
     private readonly VoiceChannel voice;
 
+    private long bgmEpoch;
+    private bool bgmSceneClosing;
     private bool isInitialized;
     private bool backendInitializationAttempted;
 
@@ -146,11 +148,14 @@ public sealed class AudioManager : IAudioManager, IDisposable
         backendInitializationAttempted = true;
         await backend.InitializeAsync(cancellationToken);
         resourceGuard.Initialize();
+        OpenSceneRequests();
         isInitialized = true;
     }
 
     public async Task ResetAsync(CancellationToken cancellationToken)
     {
+        CloseSceneRequests();
+
         EnsureInitialized();
         await mutations.WaitAsync(cancellationToken);
         try
@@ -165,11 +170,14 @@ public sealed class AudioManager : IAudioManager, IDisposable
         finally
         {
             mutations.Release();
+            OpenSceneRequests();
         }
     }
 
     public async Task ShutdownAsync(CancellationToken cancellationToken)
     {
+        CloseSceneRequests();
+
         if (!isInitialized && !backendInitializationAttempted)
         {
             return;
@@ -194,6 +202,13 @@ public sealed class AudioManager : IAudioManager, IDisposable
         }
     }
 
+    public void CloseSceneRequests()
+    {
+        Volatile.Write(ref bgmSceneClosing, true);
+        Interlocked.Increment(ref bgmEpoch);
+    }
+    public void OpenSceneRequests() => Volatile.Write(ref bgmSceneClosing, false);
+
     public async Task<AudioPlaybackResult> PlayBgmAsync(
         string clipId,
         string? trackId = null,
@@ -202,6 +217,9 @@ public sealed class AudioManager : IAudioManager, IDisposable
         AudioFade fade = default,
         CancellationToken cancellationToken = default)
     {
+        var requestEpoch = Volatile.Read(ref bgmEpoch);
+        if (Volatile.Read(ref bgmSceneClosing))
+            throw new InvalidOperationException("The BGM scene is closing.");
         EnsureInitialized();
         clipId = AudioResourceGuard.RequireName(clipId, nameof(clipId));
         trackId = string.IsNullOrWhiteSpace(trackId) ? clipId : trackId.Trim();
@@ -218,6 +236,8 @@ public sealed class AudioManager : IAudioManager, IDisposable
         await mutations.WaitAsync(cancellationToken);
         try
         {
+            if (requestEpoch != Volatile.Read(ref bgmEpoch) || Volatile.Read(ref bgmSceneClosing))
+                return AudioPlaybackResult.Skipped(AudioCategory.Bgm, clipId, trackId);
             return await bgm.PlayAsync(
                 clipId, trackId, clip, looping, volume, fade, cancellationToken);
         }

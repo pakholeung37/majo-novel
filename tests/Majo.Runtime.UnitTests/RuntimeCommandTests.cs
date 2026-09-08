@@ -23,7 +23,7 @@ namespace Majo.Runtime.UnitTests;
 public sealed class RuntimeCommandTests
 {
     [Fact]
-    public async Task AppearanceWithPositionUsesDissolveByDefault()
+    public async Task NewAppearanceWithPositionUsesVisibilityFadeByDefault()
     {
         var beats = new FakeDirectionBeatRuntime();
         var command = new CharacterCommand(beats,
@@ -33,7 +33,7 @@ public sealed class RuntimeCommandTests
         await bound.ExecuteAsync(new CommandInput("character",
             new[] { "hero", "appearance:blue", "at:left" }), new CommandExecutionContext("default-appearance"));
         var patch = Assert.IsType<ActorPatch>(beats.LastSubmitted);
-        Assert.Equal(DirectionTransitionId.Dissolve, patch.Transition.Kind);
+        Assert.Equal(DirectionTransitionId.Fade, patch.Transition.Kind);
         Assert.True(patch.Position.HasValue);
     }
 
@@ -114,7 +114,7 @@ public sealed class RuntimeCommandTests
     }
 
     [Theory]
-    [InlineData("at least one", "character hero")]
+    [InlineData("Unknown", "character hero unexpected:true")]
     [InlineData("integer", "character hero appearance:happy z:1.5")]
     [InlineData("duration", "backdrop dark duration:NaN")]
     [InlineData("at least 0", "backdrop dark duration:-0.1")]
@@ -362,10 +362,10 @@ public sealed class RuntimeCommandTests
         var handler = Assert.IsType<Func<string[], Task>>(registry.Handlers["character"]);
 
         var exception = await Assert.ThrowsAsync<RuntimeCommandException>(() =>
-            handler(["hero"]));
+            handler(["hero", "unexpected:true"]));
 
         Assert.Same(exception, adapter.LastFailure);
-        Assert.Contains("at least one", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("unknown", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(
             catalog.Get("character").Usage,
             exception.Message,
@@ -416,7 +416,7 @@ public sealed class RuntimeCommandTests
         await adapter.InitializeAsync(CancellationToken.None);
         var handler = Assert.IsType<Func<string[], Task>>(registry.Handlers["character"]);
 
-        await handler(["hero"]);
+        await handler(["hero", "unexpected:true"]);
 
         Assert.NotNull(adapter.LastFailure);
         Assert.True(adapter.LastFailure!.IsRecoverable);

@@ -9,6 +9,7 @@ using Godot;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Core;
 using Majo.Runtime.Direction.Core;
+using Majo.Runtime.Direction.Actors;
 using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Direction.Rendering;
 using Majo.Runtime.Direction.Transitions;
@@ -19,6 +20,7 @@ namespace Majo.Runtime.Direction.Godot;
 
 internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRuntimeService
 {
+    private readonly Dictionary<StageId, PreparedBackdrop> activeBackdrops = new();
     private readonly GodotDirectionRenderHost host;
     private readonly IDirectionTextureLoader textures;
     private readonly Func<Node2D, IActorManager>? createActorManager;
@@ -96,8 +98,15 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
         var createdSurface = !host.HasStage(stageId);
         var surface = host.GetOrCreateStage(stageId);
 
-        var backdropChanged = !Equals(before?.Backdrop, target?.Backdrop);
-        var actorsChanged = !DirectionActorsEqual(before, target);
+        var backdropChanged = !Equals(before?.Backdrop, target?.Backdrop) || plan.Transitions.Any(transition =>
+            transition.StablePaths.Contains($"stage/{stageId.Value}/backdrop"));
+        var actorsChanged = !DirectionActorsEqual(before, target) || plan.ActorIntents.Any(patch => patch switch
+        {
+            ActorPatch value => value.StageId == stageId,
+            ActorMovePatch value => value.StageId == stageId,
+            ActorHidePatch value => value.StageId == stageId,
+            _ => false,
+        });
         if (!backdropChanged && !actorsChanged)
         {
             var immediate = new ImmediatePreparedDirectionComponent();
@@ -205,6 +214,7 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
                 StringComparison.Ordinal));
         GodotDirectionRendering.ValidateTransition(transition, TransitionDomains.Stage, drivers, easings);
         var prepared = new PreparedBackdrop(
+            this,
             host,
             surface,
             surface.PublishedBackdrop,
@@ -241,7 +251,12 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
             try { await actorBackend.ResetAsync(CancellationToken.None); }
             catch (Exception exception) { failure = exception; }
         }
-        try { host.ReleasePreparedStage(stageId); }
+        try
+        {
+            if (host.HasStage(stageId)) await host.ReleaseActorModifierTargetAsync(
+                new ActorFxTarget(stageId, ActorFxSlot.Backdrop), host.GetStage(stageId).ModifierTarget);
+            host.ReleasePreparedStage(stageId);
+        }
         catch (Exception exception)
         {
             failure = failure is null
@@ -325,6 +340,8 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
             committed = true;
         }
 
+        public void ConfirmCommit() => component.ConfirmCommit();
+
         public void Rollback(DirectionCommitToken token)
         {
             if (!commitStarted) return;
@@ -354,6 +371,8 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
 
     private sealed class PreparedBackdrop : IPreparedDirectionComponent
     {
+        private readonly GodotDirectionStageBackend backend;
+        private readonly TaskCompletionSource<bool> confirmation = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly GodotDirectionRenderHost host;
         private readonly GodotDirectionStageSurface surface;
         private readonly BackdropState? source;
@@ -375,6 +394,7 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
         private long generation;
 
         public PreparedBackdrop(
+            GodotDirectionStageBackend backend,
             GodotDirectionRenderHost host,
             GodotDirectionStageSurface surface,
             BackdropState? source,
@@ -386,6 +406,7 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
             IEasingRegistry? easings = null)
         {
             this.host = host;
+            this.backend = backend;
             this.surface = surface;
             this.source = source;
             this.sourceTexture = sourceTexture;
@@ -421,6 +442,8 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
             if (committed || rolledBack || disposed)
                 throw new InvalidOperationException("Backdrop is no longer preparable.");
             committed = true;
+            if (backend.activeBackdrops.TryGetValue(surface.Id, out var old)) old.Complete();
+            backend.activeBackdrops[surface.Id] = this;
             generation = host.BeginStageGeneration(surface.Id);
             if (host.IsCurrentStageGeneration(surface.Id, generation))
                 host.ClearBackdropTransition(surface.Id);
@@ -445,8 +468,7 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
             host.PublishBackdrop(surface.Id, target, targetTexture);
             if (!animate)
             {
-                ReleaseInputs();
-                settlement.TrySetResult();
+                Complete();
                 return;
             }
 
@@ -471,10 +493,13 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
             return ValueTask.CompletedTask;
         }
 
+        public void ConfirmCommit() => confirmation.TrySetResult(true);
+
         public void Rollback(DirectionCommitToken token)
         {
             if (rolledBack || disposed) return;
             rolledBack = true;
+            confirmation.TrySetResult(false);
             clock?.Dispose();
             clock = null;
             preparedTransition?.Dispose();
@@ -492,6 +517,8 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
         {
             if (disposed) return ValueTask.CompletedTask;
             disposed = true;
+            if (!committed || rolledBack) confirmation.TrySetResult(false);
+            Retire();
             if (!settlement.Task.IsCompleted) settlement.TrySetCanceled();
             clock?.Dispose();
             clock = null;
@@ -519,7 +546,24 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
             preparedTransition?.Dispose();
             preparedTransition = null;
             ReleaseInputs();
-            settlement.TrySetResult();
+            Retire();
+            _ = SettleAsync();
+        }
+        private void Retire()
+        {
+            if (backend.activeBackdrops.GetValueOrDefault(surface.Id) == this)
+                backend.activeBackdrops.Remove(surface.Id);
+        }
+
+        private async Task SettleAsync()
+        {
+            try
+            {
+                if (target is null && await confirmation.Task && !rolledBack && host.IsCurrentStageGeneration(surface.Id, generation))
+                    await host.ReleaseActorModifierTargetAsync(new ActorFxTarget(surface.Id, ActorFxSlot.Backdrop), surface.ModifierTarget);
+                settlement.TrySetResult();
+            }
+            catch (Exception error) { settlement.TrySetException(error); }
         }
     }
 }

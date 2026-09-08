@@ -73,10 +73,17 @@ internal sealed class ResourceMemorySampler
         var format = texture.GetFormat().ToString();
         var bytesPerPixel = format switch
         {
-            "L8" or "R8" => 1, "La8" or "Rg8" or "Rh" => 2,
-            "Rgb8" => 3, "Rgba8" or "Rgbe9995" => 4, "Rgba4444" or "Rgb565" => 2,
-            "Rf" or "Rgh" => 4, "Rgbh" => 6, "Rgf" or "Rgbah" => 8,
-            "Rgbf" => 12, "Rgbaf" => 16, _ => 0,
+            "L8" or "R8" => 1,
+            "La8" or "Rg8" or "Rh" => 2,
+            "Rgb8" => 3,
+            "Rgba8" or "Rgbe9995" => 4,
+            "Rgba4444" or "Rgb565" => 2,
+            "Rf" or "Rgh" => 4,
+            "Rgbh" => 6,
+            "Rgf" or "Rgbah" => 8,
+            "Rgbf" => 12,
+            "Rgbaf" => 16,
+            _ => 0,
         };
         var blockBytes = format switch
         {

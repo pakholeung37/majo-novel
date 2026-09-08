@@ -1,4 +1,5 @@
 title: Act01_Chapter01_Adv02
+scene: act01_chapter01_adv02
 ---
 // <<gosubResetWitchBook Path:System/System_ResetWitchBook IsDebugDirectJump:isDebugDirectJump>>
 // <<gosub Path:System/System_Subroutine.BeginAdv>>
@@ -19,8 +20,10 @@ Ema: ——不对！ #line:0101Adv02_Ema001
 <<beat begin>>
 
 <<backdrop Still_490_001 stage:illustration via:cut>>
-<<camera pose stage:illustration center:37.384,74.816 zoom:3 rotation:10 via:cut>>
-<<camera pose stage:illustration center:44.438,71.950 duration:0.4 ease:back-out>>
+<<camera stage:illustration center:37.384,74.816 zoom:3 rotation:10 via:cut>>
+<<beat end wait:false>>
+<<camera move stage:illustration center:44.438,71.950 duration:0.4 ease:back-out>>
+<<beat begin>>
 <<stage show illustration via:cut>>
 <<beat end wait:false>>
 <<curtain open duration:1.2>>
@@ -86,7 +89,6 @@ Ema: （这是噩梦的后续……？） #line:0101Adv02_Ema007
 <<backdrop Background_001_001 via:cut>>
 <<character Ema at:center appearance:Surprised1 via:cut>>
 <<stage show main via:dissolve duration:0.5>>
-<<stage release illustration>>
 <<beat end wait:false>>
 
 Ema: 我说，这里究竟是什么地方！？ #line:0101Adv02_Ema008
@@ -95,7 +97,7 @@ Ema: 我说，这里究竟是什么地方！？ #line:0101Adv02_Ema008
 
 紧接着，远远地从其他地方传来了[br /]其他少女们的叫喊声。 #line:0101Adv02_Narrative018
 
-<<leave Ema>>
+<<character hide Ema>>
 
 // ＠遠野ハンナ
 Unknown: 竟把本小姐关在这种地方！[br /]究竟是什么意思啊！？ #line:0101Adv02_Unknown001
@@ -112,7 +114,7 @@ Ema: （……太好了，被关进来的[br /]　不止我一个人） #line:01
 
 现场忽然吵闹起来，[br /]艾玛的脸上露出了安心。紧接着—— #line:0101Adv02_Narrative019
 
-<<leave Ema>>
+<<character hide Ema>>
 
 // ＠二階堂ヒロ
 Unknown: ——能不能给我安静一下？ #line:0101Adv02_Unknown004
@@ -152,7 +154,7 @@ Hiro: 为什么你会在这里？ #line:0101Adv02_Hiro001
 往日同窗竟出现在眼前，[br /]惊慌失措的艾玛哑口无言。 #line:0101Adv02_Narrative027
 
 <<beat begin>>
-<<character Hiro at:30,0 appearance:Surprised1>>
+<<character move Hiro at:30,0 ease:cubic-out>>
 <<character Ema at:70,0 appearance:Fearful1>>
 <<beat end wait:false>>
 
@@ -215,15 +217,14 @@ Warden: 想反抗也没问题……[br /]只不过小命不保罢了……嗯…
 <<stage show main via:cut>>
 <<curtain open duration:0.5>>
 <<beat end wait:true>>
-<<stage release broadcast>>
 
 
 Ema: 典狱长……？看守……？ #line:0101Adv02_Ema015
 
 艾玛似乎思考不太跟得上状况的变化，呆站在原地一动不动——[br /]而她身边的希罗也一样。紧接着—— #line:0101Adv02_Narrative033
 
-<<leave Hiro>>
-<<leave Ema>>
+<<character hide Hiro>>
+<<character hide Ema>>
 
 <<sfx Sfx_Scenario_005>>
 
@@ -233,7 +234,7 @@ Ema: 典狱长……？看守……？ #line:0101Adv02_Ema015
 
 艾玛和希罗绷紧了身子，[br /]——然后缓慢地将视线挪动到过道上。 #line:0101Adv02_Narrative036
 
-<<camera pose center:35,50 zoom:2 via:dissolve duration:0.6>>
+<<camera center:35,50 zoom:2 via:dissolve duration:0.6>>
 
 <<wait 1.2>>
 // <<animateActorExtended ActorIds:MainBackground Loop:0 ScenePositionY:45 EasingTypeName:EaseOutQuad Duration:0.8>>
@@ -286,8 +287,10 @@ Hiro: 所谓的说明，会解释清楚情况吗。[br /]那我得快点过去�
 
 <<sfx Sfx_Scenario_018>>
 <<beat begin>>
-<<character Hiro at:40,0 appearance:Angry2>>
-<<character Ema at:80,0 appearance:"Fearful1,ArmR3">>
+<<character Hiro appearance:Angry2>>
+<<character move Hiro at:40,0>>
+<<character Ema appearance:"Fearful1,ArmR3">>
+<<character move Ema at:80,0>>
 <<beat end wait:false>>
 
 ——唰。[br /]她用力地甩开了艾玛的手。 #line:0101Adv02_Narrative045
@@ -296,7 +299,7 @@ Ema: ……！ #line:0101Adv02_Ema018
 
 Hiro: 不要随便碰我。[br /]你可别忘了，我讨厌你。 #line:0101Adv02_Hiro004
 
-<<leave Hiro via:fade duration:0.3>>
+<<character hide Hiro via:fade duration:0.3>>
 
 希罗的眼神中[br /]透着一股深深的厌弃。 #line:0101Adv02_Narrative046
 

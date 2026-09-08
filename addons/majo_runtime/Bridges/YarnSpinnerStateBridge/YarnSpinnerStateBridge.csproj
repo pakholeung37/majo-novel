@@ -10,5 +10,6 @@
 
   <ItemGroup>
     <PackageReference Include="YarnSpinner" Version="3.2.0" />
+    <PackageReference Include="YarnSpinner.Compiler" Version="3.2.0" />
   </ItemGroup>
 </Project>

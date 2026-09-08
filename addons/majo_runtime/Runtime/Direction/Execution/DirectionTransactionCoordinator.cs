@@ -151,6 +151,23 @@ public sealed class CommittedDirectionTransaction : IAsyncDisposable
         }
     }
 
+    internal async Task FinishSceneAsync(CancellationToken cancellationToken)
+    {
+        await lifecycleGate.WaitAsync(cancellationToken);
+        try
+        {
+            if (Volatile.Read(ref disposed) != 0) return;
+            List<Exception>? errors = null;
+            try { await prepared.FinishSceneAsync(cancellationToken); }
+            catch (Exception error) { (errors ??= new()).Add(error); }
+            if (cueActivity is not null && !cueActivity.Settlement.IsCompleted)
+                try { await cueActivity.FinishAsync(cancellationToken); }
+                catch (Exception error) { (errors ??= new()).Add(error); }
+            if (errors is not null) throw new AggregateException("Scene transaction failed to finish.", errors);
+        }
+        finally { lifecycleGate.Release(); }
+    }
+
     internal async Task CleanupAsync(CancellationToken cancellationToken)
     {
         List<Exception>? failures = null;
@@ -297,6 +314,8 @@ public interface IDirectionTransactionCoordinator : IRuntimeService
         CancellationToken cancellationToken = default);
 
     Task FinishSkippableAsync(CancellationToken cancellationToken = default);
+    Task ClearSceneAsync(DirectionSceneContext context, Func<CancellationToken, Task> stopAudio,
+        CancellationToken cancellationToken = default) => throw new NotSupportedException("Scene boundaries are not supported by this backend.");
 }
 
 public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoordinator, IDisposable
@@ -311,6 +330,8 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
     private readonly IRuntimeActivityRegistry? activities;
     private readonly ITransientDirectionCueExecutor? cues;
     private readonly Func<CancellationToken, Task>? resetRendering;
+    private readonly Func<CancellationToken, Task>? clearSceneRendering;
+    private bool sceneClosing;
     private readonly SemaphoreSlim commitGate = new(1, 1);
     private readonly object stateGate = new();
     private readonly List<CommittedDirectionTransaction> transactions = new();
@@ -322,13 +343,15 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
         DirectionState? initialState = null,
         IRuntimeActivityRegistry? activities = null,
         ITransientDirectionCueExecutor? cues = null,
-        Func<CancellationToken, Task>? resetRendering = null)
+        Func<CancellationToken, Task>? resetRendering = null,
+        Func<CancellationToken, Task>? clearSceneRendering = null)
     {
         this.planner = planner ?? throw new ArgumentNullException(nameof(planner));
         this.backend = backend ?? throw new ArgumentNullException(nameof(backend));
         this.activities = activities;
         this.cues = cues;
         this.resetRendering = resetRendering;
+        this.clearSceneRendering = clearSceneRendering;
         state = initialState ?? DirectionState.CreateDefault();
         state.Validate();
     }
@@ -393,10 +416,41 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
         {
             transactions.Clear();
             state = DirectionState.CreateDefault();
+            sceneClosing = false;
         }
 
         if (failures is not null)
             throw new AggregateException("One or more Direction transactions failed to reset.", failures);
+    }
+
+    public async Task ClearSceneAsync(DirectionSceneContext context, Func<CancellationToken, Task> stopAudio,
+        CancellationToken cancellationToken = default)
+    {
+        await commitGate.WaitAsync(cancellationToken);
+        try
+        {
+            sceneClosing = true;
+            CommittedDirectionTransaction[] owned;
+            lock (stateGate) owned = transactions.ToArray();
+            List<Exception>? errors = null;
+            foreach (var transaction in owned)
+                try { await transaction.FinishSceneAsync(CancellationToken.None); }
+                catch (Exception error) { (errors ??= new()).Add(error); }
+            try { await stopAudio(CancellationToken.None); }
+            catch (Exception error) { (errors ??= new()).Add(error); }
+            if (clearSceneRendering is not null)
+                try { await clearSceneRendering(CancellationToken.None); }
+                catch (Exception error) { (errors ??= new()).Add(error); }
+            if (errors is not null) throw new AggregateException("Scene boundary cleanup failed.", errors);
+            lock (stateGate)
+            {
+                state = DirectionState.CreateDefault() with
+                { Scene = context, Effects = state.Effects, Revision = checked(state.Revision + 1) };
+                transactions.RemoveAll(transaction => transaction.Status != DirectionTransactionStatus.Committed);
+            }
+            sceneClosing = false;
+        }
+        finally { commitGate.Release(); }
     }
 
     public Task ShutdownAsync(CancellationToken cancellationToken = default) =>
@@ -414,6 +468,7 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
         await commitGate.WaitAsync(cancellationToken);
         try
         {
+            if (sceneClosing) throw new DirectionException("Scene context is closing or failed; reset before submitting new commands.");
             var plan = planner.Plan(State, capturedDirectives, completion);
             committed = await PrepareAndCommitAsync(plan, cancellationToken);
         }
@@ -508,12 +563,22 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
         await commitGate.WaitAsync(cancellationToken);
         try
         {
+            CommittedDirectionTransaction[] active;
+            lock (stateGate) active = transactions.ToArray();
+            foreach (var transaction in active)
+                if (transaction.Status == DirectionTransactionStatus.Committed)
+                    await transaction.FinishAsync(cancellationToken);
             var current = State;
             var plan = new DirectionExecutionPlan(
                 new DirectionPlan(
                     DirectionTransactionId.New(),
                     current,
-                    target with { Revision = checked(current.Revision + 1) },
+                    target with
+                    {
+                        Revision = checked(current.Revision + 1),
+                        Scene = target.Scene with
+                        { Epoch = checked(Math.Max(current.Scene.Epoch, target.Scene.Epoch) + 1) }
+                    },
                     FallbackCutTransitions,
                     Array.Empty<ITransientDirectionCue>()),
                 Array.Empty<DirectionResourceClaim>(),
@@ -610,6 +675,8 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
             // serializes writers, while readers never block on Godot/backend work.
             commitStarted = true;
             prepared.Commit(token);
+            var committedState = plan.DomainPlan.ResolveCommitState();
+            plan = plan with { DomainPlan = plan.DomainPlan with { TargetState = committedState } };
 
             lock (stateGate)
             {
@@ -629,6 +696,7 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
                     cancellationToken);
             }
 
+            prepared.ConfirmCommit();
             var committed = new CommittedDirectionTransaction(
                 this, plan, token, prepared, activityLease, cueActivity);
             ownershipTransferred = true;

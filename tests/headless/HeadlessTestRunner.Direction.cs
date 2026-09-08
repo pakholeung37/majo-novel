@@ -184,10 +184,9 @@ public partial class HeadlessTestRunner
         {
             await coordinator.ExecuteAsync(new IDirectionDirective[]
             {
-                ActorPatchFor("hero", new DirectionPoint(30, 0), "red", 1.25f, 7) with
-                {
-                    Transition = new DirectionTransitionSpec(DirectionTransitionId.Move, 1, new EasingId("unregistered_ease")),
-                },
+                new ActorMovePatch(StageId.Main, new ActorId("hero"), DirectionActorKind.Character,
+                    DirectionValue.From(new DirectionPoint(30, 0)), default, default,
+                    new DirectionTransitionSpec(DirectionTransitionId.Move, 1, new EasingId("unregistered_ease"))),
             });
         }
         catch (DirectionException exception)
@@ -287,10 +286,10 @@ public partial class HeadlessTestRunner
             new DirectionPoint(44.438f, 71.950f),
             3,
             10);
+        await coordinator.ExecuteAsync(new[] { ViewPoseFor(ViewId.Main, cutPose, DirectionTransitionSpec.Cut) });
         var sequenceTransaction = await coordinator.ExecuteAsync(
             new IDirectionDirective[]
             {
-                ViewPoseFor(ViewId.Main, cutPose, DirectionTransitionSpec.Cut),
                 new ViewPosePatch(
                     ViewId.Main,
                     DirectionValue.From(movePose.Center),
@@ -301,7 +300,7 @@ public partial class HeadlessTestRunner
                         0.4,
                         EasingId.SineOut)),
             });
-        Assert(Equals(host.PublishedView?.Pose, cutPose),
+        Assert(Equals(host.GetCurrentViewPose(ViewId.Main), cutPose),
             "A sequential View move did not publish its Cut pose before tweening.");
         var poseAtCommit = host.ViewTransform.Transform;
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -326,32 +325,28 @@ public partial class HeadlessTestRunner
             DirectionCompletionBarrier.Settle);
         var secondActorRoot = GetVisibleActorRoot(host);
         var secondActor = secondActorRoot.GetNode<Sprite2D>("hero");
-        Assert(!ReferenceEquals(firstActorRoot, secondActorRoot) && !firstActorRoot.Visible,
-            "Direction Actor Commit mutated the old actor tree instead of swapping roots.");
+        Assert(ReferenceEquals(firstActorRoot, secondActorRoot) && firstActorRoot.Visible,
+            "Direction Actor updates must preserve their stable root.");
         Assert(secondActor.Position.IsEqualApprox(new Vector2(480, 324)) &&
                 secondActor.Scale.IsEqualApprox(new Vector2(0.8f, 0.8f)) &&
                 secondActor.ZIndex == 3,
             "Prepared Direction Actor tree did not publish its complete target state.");
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        Assert(!IsInstanceValid(firstActorRoot),
-            "Direction Actor root swap retained the replaced tree after settlement.");
+        Assert(IsInstanceValid(firstActorRoot),
+            "Direction Actor updates released a stable root.");
 
         var moveTransaction = await coordinator.ExecuteAsync(
             new IDirectionDirective[]
             {
-                ActorPatchFor(
-                    "hero",
-                    new DirectionPoint(50, 0),
-                    "red",
-                    1,
-                    0,
-                    new DirectionTransitionSpec(DirectionTransitionId.Move, 0.2, new EasingId("square"))),
+                new ActorMovePatch(StageId.Main, new ActorId("hero"), DirectionActorKind.Character,
+                    DirectionValue.From(new DirectionPoint(50, 0)), DirectionValue.From(1f), default,
+                    new DirectionTransitionSpec(DirectionTransitionId.Move, .2, new EasingId("square"))),
 
             });
         var movedActorRoot = GetVisibleActorRoot(host);
         var movedActor = movedActorRoot.GetNode<Sprite2D>("hero");
-        Assert(!secondActorRoot.Visible &&
+        Assert(ReferenceEquals(secondActorRoot, movedActorRoot) &&
                 movedActor.Position.IsEqualApprox(secondActor.Position),
             "Direction move did not begin from the previous stable Actor position.");
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -375,15 +370,15 @@ public partial class HeadlessTestRunner
             });
         var fadedActorRoot = GetLatestVisibleActorRoot(host);
         var fadedActor = fadedActorRoot.GetNode<Sprite2D>("hero");
-        Assert(!movedActorRoot.Visible && (fadedActorRoot.GetChildCount() > 1 || fadedActor.GetChildCount() > 0),
+        Assert(ReferenceEquals(movedActorRoot, fadedActorRoot) && (fadedActorRoot.GetChildCount() > 1 || fadedActor.GetChildCount() > 0),
             "Direction dissolve did not publish the target Actor tree.");
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        Assert((fadedActorRoot.GetChildCount() > 1 || fadedActor.GetChildCount() > 0) && !movedActorRoot.Visible,
+        Assert((fadedActorRoot.GetChildCount() > 1 || fadedActor.GetChildCount() > 0) && movedActorRoot.Visible,
             "Direction dissolve did not delegate to the Actor appearance transition.");
         await coordinator.FinishAsync(fadeTransaction);
         Assert(Mathf.IsEqualApprox(fadedActor.Modulate.A, 1) &&
-                (!IsInstanceValid(movedActorRoot) || !movedActorRoot.Visible),
+                ReferenceEquals(movedActorRoot, fadedActorRoot),
             "Finishing Direction dissolve did not publish only the target Actor visual.");
 
         Assert(customActorDriver.Preparations == 1, "Actor appearance did not execute the registered driver.");
@@ -420,9 +415,9 @@ public partial class HeadlessTestRunner
         _ = await AssertThrowsAsync<DirectionException>(() => coordinator.ExecuteAsync(
             new IDirectionDirective[]
             {
-                new ActorLeavePatch(
+                new ActorHidePatch(
                     StageId.Main,
-                    new ActorId("hero"),
+                    new ActorId("hero"), DirectionActorKind.Character,
                     new DirectionTransitionSpec(DirectionTransitionId.Move, 0.2)),
             },
             DirectionCompletionBarrier.Settle));
@@ -432,15 +427,15 @@ public partial class HeadlessTestRunner
         var leaveTransaction = await coordinator.ExecuteAsync(
             new IDirectionDirective[]
             {
-                new ActorLeavePatch(
+                new ActorHidePatch(
                     StageId.Main,
-                    new ActorId("hero"),
+                    new ActorId("hero"), DirectionActorKind.Character,
                     new DirectionTransitionSpec(DirectionTransitionId.Fade, 0.2)),
             });
-        Assert(actorRootBeforeFailure.Visible && GetLatestVisibleActorRoot(host).GetChildCount() == 0,
+        Assert(actorRootBeforeFailure.Visible && GetLatestVisibleActorRoot(host) == actorRootBeforeFailure,
             "Direction fade-leave did not retain its source Actor during transition.");
         await coordinator.FinishAsync(leaveTransaction);
-        Assert(GetVisibleActorRoot(host).GetChildCount() == 0,
+        Assert(!host.GetOrCreateStage(StageId.Main).Actors.GetChildren().OfType<Node2D>().Any(root => root.Visible),
             "Direction leave did not publish an empty target actor tree.");
 
         var broadcast = new StageId("broadcast");

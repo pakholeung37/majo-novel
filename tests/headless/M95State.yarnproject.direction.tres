@@ -4,7 +4,8 @@
 
 [resource]
 script = ExtResource("1_lj10p")
+SchemaVersion = 2
 ManifestPath = "res://tests/headless/M95State.yarnproject"
 SourceFingerprint = "469b13bfe00795cd1e86f2f97406e66a438aeab37fac8cceb27f9795ad86c442"
-ProgramFingerprint = "e8c32f0506277109a86bd31a3cd2ef8152b7ca2765f89d87929d8a8e5066b1d7"
-ModulesJson = "[{\"NodeId\":\"Start\",\"Version\":1,\"Symbols\":{\"Stages\":[],\"Views\":[],\"ShotAliases\":[],\"Marks\":[]},\"Resources\":[],\"SourceMaps\":[],\"Imports\":[],\"Marks\":[],\"Diagnostics\":[]}]"
+ProgramFingerprint = "a87281f4c2f890b89fb6e002b0ef8d496bc8c8b7c38339d18d971d7ad401d484"
+ModulesJson = "[{\"NodeId\":\"Start\",\"SceneEntry\":null,\"Version\":1,\"Symbols\":{\"Stages\":[],\"Views\":[],\"ShotAliases\":[],\"Marks\":[]},\"Resources\":[],\"SourceMaps\":[],\"Imports\":[],\"Marks\":[],\"Diagnostics\":[]}]"

@@ -23,6 +23,7 @@ public sealed class StageCommandTests
         var nodeAccessor = new DelegateDialogueNodeAccessor(() => "node");
         var policy = new DirectionCommandPolicy(beats, DirectionAnimationDefaults.FromConfiguration(null));
         var services = new ServiceResolverBuilder()
+            .Add<IDirectionTransactionCoordinator>(new DirectionTransactionCoordinator(new DirectionPlanner(), new FakeDirectionBackend { AutoSettle = true }))
             .Add<IDirectionBeatRuntime>(beats)
             .Add<IDirectionScopeResolver>(scopes)
             .Add<IDialogueNodeAccessor>(nodeAccessor)
@@ -35,7 +36,7 @@ public sealed class StageCommandTests
         var catalog = registry.BuildCatalog(services);
 
         Assert.Contains(catalog.Commands, command => command.Name == "camera move");
-        Assert.Contains(catalog.Commands, command => command.Name == "camera pose");
+        Assert.Contains(catalog.Commands, command => command.Name == "camera");
         Assert.Contains(catalog.Commands, command => command.Name == "camera reset");
         Assert.Contains(catalog.Commands, command => command.Name == "camera fx");
 
@@ -51,7 +52,7 @@ public sealed class StageCommandTests
         Assert.Equal(EasingId.BackOut, moveArgs.Timing.Ease.Value);
         Assert.True(moveArgs.Timing.Wait.Value);
 
-        var pose = catalog.Get<CameraPoseCommand.Arguments>("camera pose");
+        var pose = catalog.Get<CameraCommand.Arguments>("camera");
         var poseArguments = pose.Bind(new RawCommandArguments(null, new Dictionary<string, string>
         {
             ["center"] = "80,-35",

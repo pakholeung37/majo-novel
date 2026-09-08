@@ -131,8 +131,7 @@ public sealed class ComponentBackendHarness :
         ViewId viewId,
         ViewState? before,
         ViewState? target,
-        CancellationToken cancellationToken,
-        IReadOnlyList<DirectionViewTransitionSequence>? viewSequences = null) =>
+        CancellationToken cancellationToken) =>
         Prepare($"view:{viewId}", FailViewPreparation, cancellationToken);
 
     public Task<IPreparedDirectionComponent> PrepareAsync(

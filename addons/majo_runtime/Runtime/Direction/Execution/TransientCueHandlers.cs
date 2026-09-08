@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Majo.Runtime.Core;
 using Majo.Runtime.Direction.Camera;
+using Majo.Runtime.Direction.Actors;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Operations;
 
@@ -50,10 +51,11 @@ public sealed class TransientCueHandlerRegistry : ITransientCueHandlerRegistry
         new(StringComparer.OrdinalIgnoreCase);
     private bool sealedRegistry;
 
-    public TransientCueHandlerRegistry(bool registerDefaults = true)
+    public TransientCueHandlerRegistry(bool registerDefaults = true, ActorModifierRegistry? actorModifiers = null)
     {
         if (!registerDefaults) return;
         Register(new CameraFxCueHandler());
+        Register(new ActorFxCueHandler(actorModifiers ?? new ActorModifierRegistry()));
     }
 
     public IReadOnlyCollection<ITransientCueHandler> Handlers
@@ -125,4 +127,20 @@ internal sealed class CameraFxCueHandler : ITransientCueHandler
         if (!double.IsFinite(duration) || duration < 0)
             throw new DirectionException("Transient cue duration must be finite and non-negative.");
     }
+}
+
+internal sealed class ActorFxCueHandler : ITransientCueHandler
+{
+    private readonly ActorModifierRegistry registry;
+    public ActorFxCueHandler(ActorModifierRegistry registry) => this.registry = registry;
+    public string Id => "actor-fx";
+    public bool CanHandle(ITransientDirectionCue cue) => cue is ActorFxCue;
+    public void Validate(ITransientDirectionCue cue)
+    {
+        var actor = (ActorFxCue)cue;
+        registry.Resolve(actor.EffectName).Validate(actor);
+    }
+    public IOperationHandle Execute(ITransientDirectionCue cue, TransientCueExecutionContext context) =>
+        (context.Services ?? throw new DirectionException("Actor FX services are unavailable."))
+            .Get<IActorModifierManager>().ApplyEffect((ActorFxCue)cue);
 }

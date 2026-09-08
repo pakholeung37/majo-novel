@@ -1,5 +1,6 @@
 title: Start
 tags: runtime validation demo
+scene: runtime_demo
 ---
 <<declare $visitor = "调查员">>
 
@@ -24,18 +25,21 @@ Narrator: M18 显式预取了本章背景、立绘、BGM 与 Voice；preload gro
 <<beat end wait:true>>
 Narrator: Camera 与瞬态视觉效果已由同一个 Direction Beat 提交并汇合，不再经过旧 Stage Operation command。 #line:demo-m19-stage
 
-<<camera reset via:move duration:0.2 wait:true>>
+<<camera move center:50,50 zoom:1 rotation:0 duration:0.2 wait:true>>
 <<demo_release_preload>>
 Narrator: M17-M19 演示资源已释放，接下来继续原有的 Audio、State、Save/Load 与 Played 流程。 #line:demo-m17-m19-complete
 
 <<sfx demo-chime instance:checkpoint-chime>>
 Narrator: 刚才的提示音、循环背景音与角色语音分别走 SFX、BGM 和单通道 Voice。 #line:demo-audio-ready
 
-<<character hero appearance:determined at:center via:move duration:0.35 wait:true>>
+<<beat begin>>
+<<character hero appearance:determined via:dissolve duration:0.35>>
+<<character move hero at:center duration:0.35>>
+<<beat end wait:true>>
 Maya: `wait:true` 会阻止脚本越过动画；现在我已经移动到中央并切换立绘。 #line:demo-operation-wait
 
 <<beat begin id:demo-completed-leave>>
-<<leave hero via:fade duration:2>>
+<<character hide hero via:fade duration:2>>
 <<beat end wait:false>>
 <<beat finish demo-completed-leave>>
 Narrator: 这个已提交的退场 Beat 被强制完成，因此立即应用隐藏终态。 #line:demo-operation-complete
@@ -55,7 +59,8 @@ Narrator: 在这行完整显示后点击右侧“Capture”。M12 快照会保�
 
 <<beat begin>>
 <<backdrop backdrop/spotlight via:dissolve duration:0.35>>
-<<character hero appearance:determined at:right via:move duration:0.35>>
+<<character hero appearance:determined via:dissolve duration:0.35>>
+<<character move hero at:right duration:0.35>>
 <<beat end wait:true>>
 <<bgm demo-tension track:music duration:0.35 wait:true>>
 Narrator: Game State 已被明显改变。现在可点击“Restore”，验证背景、角色、BGM 和当前脚本行一起回到快照，History 则继续保留。 #line:demo-state-mutated

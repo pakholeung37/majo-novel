@@ -32,10 +32,14 @@ public interface IPreparedDirectionTransaction : IAsyncDisposable
 
     void Commit(DirectionCommitToken token);
 
+    /// <summary>Releases deferred destruction after every component and cue committed.</summary>
+    void ConfirmCommit() { }
+
     /// <summary>Compensates any visible work from a failed Commit.</summary>
     void Rollback(DirectionCommitToken token)
     {
     }
 
     ValueTask FinishAsync(CancellationToken cancellationToken);
+    ValueTask FinishSceneAsync(CancellationToken cancellationToken) => FinishAsync(cancellationToken);
 }

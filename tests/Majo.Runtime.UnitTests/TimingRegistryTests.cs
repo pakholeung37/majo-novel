@@ -293,6 +293,7 @@ public sealed class TimingRegistryTests
         var nodeAccessor = new DelegateDialogueNodeAccessor(() => "Start");
         var policy = new DirectionCommandPolicy(beats, DirectionAnimationDefaults.FromConfiguration(null));
         var services = new ServiceResolverBuilder()
+            .Add<IDirectionTransactionCoordinator>(new DirectionTransactionCoordinator(new DirectionPlanner(), new FakeDirectionBackend { AutoSettle = true }))
             .Add<IDirectionBeatRuntime>(beats)
             .Add<IDirectionScopeResolver>(scopes)
             .Add<IDialogueNodeAccessor>(nodeAccessor)
@@ -323,7 +324,7 @@ public sealed class TimingRegistryTests
     }
 
     [Fact]
-    public void CustomTransitionCanBeDefaultAndResolvedByPolicy()
+    public void CustomTransitionCannotExpandActorStateKinds()
     {
         var transitions = new TransitionDriverRegistry();
         var customId = new DirectionTransitionId("wipe");
@@ -337,8 +338,7 @@ public sealed class TimingRegistryTests
         var policy = new DirectionCommandPolicy(defaults: defaults, transitions: transitions);
         var transitionArgs = TransitionArguments.Create();
 
-        var spec = policy.ResolveTransition("character", transitionArgs, null!);
-        Assert.Equal(customId, spec.Kind);
+        Assert.Throws<DirectionException>(() => policy.ResolveTransition("character", transitionArgs, null!));
     }
 
     [Fact]
@@ -389,7 +389,7 @@ public sealed class TimingRegistryTests
         var timing = TimingArguments.Create();
         Assert.Equal(custom, policy.ResolveTransition("backdrop", transition, null!).Easing);
         Assert.Equal(custom, policy.ResolveMotionTransition("camera move", timing, DirectionTransitionId.Move, null!).Easing);
-        Assert.Equal(custom, policy.ResolveCameraPoseTransition("camera pose", timing, DirectionTransitionId.Move, null!).Easing);
+        Assert.Equal(custom, policy.ResolveCameraTransition("camera", timing, DirectionTransitionId.Dissolve, null!).Easing);
         beats.Begin("b", "n", new DirectionBeatDefaults(null, EasingId.SineIn));
         Assert.Equal(EasingId.SineIn, policy.ResolveTransition("backdrop", transition, null!).Easing);
         var explicitEase = TransitionArguments.Create(ease: CommandValue<EasingId>.Explicit(EasingId.CubicOut));
@@ -399,17 +399,14 @@ public sealed class TimingRegistryTests
     }
 
     [Fact]
-    public async Task LayoutMoveUsesNativeScreenCapabilityWithRegistryPresent()
+    public async Task LayoutDefaultsRejectMoveEvenWithRegistryPresent()
     {
         var defaults = DirectionAnimationDefaults.FromConfiguration(null) with
         {
             DefaultLayoutAnimationKind = DirectionTransitionId.Move,
         };
         var policy = new DirectionCommandPolicy(defaults: defaults, transitions: new TransitionDriverRegistry());
-        await policy.InitializeAsync(CancellationToken.None);
-        var arguments = TransitionArguments.Create(
-            via: CommandValue<DirectionTransitionId>.Explicit(DirectionTransitionId.Move));
-        Assert.Equal(DirectionTransitionId.Move, policy.ResolveTransition("layout", arguments, null!).Kind);
+        await Assert.ThrowsAsync<DirectionException>(() => policy.InitializeAsync(CancellationToken.None));
     }
 
     [Fact]
@@ -433,8 +430,8 @@ public sealed class TimingRegistryTests
         registry.Register(new FakeTransitionDriver("actor-only", TransitionDomains.Actor));
         registry.Register(new FakeTransitionDriver("stage-only", TransitionDomains.Stage));
         var policy = new DirectionCommandPolicy(transitions: registry);
-        Assert.Equal(new DirectionTransitionId("actor-only"), policy.ResolveTransition("character appearance",
-            TransitionArguments.Create(via: CommandValue<DirectionTransitionId>.Explicit("actor-only")), null!).Kind);
+        Assert.Throws<DirectionException>(() => policy.ResolveTransition("character appearance",
+            TransitionArguments.Create(via: CommandValue<DirectionTransitionId>.Explicit("actor-only")), null!));
         Assert.Throws<DirectionException>(() => policy.ResolveTransition("character appearance",
             TransitionArguments.Create(via: CommandValue<DirectionTransitionId>.Explicit("stage-only")), null!));
     }

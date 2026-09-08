@@ -13,11 +13,17 @@ namespace Majo.Runtime.Direction.Rendering;
 /// A component prepared off-screen for one Direction transaction. Commit must be
 /// synchronous, allocation-free where practical, and must not fail after Prepare succeeds.
 /// </summary>
+public enum DirectionOperationOwner { Scene, Global }
+
 public interface IPreparedDirectionComponent : IAsyncDisposable
 {
+    DirectionOperationOwner Owner => DirectionOperationOwner.Scene;
     Task Settlement { get; }
 
     void Commit(DirectionCommitToken token);
+
+    /// <summary>Releases deferred destruction after every component and cue committed.</summary>
+    void ConfirmCommit() { }
 
     /// <summary>
     /// Compensates a partially published commit. Implementations that cannot
@@ -47,8 +53,7 @@ public interface IDirectionViewBackend
         ViewId viewId,
         ViewState? before,
         ViewState? target,
-        CancellationToken cancellationToken,
-        IReadOnlyList<DirectionViewTransitionSequence>? viewSequences = null);
+        CancellationToken cancellationToken);
 }
 
 public interface IDirectionScreenBackend

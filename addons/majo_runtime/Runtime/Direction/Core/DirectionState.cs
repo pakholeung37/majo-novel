@@ -62,6 +62,8 @@ public sealed record BackdropState(
     }
 }
 
+public enum DirectionActorKind { Character, SceneObject }
+
 public sealed record ActorState(
     ActorId Id,
     DirectionPoint Position,
@@ -69,12 +71,24 @@ public sealed record ActorState(
     float Scale,
     int Z)
 {
+    public DirectionActorKind Kind { get; init; } = DirectionActorKind.Character;
+    public string? DefinitionId { get; init; }
+    public bool Visible { get; init; } = true;
+    public float RotationDegrees { get; init; }
+
     public static ActorState CreateDefault(ActorId id) =>
         new(id, new DirectionPoint(50, 0), null, 1, 0);
 
     public ActorState Validate()
     {
         Position.Validate();
+        if (!Enum.IsDefined(Kind)) throw new ArgumentOutOfRangeException(nameof(Kind));
+        if (Kind == DirectionActorKind.SceneObject && string.IsNullOrWhiteSpace(DefinitionId))
+            throw new ArgumentException("Object actors require a definition id.", nameof(DefinitionId));
+        if (DefinitionId is not null && string.IsNullOrWhiteSpace(DefinitionId))
+            throw new ArgumentException("Actor definition id cannot be blank.", nameof(DefinitionId));
+        if (!float.IsFinite(RotationDegrees)) throw new ArgumentOutOfRangeException(nameof(RotationDegrees));
+        Majo.Runtime.Actors.ActorZIndexRange.Validate(Z);
         if (!float.IsFinite(Scale) || Scale <= 0)
             throw new ArgumentOutOfRangeException(nameof(Scale));
         if (Appearance is not null && string.IsNullOrWhiteSpace(Appearance))
@@ -169,6 +183,8 @@ public sealed record StableEffectState(CurtainState Curtain)
     public static StableEffectState Default { get; } = new(CurtainState.Open);
 }
 
+public sealed record DirectionSceneContext(string? ProjectId, string? SceneId, long Epoch);
+
 public sealed record DirectionState(
     IReadOnlyDictionary<StageId, StageState> Stages,
     IReadOnlyDictionary<ViewId, ViewState> Views,
@@ -176,6 +192,8 @@ public sealed record DirectionState(
     StableEffectState Effects,
     long Revision)
 {
+    public DirectionSceneContext Scene { get; init; } = new(null, null, 0);
+
     public static DirectionState CreateDefault() => new(
         DirectionCollections.Freeze(new Dictionary<StageId, StageState>
         {
@@ -196,6 +214,8 @@ public sealed record DirectionState(
     {
         if (Stages is null || Views is null || Screen is null || Effects is null)
             throw new DirectionException("Direction state is incomplete.");
+        if (Scene is null || Scene.Epoch < 0)
+            throw new DirectionException("Direction scene context is invalid.");
         if (Revision < 0 || !Stages.ContainsKey(StageId.Main) || !Views.ContainsKey(ViewId.Main))
             throw new DirectionException("Direction state has no valid main Stage/View.");
 

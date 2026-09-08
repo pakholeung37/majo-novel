@@ -1,7 +1,5 @@
 #nullable enable
 
-#nullable enable
-
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
@@ -53,7 +51,8 @@ public sealed class ResourceActorTextureLoader : IActorTextureLoader, System.IDi
     {
         if (resources is null) throw new System.InvalidOperationException("Resource-backed texture loading is required for retention.");
         return new ResourceActorTextureLoader(resources, failOnMissingAssets, missingResources,
-            localizedResources, locales, localizedRoots) { retention = new ResourceRetentionScope(resources) };
+            localizedResources, locales, localizedRoots)
+        { retention = new ResourceRetentionScope(resources) };
     }
 
     private Texture2D LoadResource(ResourceKey key, string? overridePath = null)
@@ -70,6 +69,8 @@ public sealed class ResourceActorTextureLoader : IActorTextureLoader, System.IDi
         CancellationToken cancellationToken = default) => retention is null
         ? resources!.LoadAsync<Texture2D>(key, overridePath, cancellationToken)
         : retention.AcquireAsync<Texture2D>(key, overridePath, cancellationToken);
+
+    public void RetainOnly(IReadOnlySet<object> resourcesInUse) => retention?.RetainOnly(resourcesInUse);
 
     public void Dispose()
     {

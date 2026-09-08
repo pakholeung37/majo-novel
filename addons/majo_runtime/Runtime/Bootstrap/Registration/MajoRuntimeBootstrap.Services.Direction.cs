@@ -3,11 +3,13 @@
 using System.Linq;
 using Godot;
 using Majo.Runtime.Actors;
+using Majo.Runtime.Audio;
 using Majo.Runtime.Actors.Godot;
 using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Dialogue.Yarn;
 using Majo.Runtime.Direction.Camera;
+using Majo.Runtime.Direction.Actors;
 using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Direction.Godot;
 using Majo.Runtime.Direction.Rendering;
@@ -67,12 +69,21 @@ public partial class MajoRuntimeBootstrap : Node
                         resolver.Get<IDirectionAccessibility>(),
                         resolver.Get<IFrameClock>(),
                         registry: cameraModifiers);
+                    host.ReleaseViewEffectsAsync = view => manager.ClearViewAsync(view);
                     return manager;
                 },
                 typeof(GodotDirectionRenderHost),
                 typeof(IOperationRunner),
                 typeof(IDirectionAccessibility),
                 typeof(IFrameClock))
+            .AddSingleton<IActorModifierManager>(resolver =>
+                {
+                    var host = resolver.Get<GodotDirectionRenderHost>();
+                    var manager = new ActorModifierManager(host.FindActorModifierTarget,
+                        resolver.Get<IOperationRunner>(), resolver.Get<IDirectionAccessibility>(), resolver.Get<IFrameClock>(), actorModifiers);
+                    host.ReleaseActorEffectsAsync = target => manager.ClearTargetAsync(target);
+                    return manager;
+                }, typeof(GodotDirectionRenderHost), typeof(IOperationRunner), typeof(IDirectionAccessibility), typeof(IFrameClock))
             .AddSingleton<ITransientCueHandlerRegistry>(_ => transientCueHandlers)
             .AddSingleton<ITransientDirectionCueExecutor>(
                 resolver => new TransientDirectionCueExecutor(
@@ -81,6 +92,7 @@ public partial class MajoRuntimeBootstrap : Node
                     resolver,
                     resolver.Get<IRuntimeActivityRegistry>()),
                 typeof(ITransientCueHandlerRegistry),
+                typeof(IActorModifierManager),
                 typeof(ICameraModifierManager),
                 typeof(IRuntimeActivityRegistry))
             .AddSingleton<IDirectionTransactionCoordinator>(
@@ -114,6 +126,20 @@ public partial class MajoRuntimeBootstrap : Node
                             // Scene teardown may already have freed the render surfaces.
                             if (GodotObject.IsInstanceValid(host.StageViewport))
                                 await host.ResetAsync(token);
+                        },
+                        clearSceneRendering: async token =>
+                        {
+                            var failures = new System.Collections.Generic.List<System.Exception>();
+                            foreach (var cleanup in new System.Func<System.Threading.Tasks.Task>[]
+                            {
+                                () => resolver.Get<ICameraModifierManager>().ResetAsync(token),
+                                () => resolver.Get<IActorModifierManager>().ResetAsync(token),
+                                () => resolver.Get<GodotDirectionStageBackend>().ResetAsync(token),
+                                () => host.ResetSceneAsync(token),
+                            })
+                                try { await cleanup(); }
+                                catch (System.Exception error) { failures.Add(error); }
+                            if (failures.Count > 0) throw new System.AggregateException("Scene rendering cleanup failed.", failures);
                         });
                 },
                 typeof(GodotDirectionRenderHost),
@@ -121,6 +147,8 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(ITransitionDriverRegistry),
                 typeof(IEasingRegistry),
                 typeof(IResourceManager),
+                typeof(ICameraModifierManager),
+                typeof(IActorModifierManager),
                 typeof(IRuntimeActivityRegistry),
                 typeof(ITransientDirectionCueExecutor))
             .AddSingleton<IDirectionBeatRuntime>(
@@ -140,11 +168,20 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(IDirectionBeatRuntime),
                 typeof(ITransitionDriverRegistry),
                 typeof(IEasingRegistry))
+            .AddSingleton<ISceneBoundaryCoordinator>(resolver =>
+                {
+                    var coordinator = new SceneBoundaryCoordinator(resolver.Get<IDirectionTransactionCoordinator>(),
+                        resolver.Get<IDirectionBeatRuntime>(), resolver.Get<IAudioManager>());
+                    if (resolver.Get<IYarnDialogueBackend>() is YarnDialogueBackend yarn)
+                        yarn.BeforeNodeEntryAsync = coordinator.EnterNodeAsync;
+                    return coordinator;
+                }, typeof(IDirectionTransactionCoordinator), typeof(IDirectionBeatRuntime), typeof(IAudioManager), typeof(IYarnDialogueBackend))
             .AddSingleton<DirectionBeatNodeBoundaryService>(
                 resolver => new DirectionBeatNodeBoundaryService(
                     resolver.Get<IYarnDialogueBackend>(),
                     resolver.Get<IDirectionBeatRuntime>()),
                 typeof(IYarnDialogueBackend),
+                typeof(ISceneBoundaryCoordinator),
                 typeof(IDirectionBeatRuntime));
     }
 
@@ -172,6 +209,8 @@ public partial class MajoRuntimeBootstrap : Node
                 .ToArray(),
             new IActorFactory[]
             {
+                new SceneObjectActorFactory(root, scheduler, textureLoader, Configuration.Resources!,
+                    actorConfiguration.ReferenceResolution, easingRegistry, transitionDrivers),
                 new CharacterActorFactory(
                     root,
                     scheduler,

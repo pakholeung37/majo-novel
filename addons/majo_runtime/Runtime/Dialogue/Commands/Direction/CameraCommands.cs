@@ -11,78 +11,17 @@ using Majo.Runtime.Direction.Camera;
 
 namespace Majo.Runtime.Dialogue.Commands;
 
-[Command("view define", Category = "Direction")]
-public sealed partial class ViewDefineCommand : RuntimeCommand<ViewDefineCommand.Arguments>
-{
-    private readonly IDirectionBeatRuntime beats;
-    private readonly IDirectionScopeResolver scopes;
-    private readonly IDialogueNodeAccessor nodeAccessor;
-
-    public ViewDefineCommand(
-        IDirectionBeatRuntime beats,
-        IDirectionScopeResolver scopes,
-        IDialogueNodeAccessor nodeAccessor)
-    {
-        this.beats = beats ?? throw new ArgumentNullException(nameof(beats));
-        this.scopes = scopes ?? throw new ArgumentNullException(nameof(scopes));
-        this.nodeAccessor = nodeAccessor ?? throw new ArgumentNullException(nameof(nodeAccessor));
-    }
-
-    protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
-    {
-        var node = nodeAccessor.RequireNode();
-        var viewId = scopes.ResolveView(node, arguments.View);
-        var stageId = scopes.ResolveStage(node, arguments.Stage);
-
-        await beats.SubmitAsync(
-            new ViewCreatePatch(viewId, stageId, DirectionTransitionSpec.Cut),
-            DirectionCompletionBarrier.Commit,
-            context.CancellationToken);
-    }
-
-    public sealed record Arguments([Primary] string View, [Option] string Stage);
-}
-
-[Command("view release", Category = "Direction")]
-public sealed partial class ViewReleaseCommand : RuntimeCommand<ViewReleaseCommand.Arguments>
-{
-    private readonly IDirectionBeatRuntime beats;
-    private readonly IDirectionScopeResolver scopes;
-    private readonly IDialogueNodeAccessor nodeAccessor;
-
-    public ViewReleaseCommand(
-        IDirectionBeatRuntime beats,
-        IDirectionScopeResolver scopes,
-        IDialogueNodeAccessor nodeAccessor)
-    {
-        this.beats = beats ?? throw new ArgumentNullException(nameof(beats));
-        this.scopes = scopes ?? throw new ArgumentNullException(nameof(scopes));
-        this.nodeAccessor = nodeAccessor ?? throw new ArgumentNullException(nameof(nodeAccessor));
-    }
-
-    protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
-    {
-        var viewId = scopes.ResolveView(nodeAccessor.RequireNode(), arguments.View);
-        await beats.SubmitAsync(
-            new ViewReleasePatch(viewId, DirectionTransitionSpec.Cut),
-            DirectionCompletionBarrier.Commit,
-            context.CancellationToken);
-    }
-
-    public sealed record Arguments([Primary] string View);
-}
-
-[Command("camera pose", Category = "Direction")]
+[Command("camera", Category = "Direction")]
 [AtMostOne(nameof(Arguments.Stage), nameof(Arguments.View))]
 [AtLeastOne(nameof(Arguments.Center), nameof(Arguments.Zoom), nameof(Arguments.Rotation), nameof(Arguments.As))]
-public sealed partial class CameraPoseCommand : RuntimeCommand<CameraPoseCommand.Arguments>
+public sealed partial class CameraCommand : RuntimeCommand<CameraCommand.Arguments>
 {
     private readonly IDirectionBeatRuntime beats;
     private readonly IDirectionScopeResolver scopes;
     private readonly IDialogueNodeAccessor nodeAccessor;
     private readonly IDirectionCommandPolicy policy;
 
-    public CameraPoseCommand(
+    public CameraCommand(
         IDirectionBeatRuntime beats,
         IDirectionScopeResolver scopes,
         IDialogueNodeAccessor nodeAccessor,
@@ -98,7 +37,7 @@ public sealed partial class CameraPoseCommand : RuntimeCommand<CameraPoseCommand
     {
         var node = nodeAccessor.RequireNode();
         var via = arguments.Via.WasProvided ? arguments.Via.Value : (DirectionTransitionId?)null;
-        var transition = policy.ResolveCameraPoseTransition("camera pose", arguments.Timing, via, context);
+        var transition = policy.ResolveCameraTransition("camera", arguments.Timing, via, context);
         var wait = arguments.Timing.Wait.GetValueOrDefault(false);
 
         var targetView = ResolveTarget(node, arguments.Stage.Value, arguments.View.Value);
@@ -230,7 +169,7 @@ public sealed partial class CameraResetCommand : RuntimeCommand<CameraResetComma
         var node = nodeAccessor.RequireNode();
         var via = arguments.Transition.Via.WasProvided ? arguments.Transition.Via.Value : (DirectionTransitionId?)null;
         var timing = new TimingArguments(arguments.Transition.Duration, arguments.Transition.Ease, arguments.Transition.Wait);
-        var transition = policy.ResolveCameraPoseTransition("camera reset", timing, via, context, reset: true);
+        var transition = policy.ResolveCameraTransition("camera reset", timing, via, context, reset: true);
         var wait = arguments.Transition.Wait.GetValueOrDefault(false);
 
         var targetView = ResolveTarget(node, arguments.Stage.Value, arguments.View.Value);
@@ -291,7 +230,7 @@ public sealed partial class CameraFxCommand : RuntimeCommand<CameraFxCommand.Arg
 
         var duration = arguments.Duration.WasProvided
             ? arguments.Duration.Value
-            : 0.4;
+            : beats.OpenBeatDefaults?.DurationSeconds ?? 0.4;
         var wait = arguments.Wait.Wait.GetValueOrDefault(false);
 
         var targetView = ResolveTarget(node, arguments.Stage.Value, arguments.View.Value);
@@ -317,7 +256,7 @@ public sealed partial class CameraFxCommand : RuntimeCommand<CameraFxCommand.Arg
         [Option] CommandValue<string> Stage,
         [Option] CommandValue<string> View,
         [Option(Minimum = 0, ValueHint = "seconds")] CommandValue<double> Duration,
-        [Option(Minimum = 0, ValueHint = "number")] CommandValue<double> Strength,
+        [Option(Minimum = 0, ValueHint = "View viewport pixels")] CommandValue<double> Strength,
         [Option(Converter = typeof(CameraShakeAxisConverter), ValueHint = "all|x|y|diagonal")] CommandValue<CameraShakeAxis> Axis,
         [Option(ValueHint = "number")] CommandValue<int> Frequency,
         [Option(ValueHint = "number")] CommandValue<double> Zoom,

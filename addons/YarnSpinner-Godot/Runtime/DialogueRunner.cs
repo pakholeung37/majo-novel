@@ -678,6 +678,7 @@ public partial class DialogueRunner : Godot.Node
 
     private async YarnTask OnCommandReceivedAsync(Command command)
     {
+        var commandDialogueCancellationSource = dialogueCancellationSource;
         CommandDispatchResult dispatchResult = this.CommandDispatcher!.DispatchCommand(command.Text, this);
 
         var parts = SplitCommandText(command.Text);
@@ -743,8 +744,9 @@ public partial class DialogueRunner : Godot.Node
                     $"Internal error: Unknown command dispatch result status {dispatchResult}");
         }
 
-        // Continue the Dialogue, unless dialogue cancellation was requested.
-        if (dialogueCancellationSource?.IsCancellationRequested ?? false)
+        // A late command must never continue a replacement dialogue session.
+        if (!ReferenceEquals(commandDialogueCancellationSource, dialogueCancellationSource) ||
+            (commandDialogueCancellationSource?.IsCancellationRequested ?? true))
         {
             return;
         }
@@ -755,7 +757,9 @@ public partial class DialogueRunner : Godot.Node
             return;
         }
 
-        Dialogue.Continue();
+        if (ReferenceEquals(commandDialogueCancellationSource, dialogueCancellationSource) &&
+            commandDialogueCancellationSource?.IsCancellationRequested == false)
+            Dialogue.Continue();
     }
 
     private void OnLineReceived(Line line)

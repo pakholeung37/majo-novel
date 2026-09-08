@@ -8,6 +8,7 @@ public partial class ResourceConfiguration : Resource
     public const string DefaultRootPath = "res://assets";
     public const string DefaultCharactersPath = "characters";
     public const string DefaultBackgroundsPath = "backgrounds";
+    public const string DefaultObjectsPath = "objects";
     public const string DefaultScriptsPath = "scripts";
 
     [Export(PropertyHint.Dir)]
@@ -18,6 +19,9 @@ public partial class ResourceConfiguration : Resource
 
     [Export]
     public string BackgroundsPath { get; set; } = DefaultBackgroundsPath;
+
+    [Export]
+    public string ObjectsPath { get; set; } = DefaultObjectsPath;
 
     [Export]
     public string ScriptsPath { get; set; } = DefaultScriptsPath;

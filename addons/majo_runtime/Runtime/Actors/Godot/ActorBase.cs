@@ -22,6 +22,44 @@ public abstract class ActorBase : IActor, IGodotActorView
         new(StringComparer.Ordinal);
     private readonly IEasingRegistry easings;
     private bool isDestroyed;
+    private int visualPreparations;
+
+    public IDisposable RetainVisualPreparation()
+    {
+        visualPreparations++;
+        return new VisualRetention(this);
+    }
+
+    private void ReleaseVisualPreparation()
+    {
+        if (--visualPreparations != 0 || isDestroyed || TextureLoader is not ResourceActorTextureLoader retained) return;
+        var used = new HashSet<object>();
+        void Keep(Texture2D texture)
+        {
+            if (!used.Add(texture)) return;
+            if (texture is AtlasTexture { Atlas: { } atlas }) Keep(atlas);
+        }
+        void Visit(Node node)
+        {
+            if (!GodotObject.IsInstanceValid(node) || node.IsQueuedForDeletion()) return;
+            if (node is Sprite2D { Texture: { } spriteTexture }) Keep(spriteTexture);
+            if (node is TextureRect { Texture: { } rectTexture }) Keep(rectTexture);
+            foreach (var child in node.GetChildren()) Visit(child);
+        }
+        Visit(View.GetParent() ?? View);
+        retained.RetainOnly(used);
+    }
+
+    private sealed class VisualRetention(ActorBase actor) : IDisposable
+    {
+        private ActorBase? owner = actor;
+        public void Dispose()
+        {
+            var value = owner;
+            owner = null;
+            value?.ReleaseVisualPreparation();
+        }
+    }
 
     protected IEasingRegistry Easings => easings;
     protected long AppearanceEpoch { get; private set; }

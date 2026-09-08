@@ -1,0 +1,1227 @@
+{
+  "version": 2,
+  "commands": [
+    {
+      "yarnName": "stage define",
+      "definitionName": "Majo.Runtime.Dialogue.Commands.StageDefineCommand",
+      "language": "csharp",
+      "documentation": "stage define \u003Cstage\u003E\nstage: value",
+      "async": true,
+      "containsErrors": false,
+      "parameters": [
+        {
+          "name": "stage",
+          "type": "string",
+          "isOptional": false,
+          "isParamsArray": false
+        }
+      ]
+    },
+    {
+      "yarnName": "stage show",
+      "definitionName": "Majo.Runtime.Dialogue.Commands.StageShowCommand",
+      "language": "csharp",
+      "documentation": "stage show \u003Cstage\u003E [via:\u003Ckind\u003E] [duration:\u003Cnumber\u003E] [ease:\u003Ceasing-id\u003E] [wait:\u003Cbool\u003E]\nstage: value\nvia: kind\nduration: seconds\nease: curve\nwait: bool (default false)",
+      "async": true,
+      "containsErrors": false,
+      "parameters": [
+        {
+          "name": "stage",
+          "type": "string",
+          "isOptional": false,
+          "isParamsArray": false
+        },
+        {
+          "name": "via:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "duration:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "ease:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "wait:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        }
+      ]
+    },
+    {
+      "yarnName": "stage clear",
+      "definitionName": "Majo.Runtime.Dialogue.Commands.StageClearCommand",
+      "language": "csharp",
+      "documentation": "stage clear \u003Cstage\u003E [via:\u003Ckind\u003E] [duration:\u003Cnumber\u003E] [ease:\u003Ceasing-id\u003E] [wait:\u003Cbool\u003E]\nstage: value\nvia: kind\nduration: seconds\nease: curve\nwait: bool (default false)",
+      "async": true,
+      "containsErrors": false,
+      "parameters": [
+        {
+          "name": "stage",
+          "type": "string",
+          "isOptional": false,
+          "isParamsArray": false
+        },
+        {
+          "name": "via:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "duration:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "ease:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "wait:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        }
+      ]
+    },
+    {
+      "yarnName": "backdrop",
+      "definitionName": "Majo.Runtime.Dialogue.Commands.BackdropCommand",
+      "language": "csharp",
+      "documentation": "backdrop \u003Cresource\u003E [stage:\u003Cstring\u003E] [via:\u003Ckind\u003E] [duration:\u003Cnumber\u003E] [ease:\u003Ceasing-id\u003E] [wait:\u003Cbool\u003E]\nresource: value\nstage: value (default main)\nvia: kind\nduration: seconds\nease: curve\nwait: bool (default false)",
+      "async": true,
+      "containsErrors": false,
+      "parameters": [
+        {
+          "name": "resource",
+          "type": "string",
+          "isOptional": false,
+          "isParamsArray": false
+        },
+        {
+          "name": "stage:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "via:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "duration:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "ease:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "wait:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        }
+      ]
+    },
+    {
+      "yarnName": "character",
+      "definitionName": "Majo.Runtime.Dialogue.Commands.CharacterCommand",
+      "language": "csharp",
+      "documentation": "character \u003Cactor\u003E [stage:\u003Cstring\u003E] [appearance:\u003Cstring\u003E] [at:\u003Cmark|x,y\u003E] [scale:\u003Cnumber\u003E] [z:\u003Cinteger\u003E] [rotation:\u003Cnumber\u003E] [via:\u003Ckind\u003E] [duration:\u003Cnumber\u003E] [ease:\u003Ceasing-id\u003E] [wait:\u003Cbool\u003E]\nactor: value\nstage: value (default main)\nappearance: value\nat: value\nscale: value\nz: value\nrotation: degrees\nvia: kind\nduration: seconds\nease: curve\nwait: bool (default false)",
+      "async": true,
+      "containsErrors": false,
+      "parameters": [
+        {
+          "name": "actor",
+          "type": "string",
+          "isOptional": false,
+          "isParamsArray": false
+        },
+        {
+          "name": "stage:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "appearance:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "at:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "scale:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "z:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "rotation:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "via:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "duration:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "ease:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "wait:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        }
+      ]
+    },
+    {
+      "yarnName": "character hide",
+      "definitionName": "Majo.Runtime.Dialogue.Commands.CharacterHideCommand",
+      "language": "csharp",
+      "documentation": "character hide \u003Cactor\u003E [stage:\u003Cstring\u003E] [via:\u003Ckind\u003E] [duration:\u003Cnumber\u003E] [ease:\u003Ceasing-id\u003E] [wait:\u003Cbool\u003E]\nactor: value\nstage: value (default main)\nvia: kind\nduration: seconds\nease: curve\nwait: bool (default false)",
+      "async": true,
+      "containsErrors": false,
+      "parameters": [
+        {
+          "name": "actor",
+          "type": "string",
+          "isOptional": false,
+          "isParamsArray": false
+        },
+        {
+          "name": "stage:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "via:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "duration:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "ease:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "wait:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        }
+      ]
+    },
+    {
+      "yarnName": "object",
+      "definitionName": "Majo.Runtime.Dialogue.Commands.ObjectCommand",
+      "language": "csharp",
+      "documentation": "object \u003Cactor\u003E [stage:\u003Cstring\u003E] [appearance:\u003Cstring\u003E] [at:\u003Cmark|x,y\u003E] [scale:\u003Cnumber\u003E] [z:\u003Cinteger\u003E] [rotation:\u003Cnumber\u003E] [asset:\u003Cstring\u003E] [via:\u003Ckind\u003E] [duration:\u003Cnumber\u003E] [ease:\u003Ceasing-id\u003E] [wait:\u003Cbool\u003E]\nactor: value\nstage: value (default main)\nappearance: value\nat: value\nscale: value\nz: value\nrotation: degrees\nasset: value\nvia: kind\nduration: seconds\nease: curve\nwait: bool (default false)",
+      "async": true,
+      "containsErrors": false,
+      "parameters": [
+        {
+          "name": "actor",
+          "type": "string",
+          "isOptional": false,
+          "isParamsArray": false
+        },
+        {
+          "name": "stage:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "appearance:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "at:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "scale:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "z:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "rotation:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "asset:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "via:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "duration:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "ease:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "wait:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        }
+      ]
+    },
+    {
+      "yarnName": "character move",
+      "definitionName": "Majo.Runtime.Dialogue.Commands.CharacterMoveCommand",
+      "language": "csharp",
+      "documentation": "character move \u003Cactor\u003E [stage:\u003Cstring\u003E] [at:\u003Cmark|x,y\u003E] [scale:\u003Cnumber\u003E] [rotation:\u003Cnumber\u003E] [duration:\u003Cnumber\u003E] [ease:\u003Ceasing-id\u003E] [wait:\u003Cbool\u003E]\nactor: value\nstage: value (default main)\nat: value\nscale: value\nrotation: degrees\nduration: seconds\nease: curve\nwait: bool (default false)",
+      "async": true,
+      "containsErrors": false,
+      "parameters": [
+        {
+          "name": "actor",
+          "type": "string",
+          "isOptional": false,
+          "isParamsArray": false
+        },
+        {
+          "name": "stage:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "at:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "scale:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "rotation:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "duration:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "ease:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "wait:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        }
+      ]
+    },
+    {
+      "yarnName": "object move",
+      "definitionName": "Majo.Runtime.Dialogue.Commands.ObjectMoveCommand",
+      "language": "csharp",
+      "documentation": "object move \u003Cactor\u003E [stage:\u003Cstring\u003E] [at:\u003Cmark|x,y\u003E] [scale:\u003Cnumber\u003E] [rotation:\u003Cnumber\u003E] [duration:\u003Cnumber\u003E] [ease:\u003Ceasing-id\u003E] [wait:\u003Cbool\u003E]\nactor: value\nstage: value (default main)\nat: value\nscale: value\nrotation: degrees\nduration: seconds\nease: curve\nwait: bool (default false)",
+      "async": true,
+      "containsErrors": false,
+      "parameters": [
+        {
+          "name": "actor",
+          "type": "string",
+          "isOptional": false,
+          "isParamsArray": false
+        },
+        {
+          "name": "stage:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "at:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "scale:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "rotation:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "duration:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "ease:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "wait:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        }
+      ]
+    },
+    {
+      "yarnName": "object hide",
+      "definitionName": "Majo.Runtime.Dialogue.Commands.ObjectHideCommand",
+      "language": "csharp",
+      "documentation": "object hide \u003Cactor\u003E [stage:\u003Cstring\u003E] [via:\u003Ckind\u003E] [duration:\u003Cnumber\u003E] [ease:\u003Ceasing-id\u003E] [wait:\u003Cbool\u003E]\nactor: value\nstage: value (default main)\nvia: kind\nduration: seconds\nease: curve\nwait: bool (default false)",
+      "async": true,
+      "containsErrors": false,
+      "parameters": [
+        {
+          "name": "actor",
+          "type": "string",
+          "isOptional": false,
+          "isParamsArray": false
+        },
+        {
+          "name": "stage:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "via:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "duration:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "ease:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "wait:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        }
+      ]
+    },
+    {
+      "yarnName": "character fx",
+      "definitionName": "Majo.Runtime.Dialogue.Commands.CharacterFxCommand",
+      "language": "csharp",
+      "documentation": "character fx \u003Cactor\u003E \u003Ceffect:\u003Cstring\u003E\u003E [stage:\u003Cstring\u003E] [duration:\u003Cnumber\u003E] [strength:\u003Cnumber\u003E] [axis:all|x|y|diagonal] [frequency:\u003Cinteger\u003E] [wait:\u003Cbool\u003E]\nactor: value\neffect: value\nstage: value (default main)\nduration: seconds\nstrength: Stage reference pixels (default 8)\naxis: value (default all)\nfrequency: value (default 20)\nwait: value (default false)",
+      "async": true,
+      "containsErrors": false,
+      "parameters": [
+        {
+          "name": "actor",
+          "type": "string",
+          "isOptional": false,
+          "isParamsArray": false
+        },
+        {
+          "name": "effect:value",
+          "type": "string",
+          "isOptional": false,
+          "isParamsArray": false
+        },
+        {
+          "name": "stage:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "duration:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "strength:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "axis:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "frequency:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "wait:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        }
+      ]
+    },
+    {
+      "yarnName": "object fx",
+      "definitionName": "Majo.Runtime.Dialogue.Commands.ObjectFxCommand",
+      "language": "csharp",
+      "documentation": "object fx \u003Cactor\u003E \u003Ceffect:\u003Cstring\u003E\u003E [stage:\u003Cstring\u003E] [duration:\u003Cnumber\u003E] [strength:\u003Cnumber\u003E] [axis:all|x|y|diagonal] [frequency:\u003Cinteger\u003E] [wait:\u003Cbool\u003E]\nactor: value\neffect: value\nstage: value (default main)\nduration: seconds\nstrength: Stage reference pixels (default 8)\naxis: value (default all)\nfrequency: value (default 20)\nwait: value (default false)",
+      "async": true,
+      "containsErrors": false,
+      "parameters": [
+        {
+          "name": "actor",
+          "type": "string",
+          "isOptional": false,
+          "isParamsArray": false
+        },
+        {
+          "name": "effect:value",
+          "type": "string",
+          "isOptional": false,
+          "isParamsArray": false
+        },
+        {
+          "name": "stage:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "duration:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "strength:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "axis:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "frequency:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "wait:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        }
+      ]
+    },
+    {
+      "yarnName": "backdrop fx",
+      "definitionName": "Majo.Runtime.Dialogue.Commands.BackdropFxCommand",
+      "language": "csharp",
+      "documentation": "backdrop fx \u003Ceffect\u003E [stage:\u003Cstring\u003E] [duration:\u003Cnumber\u003E] [strength:\u003Cnumber\u003E] [axis:all|x|y|diagonal] [frequency:\u003Cinteger\u003E] [wait:\u003Cbool\u003E]\neffect: value\nstage: value (default main)\nduration: seconds\nstrength: Stage reference pixels (default 8)\naxis: value (default all)\nfrequency: value (default 20)\nwait: value (default false)",
+      "async": true,
+      "containsErrors": false,
+      "parameters": [
+        {
+          "name": "effect",
+          "type": "string",
+          "isOptional": false,
+          "isParamsArray": false
+        },
+        {
+          "name": "stage:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "duration:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "strength:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "axis:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "frequency:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "wait:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        }
+      ]
+    },
+    {
+      "yarnName": "view define",
+      "definitionName": "Majo.Runtime.Dialogue.Commands.ViewDefineCommand",
+      "language": "csharp",
+      "documentation": "view define \u003Cview\u003E \u003Cstage:\u003Cstring\u003E\u003E\nview: value\nstage: value",
+      "async": true,
+      "containsErrors": false,
+      "parameters": [
+        {
+          "name": "view",
+          "type": "string",
+          "isOptional": false,
+          "isParamsArray": false
+        },
+        {
+          "name": "stage:value",
+          "type": "string",
+          "isOptional": false,
+          "isParamsArray": false
+        }
+      ]
+    },
+    {
+      "yarnName": "camera",
+      "definitionName": "Majo.Runtime.Dialogue.Commands.CameraCommand",
+      "language": "csharp",
+      "documentation": "camera [stage:\u003Cstring\u003E] [view:\u003Cstring\u003E] [center:\u003Cx,y\u003E] [zoom:\u003Cnumber\u003E] [rotation:\u003Cnumber\u003E] [as:\u003Cstring\u003E] [via:\u003Ckind\u003E] [duration:\u003Cnumber\u003E] [ease:\u003Ceasing-id\u003E] [wait:\u003Cbool\u003E]\nstage: value\nview: value\ncenter: x,y\nzoom: number\nrotation: degrees\nas: shot\nvia: kind\nduration: seconds\nease: curve\nwait: bool (default false)",
+      "async": true,
+      "containsErrors": false,
+      "parameters": [
+        {
+          "name": "stage:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "view:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "center:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "zoom:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "rotation:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "as:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "via:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "duration:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "ease:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "wait:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        }
+      ]
+    },
+    {
+      "yarnName": "camera move",
+      "definitionName": "Majo.Runtime.Dialogue.Commands.CameraMoveCommand",
+      "language": "csharp",
+      "documentation": "camera move [stage:\u003Cstring\u003E] [view:\u003Cstring\u003E] [center:\u003Cx,y\u003E] [zoom:\u003Cnumber\u003E] [rotation:\u003Cnumber\u003E] [duration:\u003Cnumber\u003E] [ease:\u003Ceasing-id\u003E] [wait:\u003Cbool\u003E]\nstage: value\nview: value\ncenter: x,y\nzoom: number\nrotation: degrees\nduration: seconds\nease: curve\nwait: bool (default false)",
+      "async": true,
+      "containsErrors": false,
+      "parameters": [
+        {
+          "name": "stage:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "view:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "center:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "zoom:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "rotation:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "duration:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "ease:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "wait:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        }
+      ]
+    },
+    {
+      "yarnName": "camera reset",
+      "definitionName": "Majo.Runtime.Dialogue.Commands.CameraResetCommand",
+      "language": "csharp",
+      "documentation": "camera reset [stage:\u003Cstring\u003E] [view:\u003Cstring\u003E] [via:\u003Ckind\u003E] [duration:\u003Cnumber\u003E] [ease:\u003Ceasing-id\u003E] [wait:\u003Cbool\u003E]\nstage: value\nview: value\nvia: kind\nduration: seconds\nease: curve\nwait: bool (default false)",
+      "async": true,
+      "containsErrors": false,
+      "parameters": [
+        {
+          "name": "stage:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "view:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "via:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "duration:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "ease:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "wait:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        }
+      ]
+    },
+    {
+      "yarnName": "camera fx",
+      "definitionName": "Majo.Runtime.Dialogue.Commands.CameraFxCommand",
+      "language": "csharp",
+      "documentation": "camera fx \u003Ceffect\u003E [stage:\u003Cstring\u003E] [view:\u003Cstring\u003E] [duration:\u003Cnumber\u003E] [strength:\u003Cnumber\u003E] [axis:all|x|y|diagonal] [frequency:\u003Cinteger\u003E] [zoom:\u003Cnumber\u003E] [wait:\u003Cbool\u003E]\neffect: value\nstage: value\nview: value\nduration: seconds\nstrength: View viewport pixels\naxis: all|x|y|diagonal\nfrequency: number\nzoom: number\nwait: bool (default false)",
+      "async": true,
+      "containsErrors": false,
+      "parameters": [
+        {
+          "name": "effect",
+          "type": "string",
+          "isOptional": false,
+          "isParamsArray": false
+        },
+        {
+          "name": "stage:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "view:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "duration:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "strength:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "axis:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "frequency:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "zoom:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "wait:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        }
+      ]
+    },
+    {
+      "yarnName": "shot use",
+      "definitionName": "Majo.Runtime.Dialogue.Commands.ShotUseCommand",
+      "language": "csharp",
+      "documentation": "shot use \u003Calias\u003E [stage:\u003Cstring\u003E] [view:\u003Cstring\u003E] [via:\u003Ckind\u003E] [duration:\u003Cnumber\u003E] [ease:\u003Ceasing-id\u003E] [wait:\u003Cbool\u003E]\nalias: value\nstage: value\nview: value\nvia: kind\nduration: seconds\nease: curve\nwait: bool (default false)",
+      "async": true,
+      "containsErrors": false,
+      "parameters": [
+        {
+          "name": "alias",
+          "type": "string",
+          "isOptional": false,
+          "isParamsArray": false
+        },
+        {
+          "name": "stage:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "view:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "via:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "duration:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "ease:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "wait:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        }
+      ]
+    },
+    {
+      "yarnName": "layout",
+      "definitionName": "Majo.Runtime.Dialogue.Commands.LayoutCommand",
+      "language": "csharp",
+      "documentation": "layout \u003Clayout\u003E [main:\u003Cstring\u003E] [inset:\u003Cstring\u003E] [via:\u003Ckind\u003E] [duration:\u003Cnumber\u003E] [ease:\u003Ceasing-id\u003E] [wait:\u003Cbool\u003E]\nlayout: value\nmain: value\ninset: value\nvia: kind\nduration: seconds\nease: curve\nwait: bool (default false)",
+      "async": true,
+      "containsErrors": false,
+      "parameters": [
+        {
+          "name": "layout",
+          "type": "string",
+          "isOptional": false,
+          "isParamsArray": false
+        },
+        {
+          "name": "main:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "inset:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "via:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "duration:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "ease:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "wait:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        }
+      ]
+    },
+    {
+      "yarnName": "import",
+      "definitionName": "Majo.Runtime.Dialogue.Commands.DirectionImportCommand",
+      "language": "csharp",
+      "documentation": "import \u003Ckind\u003E \u003Calias:\u003Cstring\u003E\u003E \u003Csource:\u003Cstring\u003E\u003E\nkind: value\nalias: value\nsource: value",
+      "async": true,
+      "containsErrors": false,
+      "parameters": [
+        {
+          "name": "kind",
+          "type": "string",
+          "isOptional": false,
+          "isParamsArray": false
+        },
+        {
+          "name": "alias:value",
+          "type": "string",
+          "isOptional": false,
+          "isParamsArray": false
+        },
+        {
+          "name": "source:value",
+          "type": "string",
+          "isOptional": false,
+          "isParamsArray": false
+        }
+      ]
+    },
+    {
+      "yarnName": "mark",
+      "definitionName": "Majo.Runtime.Dialogue.Commands.DirectionMarkCommand",
+      "language": "csharp",
+      "documentation": "mark \u003Cname\u003E \u003Cat:\u003Cmark|x,y\u003E\u003E\nname: value\nat: value",
+      "async": true,
+      "containsErrors": false,
+      "parameters": [
+        {
+          "name": "name",
+          "type": "string",
+          "isOptional": false,
+          "isParamsArray": false
+        },
+        {
+          "name": "at:value",
+          "type": "string",
+          "isOptional": false,
+          "isParamsArray": false
+        }
+      ]
+    },
+    {
+      "yarnName": "curtain",
+      "definitionName": "Majo.Runtime.Dialogue.Commands.CurtainCommand",
+      "language": "csharp",
+      "documentation": "curtain \u003Cstate\u003E [duration:\u003Cnumber\u003E] [r:\u003Cnumber\u003E] [g:\u003Cnumber\u003E] [b:\u003Cnumber\u003E] [wait:\u003Cbool\u003E]\nstate: value\nduration: seconds (default 0.35)\nr: 0..1 (default 0.0)\ng: 0..1 (default 0.0)\nb: 0..1 (default 0.0)\nwait: bool (default false)",
+      "async": true,
+      "containsErrors": false,
+      "parameters": [
+        {
+          "name": "state",
+          "type": "string",
+          "isOptional": false,
+          "isParamsArray": false
+        },
+        {
+          "name": "duration:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "r:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "g:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "b:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "wait:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        }
+      ]
+    },
+    {
+      "yarnName": "beat begin",
+      "definitionName": "Majo.Runtime.Dialogue.Commands.BeatBeginCommand",
+      "language": "csharp",
+      "documentation": "beat begin [id:\u003Cstring\u003E] [duration:\u003Cnumber\u003E] [ease:\u003Ceasing-id\u003E]\nid: value\nduration: seconds\nease: curve",
+      "async": true,
+      "containsErrors": false,
+      "parameters": [
+        {
+          "name": "id:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "duration:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "ease:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        }
+      ]
+    },
+    {
+      "yarnName": "beat end",
+      "definitionName": "Majo.Runtime.Dialogue.Commands.BeatEndCommand",
+      "language": "csharp",
+      "documentation": "beat end [wait:\u003Cbool\u003E]\nwait: bool (default true)",
+      "async": true,
+      "containsErrors": false,
+      "parameters": [
+        {
+          "name": "wait:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        }
+      ]
+    },
+    {
+      "yarnName": "beat join",
+      "definitionName": "Majo.Runtime.Dialogue.Commands.BeatJoinCommand",
+      "language": "csharp",
+      "documentation": "beat join \u003Cid\u003E\nid: value",
+      "async": true,
+      "containsErrors": false,
+      "parameters": [
+        {
+          "name": "id",
+          "type": "string",
+          "isOptional": false,
+          "isParamsArray": false
+        }
+      ]
+    },
+    {
+      "yarnName": "beat finish",
+      "definitionName": "Majo.Runtime.Dialogue.Commands.BeatFinishCommand",
+      "language": "csharp",
+      "documentation": "beat finish \u003Cid\u003E\nid: value",
+      "async": true,
+      "containsErrors": false,
+      "parameters": [
+        {
+          "name": "id",
+          "type": "string",
+          "isOptional": false,
+          "isParamsArray": false
+        }
+      ]
+    },
+    {
+      "yarnName": "beat abort",
+      "definitionName": "Majo.Runtime.Dialogue.Commands.BeatAbortCommand",
+      "language": "csharp",
+      "documentation": "beat abort\n",
+      "async": true,
+      "containsErrors": false,
+      "parameters": []
+    }
+  ],
+  "functions": []
+}

@@ -26,26 +26,11 @@ public sealed class CharacterPositionMap
         return position + GetPixelOffset();
     }
 
-    public Vector2 GetScenePosition(Vector2 scenePosition)
-    {
-        if (!float.IsFinite(scenePosition.X) || !float.IsFinite(scenePosition.Y) ||
-            scenePosition.X is < 0 or > 100 || scenePosition.Y is < 0 or > 100)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(scenePosition), "Scene position percentages must be between 0 and 100.");
-        }
+    public Vector2 GetScenePosition(Vector2 scenePosition) =>
+        StageCoordinates.ToPixels(scenePosition, configuration.ReferenceResolution) + GetPixelOffset();
 
-        var resolution = configuration.ReferenceResolution;
-        if (resolution.X <= 0 || resolution.Y <= 0)
-        {
-            throw new ActorException(
-                "Scene-position commands require a positive actor reference resolution.");
-        }
-
-        return new Vector2(
-            resolution.X * scenePosition.X / 100f,
-            resolution.Y * (1f - scenePosition.Y / 100f)) + GetPixelOffset();
-    }
+    public Vector2 GetScenePercent(Vector2 pixels) =>
+        StageCoordinates.ToPercent(pixels - GetPixelOffset(), configuration.ReferenceResolution);
 
     private Vector2 GetPixelOffset()
     {

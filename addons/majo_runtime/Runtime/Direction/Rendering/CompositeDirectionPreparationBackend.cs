@@ -38,7 +38,7 @@ public sealed class CompositeDirectionPreparationBackend : IDirectionPreparation
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(plan);
-        return PrepareInternalAsync(plan.DomainPlan, plan.ViewSequences, cancellationToken);
+        return PrepareInternalAsync(plan.DomainPlan, cancellationToken);
     }
 
     public Task<IPreparedDirectionTransaction> PrepareAsync(
@@ -52,7 +52,6 @@ public sealed class CompositeDirectionPreparationBackend : IDirectionPreparation
 
     private async Task<IPreparedDirectionTransaction> PrepareInternalAsync(
         DirectionPlan plan,
-        IReadOnlyList<DirectionViewTransitionSequence>? viewSequences,
         CancellationToken cancellationToken)
     {
         validate?.Invoke(plan);
@@ -66,7 +65,7 @@ public sealed class CompositeDirectionPreparationBackend : IDirectionPreparation
             await AddPreparedBatchAsync(
                 BuildStagePreparations(plan, cancellationToken), prepared);
             await AddPreparedBatchAsync(
-                BuildViewPreparations(plan, viewSequences, cancellationToken), prepared);
+                BuildViewPreparations(plan, cancellationToken), prepared);
             await AddPreparedBatchAsync(
                 BuildScreenAndEffectPreparations(plan, cancellationToken), prepared);
         }
@@ -148,7 +147,8 @@ public sealed class CompositeDirectionPreparationBackend : IDirectionPreparation
         {
             plan.BeforeState.Stages.TryGetValue(stageId, out var before);
             plan.TargetState.Stages.TryGetValue(stageId, out var target);
-            if (!Equals(before, target))
+            if (!Equals(before, target) || plan.Transitions.Any(transition =>
+                transition.StablePaths.Contains($"stage/{stageId.Value}/backdrop")))
             {
                 preparations.Add(CapturePreparation(() =>
                     stages.PrepareAsync(plan, stageId, before, target, cancellationToken)));
@@ -160,7 +160,6 @@ public sealed class CompositeDirectionPreparationBackend : IDirectionPreparation
 
     private List<Task<IPreparedDirectionComponent>> BuildViewPreparations(
         DirectionPlan plan,
-        IReadOnlyList<DirectionViewTransitionSequence>? viewSequences,
         CancellationToken cancellationToken)
     {
         var preparations = new List<Task<IPreparedDirectionComponent>>();
@@ -170,10 +169,10 @@ public sealed class CompositeDirectionPreparationBackend : IDirectionPreparation
         {
             plan.BeforeState.Views.TryGetValue(viewId, out var before);
             plan.TargetState.Views.TryGetValue(viewId, out var target);
-            if (!Equals(before, target))
+            if (!Equals(before, target) || plan.ViewIntents.Any(intent => intent.ViewId == viewId))
             {
                 preparations.Add(CapturePreparation(() =>
-                    views.PrepareAsync(plan, viewId, before, target, cancellationToken, viewSequences)));
+                    views.PrepareAsync(plan, viewId, before, target, cancellationToken)));
             }
         }
 
@@ -222,7 +221,7 @@ public sealed class CompositeDirectionPreparationBackend : IDirectionPreparation
 
     private sealed class PreparedComposite : IPreparedDirectionTransaction
     {
-        private readonly IReadOnlyList<IPreparedDirectionComponent> components;
+        private readonly List<IPreparedDirectionComponent> components;
         private readonly TaskCompletionSource emptySettlement = new(
             TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly object sync = new();
@@ -231,7 +230,7 @@ public sealed class CompositeDirectionPreparationBackend : IDirectionPreparation
 
         public PreparedComposite(IReadOnlyList<IPreparedDirectionComponent> components)
         {
-            this.components = components;
+            this.components = components.ToList();
         }
 
         public Task Settlement => components.Count == 0
@@ -275,6 +274,11 @@ public sealed class CompositeDirectionPreparationBackend : IDirectionPreparation
                 }
                 throw;
             }
+        }
+
+        public void ConfirmCommit()
+        {
+            foreach (var component in components) component.ConfirmCommit();
         }
 
         public void Rollback(DirectionCommitToken token)
@@ -323,7 +327,7 @@ public sealed class CompositeDirectionPreparationBackend : IDirectionPreparation
             {
                 try
                 {
-                    await component.FinishAsync(cancellationToken);
+                    if (!component.Settlement.IsCompleted) await component.FinishAsync(cancellationToken);
                 }
                 catch (Exception exception)
                 {
@@ -335,6 +339,25 @@ public sealed class CompositeDirectionPreparationBackend : IDirectionPreparation
                 throw new AggregateException("One or more Direction transitions failed to finish.", failures);
         }
 
+        public async ValueTask FinishSceneAsync(CancellationToken cancellationToken)
+        {
+            List<Exception>? errors = null;
+            foreach (var component in components.Where(value => value.Owner == DirectionOperationOwner.Scene).ToArray())
+            {
+                try
+                {
+                    if (!component.Settlement.IsCompleted) await component.FinishAsync(cancellationToken);
+                    await component.Settlement.WaitAsync(cancellationToken);
+                }
+                catch (Exception error) { (errors ??= new()).Add(error); }
+                try { await component.DisposeAsync(); }
+                catch (Exception error) { (errors ??= new()).Add(error); }
+                lock (sync) { components.Remove(component); committedComponents.Remove(component); }
+            }
+            if (components.Count == 0) emptySettlement.TrySetResult();
+            if (errors is not null) throw new AggregateException("Scene components failed to finish.", errors);
+        }
+
         public async ValueTask DisposeAsync()
         {
             lock (sync)
@@ -344,7 +367,7 @@ public sealed class CompositeDirectionPreparationBackend : IDirectionPreparation
             }
 
             List<Exception>? failures = null;
-            foreach (var component in components.Reverse())
+            foreach (var component in components.AsEnumerable().Reverse())
             {
                 try
                 {

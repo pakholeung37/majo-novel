@@ -159,15 +159,19 @@ public sealed class YarnWindowPreloader : IDisposable
             {
                 "backdrop" => configuration.BackgroundsPath,
                 "character" => configuration.CharactersPath,
+                "object" => configuration.ObjectsPath,
                 "voice" => audio.VoicePath,
                 "bgm" => audio.BgmPath,
                 "sfx" => audio.SfxPath,
                 _ => null,
             };
             if (root is null || ResourcePath.IsRooted(id)) continue;
-            if (kind is "backdrop" or "character")
+            if (kind is "backdrop" or "character" or "object")
             {
-                var entries = kind == "character"
+                var entries = kind == "object"
+                    ? actors.GetPreloadResources(new ActorSpawnRequest(id, ActorFactoryIds.SceneObject, reference.Appearance ?? "Default")
+                    { DefinitionId = reference.Asset })
+                    : kind == "character"
                     ? actors.GetPreloadResources(new ActorSpawnRequest(id[..id.IndexOf('/')],
                         ActorFactoryIds.Character, id[(id.IndexOf('/') + 1)..]))
                     : new[] { ResourcePreloadEntry.Create<Texture2D>(new BackdropId(id).ToResourceKey(root)) };

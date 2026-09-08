@@ -32,10 +32,15 @@ try:
     manifest.write_text(json.dumps({"projectFileVersion": 3, "sourceFiles": ["*.yarn"], "baseLanguage": "en"}))
     main = fixture / "main.yarn"
     extra = fixture / "extra.yarn"
-    main.write_text("title: DirectionProbe\n---\n<<mark focus at:25,75>>\nHello. #line:directionprobe01\n===\n")
+    main.write_text("title: DirectionProbe\nscene: probe_room\n---\n<<mark focus at:25,75>>\nHello. #line:directionprobe01\n===\n")
     extra.write_text("title: DirectionExtra\n---\nExtra. #line:directionprobe02\n===\n")
     import_project()
     assert {m["NodeId"] for m in modules()} == {"DirectionProbe", "DirectionExtra"}
+    entry = next(m for m in modules() if m["NodeId"] == "DirectionProbe")
+    assert entry["SceneEntry"]["SceneId"] == "probe_room"
+    assert entry["SceneEntry"]["Line"] == 2
+    assert entry["SourceMaps"][0]["Line"] == 4, "Source map must use authored lines"
+    assert "SchemaVersion = 2" in asset.read_text()
     before = asset.read_bytes()
     import_project()
     assert asset.read_bytes() == before, "Unchanged import rewrote the companion"
@@ -56,6 +61,23 @@ try:
     import_project()
     assert modules()[0]["Marks"][0]["X"] == 40
     print("PASS: compile failure invalidation and recovery", flush=True)
+
+    good_source = main.read_text()
+    main.write_text(good_source.replace("scene: probe_room", "scene: probe_room\nscene: duplicate"))
+    import_project()
+    assert not asset.exists(), "Duplicate scene header retained usable metadata"
+    main.write_text(good_source)
+    extra.write_text("title: DuplicateScene\nscene: probe_room\n---\nDuplicate #line:scene_duplicate\n===\n")
+    import_project()
+    assert not asset.exists(), "Duplicate scene entry retained usable metadata"
+    extra.unlink()
+    main.write_text(good_source.replace("<<mark focus", "<<__majo_node_entry>>\n<<mark focus"))
+    import_project()
+    assert not asset.exists(), "Authored reserved prelude retained usable metadata"
+    main.write_text(good_source)
+    import_project()
+    assert asset.exists()
+    print("PASS: scene entry validation and authored source mapping", flush=True)
 
     manifest.unlink()
     import_project()

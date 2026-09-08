@@ -4,7 +4,8 @@
 
 [resource]
 script = ExtResource("1_pbv1a")
+SchemaVersion = 2
 ManifestPath = "res://tests/headless/M8Presentation.yarnproject"
 SourceFingerprint = "5f1e103b2b0a5663071416d5ce388e9079099c9bf6e1d3b48b528d70478537eb"
-ProgramFingerprint = "ef61b7c9d11ff4e81a6fa990e6fbd3ed21f21f817a8a52b1ba58f82daf0da857"
-ModulesJson = "[{\"NodeId\":\"Start\",\"Version\":1,\"Symbols\":{\"Stages\":[],\"Views\":[],\"ShotAliases\":[],\"Marks\":[]},\"Resources\":[],\"SourceMaps\":[],\"Imports\":[],\"Marks\":[],\"Diagnostics\":[]}]"
+ProgramFingerprint = "f71b23fa55654a519acbfac95954ab31d4b786966e2bf65dc23609b5cb6f9353"
+ModulesJson = "[{\"NodeId\":\"Start\",\"SceneEntry\":null,\"Version\":1,\"Symbols\":{\"Stages\":[],\"Views\":[],\"ShotAliases\":[],\"Marks\":[]},\"Resources\":[],\"SourceMaps\":[],\"Imports\":[],\"Marks\":[],\"Diagnostics\":[]}]"

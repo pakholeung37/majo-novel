@@ -29,6 +29,7 @@ public partial class HeadlessTestRunner
         };
         using var data = new MajoDirectionData
         {
+            SchemaVersion = MajoDirectionData.CurrentSchemaVersion,
             ManifestPath = manifest,
             ProgramFingerprint = MajoDirectionData.HashProgram(project),
             ModulesJson = YarnProjectDirectionMetadata.Serialize(modules),

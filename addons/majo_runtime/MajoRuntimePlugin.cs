@@ -15,6 +15,7 @@ public partial class MajoRuntimePlugin : EditorPlugin
 
     public override void _EnterTree()
     {
+        MajoDirectionCompiler.InstallCompilationPipeline();
         filesystem = EditorInterface.Singleton.GetResourceFilesystem();
         filesystem.FilesystemChanged += QueueRebuild;
         filesystem.ResourcesReimported += OnResourcesReimported;
@@ -32,6 +33,7 @@ public partial class MajoRuntimePlugin : EditorPlugin
 
     public override void _ExitTree()
     {
+        YarnSpinnerGodot.YarnProjectEditorUtility.CompilationPipeline = null;
         filesystem.FilesystemChanged -= QueueRebuild;
         filesystem.ResourcesReimported -= OnResourcesReimported;
         RemoveExportPlugin(directionExport);

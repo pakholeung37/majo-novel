@@ -16,6 +16,7 @@ using Majo.Runtime.Dialogue.Presentation;
 using Majo.Runtime.Dialogue.Yarn;
 using Majo.Runtime.Dialogue.Yarn.Presentation;
 using Majo.Runtime.Direction.Camera;
+using Majo.Runtime.Direction.Actors;
 using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Direction.Transitions;
 using Majo.Runtime.Localization;
@@ -62,11 +63,14 @@ public partial class MajoRuntimeBootstrap : Node
     private readonly EasingRegistry easingRegistry = new();
     private readonly TransitionDriverRegistry transitionDrivers = new();
     private readonly CameraModifierRegistry cameraModifiers = new();
-    private readonly TransientCueHandlerRegistry transientCueHandlers = new();
+    public Action<ActorModifierRegistry>? ConfigureActorModifiers { get; set; }
+    private readonly ActorModifierRegistry actorModifiers = new();
+    private readonly TransientCueHandlerRegistry transientCueHandlers;
     private readonly PluginRegistrationContext pluginRegistration;
 
     public MajoRuntimeBootstrap()
     {
+        transientCueHandlers = new(actorModifiers: actorModifiers);
         BuiltInEasings.RegisterDefaults(easingRegistry);
         pluginRegistration = new PluginRegistrationContext(
             commandRegistry,
@@ -290,6 +294,8 @@ public partial class MajoRuntimeBootstrap : Node
         easingRegistry.Seal();
         transitionDrivers.Seal();
         cameraModifiers.Seal();
+        ConfigureActorModifiers?.Invoke(actorModifiers);
+        actorModifiers.Seal();
         transientCueHandlers.Seal();
         pluginManager.SealRegistration();
     }

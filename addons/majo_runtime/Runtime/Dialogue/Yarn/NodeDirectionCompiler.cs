@@ -54,6 +54,9 @@ public sealed record DirectionSymbolTable(
     IReadOnlySet<string> ShotAliases,
     IReadOnlySet<string> Marks);
 
+public sealed record SceneEntryMetadata(
+    string SceneId, string File, int Line, int Column);
+
 public sealed record NodeDirectionModule(
     string NodeId,
     long Version,
@@ -76,13 +79,15 @@ public sealed record NodeDirectionModule(
     {
     }
 
+    public SceneEntryMetadata? SceneEntry { get; init; }
+
     public DirectionPreloadManifest PreloadManifest => new(Resources);
 }
 
 public sealed class NodeDirectionCompiler
 {
     private static readonly HashSet<string> DirectionCommands = new(
-        new[] { "stage", "view", "backdrop", "character", "leave", "camera", "shot",
+        new[] { "stage", "view", "backdrop", "character", "object", "camera", "shot",
             "layout", "import", "mark", "curtain", "beat" },
         StringComparer.OrdinalIgnoreCase);
     private static readonly Regex NodeHeader = new(
@@ -107,6 +112,19 @@ public sealed class NodeDirectionCompiler
         foreach (var file in snapshot.Files)
             CompileFile(file, version, modules);
 
+        var entries = new HashSet<string>(StringComparer.Ordinal);
+        for (var index = 0; index < modules.Count; index++)
+        {
+            var module = modules[index];
+            if (module.SceneEntry is { } entry && !entries.Add(entry.SceneId))
+                modules[index] = module with
+                {
+                    Diagnostics = module.Diagnostics.Append(new YarnCompilationDiagnostic(
+                        "error", "MAJO_SCENE", entry.File, entry.Line, entry.Column,
+                        entry.Line, entry.Column + entry.SceneId.Length,
+                        $"Scene '{entry.SceneId}' already has an entry node in this project.")).ToArray(),
+                };
+        }
         return modules;
     }
 
@@ -116,13 +134,26 @@ public sealed class NodeDirectionCompiler
         List<NodeDirectionModule> modules)
     {
         string? node = null;
+        var inBody = false;
+        SceneEntryMetadata? scene = null;
+        var sceneHeaderSeen = false;
+        var headerDiagnostics = new List<YarnCompilationDiagnostic>();
         var commands = new List<ParsedCommand>();
         var maps = new List<DirectionSourceMap>();
 
         void Flush()
         {
             if (node is null) return;
-            modules.Add(CompileNode(node, version, commands, maps));
+            var module = CompileNode(node, version, commands, maps);
+            modules.Add(module with
+            {
+                SceneEntry = scene,
+                Diagnostics = module.Diagnostics.Concat(headerDiagnostics).ToArray(),
+            });
+            scene = null;
+            sceneHeaderSeen = false;
+            inBody = false;
+            headerDiagnostics.Clear();
             commands.Clear();
             maps.Clear();
         }
@@ -131,7 +162,13 @@ public sealed class NodeDirectionCompiler
         for (var index = 0; index < lines.Length; index++)
         {
             var line = lines[index];
-            var header = NodeHeader.Match(line);
+            if (inBody && line.Trim() == "===")
+            {
+                Flush();
+                node = null;
+                continue;
+            }
+            var header = NodeHeader.Match(inBody ? string.Empty : line);
             if (header.Success)
             {
                 Flush();
@@ -139,9 +176,30 @@ public sealed class NodeDirectionCompiler
                 continue;
             }
             if (node is null) continue;
+            if (!inBody)
+            {
+                if (line.Trim() == "---") inBody = true;
+                else if (line.TrimStart().StartsWith("scene:", StringComparison.OrdinalIgnoreCase))
+                {
+                    var value = line[(line.IndexOf(':') + 1)..].Trim();
+                    if (sceneHeaderSeen || string.IsNullOrWhiteSpace(value))
+                        headerDiagnostics.Add(new YarnCompilationDiagnostic(
+                            "error", "MAJO_SCENE", file.LogicalPath, index + 1, 1,
+                            index + 1, line.Length + 1,
+                            sceneHeaderSeen ? "A node may declare scene only once." : "Scene id must not be empty."));
+                    else scene = new SceneEntryMetadata(value, file.LogicalPath, index + 1, 1);
+                    sceneHeaderSeen = true;
+                }
+                continue;
+            }
             foreach (Match match in Command.Matches(line))
             {
                 var raw = match.Groups["command"].Value.Trim();
+                if (raw.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() == YarnNodeEntryTransform.CommandName)
+                    headerDiagnostics.Add(new YarnCompilationDiagnostic(
+                        "error", "MAJO_RESERVED_COMMAND", file.LogicalPath, index + 1, match.Index + 1,
+                        index + 1, match.Index + match.Length + 1,
+                        $"'{YarnNodeEntryTransform.CommandName}' is reserved for the node-entry compiler."));
                 var tokens = raw.Split(' ', StringSplitOptions.RemoveEmptyEntries);
                 if (tokens.Length == 0 || !DirectionCommands.Contains(tokens[0])) continue;
                 var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -231,7 +289,7 @@ public sealed class NodeDirectionCompiler
                     aliases.Add(alias);
                 }
             }
-            else if (command.Is("backdrop"))
+            else if (command.Is("backdrop") && !command.Is("backdrop", "fx"))
             {
                 var resource = command.Positional(1);
                 if (!string.IsNullOrWhiteSpace(resource))
@@ -244,7 +302,13 @@ public sealed class NodeDirectionCompiler
                         command.Column));
                 }
             }
-            else if (command.Is("character"))
+            else if (command.Is("object") && command.Options.TryGetValue("asset", out var asset))
+            {
+                resources.Add(new TypedDirectionResourceReference(DirectionResourceKind.ObjectDefinition,
+                    Unquote(asset), command.File, command.Line, command.Column));
+            }
+            else if (command.Is("character") && !command.Is("character", "move") &&
+                !command.Is("character", "hide") && !command.Is("character", "fx"))
             {
                 if (command.Options.TryGetValue("appearance", out var appearance) &&
                     command.Tokens.Length > 1 &&

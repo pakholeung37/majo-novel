@@ -60,6 +60,20 @@ public sealed class ResourceRetentionScope : IDisposable
         }
     }
 
+    public void RetainOnly(IReadOnlySet<object> resourcesInUse)
+    {
+        lock (gate)
+        {
+            if (disposed) return;
+            foreach (var pair in System.Linq.Enumerable.ToArray(leases))
+                if (pair.Value.Completion.IsCompleted && pair.Value.Resource is { } resource && !resourcesInUse.Contains(resource))
+                {
+                    leases.Remove(pair.Key);
+                    pair.Value.Release();
+                }
+        }
+    }
+
     public void Dispose()
     {
         lock (gate)

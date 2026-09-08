@@ -24,6 +24,7 @@ public sealed class DirectionRuntimeTests
     public void DirectionCommandModuleRegistersOnlyTheFinalDslSurface()
     {
         var services = new ServiceResolverBuilder()
+            .Add<IDirectionTransactionCoordinator>(new DirectionTransactionCoordinator(new DirectionPlanner(), new FakeDirectionBackend { AutoSettle = true }))
             .Add<IDirectionBeatRuntime>(new DirectionBeatRuntime(CreateCoordinator(
                 new FakeDirectionBackend { AutoSettle = true })))
             .Add<IDirectionScopeResolver>(new DirectionScopeResolver())
@@ -44,13 +45,18 @@ public sealed class DirectionRuntimeTests
                 "stage define",
                 "stage show",
                 "stage clear",
-                "stage release",
                 "backdrop",
                 "character",
-                "leave",
+                "character hide",
+                "object",
+                "character move",
+                "object move",
+                "object hide",
+                "character fx",
+                "object fx",
+                "backdrop fx",
                 "view define",
-                "view release",
-                "camera pose",
+                "camera",
                 "camera move",
                 "camera reset",
                 "camera fx",
@@ -359,7 +365,7 @@ public sealed class DirectionRuntimeTests
         var first = new DirectionSourceLocation("Opening", 4, 0);
         var second = new DirectionSourceLocation("Opening", 5, 0);
 
-        var exception = Assert.Throws<DirectionBeatException>(() => planner.Plan(
+        var exception = Assert.Throws<DirectionConflictException>(() => planner.Plan(
             DirectionState.CreateDefault(),
             new IDirectionDirective[]
             {
@@ -376,39 +382,15 @@ public sealed class DirectionRuntimeTests
     }
 
     [Fact]
-    public void PlannerPreservesCutPoseAsStartOfFollowingMove()
+    public void PlannerRejectsCutAndMoveInOnePoseSlot()
     {
-        var cutPose = new ViewPose(new DirectionPoint(37.384f, 74.816f), 3, 10);
-        var movePose = new ViewPose(new DirectionPoint(44.438f, 71.950f), 3, 10);
-        var plan = new DirectionPlanner().Plan(
-            DirectionState.CreateDefault(),
-            new IDirectionDirective[]
+        var error = Assert.Throws<DirectionConflictException>(() => new DirectionPlanner().Plan(
+            DirectionState.CreateDefault(), new IDirectionDirective[]
             {
-                View(
-                    ViewId.Main,
-                    center: cutPose.Center,
-                    zoom: cutPose.Zoom,
-                    rotation: cutPose.RotationDegrees),
-                new ViewPosePatch(
-                    ViewId.Main,
-                    DirectionValue.From(movePose.Center),
-                    default,
-                    default,
-                    new DirectionTransitionSpec(
-                        DirectionTransitionId.Move,
-                        0.4,
-                        EasingId.SineOut)),
-            });
-
-        var rebuilt = new DirectionExecutionPlan(plan.DomainPlan,
-            Array.Empty<DirectionResourceClaim>(), DirectionCompletionBarrier.Commit);
-        var intent = Assert.Single(plan.DomainPlan.ViewPoseIntents);
-        Assert.Equal(cutPose, intent.StartState.Pose);
-        Assert.Equal(plan.ViewSequences, rebuilt.ViewSequences);
-        var sequence = Assert.Single(plan.ViewSequences!);
-        Assert.Equal(cutPose, sequence.StartState.Pose);
-        Assert.Equal(DirectionTransitionId.Move, sequence.Transition.Kind);
-        Assert.Equal(movePose, plan.TargetState.Views[ViewId.Main].Pose);
+                View(ViewId.Main, center: new DirectionPoint(30, 50)),
+                View(ViewId.Main, zoom: 2, transition: new DirectionTransitionSpec(DirectionTransitionId.Move, .4)),
+            }));
+        Assert.Equal("view/main/pose", error.StablePath);
     }
 
     [Fact]

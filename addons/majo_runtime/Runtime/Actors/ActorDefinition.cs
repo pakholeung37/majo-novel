@@ -14,6 +14,8 @@ public class ActorDefinition
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
         ArgumentException.ThrowIfNullOrWhiteSpace(factoryId);
+        if (id is "move" or "fx" or "hide")
+            throw new ActorDefinitionException(id, "This instance id is reserved by Direction child commands.");
         Id = id;
         FactoryId = factoryId;
         FactoryData = factoryData;
@@ -142,6 +144,9 @@ public sealed class TextureActorDefinitionData
 
     public string ResourcePathPrefix { get; }
 
+    public string? ResourceId { get; init; }
+    public global::Godot.Vector2 Anchor { get; init; } = new(0.5f, 0.5f);
+
     public CharacterPositionPreset InitialPosition { get; }
 
     public IReadOnlyDictionary<string, string> Appearances { get; }
@@ -156,7 +161,7 @@ public sealed class TextureActorDefinitionData
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(actorId);
         ArgumentException.ThrowIfNullOrWhiteSpace(appearance);
-        return ResourceKey.Combine(ResourcePathPrefix, actorId, appearance);
+        return ResourceKey.Combine(ResourcePathPrefix, ResourceId ?? actorId, appearance);
     }
 
     public string? GetAppearanceOverride(string appearance)

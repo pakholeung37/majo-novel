@@ -167,6 +167,10 @@ public sealed record ActorPatch(
     DirectionTransitionSpec Transition,
     DirectionSourceLocation? SourceLocation = null) : IDurableDirectionPatch
 {
+    public DirectionActorKind Kind { get; init; } = DirectionActorKind.Character;
+    public string? DefinitionId { get; init; }
+    public DirectionValue<float> RotationDegrees { get; init; }
+
     public static ActorPatch Place(
         StageId stageId,
         ActorId actorId,
@@ -182,7 +186,24 @@ public sealed record ActorPatch(
             sourceLocation);
 }
 
-public sealed record ActorLeavePatch(
+public sealed record ActorMovePatch(
+    StageId StageId,
+    ActorId ActorId,
+    DirectionActorKind Kind,
+    DirectionValue<DirectionPoint> Position,
+    DirectionValue<float> Scale,
+    DirectionValue<float> RotationDegrees,
+    DirectionTransitionSpec Transition,
+    DirectionSourceLocation? SourceLocation = null) : IDurableDirectionPatch;
+
+public sealed record ActorHidePatch(
+    StageId StageId,
+    ActorId ActorId,
+    DirectionActorKind Kind,
+    DirectionTransitionSpec Transition,
+    DirectionSourceLocation? SourceLocation = null) : IDurableDirectionPatch;
+
+public sealed record ActorRemovePatch(
     StageId StageId,
     ActorId ActorId,
     DirectionTransitionSpec Transition,

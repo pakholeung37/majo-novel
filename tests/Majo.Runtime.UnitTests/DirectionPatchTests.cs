@@ -64,8 +64,7 @@ public sealed class DirectionPatchTests
                 new StageCreatePatch(cell, new ViewId(cell.Value), DirectionTransitionSpec.Cut),
                 new ViewCreatePatch(reaction, cell, DirectionTransitionSpec.Cut),
                 View(reaction, zoom: 1.8f),
-                Actor(ema, cell, position: new DirectionPoint(70, 0)),
-                Actor(ema, cell, appearance: "Fearful1,ArmR1"),
+                Actor(ema, cell, position: new DirectionPoint(70, 0), appearance: "Fearful1,ArmR1"),
                 new BackdropPatch(
                     cell,
                     new BackdropState(new ResourceKey("Background_025_001")),
@@ -111,7 +110,7 @@ public sealed class DirectionPatchTests
                 View(ViewId.Main, zoom: 2, location: second),
             }));
 
-        Assert.Equal("view/main/zoom", exception.StablePath);
+        Assert.Equal("view/main/pose", exception.StablePath);
         Assert.Equal(first, exception.First);
         Assert.Equal(second, exception.Second);
         Assert.Contains("Trial:12#1", exception.Message);

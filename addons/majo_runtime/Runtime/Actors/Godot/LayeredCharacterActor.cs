@@ -14,7 +14,7 @@ using Majo.Runtime.Operations.Godot;
 
 namespace Majo.Runtime.Actors.Godot;
 
-public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IDisposable
+public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IActorTransformTarget, IActorAppearanceTarget, IActorVisibilityTarget, IDisposable
 {
     private const string GroupOpacityParameter = "group_opacity";
     private const ulong LayerBuildBudgetMicroseconds = 2_000;
@@ -93,6 +93,13 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IDisposa
         (float)layerComposite.GetInstanceShaderParameter(GroupOpacityParameter);
 
     public Vector2 Scale => View.Scale;
+    public Vector2 ScenePosition => positions.GetScenePercent(Position);
+    public float RotationDegrees => View.RotationDegrees;
+    public void SetRotationDegrees(float rotation)
+    {
+        if (!float.IsFinite(rotation)) throw new ArgumentOutOfRangeException(nameof(rotation));
+        View.RotationDegrees = rotation;
+    }
 
     public CharacterPositionPreset PositionPreset { get; private set; }
 
@@ -156,6 +163,25 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IDisposa
                 Appearance = canonicalAppearance;
             });
         return StartSequencedOperation(AppearanceProperty, operation, animation.ConflictPolicy);
+    }
+
+    public Task<IPreparedActorAppearance> PrepareAppearanceTransitionAsync(string appearance,
+        AnimationSpec animation, ITransitionDriver driver, CancellationToken cancellationToken = default)
+    {
+        var sourceLayers = new HashSet<string>(targetLayers, StringComparer.Ordinal);
+        var nextLayers = new HashSet<string>(targetLayers, StringComparer.Ordinal);
+        resolver.Apply(nextLayers, appearance);
+        var canonical = resolver.Canonicalize(nextLayers);
+        return GodotActorAppearanceTransition.PrepareForCommitAsync(View,
+            CreateComposite(sourceLayers), CreateComposite(nextLayers), canvasBounds,
+            visible => { if (IsAlive) layerComposite.Visible = visible; },
+            overlay =>
+            {
+                activeOverlay = overlay;
+                if (overlay is not null) overlay.Modulate = new Color(1, 1, 1, Opacity);
+            },
+            () => { targetLayers.Clear(); targetLayers.UnionWith(nextLayers); TargetAppearance = canonical; },
+            () => SetAppearance(canonical), driver, animation, cancellationToken);
     }
 
     private CanvasGroup CreateComposite(HashSet<string> layers)

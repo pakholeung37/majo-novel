@@ -17,11 +17,11 @@ public sealed record DirectionAnimationDefaults(
     double DefaultCharacterAnimationDurationSeconds,
     DirectionTransitionId DefaultCharacterAnimationKind,
     DirectionTransitionId DefaultCharacterAppearanceAnimationKind = default,
-    DirectionTransitionId DefaultLeaveAnimationKind = default,
+    DirectionTransitionId DefaultActorHideAnimationKind = default,
     DirectionTransitionId DefaultStageShowAnimationKind = default,
     DirectionTransitionId DefaultStageClearAnimationKind = default,
     DirectionTransitionId DefaultBackdropAnimationKind = default,
-    DirectionTransitionId DefaultCameraPoseAnimationKind = default,
+    DirectionTransitionId DefaultCameraAnimationKind = default,
     DirectionTransitionId DefaultCameraResetAnimationKind = default,
     DirectionTransitionId DefaultShotAnimationKind = default,
     DirectionTransitionId DefaultLayoutAnimationKind = default,
@@ -44,11 +44,11 @@ public sealed record DirectionAnimationDefaults(
             animation.DefaultCharacterAnimationDurationSeconds,
             animation.ResolveCharacterAnimationId(),
             animation.ResolveCharacterAppearanceAnimationId(),
-            animation.ResolveLeaveAnimationId(),
+            animation.ResolveActorHideAnimationId(),
             animation.ResolveStageShowAnimationId(),
             animation.ResolveStageClearAnimationId(),
             animation.ResolveBackdropAnimationId(),
-            animation.ResolveCameraPoseAnimationId(),
+            animation.ResolveCameraAnimationId(),
             animation.ResolveCameraResetAnimationId(),
             animation.ResolveShotAnimationId(),
             animation.ResolveLayoutAnimationId(),
@@ -58,16 +58,18 @@ public sealed record DirectionAnimationDefaults(
 
     public DirectionTransitionId ResolveDefaultAnimationKind(string commandName) => commandName switch
     {
-        "leave" => DefaultLeaveAnimationKind.IsEmpty ? DirectionTransitionId.Fade : DefaultLeaveAnimationKind,
+        "character hide" => DefaultActorHideAnimationKind.IsEmpty ? DirectionTransitionId.Fade : DefaultActorHideAnimationKind,
         "stage show" => DefaultStageShowAnimationKind.IsEmpty ? DirectionTransitionId.Cut : DefaultStageShowAnimationKind,
         "stage clear" => DefaultStageClearAnimationKind.IsEmpty ? DirectionTransitionId.Fade : DefaultStageClearAnimationKind,
         "backdrop" => DefaultBackdropAnimationKind.IsEmpty ? DirectionTransitionId.Cut : DefaultBackdropAnimationKind,
-        "camera pose" => DefaultCameraPoseAnimationKind.IsEmpty ? DirectionTransitionId.Cut : DefaultCameraPoseAnimationKind,
+        "camera" => DefaultCameraAnimationKind.IsEmpty ? DirectionTransitionId.Cut : DefaultCameraAnimationKind,
         "camera reset" => DefaultCameraResetAnimationKind.IsEmpty ? DirectionTransitionId.Cut : DefaultCameraResetAnimationKind,
         "shot use" => DefaultShotAnimationKind.IsEmpty ? DirectionTransitionId.Cut : DefaultShotAnimationKind,
         "layout" => DefaultLayoutAnimationKind.IsEmpty ? DirectionTransitionId.Cut : DefaultLayoutAnimationKind,
-        "character appearance" => DefaultCharacterAppearanceAnimationKind.IsEmpty ? DirectionTransitionId.Dissolve : DefaultCharacterAppearanceAnimationKind,
-        "character" => DefaultCharacterAnimationKind.IsEmpty ? DirectionTransitionId.Fade : DefaultCharacterAnimationKind,
+        "character space" or "object space" => DirectionTransitionId.Cut,
+        "object hide" => DefaultActorHideAnimationKind.IsEmpty ? DirectionTransitionId.Fade : DefaultActorHideAnimationKind,
+        "character appearance" or "object appearance" => DefaultCharacterAppearanceAnimationKind.IsEmpty ? DirectionTransitionId.Dissolve : DefaultCharacterAppearanceAnimationKind,
+        "character" or "object" => DefaultCharacterAnimationKind.IsEmpty ? DirectionTransitionId.Fade : DefaultCharacterAnimationKind,
         _ => DefaultCharacterAnimationKind.IsEmpty ? DirectionTransitionId.Fade : DefaultCharacterAnimationKind,
     };
 }
@@ -85,7 +87,7 @@ public interface IDirectionCommandPolicy : IRuntimeService
         DirectionTransitionId kind,
         CommandExecutionContext context);
 
-    DirectionTransitionSpec ResolveCameraPoseTransition(
+    DirectionTransitionSpec ResolveCameraTransition(
         string commandName,
         TimingArguments input,
         DirectionTransitionId? via,
@@ -128,11 +130,11 @@ public sealed class DirectionCommandPolicy : IDirectionCommandPolicy
         {
             ValidateDefaultTransition(defaults.DefaultCharacterAnimationKind, "character", TransitionDomains.Actor);
             ValidateDefaultTransition(defaults.DefaultCharacterAppearanceAnimationKind, "character appearance", TransitionDomains.Actor);
-            ValidateDefaultTransition(defaults.DefaultLeaveAnimationKind, "leave", TransitionDomains.Actor);
+            ValidateDefaultTransition(defaults.DefaultActorHideAnimationKind, "character hide", TransitionDomains.Actor);
             ValidateDefaultTransition(defaults.DefaultStageShowAnimationKind, "stage show", TransitionDomains.Stage);
             ValidateDefaultTransition(defaults.DefaultStageClearAnimationKind, "stage clear", TransitionDomains.Stage);
             ValidateDefaultTransition(defaults.DefaultBackdropAnimationKind, "backdrop", TransitionDomains.Stage);
-            ValidateDefaultTransition(defaults.DefaultCameraPoseAnimationKind, "camera pose", TransitionDomains.View);
+            ValidateDefaultTransition(defaults.DefaultCameraAnimationKind, "camera", TransitionDomains.View);
             ValidateDefaultTransition(defaults.DefaultCameraResetAnimationKind, "camera reset", TransitionDomains.View);
             ValidateDefaultTransition(defaults.DefaultShotAnimationKind, "shot use", TransitionDomains.View);
             ValidateDefaultTransition(defaults.DefaultLayoutAnimationKind, "layout", TransitionDomains.Screen);
@@ -145,8 +147,9 @@ public sealed class DirectionCommandPolicy : IDirectionCommandPolicy
 
     private static TransitionDomains ResolveCommandDomain(string commandName) => commandName switch
     {
-        "character" or "character appearance" or "leave" => TransitionDomains.Actor,
-        "camera pose" or "camera reset" or "camera move" or "camera fx" or "shot use" => TransitionDomains.View,
+        "character" or "character appearance" or "character hide" or "character space" or
+        "object" or "object appearance" or "object hide" or "object space" => TransitionDomains.Actor,
+        "camera" or "camera reset" or "camera move" or "camera fx" or "shot use" => TransitionDomains.View,
         "curtain" or "layout" => TransitionDomains.Screen,
         _ => TransitionDomains.Stage,
     };
@@ -160,8 +163,8 @@ public sealed class DirectionCommandPolicy : IDirectionCommandPolicy
     private void ValidateDefaultTransition(DirectionTransitionId id, string commandName, TransitionDomains domain)
     {
         if (id.IsEmpty) return;
-        var supported = (domain is TransitionDomains.View or TransitionDomains.Actor or TransitionDomains.Screen && id == DirectionTransitionId.Move)
-            || transitions!.Supports(id, domain);
+        var supported = id != DirectionTransitionId.Move && transitions!.Supports(id, domain);
+        ValidateStateKind(commandName, id);
         if (!supported)
         {
             throw new DirectionException(
@@ -177,14 +180,16 @@ public sealed class DirectionCommandPolicy : IDirectionCommandPolicy
         ArgumentException.ThrowIfNullOrWhiteSpace(commandName);
         ArgumentNullException.ThrowIfNull(input);
 
+        ValidateWait(input.Wait);
         var domain = ResolveCommandDomain(commandName);
         var isCharacterCommand = domain == TransitionDomains.Actor;
         var kind = input.Via.WasProvided
             ? input.Via.Value
             : defaults.ResolveDefaultAnimationKind(commandName);
 
+        ValidateStateKind(commandName, kind);
         var isSupported = transitions is not null
-            ? ((domain is TransitionDomains.View or TransitionDomains.Actor or TransitionDomains.Screen && kind == DirectionTransitionId.Move) || transitions.Supports(kind, domain))
+            ? transitions.Supports(kind, domain)
             : IsBuiltInTransition(kind);
 
         if (!isSupported)
@@ -205,9 +210,7 @@ public sealed class DirectionCommandPolicy : IDirectionCommandPolicy
         }
         else if (isCharacterCommand)
         {
-            duration = defaults.DefaultCharacterAnimationDurationSeconds != 0
-                ? defaults.DefaultCharacterAnimationDurationSeconds
-                : openBeatDefaults?.DurationSeconds ?? 0;
+            duration = openBeatDefaults?.DurationSeconds ?? defaults.DefaultCharacterAnimationDurationSeconds;
         }
         else
         {
@@ -232,10 +235,12 @@ public sealed class DirectionCommandPolicy : IDirectionCommandPolicy
         ArgumentException.ThrowIfNullOrWhiteSpace(commandName);
         ArgumentNullException.ThrowIfNull(input);
 
+        ValidateWait(input.Wait);
         var openBeatDefaults = beats.OpenBeatDefaults;
         var duration = input.Duration.WasProvided
             ? input.Duration.Value
-            : openBeatDefaults?.DurationSeconds ?? defaults.DefaultAnimationDurationSeconds;
+            : openBeatDefaults?.DurationSeconds ?? (commandName is "character fx" or "object fx" or "backdrop fx"
+                ? .4 : defaults.DefaultAnimationDurationSeconds);
 
         var ease = (input.Ease.WasProvided && !input.Ease.Value.IsEmpty)
             ? input.Ease.Value
@@ -246,7 +251,7 @@ public sealed class DirectionCommandPolicy : IDirectionCommandPolicy
         return new DirectionTransitionSpec(kind, duration, ease).Validate();
     }
 
-    public DirectionTransitionSpec ResolveCameraPoseTransition(
+    public DirectionTransitionSpec ResolveCameraTransition(
         string commandName,
         TimingArguments input,
         DirectionTransitionId? via,
@@ -256,55 +261,26 @@ public sealed class DirectionCommandPolicy : IDirectionCommandPolicy
         ArgumentException.ThrowIfNullOrWhiteSpace(commandName);
         ArgumentNullException.ThrowIfNull(input);
 
-        // A pose command with an explicit duration but no `via` is the common
-        // camera-pan shorthand. The cut remains the default when no duration
-        // is supplied, while `via:cut` still requires duration:0.
-        DirectionTransitionId kind;
-        if (via.HasValue && !via.Value.IsEmpty)
-        {
-            kind = via.Value;
-        }
-        else if (input.Duration.WasProvided)
-        {
-            kind = DirectionTransitionId.Move;
-        }
-        else
-        {
-            kind = defaults.ResolveDefaultAnimationKind(reset ? "camera reset" : "camera pose");
-        }
+        return ResolveTransition(commandName, input.ToTransitionArguments(via ?? default), context);
+    }
 
-        var isSupported = transitions is not null
-            ? (kind == DirectionTransitionId.Move || transitions.Supports(kind, TransitionDomains.View))
-            : IsBuiltInTransition(kind);
+    private void ValidateWait(CommandValue<bool> wait)
+    {
+        if (beats.HasOpenBeat && wait.WasProvided && wait.Value)
+            throw new DirectionBeatException("Beat child commands cannot wait; use 'beat end wait:true' or 'beat join'.");
+    }
 
-        if (!isSupported)
+    private static void ValidateStateKind(string commandName, DirectionTransitionId kind)
+    {
+        var cut = kind == DirectionTransitionId.Cut;
+        var allowed = kind != DirectionTransitionId.Move && commandName switch
         {
-            throw new DirectionException(
-                $"Transition '{kind.ToString().ToLowerInvariant()}' is not supported by command '{commandName}' (domain 'View').");
-        }
-
-        var openBeatDefaults = beats.OpenBeatDefaults;
-        double duration;
-        if (input.Duration.WasProvided)
-        {
-            duration = input.Duration.Value;
-        }
-        else if (kind == DirectionTransitionId.Cut)
-        {
-            duration = 0;
-        }
-        else
-        {
-            duration = openBeatDefaults?.DurationSeconds ?? defaults.DefaultAnimationDurationSeconds;
-        }
-
-        var ease = (input.Ease.WasProvided && !input.Ease.Value.IsEmpty)
-            ? input.Ease.Value
-            : (openBeatDefaults?.Easing is { IsEmpty: false } beatEase)
-                ? beatEase
-                : defaults.DefaultEasing.IsEmpty ? EasingId.Linear : defaults.DefaultEasing;
-
-        return new DirectionTransitionSpec(kind, duration, ease).Validate();
+            "character" or "object" or "character hide" or "object hide" => cut || kind == DirectionTransitionId.Fade,
+            "character appearance" or "object appearance" or "camera" or "camera reset" or "shot use" or "backdrop" => cut || kind == DirectionTransitionId.Dissolve,
+            "character space" or "object space" => cut,
+            _ => true,
+        };
+        if (!allowed) throw new DirectionException($"Transition '{kind}' is not supported by '{commandName}'. Use a dedicated move command for motion.");
     }
 
     private sealed class NullDirectionBeatRuntime : IDirectionBeatRuntime

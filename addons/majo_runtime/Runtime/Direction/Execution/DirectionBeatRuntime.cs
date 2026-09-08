@@ -136,6 +136,8 @@ public sealed class DirectionBeatRuntime : IDirectionBeatRuntime, IDisposable
         {
             if (open is not null)
             {
+                if (completion == DirectionCompletionBarrier.Settle)
+                    throw new DirectionBeatException("Beat child commands cannot wait; use 'beat end wait:true'.");
                 open.Directives.Add(directive);
                 return null;
             }
@@ -240,7 +242,7 @@ public sealed class DirectionBeatRuntime : IDirectionBeatRuntime, IDisposable
         lock (sync)
         {
             invalid = open;
-            if (invalid is not null) open = null;
+
         }
         if (invalid is not null)
         {

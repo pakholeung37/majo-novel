@@ -12,9 +12,9 @@ namespace Majo.Runtime.Dialogue.Yarn;
 [Tool]
 public partial class MajoDirectionData : Resource
 {
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
 
-    [Export] public int SchemaVersion { get; set; } = CurrentSchemaVersion;
+    [Export] public int SchemaVersion { get; set; }
     [Export] public string ManifestPath { get; set; } = string.Empty;
     [Export] public string SourceFingerprint { get; set; } = string.Empty;
     [Export] public string ProgramFingerprint { get; set; } = string.Empty;

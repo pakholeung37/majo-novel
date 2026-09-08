@@ -1,6 +1,6 @@
 # Direction Command API 与场景生命周期重构实施方案
 
-状态：实施设计，尚未修改运行时代码。
+状态：已实施并通过最终验收；实际接口见 `direction-command-api.md`，测试记录见 `direction-command-api-refactor-progress.md`。
 
 日期：2026-09-08。
 

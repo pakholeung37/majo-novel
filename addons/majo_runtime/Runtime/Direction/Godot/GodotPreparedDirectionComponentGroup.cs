@@ -58,6 +58,11 @@ internal sealed class GodotPreparedDirectionComponentGroup : IPreparedDirectionC
         }
     }
 
+    public void ConfirmCommit()
+    {
+        foreach (var component in components) component.ConfirmCommit();
+    }
+
     public void Rollback(DirectionCommitToken token)
     {
         lock (sync)

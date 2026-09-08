@@ -17,8 +17,22 @@ namespace Majo.Runtime.Editor;
 /// <summary>Owns Direction compilation without modifying the Yarn importer or resource type.</summary>
 public static class MajoDirectionCompiler
 {
+    public static void InstallCompilationPipeline() =>
+        YarnProjectEditorUtility.CompilationPipeline = CompileProgram;
+
+    private static global::Yarn.Compiler.CompilationResult CompileProgram(global::Yarn.Compiler.CompilationJob job)
+    {
+        var transform = new YarnNodeEntryTransform();
+        job.Inputs = job.Inputs.Select(input => input is global::Yarn.Compiler.CompilationJob.File file
+            ? (global::Yarn.Compiler.ISourceInput)transform.Transform(file.FileName, file.Source) : input).ToArray();
+        var result = global::Yarn.Compiler.Compiler.Compile(job);
+        transform.RestoreSourceCoordinates(result);
+        return result;
+    }
+
     public static bool Compile(string manifestPath)
     {
+        InstallCompilationPipeline();
         var assetPath = MajoDirectionData.GetPath(manifestPath);
         try
         {
@@ -71,6 +85,7 @@ public static class MajoDirectionCompiler
 
             using var data = new MajoDirectionData
             {
+                SchemaVersion = MajoDirectionData.CurrentSchemaVersion,
                 ManifestPath = manifestPath,
                 SourceFingerprint = fingerprint,
                 ProgramFingerprint = programHash,

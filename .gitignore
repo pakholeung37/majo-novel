@@ -1,6 +1,7 @@
 /.godot/
 /android/
 *.ysls.json
+!Majo.Direction.ysls.json
 /tests/fixtures/clean_consumer/.godot/
 /tests/fixtures/clean_consumer/addons/
 /original/

@@ -2,6 +2,7 @@
 
 using System;
 using System.Threading.Tasks;
+using System.Collections.Generic;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
@@ -9,23 +10,25 @@ using Majo.Runtime.Direction.Execution;
 namespace Majo.Runtime.Dialogue.Commands;
 
 [Command("character", Category = "Direction")]
-[AtLeastOne(nameof(Arguments.Appearance), nameof(Arguments.At), nameof(Arguments.Scale), nameof(Arguments.Z))]
 public sealed partial class CharacterCommand : RuntimeCommand<CharacterCommand.Arguments>
 {
     private readonly IDirectionBeatRuntime beats;
     private readonly IDirectionScopeResolver scopes;
     private readonly IDialogueNodeAccessor nodeAccessor;
     private readonly IDirectionCommandPolicy policy;
+    private readonly IDirectionTransactionCoordinator? direction;
 
     public CharacterCommand(
         IDirectionBeatRuntime beats,
         IDirectionScopeResolver scopes,
         IDialogueNodeAccessor nodeAccessor,
-        IDirectionCommandPolicy policy)
+        IDirectionCommandPolicy policy,
+        IDirectionTransactionCoordinator? direction = null)
     {
         this.beats = beats ?? throw new ArgumentNullException(nameof(beats));
         this.scopes = scopes ?? throw new ArgumentNullException(nameof(scopes));
         this.nodeAccessor = nodeAccessor ?? throw new ArgumentNullException(nameof(nodeAccessor));
+        this.direction = direction;
         this.policy = policy ?? throw new ArgumentNullException(nameof(policy));
     }
 
@@ -33,9 +36,10 @@ public sealed partial class CharacterCommand : RuntimeCommand<CharacterCommand.A
     {
         var node = nodeAccessor.RequireNode();
         var stageId = scopes.ResolveStage(node, arguments.Stage.GetValueOrDefault("main"));
-        var commandName = arguments.Appearance.WasProvided
-            ? "character appearance"
-            : "character";
+        ActorState? existing = null;
+        direction?.State.Stages.GetValueOrDefault(stageId)?.Actors.TryGetValue(new ActorId(arguments.Actor), out existing);
+        var commandName = existing is null || !existing.Visible ? "character" :
+            arguments.Appearance.WasProvided ? "character appearance" : "character space";
         var transition = policy.ResolveTransition(commandName, arguments.Transition, context);
         var wait = arguments.Transition.Wait.GetValueOrDefault(false);
 
@@ -51,7 +55,8 @@ public sealed partial class CharacterCommand : RuntimeCommand<CharacterCommand.A
                 arguments.Appearance.WasProvided ? DirectionValue.From<string?>(arguments.Appearance.Value) : default,
                 arguments.Scale.WasProvided ? DirectionValue.From((float)arguments.Scale.Value) : default,
                 arguments.Z.WasProvided ? DirectionValue.From(arguments.Z.Value) : default,
-                transition),
+                transition)
+            { RotationDegrees = arguments.Rotation.WasProvided ? DirectionValue.From((float)arguments.Rotation.Value) : default },
             wait ? DirectionCompletionBarrier.Settle : DirectionCompletionBarrier.Commit,
             context.CancellationToken);
     }
@@ -63,18 +68,19 @@ public sealed partial class CharacterCommand : RuntimeCommand<CharacterCommand.A
         [Option] CommandValue<PositionRef> At,
         [Option(Minimum = 0.001)] CommandValue<double> Scale,
         [Option] CommandValue<int> Z,
-        [Group] TransitionArguments Transition);
+        [Group] TransitionArguments Transition,
+        [Option(ValueHint = "degrees")] CommandValue<double> Rotation);
 }
 
-[Command("leave", Category = "Direction")]
-public sealed partial class LeaveCommand : RuntimeCommand<LeaveCommand.Arguments>
+[Command("character hide", Category = "Direction")]
+public sealed partial class CharacterHideCommand : RuntimeCommand<CharacterHideCommand.Arguments>
 {
     private readonly IDirectionBeatRuntime beats;
     private readonly IDirectionScopeResolver scopes;
     private readonly IDialogueNodeAccessor nodeAccessor;
     private readonly IDirectionCommandPolicy policy;
 
-    public LeaveCommand(
+    public CharacterHideCommand(
         IDirectionBeatRuntime beats,
         IDirectionScopeResolver scopes,
         IDialogueNodeAccessor nodeAccessor,
@@ -90,13 +96,14 @@ public sealed partial class LeaveCommand : RuntimeCommand<LeaveCommand.Arguments
     {
         var node = nodeAccessor.RequireNode();
         var stageId = scopes.ResolveStage(node, arguments.Stage.GetValueOrDefault("main"));
-        var transition = policy.ResolveTransition("leave", arguments.Transition, context);
+        var transition = policy.ResolveTransition("character hide", arguments.Transition, context);
         var wait = arguments.Transition.Wait.GetValueOrDefault(false);
 
         await beats.SubmitAsync(
-            new ActorLeavePatch(
+            new ActorHidePatch(
                 stageId,
                 new ActorId(arguments.Actor),
+                DirectionActorKind.Character,
                 transition),
             wait ? DirectionCompletionBarrier.Settle : DirectionCompletionBarrier.Commit,
             context.CancellationToken);

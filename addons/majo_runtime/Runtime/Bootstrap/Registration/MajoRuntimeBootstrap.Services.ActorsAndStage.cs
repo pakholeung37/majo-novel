@@ -51,6 +51,8 @@ public partial class MajoRuntimeBootstrap : Node
             ActorConfigurationCompiler.Compile(actorConfiguration, Configuration.Resources!),
             new IActorFactory[]
             {
+                new SceneObjectActorFactory(host.CharacterLayer, scheduler, textureLoader, Configuration.Resources!,
+                    actorConfiguration.ReferenceResolution, easingRegistry, transitionDrivers),
                 new CharacterActorFactory(
                     host.CharacterLayer,
                     scheduler,

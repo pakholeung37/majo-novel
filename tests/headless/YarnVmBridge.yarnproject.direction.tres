@@ -4,7 +4,8 @@
 
 [resource]
 script = ExtResource("1_sd7u8")
+SchemaVersion = 2
 ManifestPath = "res://tests/headless/YarnVmBridge.yarnproject"
 SourceFingerprint = "c37b4916ec868335b031b924280a4ea22945a45e103b146d23564ebb86bbf7b5"
-ProgramFingerprint = "9a55cf91aa3f33b3390d7b93ef4b50408db4dafc491a607a69f65ad89cd1161c"
-ModulesJson = "[{\"NodeId\":\"Start\",\"Version\":1,\"Symbols\":{\"Stages\":[],\"Views\":[],\"ShotAliases\":[],\"Marks\":[]},\"Resources\":[],\"SourceMaps\":[],\"Imports\":[],\"Marks\":[],\"Diagnostics\":[]}]"
+ProgramFingerprint = "8da2ce50ba5a5e56119369e99356903ee24d4e79a6c57eac1ab2c80d88bdedf2"
+ModulesJson = "[{\"NodeId\":\"Start\",\"SceneEntry\":null,\"Version\":1,\"Symbols\":{\"Stages\":[],\"Views\":[],\"ShotAliases\":[],\"Marks\":[]},\"Resources\":[],\"SourceMaps\":[],\"Imports\":[],\"Marks\":[],\"Diagnostics\":[]}]"

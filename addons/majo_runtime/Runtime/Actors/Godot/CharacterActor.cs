@@ -2,6 +2,7 @@
 
 using System;
 using System.Threading.Tasks;
+using System.Threading;
 using Godot;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Transitions;
@@ -11,7 +12,7 @@ using Majo.Runtime.Timing;
 
 namespace Majo.Runtime.Actors.Godot;
 
-public sealed class CharacterActor : ActorBase, ICharacterActor
+public sealed class CharacterActor : ActorBase, ICharacterActor, IActorTransformTarget, IActorAppearanceTarget, IActorVisibilityTarget
 {
     private readonly CharacterPositionMap positions;
     private readonly ITransitionDriverRegistry transitions;
@@ -40,6 +41,13 @@ public sealed class CharacterActor : ActorBase, ICharacterActor
     public override Vector2 Position => View.Position;
 
     public Vector2 Scale => View.Scale;
+    public Vector2 ScenePosition => positions.GetScenePercent(Position);
+    public float RotationDegrees => View.RotationDegrees;
+    public void SetRotationDegrees(float rotation)
+    {
+        if (!float.IsFinite(rotation)) throw new ArgumentOutOfRangeException(nameof(rotation));
+        View.RotationDegrees = rotation;
+    }
 
     public CharacterPositionPreset PositionPreset { get; private set; }
 
@@ -93,6 +101,22 @@ public sealed class CharacterActor : ActorBase, ICharacterActor
                 Appearance = appearance;
             });
         return StartSequencedOperation(AppearanceProperty, operation, animation.ConflictPolicy);
+    }
+
+    public async Task<IPreparedActorAppearance> PrepareAppearanceTransitionAsync(string appearance,
+        AnimationSpec animation, ITransitionDriver driver, CancellationToken cancellationToken = default)
+    {
+        var sourceTexture = await TextureLoader.LoadAsync(Definition.GetAppearanceResourceKey(TargetAppearance),
+            Definition.GetAppearanceOverride(TargetAppearance), cancellationToken);
+        var texture = await TextureLoader.LoadAsync(Definition.GetAppearanceResourceKey(appearance),
+            Definition.GetAppearanceOverride(appearance), cancellationToken);
+        var source = CreateAppearanceSprite(sourceTexture);
+        var target = CreateAppearanceSprite(texture);
+        return await GodotActorAppearanceTransition.PrepareForCommitAsync(View, source, target,
+            source.GetRect().Merge(target.GetRect()),
+            visible => { if (IsAlive) View.Texture = visible ? sourceTexture : null; },
+            _ => { }, () => TargetAppearance = appearance, () => SetAppearance(appearance),
+            driver, animation, cancellationToken);
     }
 
     private Sprite2D CreateAppearanceSprite(Texture2D? texture) => new()

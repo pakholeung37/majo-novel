@@ -60,6 +60,12 @@ public partial class HeadlessTestRunner : Node
 
     private async Task RunSuiteAsync()
     {
+        if (OS.GetCmdlineUserArgs().Contains("--majo-direction-slots"))
+        {
+            await ValidateActorSlotsAsync();
+            return;
+        }
+
         if (OS.GetCmdlineUserArgs().Contains(ForcedFailureArgument, StringComparer.Ordinal))
         {
             throw new InvalidOperationException("Intentional headless failure probe.");
@@ -97,6 +103,8 @@ public partial class HeadlessTestRunner : Node
         await ValidateActorSystemAsync();
         await ValidateLayeredCharacterAsync();
         await ValidateWindowPreloadingAsync();
+        await ValidateActorSlotsAsync();
+        await ValidateSceneEntryBarrierAsync();
         await ValidateYarnCommandAdapterAsync();
         await ValidatePlayableDemoAsync();
         await ValidateFailedConfigurationCleanupAsync();

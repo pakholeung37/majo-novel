@@ -54,7 +54,9 @@ public sealed class DirectionScopeResolver : IDirectionScopeResolver
         this.defaultMarks = new Dictionary<string, DirectionPoint>(StringComparer.OrdinalIgnoreCase);
         foreach (var (name, point) in defaultMarks ?? new Dictionary<string, DirectionPoint>
         {
-            ["left"] = new(25, 50), ["center"] = new(50, 50), ["right"] = new(75, 50),
+            ["left"] = new(25, 50),
+            ["center"] = new(50, 50),
+            ["right"] = new(75, 50),
         })
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(name);
