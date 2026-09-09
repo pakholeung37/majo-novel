@@ -27,6 +27,14 @@ internal sealed partial class YarnDialoguePresenterAdapter : Node, DialoguePrese
     private int activePresentations;
     private TaskCompletionSource? localeBoundary;
     private readonly LineBoundaryGate boundaries = new();
+    private LineBoundaryGate.Lease? presentedBoundary;
+    private CancellationToken presentedNextLineToken;
+
+    public bool CanReviseBoundary(LineBoundaryContext context) =>
+        presentedBoundary is { } boundary &&
+        boundary.Generation == context.SessionGeneration &&
+        boundary.Sequence == context.OccurrenceSequence &&
+        !boundary.Token.IsCancellationRequested && !presentedNextLineToken.IsCancellationRequested;
 
     public YarnDialoguePresenterAdapter(
         IReadOnlyList<IDialoguePresenter> presenters,
@@ -62,6 +70,8 @@ internal sealed partial class YarnDialoguePresenterAdapter : Node, DialoguePrese
     { get; set; }
 
     internal void ReleaseBoundaryResources() => boundaries.Dispose();
+
+    public Task<IDisposable> AcquireRestoreAsync(CancellationToken token) => boundaries.AcquireRestoreAsync(token);
 
     public Task WaitForPreparationAsync(CancellationToken token) => boundaries.WaitForPreparationAsync(token);
 
@@ -125,12 +135,13 @@ internal sealed partial class YarnDialoguePresenterAdapter : Node, DialoguePrese
             return;
         }
 
-        using var boundary = boundaries.Enter();
+        LineBoundaryGate.Lease? boundary = null;
         var activated = false;
         try
         {
-            PreparationChanged?.Invoke(true);
             var converted = lineConverter(line);
+            boundary = boundaries.Enter(converted.Origin != DialoguePresentationOrigin.Normal);
+            PreparationChanged?.Invoke(true);
             if (PrepareLineAsync is not null) await PrepareLineAsync(converted, boundary.Token);
             boundary.Token.ThrowIfCancellationRequested();
             var substitutions = Array.AsReadOnly(line.Substitutions.ToArray());
@@ -140,6 +151,8 @@ internal sealed partial class YarnDialoguePresenterAdapter : Node, DialoguePrese
                     converted, substitutions, boundary.Generation, boundary.Sequence, boundary.Token);
             }
             boundary.Token.ThrowIfCancellationRequested();
+            presentedBoundary = boundary;
+            presentedNextLineToken = token.NextLineToken;
             linePresented(converted, substitutions);
             var context = new DialoguePresentationContext(
                 requestHurryUp,
@@ -165,7 +178,7 @@ internal sealed partial class YarnDialoguePresenterAdapter : Node, DialoguePrese
             await nativePresentation;
         }
         catch (OperationCanceledException) when (
-            boundary.Token.IsCancellationRequested || token.NextLineToken.IsCancellationRequested)
+            boundary?.Token.IsCancellationRequested == true || token.NextLineToken.IsCancellationRequested)
         {
         }
         catch (Exception failure) when (!activated)
@@ -178,6 +191,8 @@ internal sealed partial class YarnDialoguePresenterAdapter : Node, DialoguePrese
         }
         finally
         {
+            if (ReferenceEquals(presentedBoundary, boundary)) presentedBoundary = null;
+            boundary?.Dispose();
             if (!activated) PreparationChanged?.Invoke(false);
             ExitPresentation();
         }

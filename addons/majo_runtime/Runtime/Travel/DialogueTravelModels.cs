@@ -13,7 +13,9 @@ public sealed record DialogueTravelEntry(
     StateSnapshot Snapshot,
     string? Speaker,
     string Text,
-    DateTimeOffset CapturedAt);
+    DateTimeOffset CapturedAt,
+    long OccurrenceSequence = 0,
+    long SessionGeneration = 0);
 
 public sealed record DialogueTravelTimelineChanged(
     IReadOnlyList<DialogueTravelEntry> Entries,

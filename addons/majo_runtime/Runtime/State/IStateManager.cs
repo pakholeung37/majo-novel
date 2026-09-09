@@ -100,10 +100,12 @@ public interface IStateManager : IRuntimeService
 
 public sealed record CommittedLineBoundary(
     Majo.Runtime.Script.LineBoundaryContext Context,
-    StateSnapshot Snapshot);
+    StateSnapshot Snapshot,
+    long MutationRevision = 0);
 
 public interface IStateBoundarySource
 {
     event Action<CommittedLineBoundary>? BoundaryCommitted;
     CommittedLineBoundary? CurrentBoundary { get; }
+    Task<CommittedLineBoundary> CaptureSaveBoundaryAsync(CancellationToken cancellationToken = default);
 }

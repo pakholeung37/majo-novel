@@ -7,8 +7,16 @@ using System.Threading.Tasks;
 
 namespace Majo.Runtime.Dialogue.Presentation;
 
+public enum DialogueMarkupReplayPolicy
+{
+    Visual = 0,
+    RunOnce = 1,
+}
+
 public interface IDialogueMarkupHandler
 {
+    DialogueMarkupReplayPolicy ReplayPolicy { get; }
+
     void OnLinePrepared(DialogueText text)
     {
     }
@@ -40,6 +48,9 @@ public sealed class DialogueMarkupHandlerRegistry
     public DialogueMarkupHandlerRegistry Register(IDialogueMarkupHandler handler)
     {
         ArgumentNullException.ThrowIfNull(handler);
+        if (!Enum.IsDefined(handler.ReplayPolicy))
+            throw new DialogueException(
+                $"Dialogue markup handler '{handler.GetType().FullName}' has an invalid replay policy.");
         if (handlers.Contains(handler))
         {
             throw new DialogueException(

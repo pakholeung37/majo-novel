@@ -248,7 +248,7 @@ public sealed class SettingsManager : ScopedStatePersistence, ISettingsManager
         return result;
     }
 
-    private sealed class RuntimeSettingsStateContributor : IStateContributor
+    private sealed class RuntimeSettingsStateContributor : IImmediateStateContributor
     {
         private SettingsManager? manager;
 

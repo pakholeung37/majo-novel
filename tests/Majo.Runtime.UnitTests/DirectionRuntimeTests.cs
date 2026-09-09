@@ -101,7 +101,7 @@ public sealed class DirectionRuntimeTests
         Assert.Contains(new StageId("broadcast"), coordinator.State.Stages.Keys);
 
         await contributor.PreflightAsync(initial, default);
-        await contributor.RestoreAsync(initial, default);
+        await contributor.CommitPreparedAsync(initial, default);
 
         Assert.DoesNotContain(new StageId("broadcast"), coordinator.State.Stages.Keys);
         Assert.True(coordinator.State.Revision > 0);
@@ -138,7 +138,7 @@ public sealed class DirectionRuntimeTests
         var snapshot = await contributor.CaptureAsync(default);
 
         await coordinator.ResetAsync(default);
-        await contributor.RestoreAsync(snapshot, default);
+        await contributor.CommitPreparedAsync(snapshot, default);
         Assert.Equal(
             new ResourceKey("Still_490_001"),
             coordinator.State.Stages[illustration].Backdrop?.Resource);

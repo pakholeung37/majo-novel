@@ -12,6 +12,7 @@ public sealed class LineBoundaryGate : IDisposable
     private readonly object sync = new();
     private CancellationTokenSource session = new();
     private bool preparing;
+    private bool restoring;
     private bool pendingAdvance;
     private bool pendingHurryUp;
     private long generation;
@@ -42,6 +43,44 @@ public sealed class LineBoundaryGate : IDisposable
         previous.Dispose();
     }
 
+    public async Task<IDisposable> AcquireRestoreAsync(CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        CancellationTokenSource current;
+        Task pending;
+        lock (sync)
+        {
+            if (restoring) throw new InvalidOperationException("Playback already belongs to another restore.");
+            restoring = true;
+            pendingAdvance = pendingHurryUp = false;
+            current = session;
+            pending = preparation?.Task ?? Task.CompletedTask;
+        }
+        try
+        {
+            current.Cancel();
+            // Drain the cancelled owner before taking State's transaction gate.
+            await pending;
+            return new RestoreLease(this);
+        }
+        catch
+        {
+            lock (sync) restoring = false;
+            throw;
+        }
+    }
+
+    private sealed class RestoreLease(LineBoundaryGate owner) : IDisposable
+    {
+        private bool disposed;
+        public void Dispose()
+        {
+            if (disposed) return;
+            disposed = true;
+            lock (owner.sync) owner.restoring = false;
+        }
+    }
+
     public void Stop()
     {
         CancellationTokenSource current;
@@ -53,11 +92,13 @@ public sealed class LineBoundaryGate : IDisposable
         current.Cancel();
     }
 
-    public Lease Enter()
+    public Lease Enter(bool restoreReplay = false)
     {
         lock (sync)
         {
             session.Token.ThrowIfCancellationRequested();
+            if (restoring && !restoreReplay)
+                throw new InvalidOperationException("Normal playback cannot enter a line during state replacement.");
             if (preparing) throw new InvalidOperationException("A line boundary is already preparing.");
             preparing = true;
             preparation = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -70,6 +111,7 @@ public sealed class LineBoundaryGate : IDisposable
     {
         lock (sync)
         {
+            if (restoring) return true;
             if (!preparing) return false;
             if (hurryUp) pendingHurryUp = true;
             else pendingAdvance = true;

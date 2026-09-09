@@ -32,3 +32,8 @@ public interface IHistoryManager : IRuntimeService
         long sequence,
         CancellationToken cancellationToken = default);
 }
+
+public interface IHistoryRestoreSink
+{
+    void CommitLoadedLine(Majo.Runtime.Dialogue.DialogueLine line);
+}

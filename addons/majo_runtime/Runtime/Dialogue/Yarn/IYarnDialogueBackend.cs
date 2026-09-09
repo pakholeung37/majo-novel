@@ -19,6 +19,8 @@ public interface IYarnDialogueBackend : IDialogueBackend,
 
     IDialogueVariableStore VariableStore { get; }
 
+    DialogueLine? CurrentLine { get; }
+
     void RegisterNativePresenter(Node presenter);
 
     void UnregisterNativePresenter(Node presenter);

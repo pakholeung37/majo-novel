@@ -9,10 +9,11 @@ using Majo.Runtime.Operations;
 using Majo.Runtime.Operations.Godot;
 using Majo.Runtime.Timing;
 using Majo.Runtime.Direction.Transitions;
+using Majo.Runtime.State;
 
 namespace Majo.Runtime.Actors.Godot;
 
-public abstract class ActorBase : IActor, IGodotActorView
+public abstract class ActorBase : IActor, IGodotActorView, IStateMutationParticipant
 {
     private const string PositionProperty = "position";
     protected const string OpacityProperty = "opacity";
@@ -23,6 +24,15 @@ public abstract class ActorBase : IActor, IGodotActorView
     private readonly IEasingRegistry easings;
     private bool isDestroyed;
     private int visualPreparations;
+    private StateMutationGate? mutationGate;
+
+    public void BindStateMutationGate(StateMutationGate gate)
+    {
+        ArgumentNullException.ThrowIfNull(gate);
+        if (mutationGate is not null && !ReferenceEquals(mutationGate, gate))
+            throw new StateCompatibilityException($"Actor '{Id}' is already bound to another runtime's state mutation gate.");
+        mutationGate = gate;
+    }
 
     public IDisposable RetainVisualPreparation()
     {
@@ -147,15 +157,18 @@ public abstract class ActorBase : IActor, IGodotActorView
 
     public virtual void SetAppearance(string appearance)
     {
-        EnsureAlive();
-        var texture = TextureLoader.Load(
-            Definition.GetAppearanceResourceKey(appearance),
-            Definition.GetAppearanceOverride(appearance));
-        InvalidateAppearance();
-        CancelProperty(AppearanceProperty);
-        ApplyTexture(texture);
-        Appearance = appearance;
-        TargetAppearance = appearance;
+        PersistentWrite(() =>
+        {
+            EnsureAlive();
+            var texture = TextureLoader.Load(
+                Definition.GetAppearanceResourceKey(appearance),
+                Definition.GetAppearanceOverride(appearance));
+            InvalidateAppearance();
+            CancelProperty(AppearanceProperty);
+            ApplyTexture(texture);
+            Appearance = appearance;
+            TargetAppearance = appearance;
+        });
     }
 
     public virtual async Task PrepareAppearanceAsync(
@@ -172,26 +185,35 @@ public abstract class ActorBase : IActor, IGodotActorView
 
     public virtual void SetVisible(bool visible)
     {
-        EnsureAlive();
-        CancelProperty(OpacityProperty);
-        View.Visible = visible;
-        TargetVisible = visible;
+        PersistentWrite(() =>
+        {
+            EnsureAlive();
+            CancelProperty(OpacityProperty);
+            View.Visible = visible;
+            TargetVisible = visible;
+        });
     }
 
     public void SetPosition(Vector2 position)
     {
-        EnsureAlive();
-        ValidatePosition(position);
-        CancelProperty(PositionProperty);
-        ApplyPosition(position);
-        TargetPosition = position;
+        PersistentWrite(() =>
+        {
+            EnsureAlive();
+            ValidatePosition(position);
+            CancelProperty(PositionProperty);
+            ApplyPosition(position);
+            TargetPosition = position;
+        });
     }
 
     public void SetTint(Color tint)
     {
-        EnsureAlive();
-        var current = View.Modulate;
-        View.Modulate = new Color(tint.R, tint.G, tint.B, current.A);
+        PersistentWrite(() =>
+        {
+            EnsureAlive();
+            var current = View.Modulate;
+            View.Modulate = new Color(tint.R, tint.G, tint.B, current.A);
+        });
     }
 
     protected virtual void ApplyOpacity(float opacity)
@@ -202,18 +224,24 @@ public abstract class ActorBase : IActor, IGodotActorView
 
     public virtual void SetOpacity(float opacity)
     {
-        EnsureAlive();
-        ValidateOpacity(opacity);
-        CancelProperty(OpacityProperty);
-        ApplyOpacity(opacity);
-        TargetOpacity = opacity;
+        PersistentWrite(() =>
+        {
+            EnsureAlive();
+            ValidateOpacity(opacity);
+            CancelProperty(OpacityProperty);
+            ApplyOpacity(opacity);
+            TargetOpacity = opacity;
+        });
     }
 
     public void SetZIndex(int zIndex)
     {
-        EnsureAlive();
-        ActorZIndexRange.Validate(zIndex);
-        View.ZIndex = zIndex;
+        PersistentWrite(() =>
+        {
+            EnsureAlive();
+            ActorZIndexRange.Validate(zIndex);
+            View.ZIndex = zIndex;
+        });
     }
 
     public IOperationHandle ChangePosition(
@@ -226,22 +254,25 @@ public abstract class ActorBase : IActor, IGodotActorView
         Vector2 position,
         AnimationSpec animation)
     {
-        EnsureAlive();
-        ValidatePosition(position);
-        TargetPosition = position;
-        var startPos = Position;
-        var resolvedEasing = easings.GetRequired(animation.Easing);
-        var operation = GodotTweenOperation.CreateProgressOperation(
-            View,
-            animation.Timing,
-            resolvedEasing,
-            applyProgress: e => ApplyPosition(startPos.Lerp(position, e)),
-            finish: () => ApplyPosition(position),
-            cancel: () => { });
-        return StartSequencedOperation(
-            PositionProperty, new OperationDefinition(
-                async context => { startPos = Position; await operation.ExecuteAsync(context); },
-                operation.FinishAsync, operation.CancelAsync), animation.ConflictPolicy);
+        return PersistentWrite(() =>
+        {
+            EnsureAlive();
+            ValidatePosition(position);
+            TargetPosition = position;
+            var startPos = Position;
+            var resolvedEasing = easings.GetRequired(animation.Easing);
+            var operation = GodotTweenOperation.CreateProgressOperation(
+                View,
+                animation.Timing,
+                resolvedEasing,
+                applyProgress: e => ApplyPosition(startPos.Lerp(position, e)),
+                finish: () => ApplyPosition(position),
+                cancel: () => { });
+            return StartSequencedOperation(
+                PositionProperty, new OperationDefinition(
+                    async context => { startPos = Position; await operation.ExecuteAsync(context); },
+                    operation.FinishAsync, operation.CancelAsync), animation.ConflictPolicy);
+        });
     }
 
     public virtual IOperationHandle ChangeOpacity(
@@ -254,50 +285,56 @@ public abstract class ActorBase : IActor, IGodotActorView
         float opacity,
         AnimationSpec animation)
     {
-        EnsureAlive();
-        ValidateOpacity(opacity);
-        TargetOpacity = opacity;
-        var startOpacity = Opacity;
-        var resolvedEasing = easings.GetRequired(animation.Easing);
+        return PersistentWrite(() =>
+        {
+            EnsureAlive();
+            ValidateOpacity(opacity);
+            TargetOpacity = opacity;
+            var startOpacity = Opacity;
+            var resolvedEasing = easings.GetRequired(animation.Easing);
 
-        var operation = GodotTweenOperation.CreateProgressOperation(
-            View,
-            animation.Timing,
-            resolvedEasing,
-            applyProgress: e =>
-            {
-                var clamped = Math.Clamp(e, 0.0f, 1.0f);
-                ApplyOpacity(Mathf.Lerp(startOpacity, opacity, clamped));
-            },
-            finish: () => ApplyOpacity(opacity),
-            cancel: () => { });
-        return StartSequencedOperation(
-            OpacityProperty, new OperationDefinition(
-                async context => { startOpacity = Opacity; await operation.ExecuteAsync(context); },
-                operation.FinishAsync, operation.CancelAsync), animation.ConflictPolicy);
+            var operation = GodotTweenOperation.CreateProgressOperation(
+                View,
+                animation.Timing,
+                resolvedEasing,
+                applyProgress: e =>
+                {
+                    var clamped = Math.Clamp(e, 0.0f, 1.0f);
+                    ApplyOpacity(Mathf.Lerp(startOpacity, opacity, clamped));
+                },
+                finish: () => ApplyOpacity(opacity),
+                cancel: () => { });
+            return StartSequencedOperation(
+                OpacityProperty, new OperationDefinition(
+                    async context => { startOpacity = Opacity; await operation.ExecuteAsync(context); },
+                    operation.FinishAsync, operation.CancelAsync), animation.ConflictPolicy);
+        });
     }
 
 
     public virtual void Destroy()
     {
-        if (isDestroyed)
+        PersistentWrite(() =>
         {
-            return;
-        }
+            if (isDestroyed) return;
 
-        isDestroyed = true;
-        InvalidateAppearance();
-        foreach (var operation in propertyOperations.Values)
-        {
-            operation.Cancel();
-        }
+            isDestroyed = true;
+            InvalidateAppearance();
+            foreach (var operation in propertyOperations.Values) operation.Cancel();
 
-        propertyOperations.Clear();
-        if (GodotObject.IsInstanceValid(View))
-        {
-            View.QueueFree();
-        }
+            propertyOperations.Clear();
+            if (GodotObject.IsInstanceValid(View)) View.QueueFree();
+        });
     }
+
+    protected void PersistentWrite(Action mutation)
+    {
+        if (mutationGate is null) mutation();
+        else mutationGate.Write(mutation);
+    }
+
+    protected T PersistentWrite<T>(Func<T> mutation) =>
+        mutationGate is null ? mutation() : mutationGate.Write(mutation);
 
     protected abstract void ApplyTexture(Texture2D texture);
 

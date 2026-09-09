@@ -30,7 +30,7 @@ public sealed class SplitLayoutTests
         var contributor = new DirectionStateContributor(direction);
         var saved = await contributor.CaptureAsync(default);
         await direction.ResetAsync(default);
-        await contributor.RestoreAsync(saved, default);
+        await contributor.CommitPreparedAsync(saved, default);
         Assert.Equal(expected, direction.State.Screen.Split);
         var show = TestCatalogBuilder.CreateBound(new ScreenShowCommand(beats, scopes,
             new DelegateDialogueNodeAccessor(() => "Court"), new DirectionCommandPolicy(beats)));

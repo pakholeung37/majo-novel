@@ -79,14 +79,17 @@ internal abstract class AudioChannelBase
         backendPlayer.Volume = initialVolume;
         var playback = new AudioPlayback(
             Category, clipId, instanceId, looping, baseVolume, backendPlayer);
-        backendPlayer.Play();
-        logger.Debug(
-            "audio",
-            $"audio.{Category.ToString().ToLowerInvariant()}_started",
-            $"{Category} playback '{clipId}' started as '{instanceId}'.");
+        StartPreparedPlayback(playback);
+        return playback;
+    }
+
+    protected void StartPreparedPlayback(AudioPlayback playback)
+    {
+        playback.Backend.Play();
+        logger.Debug("audio", $"audio.{Category.ToString().ToLowerInvariant()}_started",
+            $"{Category} playback '{playback.ClipId}' started as '{playback.InstanceId}'.");
         onPlaybackStarted(playback);
         _ = ObservePlaybackAsync(playback);
-        return playback;
     }
 
     protected void StopPlayback(AudioPlayback playback)

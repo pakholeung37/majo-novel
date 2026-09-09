@@ -22,9 +22,13 @@ public interface IStateContributor
 
     ValueTask PreflightAsync(StateRecord record, CancellationToken cancellationToken);
 
-    ValueTask RestoreAsync(StateRecord record, CancellationToken cancellationToken);
-
     ValueTask ResetAsync(CancellationToken cancellationToken);
+}
+
+/// <summary>Immediate restore is only for non-Game persistence.</summary>
+public interface IImmediateStateContributor : IStateContributor
+{
+    ValueTask RestoreAsync(StateRecord record, CancellationToken cancellationToken);
 }
 
 public interface IStateContributorActivity

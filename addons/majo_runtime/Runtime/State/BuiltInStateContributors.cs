@@ -24,7 +24,7 @@ public static class BuiltInStateKeys
     public const string Direction = "majo.direction";
 }
 
-public sealed class SessionHistoryStateContributor : IStateContributor
+public sealed class SessionHistoryStateContributor : IImmediateStateContributor
 {
     private readonly IHistoryManager history;
 
@@ -72,8 +72,13 @@ public sealed class SessionHistoryStateContributor : IStateContributor
     }
 }
 
-public sealed class DialogueVariablesStateContributor : IStateContributor
+public sealed class DialogueVariablesStateContributor : IPreparedStateContributor, IStateMutationParticipant
 {
+    public void BindStateMutationGate(StateMutationGate gate)
+    {
+        if (variables is IStateMutationParticipant participant) participant.BindStateMutationGate(gate);
+        else throw new StateCompatibilityException("Dialogue variables do not implement the persistent write gate contract.");
+    }
     private readonly IDialogueVariables variables;
 
     public DialogueVariablesStateContributor(IDialogueVariables variables)
@@ -107,15 +112,17 @@ public sealed class DialogueVariablesStateContributor : IStateContributor
         return ValueTask.CompletedTask;
     }
 
-    public ValueTask RestoreAsync(StateRecord record, CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        variables.ReplaceAll(Decode(record));
-        return ValueTask.CompletedTask;
-    }
-
     public async ValueTask ResetAsync(CancellationToken cancellationToken) =>
         await variables.ResetAsync(cancellationToken);
+
+    public ValueTask<IPreparedStateRestore> PrepareRestoreAsync(
+        StateRecord? record, RestoreContext context, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var target = Decode(record ?? context.Require(Key));
+        return ValueTask.FromResult<IPreparedStateRestore>(
+            new PreparedStateRestore(() => variables.ReplaceAll(target)));
+    }
 
     private StateRecord CreateRecord(VariablesPayload payload) =>
         new(Key, Scope, SchemaVersion, StateJson.Serialize(payload));
@@ -166,13 +173,19 @@ public sealed class DialogueVariablesStateContributor : IStateContributor
     }
 }
 
-public sealed class ActorStateContributor : IStateContributor
+public sealed class ActorStateContributor : IPreparedStateContributor, IStateMutationParticipant
 {
     private readonly IActorManager actors;
 
     public ActorStateContributor(IActorManager actors)
     {
         this.actors = actors ?? throw new ArgumentNullException(nameof(actors));
+    }
+
+    public void BindStateMutationGate(StateMutationGate gate)
+    {
+        if (actors is IStateMutationParticipant participant) participant.BindStateMutationGate(gate);
+        else throw new StateCompatibilityException("Actor manager does not implement the persistent write gate contract.");
     }
 
     public string Key => BuiltInStateKeys.Actors;
@@ -218,34 +231,40 @@ public sealed class ActorStateContributor : IStateContributor
         return ValueTask.CompletedTask;
     }
 
-    public async ValueTask RestoreAsync(StateRecord record, CancellationToken cancellationToken)
+    public async ValueTask<IPreparedStateRestore> PrepareRestoreAsync(
+        StateRecord? record, RestoreContext context, CancellationToken cancellationToken)
     {
-        foreach (var entry in Decode(record))
+        var entries = Decode(record ?? context.Require(Key));
+        if (actors is not IActorReplacementSource replacement)
+            throw new StateCompatibilityException("Actor backend does not support prepared replacement.");
+        var prepared = await replacement.PrepareReplacementAsync(entries.Select(entry =>
+            new ActorSpawnRequest(entry.Id, entry.FactoryId, entry.Appearance,
+                requiredFactoryId: entry.FactoryId, creationMode: ActorCreationMode.Dormant)).ToArray(), cancellationToken);
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var actor = await actors.GetOrCreateAsync(
-                new ActorSpawnRequest(
-                    entry.Id,
-                    entry.FactoryId,
-                    entry.Appearance,
-                    requiredFactoryId: entry.FactoryId),
-                cancellationToken);
-            if (actor is IBackgroundActor background)
+            for (var index = 0; index < entries.Length; index++)
             {
-                background.SetSlot(entry.Slot ?? BackgroundSlotIds.Main);
+                var entry = entries[index];
+                var actor = prepared.Actors[index];
+                await actor.PrepareAppearanceAsync(entry.Appearance, cancellationToken);
+                if (actor is IBackgroundActor background) background.SetSlot(entry.Slot ?? BackgroundSlotIds.Main);
+                actor.SetAppearance(entry.Appearance);
+                actor.SetPosition(new Vector2(entry.PositionX, entry.PositionY));
+                if (actor is ICharacterActor character && entry.ScaleX is { } x && entry.ScaleY is { } y)
+                    character.SetScale(new Vector2(x, y));
+                actor.SetTint(new Color(entry.TintR, entry.TintG, entry.TintB));
+                actor.SetOpacity(entry.Opacity);
+                actor.SetZIndex(entry.ZIndex);
+                actor.SetVisible(false);
             }
-            actor.SetAppearance(entry.Appearance);
-            actor.SetPosition(new Vector2(entry.PositionX, entry.PositionY));
-            if (actor is ICharacterActor character &&
-                entry.ScaleX is { } scaleX && entry.ScaleY is { } scaleY)
+            return new PreparedStateRestore(() =>
             {
-                character.SetScale(new Vector2(scaleX, scaleY));
-            }
-            actor.SetTint(new Color(entry.TintR, entry.TintG, entry.TintB));
-            actor.SetOpacity(entry.Opacity);
-            actor.SetZIndex(entry.ZIndex);
-            actor.SetVisible(entry.Visible);
+                prepared.Commit();
+                for (var index = 0; index < entries.Length; index++)
+                    prepared.Actors[index].SetVisible(entries[index].Visible);
+            }, prepared.DisposeAsync);
         }
+        catch { await prepared.DisposeAsync(); throw; }
     }
 
     public async ValueTask ResetAsync(CancellationToken cancellationToken) =>
@@ -321,13 +340,19 @@ public sealed class ActorStateContributor : IStateContributor
         int ZIndex);
 }
 
-public sealed class AudioStateContributor : IStateContributor
+public sealed class AudioStateContributor : IPreparedStateContributor, IStateMutationParticipant
 {
     private readonly IAudioManager audio;
 
     public AudioStateContributor(IAudioManager audio)
     {
         this.audio = audio ?? throw new ArgumentNullException(nameof(audio));
+    }
+
+    public void BindStateMutationGate(StateMutationGate gate)
+    {
+        if (audio is IStateMutationParticipant participant) participant.BindStateMutationGate(gate);
+        else throw new StateCompatibilityException("Audio manager does not implement the persistent write gate contract.");
     }
 
     public string Key => BuiltInStateKeys.AudioBgm;
@@ -342,14 +367,10 @@ public sealed class AudioStateContributor : IStateContributor
     public ValueTask<StateRecord> CaptureAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var tracks = audio.BgmTracks
-            .Where(track => track.State == AudioPlaybackState.Playing)
-            .OrderBy(track => track.InstanceId, StringComparer.Ordinal)
-            .Select(track => new BgmEntry(
-                track.ClipId,
-                track.InstanceId,
-                track.IsLooping,
-                track.BaseVolume))
+        if (audio is not IAudioReplacementSource source)
+            throw new StateCompatibilityException("Audio backend cannot freeze committed BGM state.");
+        var tracks = source.CaptureCommittedBgm()
+            .Select(track => new BgmEntry(track.ClipId, track.TrackId, track.Loop, track.Volume))
             .ToArray();
         return ValueTask.FromResult(new StateRecord(
             Key,
@@ -365,18 +386,15 @@ public sealed class AudioStateContributor : IStateContributor
         return ValueTask.CompletedTask;
     }
 
-    public async ValueTask RestoreAsync(StateRecord record, CancellationToken cancellationToken)
+    public async ValueTask<IPreparedStateRestore> PrepareRestoreAsync(
+        StateRecord? record, RestoreContext context, CancellationToken cancellationToken)
     {
-        foreach (var track in Decode(record))
-        {
-            var result = await audio.PlayBgmAsync(
-                track.ClipId,
-                track.TrackId,
-                looping: track.Loop,
-                volume: track.Volume,
-                cancellationToken: cancellationToken);
-            await result.Settlement.WaitAsync(cancellationToken);
-        }
+        var entries = Decode(record ?? context.Require(Key));
+        if (audio is not IAudioReplacementSource replacement)
+            throw new StateCompatibilityException("Audio backend does not support prepared replacement.");
+        var prepared = await replacement.PrepareReplacementAsync(entries.Select(track =>
+            new BgmRestoreTarget(track.ClipId, track.TrackId, track.Loop, track.Volume)).ToArray(), cancellationToken);
+        return new PreparedStateRestore(prepared.Commit, prepared.DisposeAsync);
     }
 
     public async ValueTask ResetAsync(CancellationToken cancellationToken) =>
@@ -412,7 +430,7 @@ public sealed class AudioStateContributor : IStateContributor
     private sealed record BgmEntry(string ClipId, string TrackId, bool Loop, float Volume);
 }
 
-public sealed class ScriptStateContributor : IStateContributor
+public sealed class ScriptStateContributor : IPreparedStateContributor, ILineBoundaryOwnedStateContributor
 {
     private static readonly string[] RequiredContributors =
     [
@@ -465,8 +483,26 @@ public sealed class ScriptStateContributor : IStateContributor
     public async ValueTask PreflightAsync(StateRecord record, CancellationToken cancellationToken) =>
         await playback.ValidateCheckpointAsync(Decode(record), cancellationToken);
 
-    public async ValueTask RestoreAsync(StateRecord record, CancellationToken cancellationToken) =>
-        await playback.RestoreCheckpointAsync(Decode(record), cancellationToken);
+    public async ValueTask<IPreparedStateRestore> PrepareRestoreAsync(
+        StateRecord? record, RestoreContext context, CancellationToken cancellationToken)
+    {
+        var checkpoint = Decode(record ?? context.Require(Key));
+        if (playback is not IScriptCheckpointRestorePreparation preparer)
+            throw new StateCompatibilityException("Script backend does not support prepared checkpoint activation.");
+        var origin = context.Operation == StateOperationKind.HotReload
+            ? DialoguePresentationOrigin.HotReloadReplay
+            : DialoguePresentationOrigin.CheckpointRestore;
+        return new PreparedScriptState(await preparer.PrepareCheckpointRestoreAsync(
+            checkpoint, cancellationToken, origin));
+    }
+
+    private sealed class PreparedScriptState(IPreparedScriptCheckpoint checkpoint)
+        : IPreparedStateRestore, IStateRestoreActivation
+    {
+        public void Commit() => checkpoint.Commit();
+        public Task ActivateAsync(CancellationToken cancellationToken) => checkpoint.ActivateAsync(cancellationToken);
+        public ValueTask DisposeAsync() => checkpoint.DisposeAsync();
+    }
 
     public ValueTask ResetAsync(CancellationToken cancellationToken)
     {

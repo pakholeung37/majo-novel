@@ -7,6 +7,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Majo.Runtime.Core;
+using Majo.Runtime.State;
 
 namespace Majo.Runtime.Dialogue;
 
@@ -106,8 +107,23 @@ public interface IDialogueVariables : IRuntimeService
     void ReplaceAll(IReadOnlyDictionary<string, DialogueValue> values);
 }
 
-public sealed class DialogueVariables : IDialogueVariables
+public sealed class DialogueVariables : IDialogueVariables, IStateMutationParticipant
 {
+    private StateMutationGate? mutationGate;
+    public void BindStateMutationGate(StateMutationGate gate)
+    {
+        ArgumentNullException.ThrowIfNull(gate);
+        if (mutationGate is not null && !ReferenceEquals(mutationGate, gate))
+            throw new StateRuntimeException("Variables already belong to another runtime's state gate.");
+        if (store is IStateMutationParticipant participant) participant.BindStateMutationGate(gate);
+        mutationGate = gate;
+    }
+
+    private void Write(Action mutation)
+    {
+        if (mutationGate is null) mutation();
+        else mutationGate.Write(mutation);
+    }
     private readonly IDialogueVariableStore store;
     private bool isInitialized;
 
@@ -133,7 +149,7 @@ public sealed class DialogueVariables : IDialogueVariables
     public Task ResetAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        store.Clear();
+        Write(store.Clear);
         return Task.CompletedTask;
     }
 
@@ -143,7 +159,7 @@ public sealed class DialogueVariables : IDialogueVariables
         if (isInitialized)
         {
             store.Changed -= HandleChanged;
-            store.Clear();
+            Write(store.Clear);
             isInitialized = false;
         }
 
@@ -168,7 +184,7 @@ public sealed class DialogueVariables : IDialogueVariables
     }
 
     public void SetValue(string name, DialogueValue value) =>
-        store.SetValue(NormalizeName(name), value);
+        Write(() => store.SetValue(NormalizeName(name), value));
 
     public void SetNumber(string name, double value) =>
         SetValue(name, DialogueValue.FromNumber(value));
@@ -195,7 +211,7 @@ public sealed class DialogueVariables : IDialogueVariables
             pair => NormalizeName(pair.Key),
             pair => pair.Value,
             StringComparer.Ordinal);
-        store.ReplaceAll(normalized);
+        Write(() => store.ReplaceAll(normalized));
     }
 
     public static string NormalizeName(string name)

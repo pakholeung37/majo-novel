@@ -265,7 +265,10 @@ public abstract class ScopedStatePersistence : IRuntimeService, IDisposable
         {
             if (records.TryGetValue(contributor.Key, out var record))
             {
-                await contributor.RestoreAsync(record, cancellationToken);
+                if (contributor is not IImmediateStateContributor immediate)
+                    throw new StateCompatibilityException(
+                        $"Non-Game contributor '{contributor.Key}' does not implement immediate restore.");
+                await immediate.RestoreAsync(record, cancellationToken);
             }
         }
     }

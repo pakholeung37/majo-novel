@@ -97,8 +97,11 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IActorTr
     public float RotationDegrees => View.RotationDegrees;
     public void SetRotationDegrees(float rotation)
     {
-        if (!float.IsFinite(rotation)) throw new ArgumentOutOfRangeException(nameof(rotation));
-        View.RotationDegrees = rotation;
+        PersistentWrite(() =>
+        {
+            if (!float.IsFinite(rotation)) throw new ArgumentOutOfRangeException(nameof(rotation));
+            View.RotationDegrees = rotation;
+        });
     }
 
     public CharacterPositionPreset PositionPreset { get; private set; }
@@ -108,8 +111,11 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IActorTr
 
     public void SetPosition(CharacterPositionPreset preset)
     {
-        PositionPreset = preset;
-        SetPosition(positions.Get(preset));
+        PersistentWrite(() =>
+        {
+            PositionPreset = preset;
+            SetPosition(positions.Get(preset));
+        });
     }
 
     protected override void ApplyOpacity(float opacity)
@@ -123,8 +129,11 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IActorTr
 
     public void SetScale(Vector2 scale)
     {
-        ValidateScale(scale);
-        View.Scale = scale;
+        PersistentWrite(() =>
+        {
+            ValidateScale(scale);
+            View.Scale = scale;
+        });
     }
 
     public IOperationHandle ChangeAppearance(
@@ -137,16 +146,18 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IActorTr
 
     public IOperationHandle ChangeAppearance(string appearance, AnimationSpec animation, ITransitionDriver driver)
     {
-        EnsureAlive();
-        ArgumentException.ThrowIfNullOrWhiteSpace(appearance);
-        var easing = Easings.GetRequired(animation.Easing);
-        var nextLayers = new HashSet<string>(targetLayers, StringComparer.Ordinal);
-        resolver.Apply(nextLayers, appearance);
-        var canonicalAppearance = resolver.Canonicalize(nextLayers);
-        var epoch = AppearanceEpoch;
-        targetLayers.Clear(); targetLayers.UnionWith(nextLayers);
-        TargetAppearance = canonicalAppearance;
-        var operation = GodotActorAppearanceTransition.CreateOperation(View, animation, easing,
+        return PersistentWrite(() =>
+        {
+            EnsureAlive();
+            ArgumentException.ThrowIfNullOrWhiteSpace(appearance);
+            var easing = Easings.GetRequired(animation.Easing);
+            var nextLayers = new HashSet<string>(targetLayers, StringComparer.Ordinal);
+            resolver.Apply(nextLayers, appearance);
+            var canonicalAppearance = resolver.Canonicalize(nextLayers);
+            var epoch = AppearanceEpoch;
+            targetLayers.Clear(); targetLayers.UnionWith(nextLayers);
+            TargetAppearance = canonicalAppearance;
+            var operation = GodotActorAppearanceTransition.CreateOperation(View, animation, easing,
             token => GodotActorAppearanceTransition.PrepareAsync(View,
                 CreateComposite(activeLayers), CreateComposite(nextLayers), canvasBounds, Opacity,
                 visible => { if (IsAlive) layerComposite.Visible = visible; },
@@ -162,7 +173,8 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IActorTr
                 ApplyLayerVisibility(activeLayers);
                 Appearance = canonicalAppearance;
             });
-        return StartSequencedOperation(AppearanceProperty, operation, animation.ConflictPolicy);
+            return StartSequencedOperation(AppearanceProperty, operation, animation.ConflictPolicy);
+        });
     }
 
     public Task<IPreparedActorAppearance> PrepareAppearanceTransitionAsync(string appearance,
@@ -198,16 +210,19 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IActorTr
 
     public override void SetAppearance(string appearance)
     {
-        EnsureAlive();
-        InvalidateAppearance();
-        CancelPropertyAnimation(AppearanceProperty);
-        resolver.Apply(activeLayers, appearance);
-        targetLayers.Clear();
-        targetLayers.UnionWith(activeLayers);
-        ApplyLayerVisibility(activeLayers);
-        ResetLayerOpacities();
-        Appearance = resolver.Canonicalize(activeLayers);
-        TargetAppearance = Appearance;
+        PersistentWrite(() =>
+        {
+            EnsureAlive();
+            InvalidateAppearance();
+            CancelPropertyAnimation(AppearanceProperty);
+            resolver.Apply(activeLayers, appearance);
+            targetLayers.Clear();
+            targetLayers.UnionWith(activeLayers);
+            ApplyLayerVisibility(activeLayers);
+            ResetLayerOpacities();
+            Appearance = resolver.Canonicalize(activeLayers);
+            TargetAppearance = Appearance;
+        });
     }
 
     public override Task PrepareAppearanceAsync(
@@ -230,8 +245,11 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IActorTr
         CharacterPositionPreset preset,
         AnimationSpec animation)
     {
-        PositionPreset = preset;
-        return ChangePosition(positions.Get(preset), animation);
+        return PersistentWrite(() =>
+        {
+            PositionPreset = preset;
+            return ChangePosition(positions.Get(preset), animation);
+        });
     }
 
     protected override void ApplyTexture(Texture2D texture)

@@ -4,12 +4,27 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using YarnSpinnerGodot;
+using Majo.Runtime.State;
 
 namespace Majo.Runtime.Dialogue.Yarn;
 
 public partial class YarnDialogueVariableStore : InMemoryVariableStorage,
-    IDialogueVariableStore
+    IDialogueVariableStore, IStateMutationParticipant
 {
+    private StateMutationGate? mutationGate;
+    public void BindStateMutationGate(StateMutationGate gate)
+    {
+        ArgumentNullException.ThrowIfNull(gate);
+        if (mutationGate is not null && !ReferenceEquals(mutationGate, gate))
+            throw new StateRuntimeException("Yarn variables already belong to another runtime's state gate.");
+        mutationGate = gate;
+    }
+    private void Write(Action mutation)
+    {
+        if (mutationGate is null) mutation();
+        else mutationGate.Write(mutation);
+    }
+    public override void Clear() => Write(base.Clear);
     public event Action<DialogueVariableChanged>? Changed;
 
     bool IDialogueVariableStore.Contains(string name)
@@ -141,36 +156,37 @@ public partial class YarnDialogueVariableStore : InMemoryVariableStorage,
         IReadOnlyDictionary<string, DialogueValue> values)
     {
         ArgumentNullException.ThrowIfNull(values);
-        Clear();
-        foreach (var pair in values)
+        Write(() =>
         {
-            ((IDialogueVariableStore)this).SetValue(pair.Key, pair.Value);
-        }
+            Clear();
+            foreach (var pair in values)
+                ((IDialogueVariableStore)this).SetValue(pair.Key, pair.Value);
+        });
     }
 
-    public override void SetValue(string variableName, float floatValue)
+    public override void SetValue(string variableName, float floatValue) => Write(() =>
     {
         base.SetValue(variableName, floatValue);
         Changed?.Invoke(new DialogueVariableChanged(
             FromYarnName(variableName),
             DialogueValue.FromNumber(floatValue)));
-    }
+    });
 
-    public override void SetValue(string variableName, string stringValue)
+    public override void SetValue(string variableName, string stringValue) => Write(() =>
     {
         base.SetValue(variableName, stringValue);
         Changed?.Invoke(new DialogueVariableChanged(
             FromYarnName(variableName),
             DialogueValue.FromString(stringValue)));
-    }
+    });
 
-    public override void SetValue(string variableName, bool boolValue)
+    public override void SetValue(string variableName, bool boolValue) => Write(() =>
     {
         base.SetValue(variableName, boolValue);
         Changed?.Invoke(new DialogueVariableChanged(
             FromYarnName(variableName),
             DialogueValue.FromBoolean(boolValue)));
-    }
+    });
 
     private static string ToYarnName(string name) => $"${DialogueVariables.NormalizeName(name)}";
 

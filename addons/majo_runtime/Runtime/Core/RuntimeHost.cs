@@ -11,11 +11,12 @@ using Majo.Runtime.Dialogue;
 using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Direction.Godot;
 using Majo.Runtime.Operations;
+using Majo.Runtime.Script;
 
 namespace Majo.Runtime.Core;
 
 public sealed class RuntimeHost : IRuntimeLifetime, IRuntimeSessionController,
-    IRuntimeRestoreBoundary, IAsyncDisposable
+    IRuntimeRestoreBoundary, IRuntimeRestoreOutput, IRuntimeHotReloadBoundary, IAsyncDisposable
 {
     private readonly RuntimeServiceGraph graph;
     private readonly IRuntimeLogger logger;
@@ -380,24 +381,52 @@ public sealed class RuntimeHost : IRuntimeLifetime, IRuntimeSessionController,
         TryCancel(runtimeCancellation, "runtime", exceptions);
     }
 
-    public async Task CancelForRestoreAsync(CancellationToken cancellationToken = default)
+    public IRetainedRestoreOutput? RetainRestoreOutput() =>
+        resolver.TryGet<GodotDirectionRenderHost>(out var renderer) && renderer is not null
+            ? renderer.RetainRestoreOutput() : null;
+
+    public Task CancelForRestoreAsync(CancellationToken cancellationToken = default) =>
+        CancelForStateReplacementAsync(false, cancellationToken);
+
+    public Task CancelForHotReloadAsync(CancellationToken cancellationToken) =>
+        CancelForStateReplacementAsync(true, cancellationToken);
+
+    private async Task CancelForStateReplacementAsync(
+        bool hotReload,
+        CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var failures = new List<Exception>();
 
-        if (resolver.TryGet<IDialoguePlayer>(out var dialogue) && dialogue is not null)
+        if (hotReload && resolver.TryGet<IScriptPlayback>(out var script) &&
+            script is ScriptPlayback { BoundarySource: IScriptCheckpointReplayBackend replay })
+        {
+            try { await replay.StopForReplayAsync(cancellationToken); }
+            catch (Exception exception) { failures.Add(exception); }
+        }
+        else if (resolver.TryGet<IDialoguePlayer>(out var dialogue) && dialogue is not null)
         {
             try { await dialogue.StopAsync(cancellationToken); }
             catch (Exception exception) { failures.Add(exception); }
         }
         if (resolver.TryGet<IDirectionTransactionCoordinator>(out var direction) && direction is not null)
         {
-            try { await direction.ResetAsync(cancellationToken); }
+            try
+            {
+                if (direction is not IDirectionStateReplacementSource replacement)
+                    throw new InvalidOperationException("Direction backend cannot stop execution while retaining output.");
+                await replacement.StopExecutionForRestoreAsync(cancellationToken);
+            }
             catch (Exception exception) { failures.Add(exception); }
         }
         if (resolver.TryGet<IAudioManager>(out var audio) && audio is not null)
         {
-            try { await audio.ResetAsync(cancellationToken); }
+            try
+            {
+                if (audio is not IAudioReplacementSource replacement)
+                    throw new InvalidOperationException("Audio backend cannot stop execution for prepared replacement.");
+                await replacement.StopExecutionForRestoreAsync(cancellationToken);
+            }
             catch (Exception exception) { failures.Add(exception); }
         }
         if (resolver.TryGet<IOperationRunner>(out var operations) && operations is not null)

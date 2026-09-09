@@ -1,7 +1,7 @@
 # 台词边界、状态快照与无黑帧恢复重构计划
 
 日期：2026-09-08  
-状态：实施中；已接入行入口及同步 checkpoint 登记，P2 尚有写入隔离工作，P3–P5 未完成。详见 [实施记录](rollback-state-refactor-progress.md)。  
+状态：已完成（2026-09-09）。实现与验收结果见 [实施记录](rollback-state-refactor-progress.md)。
 范围：允许修改内部接口及 checkpoint 格式，统一整理 Script、State、Direction、Travel 的流程。
 
 ## 1. 目标与决策
@@ -227,10 +227,10 @@ Commit 应通过预验证尽量保证不抛异常，但不宣称多个任意插�
 
 ### P0：建立回归基线并审计状态写入
 
-- [ ] 添加动画跨多句、延迟 contributor、快进取消三个漏捕获回归场景。
-- [ ] 记录双 Reset 调用链，并建立彩色背景/角色/分屏的逐帧恢复场景。
+- [x] 添加动画跨多句、延迟 contributor、快进取消三个漏捕获回归场景。
+- [x] 记录双 Reset 调用链，并建立彩色背景/角色/分屏的逐帧恢复场景。
 - [x] 列出所有 Game contributor、持久写入来源、Direction/Actor 所有权及 markup 副作用。
-- [ ] 确定第一版 BGM、markup、手动存档语义并写入测试。
+- [x] 确定第一版 BGM、markup、手动存档语义并写入测试。
 
 完成条件：测试能够稳定暴露现有问题；新增机制覆盖范围有明确清单。
 
@@ -245,37 +245,37 @@ Commit 应通过预验证尽量保证不抛异常，但不宣称多个任意插�
 
 ### P2：固定快照并简化 Travel
 
-- [ ] State 增加接受边界上下文的 capture 入口，迁移各 contributor 为逻辑快照。
-- [ ] 约束全部持久写入，清除 Actor/Direction 双重保存。
+- [x] State 增加接受边界上下文的 capture 入口，迁移各 contributor 为逻辑快照。
+- [x] 约束全部持久写入，清除 Actor/Direction 双重保存。
 - [x] 在边界成功路径登记 Travel，移除机会式 capture。
-- [ ] SaveSlotManager 使用同一已固定边界，确保显示信息与记录一致。
+- [x] SaveSlotManager 使用同一已固定边界，确保显示信息与记录一致。
 
 完成条件：长动画期间快速经过 N 次台词出现，登记 N 次 checkpoint，变量/位置/revision 不串行；失败不推进。
 
 ### P3：恢复替换协议
 
-- [ ] 修改 contributor 的 prepare/commit 契约与依赖处理。
-- [ ] RuntimeHost 拆分 StopExecutionForRestore 与 Reset/Clear。
-- [ ] StateManager 移除恢复时的全 contributor Reset。
-- [ ] Direction 保留旧输出并停止旧执行，正确处理相同逻辑状态下的中途动画。
-- [ ] 完成 prepare 失败、取消、commit 故障与资源释放路径。
+- [x] 修改 contributor 的 prepare/commit 契约与依赖处理。
+- [x] RuntimeHost 拆分 StopExecutionForRestore 与 Reset/Clear。
+- [x] StateManager 移除恢复时的全 contributor Reset。
+- [x] Direction 保留旧输出并停止旧执行，正确处理相同逻辑状态下的中途动画。
+- [x] 完成 prepare 失败、取消、commit 故障与资源释放路径。
 
 完成条件：恢复不经过默认空状态；失败无成功事件；目标不存在的旧对象被完整移除。
 
 ### P4：呈现就绪与外围接入
 
-- [ ] 增加冻结输出及 presentation-ready 协议和超时。
-- [ ] 接入 rollback、load、hot reload，统一末尾激活台词。
-- [ ] 调整 session/history 提交时机及 Travel 游标更新。
-- [ ] 在真实渲染下验证黑帧、分屏、资源冷加载和连续恢复。
+- [x] 增加冻结输出及 presentation-ready 协议和超时。
+- [x] 接入 rollback、load、hot reload，统一末尾激活台词。
+- [x] 调整 session/history 提交时机及 Travel 游标更新。
+- [x] 在真实渲染下验证黑帧、分屏、资源冷加载和连续恢复。
 
 完成条件：从开始恢复到目标帧就绪，每帧是有效旧输出或有效目标输出，没有意外空白输出。
 
 ### P5：清理与发布检查
 
-- [ ] 删除旧 capture、恢复 Reset 特例及仅服务旧流程的 API/字段。
-- [ ] 更新架构、插件迁移及存档格式说明。
-- [ ] 通过完整测试与格式检查，记录性能基线和逐帧证据。
+- [x] 删除旧 capture、恢复 Reset 特例及仅服务旧流程的 API/字段。
+- [x] 更新架构、插件迁移及存档格式说明。
+- [x] 通过完整测试与格式检查，记录性能基线和逐帧证据。
 
 完成条件：正常播放、读档、rollback、热重载各只有一条明确的边界/恢复路径。
 

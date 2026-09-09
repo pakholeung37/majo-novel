@@ -14,6 +14,7 @@ public sealed class FakeGameSessionCoordinator : IGameSessionCoordinator
     public StateSnapshot? LastRollback { get; private set; }
     public StateSnapshot? LastLoadedSnapshot { get; private set; }
     public Exception? RollbackFailure { get; set; }
+    public Func<Task>? RollbackWork { get; set; }
 
     public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
@@ -41,20 +42,20 @@ public sealed class FakeGameSessionCoordinator : IGameSessionCoordinator
     public Task ReturnToTitleAsync(CancellationToken cancellationToken = default) =>
         Task.CompletedTask;
 
-    public Task RollbackAsync(
+    public async Task RollbackAsync(
         StateSnapshot snapshot,
         CancellationToken cancellationToken = default)
     {
         if (RollbackFailure is not null)
         {
-            return Task.FromException(RollbackFailure);
+            throw RollbackFailure;
         }
         LastRollback = snapshot;
+        if (RollbackWork is not null) await RollbackWork();
         SessionChanged?.Invoke(new GameSessionChanged(
             GameSessionTransition.Rollback,
             "session",
             false));
-        return Task.CompletedTask;
     }
 
     public void BeginNewSession() => SessionChanged?.Invoke(new GameSessionChanged(

@@ -9,7 +9,7 @@ using Majo.Runtime.Dialogue.Presentation;
 
 namespace Majo.Runtime.Script;
 
-public sealed class ScriptPlayback : IScriptPlayback
+public sealed class ScriptPlayback : IScriptPlayback, IScriptCheckpointRestorePreparation
 {
     private readonly IDialoguePlayer dialogue;
     private readonly IDialoguePresentation presentation;
@@ -57,6 +57,7 @@ public sealed class ScriptPlayback : IScriptPlayback
         }
 
         if (BoundarySource is { } source) source.PreparationChanged += HandlePreparationChanged;
+        if (BoundarySource is { } resumable) resumable.ResumeCheckpointAsync = ResumeCheckpointAsync;
         dialogue.StateChanged += HandleDialogueStateChanged;
         dialogue.LinePresented += HandleLinePresented;
         dialogue.OptionsPresented += HandleOptionsPresented;
@@ -83,6 +84,7 @@ public sealed class ScriptPlayback : IScriptPlayback
         }
 
         if (BoundarySource is { } source) source.PreparationChanged -= HandlePreparationChanged;
+        if (BoundarySource is { } resumable) resumable.ResumeCheckpointAsync = null;
         dialogue.StateChanged -= HandleDialogueStateChanged;
         dialogue.LinePresented -= HandleLinePresented;
         dialogue.OptionsPresented -= HandleOptionsPresented;
@@ -131,36 +133,80 @@ public sealed class ScriptPlayback : IScriptPlayback
         }
     }
 
-    public async Task RestoreCheckpointAsync(
+    public async Task<IPreparedScriptCheckpoint> PrepareCheckpointRestoreAsync(
         ScriptCheckpoint checkpoint,
+        CancellationToken cancellationToken,
+        DialoguePresentationOrigin origin = DialoguePresentationOrigin.CheckpointRestore)
+    {
+        await ValidateCheckpointAsync(checkpoint, cancellationToken);
+        return new PreparedCheckpoint(this, checkpoint, origin);
+    }
+
+    public async Task RestoreCheckpointAsync(ScriptCheckpoint checkpoint,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(checkpoint);
-        logger.Info(
-            "script",
-            "script.checkpoint_restore_started",
-            $"Restoring script checkpoint for spot '{checkpoint.Spot.Script.ProjectId}:{checkpoint.Spot.Script.NodeName}#{checkpoint.Spot.LineId}'.");
-
-        await ValidateCheckpointAsync(checkpoint, cancellationToken);
+        await using var candidate = await PrepareCheckpointRestoreAsync(checkpoint, cancellationToken);
         await dialogue.StopAsync(cancellationToken);
-        checkpointBackend.PrepareRestore(checkpoint);
-        try
+        cancellationToken.ThrowIfCancellationRequested();
+        candidate.Commit();
+        await candidate.ActivateAsync(cancellationToken);
+    }
+
+    private async Task ResumeCheckpointAsync(
+        ScriptCheckpoint checkpoint,
+        DialoguePresentationOrigin origin,
+        CancellationToken cancellationToken)
+    {
+        await using var candidate = await PrepareCheckpointRestoreAsync(
+            checkpoint, cancellationToken, origin);
+        candidate.Commit();
+        await candidate.ActivateAsync(cancellationToken);
+    }
+
+    private sealed class PreparedCheckpoint(
+        ScriptPlayback owner,
+        ScriptCheckpoint checkpoint,
+        DialoguePresentationOrigin origin) : IPreparedScriptCheckpoint
+    {
+        private bool committed;
+        private bool activated;
+        private bool disposed;
+        public void Commit()
         {
-            await dialogue.StartAsync(
-                new DialogueStartRequest(
-                    checkpoint.Spot.Script.ProjectId,
-                    checkpoint.Spot.Script.NodeName),
-                cancellationToken);
-            await WaitForRestoredBoundaryAsync(checkpoint, cancellationToken);
-            logger.Info(
-                "script",
-                "script.checkpoint_restore_completed",
-                $"Script checkpoint restored successfully for spot '{checkpoint.Spot.Script.ProjectId}:{checkpoint.Spot.Script.NodeName}#{checkpoint.Spot.LineId}'.");
+            ObjectDisposedException.ThrowIf(disposed, this);
+            if (committed) throw new ScriptCheckpointException("Script checkpoint was already committed.");
+            committed = true;
+            if (origin == DialoguePresentationOrigin.CheckpointRestore)
+                owner.checkpointBackend.PrepareRestore(checkpoint);
+            else if (owner.checkpointBackend is IScriptCheckpointReplayBackend replay)
+                replay.PrepareRestore(checkpoint, origin);
+            else
+                throw new ScriptCheckpointException(
+                    $"Script backend does not support '{origin}' checkpoint replay.");
         }
-        catch
+        public async Task ActivateAsync(CancellationToken cancellationToken)
         {
-            checkpointBackend.CancelPreparedRestore(checkpoint);
-            throw;
+            ObjectDisposedException.ThrowIf(disposed, this);
+            if (!committed || activated) throw new ScriptCheckpointException("Script checkpoint is not ready for activation.");
+            activated = true;
+            if (origin != DialoguePresentationOrigin.CheckpointRestore &&
+                owner.checkpointBackend is IScriptCheckpointReplayBackend replay)
+            {
+                await replay.ActivatePreparedReplayAsync(checkpoint, origin, cancellationToken);
+            }
+            else
+            {
+                await owner.dialogue.StartAsync(new DialogueStartRequest(
+                    checkpoint.Spot.Script.ProjectId, checkpoint.Spot.Script.NodeName), cancellationToken);
+            }
+            await owner.WaitForRestoredBoundaryAsync(checkpoint, cancellationToken);
+        }
+        public ValueTask DisposeAsync()
+        {
+            if (disposed) return ValueTask.CompletedTask;
+            disposed = true;
+            if (committed) owner.checkpointBackend.CancelPreparedRestore(checkpoint);
+            return ValueTask.CompletedTask;
         }
     }
 
@@ -173,7 +219,7 @@ public sealed class ScriptPlayback : IScriptPlayback
 
         void ObservePhase(ScriptPlaybackPhase phase)
         {
-            if (phase == ScriptPlaybackPhase.AwaitingAdvance)
+            if (phase is ScriptPlaybackPhase.PresentingLine or ScriptPlaybackPhase.AwaitingAdvance)
             {
                 var spot = CurrentSpot;
                 if (spot is not null &&
@@ -206,7 +252,7 @@ public sealed class ScriptPlayback : IScriptPlayback
             {
                 settled.TrySetException(new ScriptCheckpointException(
                     $"Checkpoint restore ended in phase '{phase}' before its current line " +
-                    "reached the awaiting-advance boundary."));
+                    "was activated."));
             }
         }
 

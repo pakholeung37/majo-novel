@@ -5,11 +5,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Majo.Runtime.Auto;
 using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Input;
-using Majo.Runtime.Script;
 using Majo.Runtime.State;
 
 namespace Majo.Runtime.Travel;
@@ -17,11 +15,9 @@ namespace Majo.Runtime.Travel;
 public sealed class DialogueTravelManager : IDialogueTravelManager, IDisposable
 {
     private readonly object sync = new();
-    private readonly SemaphoreSlim mutations = new(1, 1);
     private readonly List<DialogueTravelEntry> entries = new();
     private readonly IGameSessionCoordinator sessions;
     private readonly IStateBoundarySource boundaries;
-    private readonly IPlaybackModeManager playback;
     private readonly IInputManager? input;
     private readonly IRuntimeLogger logger;
     private IInputHandle? travelStepInput;
@@ -33,9 +29,6 @@ public sealed class DialogueTravelManager : IDialogueTravelManager, IDisposable
     public DialogueTravelManager(
         IStateManager state,
         IGameSessionCoordinator sessions,
-        IScriptPlayback script,
-        IDialoguePlayer dialogue,
-        IPlaybackModeManager playback,
         int capacity,
         IInputManager? input = null,
         IRuntimeLogger? logger = null)
@@ -44,9 +37,6 @@ public sealed class DialogueTravelManager : IDialogueTravelManager, IDisposable
         boundaries = state as IStateBoundarySource ?? throw new ArgumentException(
             "Travel requires an explicit line boundary source.", nameof(state));
         this.sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
-        ArgumentNullException.ThrowIfNull(script);
-        ArgumentNullException.ThrowIfNull(dialogue);
-        this.playback = playback ?? throw new ArgumentNullException(nameof(playback));
         this.input = input;
         this.logger = logger ?? NullRuntimeLogger.Instance;
         ArgumentOutOfRangeException.ThrowIfLessThan(capacity, 2);
@@ -134,43 +124,20 @@ public sealed class DialogueTravelManager : IDialogueTravelManager, IDisposable
         return Task.CompletedTask;
     }
 
-    public async Task ResetAsync(CancellationToken cancellationToken)
+    public Task ResetAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        await mutations.WaitAsync(cancellationToken);
-        try
-        {
-            ClearCore();
-            EnsureTravelStepInput();
-        }
-        finally
-        {
-            mutations.Release();
-        }
+        ClearCore();
+        EnsureTravelStepInput();
         PublishTimelineChanged();
+        return Task.CompletedTask;
     }
 
-    public async Task ShutdownAsync(CancellationToken cancellationToken)
+    public Task ShutdownAsync(CancellationToken cancellationToken)
     {
-        if (!isInitialized)
-        {
-            return;
-        }
-
-        boundaries.BoundaryCommitted -= RegisterCheckpoint;
-        sessions.SessionChanged -= HandleSessionChanged;
-        DisposeTravelStepInput();
-        isInitialized = false;
-
-        await mutations.WaitAsync(cancellationToken);
-        try
-        {
-            ClearCore();
-        }
-        finally
-        {
-            mutations.Release();
-        }
+        cancellationToken.ThrowIfCancellationRequested();
+        Dispose();
+        return Task.CompletedTask;
     }
 
     public Task<bool> StepBackAsync(CancellationToken cancellationToken = default) =>
@@ -184,14 +151,16 @@ public sealed class DialogueTravelManager : IDialogueTravelManager, IDisposable
         CancellationToken cancellationToken = default)
     {
         EnsureInitialized();
-        await mutations.WaitAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         DialogueTravelEntry? target = null;
         var targetIndex = -1;
         var previousIndex = -1;
+        var ownsTravel = false;
         try
         {
             lock (sync)
             {
+                if (isTravelling) return false;
                 targetIndex = entries.FindIndex(entry => entry.Sequence == sequence);
                 if (targetIndex < 0)
                 {
@@ -205,16 +174,28 @@ public sealed class DialogueTravelManager : IDialogueTravelManager, IDisposable
                 }
 
                 target = entries[targetIndex];
-                isTravelling = true;
+                isTravelling = ownsTravel = true;
             }
 
-            playback.SetMode(PlaybackMode.Manual);
-            using var pause = playback.AcquirePause(PlaybackPauseReason.External);
             await sessions.RollbackAsync(target.Snapshot, cancellationToken);
 
             lock (sync)
             {
-                currentIndex = entries.FindIndex(entry => entry.Sequence == target.Sequence);
+                var restoredIndex = entries.FindIndex(entry => ReferenceEquals(entry, target));
+                // A reset/load may have replaced the timeline while State was awaited.
+                if (!isInitialized || restoredIndex < 0) return false;
+                currentIndex = restoredIndex;
+                // Replay owns a new playback generation. Subsequent UI revisions belong
+                // to this historical entry, while the next normal line is a new occurrence.
+                if (boundaries.CurrentBoundary is { } restored && restored.Context.Script.Spot == target.Spot)
+                {
+                    target = target with
+                    {
+                        SessionGeneration = restored.Context.SessionGeneration,
+                        OccurrenceSequence = restored.Context.OccurrenceSequence,
+                    };
+                    entries[restoredIndex] = target;
+                }
             }
             logger.Info(
                 "travel",
@@ -242,9 +223,8 @@ public sealed class DialogueTravelManager : IDialogueTravelManager, IDisposable
         {
             lock (sync)
             {
-                isTravelling = false;
+                if (ownsTravel) isTravelling = false;
             }
-            mutations.Release();
         }
     }
 
@@ -294,16 +274,22 @@ public sealed class DialogueTravelManager : IDialogueTravelManager, IDisposable
         var snapshot = boundary.Snapshot;
         lock (sync)
         {
-            if (!isInitialized || isTravelling ||
-                !allowRestore && line.Origin == DialoguePresentationOrigin.CheckpointRestore) return;
+            if (!isInitialized || isTravelling) return;
             var replacesReplay = line.Origin == DialoguePresentationOrigin.HotReloadReplay &&
                 currentIndex >= 0 && entries[currentIndex].Spot == spot;
-            var sequence = replacesReplay ? entries[currentIndex].Sequence : ++nextSequence;
+            var replacesRevision = currentIndex >= 0 &&
+                entries[currentIndex].SessionGeneration == boundary.Context.SessionGeneration &&
+                entries[currentIndex].OccurrenceSequence == boundary.Context.OccurrenceSequence &&
+                boundary.Context.OccurrenceSequence != 0;
+            if (!allowRestore && line.Origin == DialoguePresentationOrigin.CheckpointRestore && !replacesRevision) return;
+            var replacesCurrent = replacesReplay || replacesRevision;
+            var sequence = replacesCurrent ? entries[currentIndex].Sequence : ++nextSequence;
             var entry = new DialogueTravelEntry(sequence, spot, snapshot,
-                line.Speaker, line.Text.Text, snapshot.CapturedAt);
+                line.Speaker, line.Text.Text, snapshot.CapturedAt,
+                boundary.Context.OccurrenceSequence, boundary.Context.SessionGeneration);
             if (currentIndex >= 0 && currentIndex < entries.Count - 1)
                 entries.RemoveRange(currentIndex + 1, entries.Count - currentIndex - 1);
-            if (replacesReplay) entries[currentIndex] = entry;
+            if (replacesCurrent) entries[currentIndex] = entry;
             else
             {
                 entries.Add(entry);
@@ -396,5 +382,12 @@ public sealed class DialogueTravelManager : IDialogueTravelManager, IDisposable
         }
     }
 
-    public void Dispose() => mutations.Dispose();
+    public void Dispose()
+    {
+        boundaries.BoundaryCommitted -= RegisterCheckpoint;
+        sessions.SessionChanged -= HandleSessionChanged;
+        DisposeTravelStepInput();
+        isInitialized = false;
+        ClearCore();
+    }
 }

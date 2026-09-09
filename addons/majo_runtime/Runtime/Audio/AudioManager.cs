@@ -2,15 +2,17 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Majo.Runtime.Core;
 using Majo.Runtime.Localization;
 using Majo.Runtime.Resources;
+using Majo.Runtime.State;
 
 namespace Majo.Runtime.Audio;
 
-public sealed class AudioManager : IAudioManager, IDisposable
+public sealed class AudioManager : IAudioManager, IAudioReplacementSource, IStateMutationParticipant, IDisposable
 {
     private readonly SemaphoreSlim mutations = new(1, 1);
     private readonly IAudioBackend backend;
@@ -26,6 +28,15 @@ public sealed class AudioManager : IAudioManager, IDisposable
     private bool bgmSceneClosing;
     private bool isInitialized;
     private bool backendInitializationAttempted;
+    private StateMutationGate? mutationGate;
+
+    public void BindStateMutationGate(StateMutationGate gate)
+    {
+        ArgumentNullException.ThrowIfNull(gate);
+        if (mutationGate is not null && !ReferenceEquals(mutationGate, gate))
+            throw new StateCompatibilityException("Audio manager is already bound to another runtime's state mutation gate.");
+        mutationGate = gate;
+    }
 
     public AudioManager(
         IAudioBackend backend,
@@ -132,6 +143,8 @@ public sealed class AudioManager : IAudioManager, IDisposable
 
     public IReadOnlyCollection<IAudioPlayback> BgmTracks => bgm.Tracks;
 
+    public IReadOnlyList<BgmRestoreTarget> CaptureCommittedBgm() => bgm.CaptureCommittedTargets();
+
     public IReadOnlyCollection<IAudioPlayback> SfxInstances => sfx.Instances;
 
     public IAudioPlayback? CurrentVoice => voice.CurrentVoice;
@@ -209,6 +222,96 @@ public sealed class AudioManager : IAudioManager, IDisposable
     }
     public void OpenSceneRequests() => Volatile.Write(ref bgmSceneClosing, false);
 
+    public async Task StopExecutionForRestoreAsync(CancellationToken cancellationToken)
+    {
+        CloseSceneRequests();
+        await mutations.WaitAsync(cancellationToken);
+        try { await transitions.CancelTransitionsAsync(null, cancellationToken); }
+        finally { mutations.Release(); OpenSceneRequests(); }
+    }
+
+    public async Task<IPreparedAudioReplacement> PrepareReplacementAsync(
+        IReadOnlyList<BgmRestoreTarget> tracks, CancellationToken cancellationToken)
+    {
+        EnsureInitialized();
+        if (tracks.Select(track => track.TrackId).Distinct(StringComparer.Ordinal).Count() != tracks.Count)
+            throw new AudioException("BGM replacement contains duplicate track IDs.");
+        await mutations.WaitAsync(cancellationToken);
+        var candidates = new List<AudioPlayback>();
+        try
+        {
+            foreach (var track in tracks)
+            {
+                AudioResourceGuard.RequireName(track.ClipId, nameof(track.ClipId));
+                AudioResourceGuard.RequireName(track.TrackId, nameof(track.TrackId));
+                AudioMixer.ValidateVolume(track.Volume);
+                var clip = await BgmLoader.LoadAsync(track.ClipId, cancellationToken: cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                candidates.Add(bgm.PreparePlayer(track, clip));
+            }
+            return new PreparedReplacement(this, candidates.ToArray());
+        }
+        catch (Exception failure)
+        {
+            var failures = new List<Exception> { failure };
+            foreach (var candidate in candidates)
+                try { candidate.Backend.Dispose(); }
+                catch (Exception cleanup) { failures.Add(cleanup); }
+            mutations.Release();
+            if (failures.Count > 1) throw new AggregateException("Audio preparation and cleanup failed.", failures);
+            throw;
+        }
+    }
+
+    private sealed class PreparedReplacement(AudioManager owner, AudioPlayback[] candidates) : IPreparedAudioReplacement
+    {
+        private bool published;
+        private bool released;
+        private bool disposed;
+        public void Commit()
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
+            if (released) throw new AudioException("Audio replacement was already committed.");
+            try
+            {
+                owner.Mutate(() =>
+                {
+                    owner.sfx.StopAll();
+                    owner.voice.StopAll();
+                    owner.transitions.ClearAll();
+                    // Published objects belong to the channel even if a plugin Play callback fails.
+                    published = true;
+                    owner.bgm.ReplacePrepared(candidates);
+                });
+            }
+            finally { ReleaseGate(); }
+        }
+        private void ReleaseGate()
+        {
+            if (released) return;
+            released = true;
+            owner.mutations.Release();
+        }
+        public ValueTask DisposeAsync()
+        {
+            if (disposed) return ValueTask.CompletedTask;
+            disposed = true;
+            try
+            {
+                if (!published)
+                {
+                    List<Exception>? failures = null;
+                    foreach (var candidate in candidates)
+                        try { candidate.Backend.Dispose(); }
+                        catch (Exception cleanup) { (failures ??= new()).Add(cleanup); }
+                    if (failures is not null) throw new AggregateException("Audio candidate cleanup failed.", failures);
+                }
+            }
+            finally { ReleaseGate(); }
+            return ValueTask.CompletedTask;
+        }
+    }
+
     public async Task<AudioPlaybackResult> PlayBgmAsync(
         string clipId,
         string? trackId = null,
@@ -233,18 +336,17 @@ public sealed class AudioManager : IAudioManager, IDisposable
 
         var clip = await BgmLoader.LoadAsync(clipId, cancellationToken: cancellationToken);
 
-        await mutations.WaitAsync(cancellationToken);
-        try
+        return await MutateAsync(async token =>
         {
-            if (requestEpoch != Volatile.Read(ref bgmEpoch) || Volatile.Read(ref bgmSceneClosing))
-                return AudioPlaybackResult.Skipped(AudioCategory.Bgm, clipId, trackId);
-            return await bgm.PlayAsync(
-                clipId, trackId, clip, looping, volume, fade, cancellationToken);
-        }
-        finally
-        {
-            mutations.Release();
-        }
+            await mutations.WaitAsync(token);
+            try
+            {
+                if (requestEpoch != Volatile.Read(ref bgmEpoch) || Volatile.Read(ref bgmSceneClosing))
+                    return AudioPlaybackResult.Skipped(AudioCategory.Bgm, clipId, trackId);
+                return await bgm.PlayAsync(clipId, trackId, clip, looping, volume, fade, token);
+            }
+            finally { mutations.Release(); }
+        }, cancellationToken);
     }
 
     public async Task StopBgmAsync(
@@ -255,15 +357,12 @@ public sealed class AudioManager : IAudioManager, IDisposable
         EnsureInitialized();
         fade = fade.Validate();
         Task? settlementTask;
-        await mutations.WaitAsync(cancellationToken);
-        try
+        settlementTask = await MutateAsync(async token =>
         {
-            settlementTask = await bgm.StopAsync(trackId, fade, cancellationToken);
-        }
-        finally
-        {
-            mutations.Release();
-        }
+            await mutations.WaitAsync(token);
+            try { return await bgm.StopAsync(trackId, fade, token); }
+            finally { mutations.Release(); }
+        }, cancellationToken);
 
         if (settlementTask is not null)
         {
@@ -436,4 +535,16 @@ public sealed class AudioManager : IAudioManager, IDisposable
             throw new AudioException("Audio manager is not initialized.");
         }
     }
+
+    private void Mutate(Action mutation)
+    {
+        if (mutationGate is null) mutation();
+        else mutationGate.Write(mutation);
+    }
+
+    private Task<T> MutateAsync<T>(
+        Func<CancellationToken, Task<T>> mutation,
+        CancellationToken cancellationToken) => mutationGate is null
+        ? mutation(cancellationToken)
+        : mutationGate.WriteAsync(mutation, cancellationToken);
 }

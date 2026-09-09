@@ -313,6 +313,31 @@ public partial class HeadlessTestRunner
         Assert(Equals(host.PublishedView?.Pose, movePose),
             "A sequential View move did not publish its final pose after settlement.");
 
+        var interruptedPose = new ViewPose(new DirectionPoint(70, 25), 1.4f, -8);
+        var interrupted = await coordinator.ExecuteAsync(
+            new IDirectionDirective[]
+            {
+                ViewPoseFor(ViewId.Main, interruptedPose,
+                    new DirectionTransitionSpec(DirectionTransitionId.Move, 2, EasingId.SineOut)),
+            });
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Assert(!Equals(host.GetCurrentViewPose(ViewId.Main), interruptedPose),
+            "The interrupted restore probe settled before it could sample an in-flight pose.");
+        var sameLogicalTarget = coordinator.State;
+        await ((IDirectionStateReplacementSource)coordinator)
+            .StopExecutionForRestoreAsync(CancellationToken.None);
+        await using (var replacement = await ((IDirectionStateReplacementSource)coordinator)
+                         .PrepareReplacementAsync(sameLogicalTarget, CancellationToken.None))
+        {
+            replacement.Commit();
+            await replacement.Settlement;
+        }
+        Assert(Equals(host.GetCurrentViewPose(ViewId.Main), interruptedPose) &&
+                Equals(coordinator.State.Views[ViewId.Main].Pose, interruptedPose),
+            "Replacing the same logical Direction state retained an interrupted visual pose.");
+        await interrupted.DisposeAsync();
+
         await coordinator.ExecuteAsync(
             new IDirectionDirective[]
             {

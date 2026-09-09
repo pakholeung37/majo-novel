@@ -12,7 +12,7 @@ using Majo.Runtime.Resources;
 
 namespace Majo.Runtime.State;
 
-public sealed class DirectionStateContributor : IStateContributor
+public sealed class DirectionStateContributor : IPreparedStateContributor, IStateMutationParticipant
 {
     private readonly IDirectionTransactionCoordinator direction;
     private readonly ScenePreparationRegistry? preparation;
@@ -20,6 +20,12 @@ public sealed class DirectionStateContributor : IStateContributor
     {
         this.preparation = preparation;
         this.direction = direction ?? throw new ArgumentNullException(nameof(direction));
+    }
+
+    public void BindStateMutationGate(StateMutationGate gate)
+    {
+        if (direction is IStateMutationParticipant participant) participant.BindStateMutationGate(gate);
+        else throw new StateCompatibilityException("Direction coordinator does not implement the persistent write gate contract.");
     }
 
     public string Key => BuiltInStateKeys.Direction;
@@ -46,13 +52,25 @@ public sealed class DirectionStateContributor : IStateContributor
         return ValueTask.CompletedTask;
     }
 
-    public async ValueTask RestoreAsync(StateRecord record, CancellationToken cancellationToken)
+    public async ValueTask<IPreparedStateRestore> PrepareRestoreAsync(
+        StateRecord? record, RestoreContext context, CancellationToken cancellationToken)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        var restored = Decode(record);
+        var target = Decode(record ?? context.Require(Key));
+        if (direction is not IDirectionStateReplacementSource replacement)
+            throw new StateCompatibilityException("Direction backend does not support prepared replacement.");
         if (preparation is not null)
-            await preparation.PrepareAsync(restored.Scene.ProjectId, restored.Scene.SceneId, ScenePreparationReason.Restore, cancellationToken);
-        await direction.RestoreAsync(restored, cancellationToken);
+            await preparation.PrepareAsync(target.Scene.ProjectId, target.Scene.SceneId,
+                ScenePreparationReason.Restore, cancellationToken);
+        return new PreparedDirectionState(await replacement.PrepareReplacementAsync(target, cancellationToken));
+    }
+
+    private sealed class PreparedDirectionState(IPreparedDirectionReplacement prepared)
+        : IPreparedStateRestore, IStateRestorePresentation
+    {
+        public void Commit() => prepared.Commit();
+        public Task WaitForPresentationAsync(CancellationToken cancellationToken) =>
+            prepared.Settlement.WaitAsync(cancellationToken);
+        public ValueTask DisposeAsync() => prepared.DisposeAsync();
     }
 
     public ValueTask ResetAsync(CancellationToken cancellationToken)

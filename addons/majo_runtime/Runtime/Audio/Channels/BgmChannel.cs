@@ -36,6 +36,50 @@ internal sealed class BgmChannel : AudioChannelBase
         }
     }
 
+    public IReadOnlyList<BgmRestoreTarget> CaptureCommittedTargets()
+    {
+        lock (gate)
+        {
+            return tracks.Values
+                .Where(track => !stopping.Contains(track) && track.State == AudioPlaybackState.Playing)
+                .OrderBy(track => track.InstanceId, StringComparer.Ordinal)
+                .Select(track => new BgmRestoreTarget(
+                    track.ClipId, track.InstanceId, track.IsLooping, track.BaseVolume))
+                .ToArray();
+        }
+    }
+
+    public AudioPlayback PreparePlayer(BgmRestoreTarget target, IAudioClip clip)
+    {
+        var player = backend.CreatePlayer(AudioCategory.Bgm, clip, target.TrackId);
+        try
+        {
+            player.IsLooping = target.Loop;
+            player.Volume = mixer.CalculateEffectiveVolume(AudioCategory.Bgm, target.Volume);
+            return new AudioPlayback(AudioCategory.Bgm, target.ClipId, target.TrackId,
+                target.Loop, target.Volume, player);
+        }
+        catch { player.Dispose(); throw; }
+    }
+
+    public void ReplacePrepared(IReadOnlyList<AudioPlayback> candidates)
+    {
+        AudioPlayback[] retired;
+        lock (gate)
+        {
+            retired = tracks.Values.ToArray();
+            tracks.Clear();
+            stopping.Clear();
+            foreach (var candidate in candidates) tracks.Add(candidate.InstanceId, candidate);
+        }
+        List<Exception>? failures = null;
+        foreach (var previous in retired)
+            try { StopPlayback(previous); }
+            catch (Exception failure) { (failures ??= new()).Add(failure); }
+        if (failures is not null) throw new AggregateException("Retired BGM cleanup failed.", failures);
+        foreach (var candidate in candidates) StartPreparedPlayback(candidate);
+    }
+
     public async Task<AudioPlaybackResult> PlayAsync(
         string clipId,
         string trackId,

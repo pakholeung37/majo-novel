@@ -13,7 +13,7 @@ using Majo.Runtime.State;
 
 namespace Majo.Runtime.Played;
 
-public sealed class PlayedRegister : IPlayedRegister, IStateContributor, IStateDirtyNotifier
+public sealed class PlayedRegister : IPlayedRegister, IImmediateStateContributor, IStateDirtyNotifier
 {
     public const string StateKey = "majo.global.played";
     private const string FingerprintMetadataPrefix = "majo:fingerprint=";

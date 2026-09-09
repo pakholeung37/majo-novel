@@ -44,6 +44,7 @@ public partial class HeadlessTestRunner
                 """);
 
             var presenter = new HotReloadPresenter();
+            var runOnceMarkup = new RunOnceMarkupProbe();
             var configuration = CreateHeadlessConfiguration();
             configuration.Resources!.RootPath = "res://tests";
             configuration.Resources.ScriptsPath = "headless";
@@ -61,6 +62,7 @@ public partial class HeadlessTestRunner
                 Configuration = configuration,
             };
             bootstrap.ConfigureDialoguePresenters += presenters => presenters.Register(presenter);
+            bootstrap.ConfigureDialogueMarkupHandlers += handlers => handlers.Register(runOnceMarkup);
             AddChild(bootstrap);
             await bootstrap.InitializationCompletion;
 
@@ -80,6 +82,8 @@ public partial class HeadlessTestRunner
             services.Get<IYarnDialogueBackend>().RegisterNativePresenter(delayedPresenter);
             await dialogue.StartAsync();
             await WaitForConditionAsync(() => presenter.Lines.Count == 1, 2);
+            Assert(runOnceMarkup.Prepared == 1,
+                "Run-once markup did not execute on normal line entry.");
             var sessionId = ((DialoguePlayer)dialogue).CurrentDialogueSessionId;
             delayedPresenter.DelayNextDismissal = true;
             await hotReload.RequestReloadAsync("YarnVmBridge");
@@ -107,6 +111,8 @@ public partial class HeadlessTestRunner
             Assert(((DialoguePlayer)dialogue).CurrentDialogueSessionId == sessionId &&
                     stopped == 0 && completed == 0,
                 "Yarn hot reload leaked an internal stop/start through DialoguePlayer.");
+            Assert(runOnceMarkup.Prepared == 1,
+                "Yarn hot reload repeated a run-once markup side effect.");
 
             await File.WriteAllTextAsync(
                 Path.Combine(sourceRoot, "YarnVmBridge.yarn"),
@@ -185,5 +191,12 @@ public partial class HeadlessTestRunner
             {
             }
         }
+    }
+
+    private sealed class RunOnceMarkupProbe : IDialogueMarkupHandler
+    {
+        public DialogueMarkupReplayPolicy ReplayPolicy => DialogueMarkupReplayPolicy.RunOnce;
+        public int Prepared { get; private set; }
+        public void OnLinePrepared(DialogueText text) => Prepared++;
     }
 }

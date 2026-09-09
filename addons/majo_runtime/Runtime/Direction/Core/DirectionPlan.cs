@@ -17,6 +17,9 @@ public sealed record DirectionPlan(
     IReadOnlyList<DirectionTransition> Transitions,
     IReadOnlyList<ITransientDirectionCue> Cues)
 {
+    /// <summary>Restore must reconcile actual output even when its logical target is unchanged.</summary>
+    public bool IsStateReplacement { get; init; }
+
     internal Dictionary<ViewId, ViewState> CommitViews { get; } = new();
     public IReadOnlyList<ViewPosePatch> ViewIntents { get; init; } = Array.Empty<ViewPosePatch>();
 

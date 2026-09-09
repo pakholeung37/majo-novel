@@ -11,6 +11,26 @@ namespace Majo.Runtime.UnitTests;
 public sealed class DialogueTravelTests
 {
     [Fact(Timeout = 5_000)]
+    public async Task RestoreCanResetTimelineWithoutWaitingForTravelLock()
+    {
+        var harness = await TravelHarness.CreateAsync(capacity: 4);
+        await harness.CaptureLineAsync("line:one", "One");
+        await harness.CaptureLineAsync("line:two", "Two");
+        harness.Sessions.RollbackWork = async () =>
+        {
+            Assert.True(harness.Manager.IsTravelling);
+            Assert.False(await harness.Manager.StepBackAsync());
+            Assert.True(harness.Manager.IsTravelling);
+            await harness.Manager.ResetAsync(CancellationToken.None);
+        };
+        Assert.False(await harness.Manager.StepBackAsync());
+        Assert.Empty(harness.Manager.Entries);
+        Assert.Equal(-1, harness.Manager.CurrentIndex);
+        Assert.False(harness.Manager.IsTravelling);
+        await harness.ShutdownAsync();
+    }
+
+    [Fact(Timeout = 5_000)]
     public async Task RepeatedLineIdsRegisterEveryOccurrence()
     {
         var harness = await TravelHarness.CreateAsync(capacity: 100);
@@ -139,6 +159,72 @@ public sealed class DialogueTravelTests
         await harness.ShutdownAsync();
     }
 
+    [Fact(Timeout = 5_000)]
+    public async Task PersistentRevisionReplacesCurrentOccurrenceWithoutAddingHistory()
+    {
+        var harness = await TravelHarness.CreateAsync(capacity: 4);
+        await harness.CaptureLineAsync("line:one", "One");
+        var original = Assert.Single(harness.Manager.Entries);
+
+        await harness.State.CommitBoundaryAsync(harness.State.CurrentBoundary!.Context);
+
+        var revised = Assert.Single(harness.Manager.Entries);
+        Assert.Equal(original.Sequence, revised.Sequence);
+        Assert.Equal(original.OccurrenceSequence, revised.OccurrenceSequence);
+        Assert.NotSame(original.Snapshot, revised.Snapshot);
+        await harness.ShutdownAsync();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RollbackGenerationKeepsTargetWhenNormalPlaybackResumes(bool reviseRestoredLine)
+    {
+        var harness = await TravelHarness.CreateAsync(capacity: 10);
+        await harness.CaptureLineAsync("line:one", "One");
+        await harness.CaptureLineAsync("line:two", "Two");
+        var target = harness.State.CurrentBoundary!.Context;
+        await harness.CaptureLineAsync("line:three", "Three");
+        var replay = target with
+        {
+            SessionGeneration = 2,
+            OccurrenceSequence = 1,
+            Line = target.Line with { Origin = DialoguePresentationOrigin.CheckpointRestore },
+        };
+        harness.Sessions.RollbackWork = () => harness.State.CommitBoundaryAsync(replay);
+        Assert.True(await harness.Manager.StepBackAsync());
+        Assert.Equal(2, harness.Manager.Entries[1].SessionGeneration);
+        if (reviseRestoredLine)
+        {
+            var previous = harness.Manager.Entries[1].Snapshot;
+            await harness.State.CommitBoundaryAsync(replay);
+            Assert.NotSame(previous, harness.Manager.Entries[1].Snapshot);
+            Assert.Equal("line:two", harness.Manager.Entries[1].Spot.LineId);
+        }
+        await harness.State.CommitBoundaryAsync(target with
+        {
+            SessionGeneration = 2,
+            OccurrenceSequence = 2,
+            Script = new ScriptCheckpoint(target.Script.FormatVersion, target.Script.ProgramFingerprint,
+                new ScriptPlaybackSpot(new ScriptId("main", "Start"), "line:branch")),
+            Line = target.Line with { Id = "line:branch" },
+        });
+        Assert.Equal(["line:one", "line:two", "line:branch"],
+            harness.Manager.Entries.Select(entry => entry.Spot.LineId));
+        await harness.ShutdownAsync();
+    }
+
+    [Fact]
+    public async Task SameOccurrenceNumberInAnotherGenerationIsNotARevision()
+    {
+        var harness = await TravelHarness.CreateAsync(capacity: 4);
+        await harness.CaptureLineAsync("line:one", "One");
+        var context = harness.State.CurrentBoundary!.Context;
+        await harness.State.CommitBoundaryAsync(context with { SessionGeneration = 2 });
+        Assert.Equal(2, harness.Manager.Entries.Count);
+        await harness.ShutdownAsync();
+    }
+
     private sealed class TravelHarness
     {
         private TravelHarness(
@@ -174,9 +260,6 @@ public sealed class DialogueTravelTests
             var manager = new DialogueTravelManager(
                 state,
                 sessions,
-                script,
-                dialogue,
-                playback,
                 capacity);
             await manager.InitializeAsync(CancellationToken.None);
             return new TravelHarness(

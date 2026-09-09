@@ -8,6 +8,7 @@ using Majo.Demos.Manosaba;
 using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.State;
+using Majo.Runtime.UnitTests.Testing;
 using Xunit;
 
 namespace Majo.Runtime.UnitTests;
@@ -54,7 +55,7 @@ public sealed class ManosabaCommandTests
         Assert.Equal(ManosabaFrameMode.Default, uiService.CurrentFrameMode);
 
         await uiService.PreflightAsync(record, CancellationToken.None);
-        await uiService.RestoreAsync(record, CancellationToken.None);
+        await uiService.CommitPreparedAsync(record, CancellationToken.None);
         Assert.Equal(ManosabaFrameMode.Stream, uiService.CurrentFrameMode);
 
         await ((IStateContributor)uiService).ResetAsync(CancellationToken.None);

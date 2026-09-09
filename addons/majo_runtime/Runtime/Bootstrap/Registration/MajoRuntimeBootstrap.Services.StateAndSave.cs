@@ -195,17 +195,11 @@ public partial class MajoRuntimeBootstrap : Node
                 resolver => new DialogueTravelManager(
                     resolver.Get<IStateManager>(),
                     resolver.Get<IGameSessionCoordinator>(),
-                    resolver.Get<IScriptPlayback>(),
-                    resolver.Get<IDialoguePlayer>(),
-                    resolver.Get<IPlaybackModeManager>(),
                     travel.Capacity,
                     resolver.Get<IInputManager>(),
                     Logger),
                 typeof(IStateManager),
                 typeof(IGameSessionCoordinator),
-                typeof(IScriptPlayback),
-                typeof(IDialoguePlayer),
-                typeof(IPlaybackModeManager),
                 typeof(IInputManager));
 
             if (travel.ShowDefaultUi)

@@ -6,6 +6,41 @@ namespace Majo.Runtime.UnitTests;
 public sealed class LineBoundaryGateTests
 {
     [Fact]
+    public async Task RestoreCancelsAndDrainsPreparationThenOnlyAllowsReplay()
+    {
+        using var gate = new LineBoundaryGate();
+        gate.BeginSession();
+        var line = gate.Enter();
+        gate.DeferAdvance();
+        var restore = gate.AcquireRestoreAsync(CancellationToken.None);
+        Assert.True(line.Token.IsCancellationRequested);
+        Assert.False(restore.IsCompleted);
+        line.Dispose();
+        var lease = await restore;
+        gate.BeginSession();
+        Assert.Throws<InvalidOperationException>(() => gate.Enter());
+        Assert.True(gate.DeferAdvance());
+        using (var replay = gate.Enter(restoreReplay: true))
+            replay.Activate(() => Assert.Fail("Input leaked into restore replay."), () => { });
+        Assert.True(gate.DeferAdvance());
+        lease.Dispose();
+        lease.Dispose();
+        Assert.False(gate.DeferAdvance());
+        using var next = gate.Enter();
+    }
+
+    [Fact]
+    public async Task CancelledRestoreRequestDoesNotStopPlayback()
+    {
+        using var gate = new LineBoundaryGate();
+        using var line = gate.Enter();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            gate.AcquireRestoreAsync(new CancellationToken(true)));
+        Assert.False(line.Token.IsCancellationRequested);
+        line.Activate(() => { }, () => { });
+    }
+
+    [Fact]
     public async Task RepeatedAdvanceDoesNotCancelDelayedPreparation()
     {
         using var gate = new LineBoundaryGate();

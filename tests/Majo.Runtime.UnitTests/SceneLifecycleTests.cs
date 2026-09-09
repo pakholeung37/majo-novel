@@ -37,7 +37,7 @@ public sealed class SceneLifecycleTests
         var contributor = new DirectionStateContributor(direction, preparation);
         var record = await contributor.CaptureAsync(default);
         pending = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var restore = contributor.RestoreAsync(record, default).AsTask();
+        var restore = contributor.CommitPreparedAsync(record, default);
         Assert.False(restore.IsCompleted);
         Assert.Equal(new[] { ScenePreparationReason.Enter, ScenePreparationReason.Restore }, reasons);
         pending.SetResult();

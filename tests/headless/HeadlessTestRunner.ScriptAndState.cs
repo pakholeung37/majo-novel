@@ -23,6 +23,7 @@ using Majo.Runtime.Script;
 using Majo.Runtime.State;
 using Majo.Runtime.UI.SaveLoad;
 using Majo.Runtime.Travel;
+using Majo.Runtime.Timing;
 
 namespace Majo.Runtime.HeadlessTests;
 
@@ -36,6 +37,7 @@ public partial class HeadlessTestRunner
         configuration.Dialogue!.DefaultProjectId = "ScriptAndState";
         configuration.Presentation!.Enabled = true;
         configuration.Diagnostics!.MinimumLevel = RuntimeLogLevel.Debug;
+        configuration.Diagnostics.RingBufferCapacity = 5_000;
         configuration.Presentation.LettersPerSecond = 10_000;
         configuration.Presentation.UseFadeEffect = false;
         configuration.Save!.Enabled = true;
@@ -232,8 +234,8 @@ public partial class HeadlessTestRunner
                 history.Entries.Count == 1 &&
                 history.Entries[0].LineId == "line:state-current" &&
                 dialogue.CurrentLineId == "line:state-current" &&
-                presentation.IsLineDisplayComplete &&
-                script.Phase == ScriptPlaybackPhase.AwaitingAdvance,
+                presentation.IsLineActive &&
+                script.Phase is ScriptPlaybackPhase.PresentingLine or ScriptPlaybackPhase.AwaitingAdvance,
             "Load Game did not return at the restored current-line boundary: " +
             $"sessionChanged={bootstrap.Host.SessionId != previousSessionId}, " +
             $"mode={playback.Mode}, history={history.Entries.Count}, " +
@@ -440,6 +442,65 @@ public partial class HeadlessTestRunner
         Assert(ReferenceEquals(completedLoad, loadTask),
             "Loading a save while background operations are active deadlocked in StopAsync.");
         await loadTask;
+
+        // A committed visual animation must not delay or drop line-entry snapshots.
+        await dialogue.StopAsync();
+        var rapidStartCount = lineProbe.Lines.Count;
+        var rapidAnimation = await direction.ExecuteAsync([
+            ViewPoseFor(ViewId.Main,
+                new ViewPose(new DirectionPoint(12, -8), 1.05f, 0),
+                new DirectionTransitionSpec(DirectionTransitionId.Move, 30, new EasingId("linear"))),
+        ]);
+        var rapidMemoryBefore = GC.GetTotalMemory(forceFullCollection: true);
+        var rapidWatch = System.Diagnostics.Stopwatch.StartNew();
+        await dialogue.StartAsync(new DialogueStartRequest("ScriptAndState", "Rapid"));
+        for (var index = 0; index < 100; index++)
+        {
+            await WaitForConditionAsync(
+                () => lineProbe.Lines.Count == rapidStartCount + index + 1,
+                2);
+            if (index < 99) dialogue.RequestNextLine();
+        }
+        rapidWatch.Stop();
+        Assert(!rapidAnimation.Settlement.IsCompleted,
+            "The long Direction animation settled before the 100-line capture regression completed.");
+        var rapidEntries = travel.Entries
+            .Where(entry => entry.Spot.LineId.StartsWith("line:rapid-", StringComparison.Ordinal))
+            .ToArray();
+        Assert(rapidEntries.Length == 100 &&
+                rapidEntries.Select(entry => entry.OccurrenceSequence).Distinct().Count() == 100,
+            $"Rapid line capture registered {rapidEntries.Length}/100 unique occurrences.");
+        var boundaryTimings = bootstrap.RingBuffer!.RecentEvents
+            .Where(logEvent => logEvent.EventId == "state.boundary_committed" &&
+                logEvent.Properties.TryGetValue("lineId", out var lineId) &&
+                lineId is string id && id.StartsWith("line:rapid-", StringComparison.Ordinal) &&
+                logEvent.Properties.TryGetValue("elapsedMs", out _))
+            .Select(logEvent => Convert.ToDouble(logEvent.Properties["elapsedMs"],
+                System.Globalization.CultureInfo.InvariantCulture))
+            .OrderBy(value => value)
+            .ToArray();
+        Assert(boundaryTimings.Length == 100,
+            $"Expected 100 boundary timing samples, got {boundaryTimings.Length}.");
+        var rapidPayloadCharacters = rapidEntries.Sum(entry =>
+            entry.Snapshot.Records.Values.Sum(record => record.Payload.GetRawText().Length));
+        var rapidMemoryAfter = GC.GetTotalMemory(forceFullCollection: true);
+        GD.Print($"[boundary baseline] count=100 totalMs={rapidWatch.Elapsed.TotalMilliseconds:F3} " +
+            $"p50Ms={boundaryTimings[50]:F3} p95Ms={boundaryTimings[95]:F3} " +
+            $"timelinePayloadChars={rapidPayloadCharacters} managedDeltaBytes={rapidMemoryAfter - rapidMemoryBefore}");
+        await direction.FinishAsync(rapidAnimation);
+
+        Assert(await travel.TravelToAsync(rapidEntries[1].Sequence),
+            "Could not roll back to the second rapid occurrence.");
+        await WaitForConditionAsync(() => presentation.IsLineDisplayComplete, 2);
+        variables.SetNumber("score", 42);
+        var revisedReplay = await ((IStateBoundarySource)state).CaptureSaveBoundaryAsync();
+        Assert(ReferenceEquals(travel.Entries[travel.CurrentIndex].Snapshot, revisedReplay.Snapshot),
+            "Saving a restored line revision did not update its Travel entry.");
+        dialogue.RequestNextLine();
+        await WaitForConditionAsync(() => script.CurrentSpot?.LineId == "line:rapid-003", 2);
+        Assert(travel.Entries.Where(entry => entry.Spot.LineId.StartsWith("line:rapid-", StringComparison.Ordinal))
+                .Select(entry => entry.Spot.LineId).SequenceEqual(["line:rapid-001", "line:rapid-002", "line:rapid-003"]),
+            "Advancing after rollback replaced the restored occurrence instead of appending a new entry.");
 
         await dialogue.StopAsync();
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);

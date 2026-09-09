@@ -128,7 +128,8 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, I
         markupBridge = new MajoActionMarkupBridge(
             backend.RequestHurryUp,
             backend.RequestNextLine,
-            markupHandlers)
+            markupHandlers,
+            () => backend.CurrentLine?.Origin ?? DialoguePresentationOrigin.Normal)
         {
             Name = "MajoMarkupBridge",
         };

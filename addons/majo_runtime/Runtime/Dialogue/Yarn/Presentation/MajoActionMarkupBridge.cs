@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
@@ -16,19 +17,23 @@ internal sealed partial class MajoActionMarkupBridge : ActionMarkupHandler
     private readonly Action requestHurryUp;
     private readonly Action requestNextLine;
     private readonly IReadOnlyList<IDialogueMarkupHandler> handlers;
+    private readonly Func<DialoguePresentationOrigin> presentationOrigin;
+    private IReadOnlyList<IDialogueMarkupHandler> activeHandlers = Array.Empty<IDialogueMarkupHandler>();
     private DialogueText? currentText;
     private TaskCompletionSource inactive = CompletedInactiveSource();
 
     public MajoActionMarkupBridge(
         Action requestHurryUp,
         Action requestNextLine,
-        IReadOnlyList<IDialogueMarkupHandler> handlers)
+        IReadOnlyList<IDialogueMarkupHandler> handlers,
+        Func<DialoguePresentationOrigin> presentationOrigin)
     {
         this.requestHurryUp = requestHurryUp ??
             throw new ArgumentNullException(nameof(requestHurryUp));
         this.requestNextLine = requestNextLine ??
             throw new ArgumentNullException(nameof(requestNextLine));
         this.handlers = handlers ?? throw new ArgumentNullException(nameof(handlers));
+        this.presentationOrigin = presentationOrigin ?? throw new ArgumentNullException(nameof(presentationOrigin));
     }
 
     public bool IsLineActive { get; private set; }
@@ -54,7 +59,10 @@ internal sealed partial class MajoActionMarkupBridge : ActionMarkupHandler
             TaskCreationOptions.RunContinuationsAsynchronously);
         IsLineActive = true;
         IsDisplayComplete = false;
-        foreach (var handler in handlers)
+        var replay = presentationOrigin() != DialoguePresentationOrigin.Normal;
+        activeHandlers = handlers.Where(handler =>
+            !replay || handler.ReplayPolicy == DialogueMarkupReplayPolicy.Visual).ToArray();
+        foreach (var handler in activeHandlers)
         {
             handler.OnLinePrepared(currentText);
         }
@@ -63,7 +71,7 @@ internal sealed partial class MajoActionMarkupBridge : ActionMarkupHandler
     public override void OnLineDisplayBegin(MarkupParseResult line, RichTextLabel text)
     {
         var converted = currentText ?? YarnLineConverter.Convert(line);
-        foreach (var handler in handlers)
+        foreach (var handler in activeHandlers)
         {
             handler.OnLineDisplayBegan(converted);
         }
@@ -75,7 +83,7 @@ internal sealed partial class MajoActionMarkupBridge : ActionMarkupHandler
         CancellationToken cancellationToken)
     {
         var converted = currentText ?? YarnLineConverter.Convert(line);
-        foreach (var handler in handlers)
+        foreach (var handler in activeHandlers)
         {
             await handler.OnCharacterWillAppearAsync(
                 currentCharacterIndex,
@@ -87,7 +95,7 @@ internal sealed partial class MajoActionMarkupBridge : ActionMarkupHandler
     public override void OnLineDisplayComplete()
     {
         IsDisplayComplete = true;
-        foreach (var handler in handlers)
+        foreach (var handler in activeHandlers)
         {
             handler.OnLineDisplayCompleted();
         }
@@ -97,7 +105,7 @@ internal sealed partial class MajoActionMarkupBridge : ActionMarkupHandler
 
     public override void OnLineWillDismiss()
     {
-        foreach (var handler in handlers)
+        foreach (var handler in activeHandlers)
         {
             handler.OnLineWillDismiss();
         }
@@ -126,6 +134,7 @@ internal sealed partial class MajoActionMarkupBridge : ActionMarkupHandler
     public void ResetState()
     {
         currentText = null;
+        activeHandlers = Array.Empty<IDialogueMarkupHandler>();
         IsLineActive = false;
         IsDisplayComplete = false;
         inactive.TrySetResult();

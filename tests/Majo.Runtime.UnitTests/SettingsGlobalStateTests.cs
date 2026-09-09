@@ -287,7 +287,7 @@ public sealed class SettingsGlobalStateTests
         public void Apply(RuntimeSettings settings) => Last = settings;
     }
 
-    private sealed class IntegerContributor : IStateContributor
+    private sealed class IntegerContributor : IImmediateStateContributor
     {
         public IntegerContributor(
             StateScope scope,

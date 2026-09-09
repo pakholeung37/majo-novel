@@ -3,12 +3,30 @@
 using System.Reflection;
 using Majo.Runtime;
 using Majo.Runtime.Dialogue;
+using Majo.Runtime.State;
 using Xunit;
 
 namespace Majo.Runtime.UnitTests;
 
 public sealed class DialoguePlayerTests
 {
+    [Fact]
+    public async Task VariableWritesAndResetCannotChangeFrozenPersistentState()
+    {
+        var variables = new DialogueVariables(new FakeVariableStore());
+        var gate = new StateMutationGate();
+        variables.BindStateMutationGate(gate);
+        variables.SetNumber("value", 1);
+        using (gate.Freeze())
+        {
+            Assert.Throws<StateRuntimeException>(() => variables.SetNumber("value", 2));
+            await Assert.ThrowsAsync<StateRuntimeException>(() => variables.ResetAsync(CancellationToken.None));
+            Assert.Equal(1, variables.GetValue("value").NumberValue);
+        }
+        variables.SetNumber("value", 3);
+        Assert.Equal(3, variables.GetValue("value").NumberValue);
+    }
+
     [Fact]
     public async Task StartUsesDefaultsAndReturnsWhenBackendIsRunning()
     {

@@ -12,6 +12,8 @@ public sealed class FakeStateManager : IStateManager, IStateBoundarySource
 {
     public event Action<CommittedLineBoundary>? BoundaryCommitted;
     public CommittedLineBoundary? CurrentBoundary { get; private set; }
+    public Task<CommittedLineBoundary> CaptureSaveBoundaryAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(CurrentBoundary ?? throw new InvalidOperationException("No test boundary."));
     public async Task CommitBoundaryAsync(Majo.Runtime.Script.LineBoundaryContext context)
     {
         var snapshot = await CaptureGameAsync();

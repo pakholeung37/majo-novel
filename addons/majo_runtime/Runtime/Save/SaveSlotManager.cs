@@ -356,8 +356,12 @@ public sealed class SaveSlotManager : ISaveSlotManager, IDisposable
         EnsureEligible(StateOperationKind.Save);
         var oldMetadata = await ReadMetadataOrNullAsync(slot, cancellationToken);
         SetPhase(operation, SaveSlotOperationPhase.Capture);
-        var snapshot = await state.CaptureGameAsync(cancellationToken);
-        var display = BuildDisplayMetadata(slot, request, snapshot);
+        if (state is not IStateBoundarySource source)
+            throw new StateCompatibilityException(
+                "SaveSlotManager requires an IStateBoundarySource; live Game capture is not supported.");
+        var boundary = await source.CaptureSaveBoundaryAsync(cancellationToken);
+        var snapshot = boundary.Snapshot;
+        var display = BuildDisplayMetadata(slot, request, boundary);
         string? capturedThumbnail = null;
         if (request?.CaptureThumbnail != false)
         {
@@ -591,7 +595,7 @@ public sealed class SaveSlotManager : ISaveSlotManager, IDisposable
     private SortedDictionary<string, string> BuildDisplayMetadata(
         SaveSlotId slot,
         SaveSlotSaveRequest? request,
-        StateSnapshot snapshot)
+        CommittedLineBoundary? boundary)
     {
         var display = new SortedDictionary<string, string>(StringComparer.Ordinal)
         {
@@ -603,8 +607,7 @@ public sealed class SaveSlotManager : ISaveSlotManager, IDisposable
         {
             display[SaveSlotMetadataKeys.PlayerName] = playerName;
         }
-        var boundary = (state as IStateBoundarySource)?.CurrentBoundary;
-        if (boundary is not null && ReferenceEquals(boundary.Snapshot, snapshot))
+        if (boundary is not null)
         {
             var line = boundary.Context.Line;
             if (!string.IsNullOrWhiteSpace(line.Speaker))

@@ -249,7 +249,7 @@ public sealed class AutoHistoryTests
             PlayedContentChangePolicy.TreatAsUnread,
             () => locale);
         await ((IStateContributor)second).PreflightAsync(record, default);
-        await ((IStateContributor)second).RestoreAsync(record, default);
+        await ((IImmediateStateContributor)second).RestoreAsync(record, default);
 
         Assert.True(second.IsPlayed("test", "line:1", "zh-Hans", "v1"));
         Assert.Equal(first.Entries, second.Entries);

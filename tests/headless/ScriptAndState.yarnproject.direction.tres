@@ -6,6 +6,6 @@
 script = ExtResource("1_soedl")
 SchemaVersion = 2
 ManifestPath = "res://tests/headless/ScriptAndState.yarnproject"
-SourceFingerprint = "a6f36a62426e024fcbf86b01e4bb7675bedd38d458310c902b4e4e860374f306"
-ProgramFingerprint = "146fa93fb590a5a9f0c111bb67df186e2f5ec475179c6cdc5018acc3dbe474c2"
-ModulesJson = "[{\"NodeId\":\"Start\",\"SceneEntry\":null,\"Version\":1,\"Symbols\":{\"Stages\":[],\"Views\":[],\"ShotAliases\":[],\"Marks\":[]},\"Resources\":[],\"SourceMaps\":[],\"Imports\":[],\"Marks\":[],\"Diagnostics\":[]}]"
+SourceFingerprint = "08d58906d675d88a7f6d923f4bc6c987e6e7be8045164e7763ceecf0afc7050f"
+ProgramFingerprint = "c0012ced60c2880b659e5511af528bde85ead0ed9086c55532a93cfc4de4c67d"
+ModulesJson = "[{\"NodeId\":\"Start\",\"SceneEntry\":null,\"CameraPresets\":[],\"Version\":1,\"Symbols\":{\"Stages\":[],\"Views\":[],\"ShotAliases\":[],\"Marks\":[]},\"Resources\":[],\"SourceMaps\":[],\"Imports\":[],\"Marks\":[],\"Diagnostics\":[]},{\"NodeId\":\"Rapid\",\"SceneEntry\":null,\"CameraPresets\":[],\"Version\":1,\"Symbols\":{\"Stages\":[],\"Views\":[],\"ShotAliases\":[],\"Marks\":[]},\"Resources\":[],\"SourceMaps\":[],\"Imports\":[],\"Marks\":[],\"Diagnostics\":[]}]"

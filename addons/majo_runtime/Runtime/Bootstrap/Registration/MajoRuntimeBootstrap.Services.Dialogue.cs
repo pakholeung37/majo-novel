@@ -28,6 +28,7 @@ using Majo.Runtime.Resources;
 using Majo.Runtime.Save;
 using Majo.Runtime.Script;
 using Majo.Runtime.Settings;
+using Majo.Runtime.State;
 using Majo.Runtime.UI.History;
 using Majo.YarnBridge;
 
@@ -187,12 +188,14 @@ public partial class MajoRuntimeBootstrap : Node
                         Configuration.Dialogue.DefaultProjectId,
                         configuredRoot,
                         Logger,
-                        playback: resolver.Get<IPlaybackModeManager>());
+                        playback: resolver.Get<IPlaybackModeManager>(),
+                        state: resolver.Get<IStateManager>());
                 },
                 typeof(IYarnProjectVersionStore),
                 typeof(IScriptPlayback),
                 typeof(IYarnDialogueBackend),
-                typeof(IPlaybackModeManager))
+                typeof(IPlaybackModeManager),
+                typeof(IStateManager))
             .AddSingleton<IHistoryManager>(
                 resolver => new HistoryManager(
                     resolver.Get<IDialoguePlayer>(),

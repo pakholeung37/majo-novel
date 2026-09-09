@@ -18,6 +18,7 @@ public enum StateOperationKind
     Save,
     Restore,
     Rollback,
+    HotReload,
 }
 
 [Flags]
@@ -27,7 +28,8 @@ public enum StateOperationMask
     Save = 1,
     Restore = 2,
     Rollback = 4,
-    All = Save | Restore | Rollback,
+    HotReload = 8,
+    All = Save | Restore | Rollback | HotReload,
 }
 
 public enum StateEligibilityReasonCode
@@ -81,6 +83,7 @@ public sealed class StateEligibility : IStateEligibility
     private readonly IYarnCommandAdapter? commands;
     private readonly List<BarrierHandle> barriers = new();
     private Func<StateManagerStatus>? statusProvider;
+    private Func<bool>? hasCommittedBoundary;
     private IReadOnlyList<IStateContributor> contributors = Array.Empty<IStateContributor>();
     private bool isInitialized;
 
@@ -130,9 +133,12 @@ public sealed class StateEligibility : IStateEligibility
         }
 
         var reasons = new List<StateEligibilityReason>();
-        var isDestructiveRestore = operation is StateOperationKind.Restore or StateOperationKind.Rollback;
+        var isDestructiveRestore = operation is StateOperationKind.Restore or StateOperationKind.Rollback or StateOperationKind.HotReload;
+        var savesFrozenBoundary = operation == StateOperationKind.Save && hasCommittedBoundary is not null;
         var safeScriptPhase = operation == StateOperationKind.Save
-            ? script.Phase == ScriptPlaybackPhase.AwaitingAdvance
+            ? savesFrozenBoundary
+                ? hasCommittedBoundary!() || script.Phase == ScriptPlaybackPhase.PreparingLineBoundary
+                : script.Phase == ScriptPlaybackPhase.AwaitingAdvance
             : script.Phase is ScriptPlaybackPhase.AwaitingAdvance or ScriptPlaybackPhase.Idle;
         if (!isDestructiveRestore && !safeScriptPhase)
         {
@@ -142,21 +148,22 @@ public sealed class StateEligibility : IStateEligibility
         }
 
         var status = statusProvider?.Invoke() ?? StateManagerStatus.Idle;
-        if (status != StateManagerStatus.Idle)
+        if (status != StateManagerStatus.Idle &&
+            !((isDestructiveRestore || savesFrozenBoundary) && status == StateManagerStatus.Capturing))
         {
             reasons.Add(new StateEligibilityReason(
                 StateEligibilityReasonCode.StateTransactionActive,
                 $"State manager is '{status}'."));
         }
 
-        if (!isDestructiveRestore && commands?.HasActiveCommands == true)
+        if (!isDestructiveRestore && !savesFrozenBoundary && commands?.HasActiveCommands == true)
         {
             reasons.Add(new StateEligibilityReason(
                 StateEligibilityReasonCode.ActiveCommand,
                 "A runtime command is active."));
         }
 
-        if (!isDestructiveRestore && activities.HasActiveActivities(includeIgnorable: false))
+        if (!isDestructiveRestore && !savesFrozenBoundary && activities.HasActiveActivities(includeIgnorable: false))
         {
             var activeCount = activities.Snapshot().Count(a => !a.IsIgnorable);
             reasons.Add(new StateEligibilityReason(
@@ -165,7 +172,7 @@ public sealed class StateEligibility : IStateEligibility
         }
 
         var modal = input.ActiveHandles.FirstOrDefault(value => value.IsModal);
-        if (!isDestructiveRestore && modal is not null)
+        if (!isDestructiveRestore && !savesFrozenBoundary && modal is not null)
         {
             reasons.Add(new StateEligibilityReason(
                 StateEligibilityReasonCode.ModalInput,
@@ -237,11 +244,13 @@ public sealed class StateEligibility : IStateEligibility
 
     internal void Attach(
         Func<StateManagerStatus> transactionStatusProvider,
-        IReadOnlyList<IStateContributor> stateContributors)
+        IReadOnlyList<IStateContributor> stateContributors,
+        Func<bool>? committedBoundaryProvider = null)
     {
         statusProvider = transactionStatusProvider ??
             throw new ArgumentNullException(nameof(transactionStatusProvider));
         contributors = stateContributors ?? throw new ArgumentNullException(nameof(stateContributors));
+        hasCommittedBoundary = committedBoundaryProvider;
     }
 
     private void Release(BarrierHandle handle)
@@ -271,6 +280,7 @@ public sealed class StateEligibility : IStateEligibility
         StateOperationKind.Save => StateOperationMask.Save,
         StateOperationKind.Restore => StateOperationMask.Restore,
         StateOperationKind.Rollback => StateOperationMask.Rollback,
+        StateOperationKind.HotReload => StateOperationMask.HotReload,
         _ => throw new ArgumentOutOfRangeException(nameof(operation)),
     };
 

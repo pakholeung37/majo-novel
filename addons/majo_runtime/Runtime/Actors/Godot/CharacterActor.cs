@@ -45,16 +45,22 @@ public sealed class CharacterActor : ActorBase, ICharacterActor, IActorTransform
     public float RotationDegrees => View.RotationDegrees;
     public void SetRotationDegrees(float rotation)
     {
-        if (!float.IsFinite(rotation)) throw new ArgumentOutOfRangeException(nameof(rotation));
-        View.RotationDegrees = rotation;
+        PersistentWrite(() =>
+        {
+            if (!float.IsFinite(rotation)) throw new ArgumentOutOfRangeException(nameof(rotation));
+            View.RotationDegrees = rotation;
+        });
     }
 
     public CharacterPositionPreset PositionPreset { get; private set; }
 
     public void SetScale(Vector2 scale)
     {
-        ValidateScale(scale);
-        View.Scale = scale;
+        PersistentWrite(() =>
+        {
+            ValidateScale(scale);
+            View.Scale = scale;
+        });
     }
 
     public void SetScenePosition(Vector2 scenePosition) =>
@@ -62,8 +68,11 @@ public sealed class CharacterActor : ActorBase, ICharacterActor, IActorTransform
 
     public void SetPosition(CharacterPositionPreset preset)
     {
-        PositionPreset = preset;
-        SetPosition(positions.Get(preset));
+        PersistentWrite(() =>
+        {
+            PositionPreset = preset;
+            SetPosition(positions.Get(preset));
+        });
     }
 
     public IOperationHandle ChangeAppearance(
@@ -76,14 +85,16 @@ public sealed class CharacterActor : ActorBase, ICharacterActor, IActorTransform
 
     public IOperationHandle ChangeAppearance(string appearance, AnimationSpec animation, ITransitionDriver driver)
     {
-        EnsureAlive();
-        ArgumentException.ThrowIfNullOrWhiteSpace(appearance);
-        var easing = Easings.GetRequired(animation.Easing);
-        var texture = TextureLoader.Load(Definition.GetAppearanceResourceKey(appearance),
-            Definition.GetAppearanceOverride(appearance));
-        var epoch = AppearanceEpoch;
-        TargetAppearance = appearance;
-        var operation = GodotActorAppearanceTransition.CreateOperation(View, animation, easing,
+        return PersistentWrite(() =>
+        {
+            EnsureAlive();
+            ArgumentException.ThrowIfNullOrWhiteSpace(appearance);
+            var easing = Easings.GetRequired(animation.Easing);
+            var texture = TextureLoader.Load(Definition.GetAppearanceResourceKey(appearance),
+                Definition.GetAppearanceOverride(appearance));
+            var epoch = AppearanceEpoch;
+            TargetAppearance = appearance;
+            var operation = GodotActorAppearanceTransition.CreateOperation(View, animation, easing,
             token =>
             {
                 var original = View.Texture;
@@ -100,7 +111,8 @@ public sealed class CharacterActor : ActorBase, ICharacterActor, IActorTransform
                 ApplyTexture(texture);
                 Appearance = appearance;
             });
-        return StartSequencedOperation(AppearanceProperty, operation, animation.ConflictPolicy);
+            return StartSequencedOperation(AppearanceProperty, operation, animation.ConflictPolicy);
+        });
     }
 
     public async Task<IPreparedActorAppearance> PrepareAppearanceTransitionAsync(string appearance,
@@ -138,9 +150,11 @@ public sealed class CharacterActor : ActorBase, ICharacterActor, IActorTransform
         CharacterPositionPreset preset,
         AnimationSpec animation)
     {
-        PositionPreset = preset;
-        return ChangePosition(
-            positions.Get(preset), animation);
+        return PersistentWrite(() =>
+        {
+            PositionPreset = preset;
+            return ChangePosition(positions.Get(preset), animation);
+        });
     }
 
     protected override void ApplyTexture(Texture2D texture)

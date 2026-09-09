@@ -13,6 +13,18 @@ namespace Majo.Runtime.UnitTests;
 public sealed class StateManagerTests
 {
     [Fact]
+    public async Task InitializationRejectsGameContributorWithoutMutationContract()
+    {
+        var events = new List<string>();
+        var manager = CreateManager([new UnsafePluginContributor()], events);
+
+        var exception = await Assert.ThrowsAsync<StateCompatibilityException>(() =>
+            manager.InitializeAsync(CancellationToken.None));
+
+        Assert.Contains(nameof(IStateMutationParticipant), exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RegistryBuildsStableTopologicalOrderAndRejectsInvalidGraphs()
     {
         var events = new List<string>();
@@ -44,7 +56,7 @@ public sealed class StateManagerTests
     }
 
     [Fact]
-    public async Task RestorePreflightsEverythingThenResetsAndRestoresInDependencyOrder()
+    public async Task RestorePreparesEverythingThenCommitsInDependencyOrderWithoutReset()
     {
         var events = new List<string>();
         var variables = new RecordingContributor("variables", [], events);
@@ -61,7 +73,7 @@ public sealed class StateManagerTests
                 .Build(),
             events);
         await manager.InitializeAsync(CancellationToken.None);
-        var snapshot = await manager.CaptureGameAsync();
+        var snapshot = await CaptureSnapshotAsync(variables, actors, script);
         events.Clear();
 
         await manager.RestoreGameAsync(snapshot);
@@ -73,12 +85,15 @@ public sealed class StateManagerTests
                 "preflight:script",
                 "input:acquire",
                 "dialogue:stop",
-                "reset:script",
-                "reset:actors",
-                "reset:variables",
+                "prepare:variables",
+                "prepare:actors",
+                "prepare:script",
                 "restore:variables",
                 "restore:actors",
                 "restore:script",
+                "dispose:script",
+                "dispose:actors",
+                "dispose:variables",
                 "input:dispose",
             ],
             events);
@@ -99,7 +114,7 @@ public sealed class StateManagerTests
                 .Build(),
             events);
         await manager.InitializeAsync(CancellationToken.None);
-        var snapshot = await manager.CaptureGameAsync();
+        var snapshot = await CaptureSnapshotAsync(variables, script);
         script.FailPreflight = true;
         events.Clear();
 
@@ -122,7 +137,7 @@ public sealed class StateManagerTests
             new StateContributorRegistry().Register(script).Register(variables).Build(),
             events);
         await manager.InitializeAsync(CancellationToken.None);
-        var snapshot = await manager.CaptureGameAsync();
+        var snapshot = await CaptureSnapshotAsync(variables, script);
         script.FailRestore = true;
         events.Clear();
 
@@ -173,8 +188,9 @@ public sealed class StateManagerTests
                 "preflight:only",
                 "input:acquire",
                 "dialogue:stop",
-                "reset:only",
+                "prepare:only",
                 "restore:only",
+                "dispose:only",
                 "input:dispose",
             ],
             events);
@@ -225,7 +241,7 @@ public sealed class StateManagerTests
         await manager.RestoreGameAsync(oldSnapshot);
 
         Assert.Equal(
-            ["input:acquire", "dialogue:stop", "reset:optional", "input:dispose"],
+            ["input:acquire", "dialogue:stop", "prepare:optional", "restore:optional", "dispose:optional", "input:dispose"],
             events);
     }
 
@@ -274,15 +290,16 @@ public sealed class StateManagerTests
                 "preflight:current",
                 "input:acquire",
                 "dialogue:stop",
-                "reset:current",
+                "prepare:current",
                 "restore:current",
+                "dispose:current",
                 "input:dispose",
             ],
             events);
     }
 
     [Fact]
-    public async Task CaptureAndRestoreRecheckEligibilityAfterCallerPreflight()
+    public async Task GameCaptureRequiresBoundaryAndRestoreRechecksEligibilityAfterPreflight()
     {
         var events = new List<string>();
         var contributor = new RecordingContributor("game", [], events);
@@ -292,16 +309,11 @@ public sealed class StateManagerTests
             events,
             eligibility: eligibility);
         await manager.InitializeAsync(CancellationToken.None);
-        var snapshot = await manager.CaptureGameAsync();
-        events.Clear();
-
-        Assert.True(eligibility.Check(StateOperationKind.Save).IsAllowed);
-        eligibility.Deny = true;
-        await Assert.ThrowsAsync<StateEligibilityException>(() =>
+        await Assert.ThrowsAsync<StateSnapshotException>(() =>
             manager.CaptureGameAsync());
         Assert.Empty(events);
 
-        eligibility.Deny = false;
+        var snapshot = await CaptureSnapshotAsync(contributor);
         var plan = await manager.RestoreTransaction.PreflightAsync(
             snapshot,
             StateScope.Game);
@@ -337,7 +349,7 @@ public sealed class StateManagerTests
         await manager.ResetAsync(CancellationToken.None);
         Assert.Empty(manager.Actors);
 
-        await contributor.RestoreAsync(record, CancellationToken.None);
+        await contributor.CommitPreparedAsync(record, CancellationToken.None);
         Assert.Equal(["stills", "scenes", "hero"], manager.Actors.Select(a => a.Id));
         Assert.Equal([-10, 0, 20], manager.Actors.Select(a => a.ZIndex));
 
@@ -356,8 +368,16 @@ public sealed class StateManagerTests
         eligibility,
         migrations: migrations);
 
-    private sealed class RecordingContributor : IStateContributor
+    private static async Task<StateSnapshot> CaptureSnapshotAsync(
+        params IStateContributor[] contributors) => new(
+        StateSnapshot.CurrentFormatVersion,
+        DateTimeOffset.UtcNow,
+        await Task.WhenAll(contributors.Select(async contributor =>
+            await contributor.CaptureAsync(CancellationToken.None))));
+
+    private sealed class RecordingContributor : IPreparedStateContributor, IStateMutationParticipant
     {
+        public void BindStateMutationGate(StateMutationGate gate) { }
         private readonly IList<string> events;
 
         public RecordingContributor(
@@ -417,18 +437,20 @@ public sealed class StateManagerTests
             return ValueTask.CompletedTask;
         }
 
-        public ValueTask RestoreAsync(
-            StateRecord record,
-            CancellationToken cancellationToken)
+        public ValueTask<IPreparedStateRestore> PrepareRestoreAsync(
+            StateRecord? record, RestoreContext context, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            events.Add($"restore:{Key}");
-            if (FailRestore)
+            events.Add($"prepare:{Key}");
+            return ValueTask.FromResult<IPreparedStateRestore>(new PreparedStateRestore(() =>
             {
-                throw new StateRuntimeException($"Restore failed for '{Key}'.");
-            }
-
-            return ValueTask.CompletedTask;
+                events.Add($"restore:{Key}");
+                if (FailRestore) throw new StateRuntimeException($"Restore failed for '{Key}'.");
+            }, () =>
+            {
+                events.Add($"dispose:{Key}");
+                return ValueTask.CompletedTask;
+            }));
         }
 
         public ValueTask ResetAsync(CancellationToken cancellationToken)
@@ -437,6 +459,22 @@ public sealed class StateManagerTests
             events.Add($"reset:{Key}");
             return ValueTask.CompletedTask;
         }
+    }
+
+    private sealed class UnsafePluginContributor : IPreparedStateContributor
+    {
+        public string Key => "plugin.unsafe";
+        public StateScope Scope => StateScope.Game;
+        public int SchemaVersion => 1;
+        public StateContributorCapability Capability => StateContributorCapability.DurableRollback;
+        public ValueTask<StateRecord> CaptureAsync(CancellationToken token) =>
+            ValueTask.FromResult(new StateRecord(Key, Scope, SchemaVersion,
+                JsonSerializer.SerializeToElement(0)));
+        public ValueTask PreflightAsync(StateRecord record, CancellationToken token) => ValueTask.CompletedTask;
+        public ValueTask ResetAsync(CancellationToken token) => ValueTask.CompletedTask;
+        public ValueTask<IPreparedStateRestore> PrepareRestoreAsync(
+            StateRecord? record, RestoreContext context, CancellationToken token) =>
+            ValueTask.FromResult<IPreparedStateRestore>(new PreparedStateRestore(() => { }));
     }
 
     private sealed class StubDialoguePlayer : IDialoguePlayer

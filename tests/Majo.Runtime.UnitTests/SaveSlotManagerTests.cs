@@ -2,12 +2,28 @@ using System.Text.Json;
 using Majo.Runtime.History;
 using Majo.Runtime.Save;
 using Majo.Runtime.State;
+using Majo.Runtime.Script;
+using Majo.Runtime.Dialogue;
 using Xunit;
 
 namespace Majo.Runtime.UnitTests;
 
 public sealed class SaveSlotManagerTests
 {
+    [Fact]
+    public async Task SaveMetadataUsesCapturedEntryEvenIfPlaybackAdvancesBeforeCaptureReturns()
+    {
+        var fixture = await Fixture.CreateAsync();
+        fixture.State.Value = 7;
+        fixture.State.AdvanceAfterCapture = true;
+        var slot = new SaveSlotId(SaveSlotKind.Manual, 1);
+        await fixture.Manager.SaveAsync(slot);
+        var envelope = fixture.Serializer.Deserialize(await fixture.Storage.ReadAsync("slots/manual/0001"));
+        Assert.Equal(7, envelope.Snapshot.Records["game.fake"].Payload.GetProperty("value").GetInt32());
+        Assert.Equal("Line 7", envelope.DisplayMetadata[SaveSlotMetadataKeys.TextSummary]);
+        Assert.Equal("Line 8", fixture.State.CurrentBoundary!.Context.Line.Text.Text);
+    }
+
     [Fact]
     public async Task SaveOverwriteFailurePreservesOldSlotAndCleansNewThumbnail()
     {
@@ -207,8 +223,29 @@ public sealed class SaveSlotManagerTests
         }
     }
 
-    private sealed class FakeStateManager : IStateManager
+    private sealed class FakeStateManager : IStateManager, IStateBoundarySource
     {
+        public event Action<CommittedLineBoundary>? BoundaryCommitted { add { } remove { } }
+        public CommittedLineBoundary? CurrentBoundary { get; private set; }
+        public bool AdvanceAfterCapture { get; set; }
+        public Task<CommittedLineBoundary> CaptureSaveBoundaryAsync(CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var captured = MakeBoundary();
+            CurrentBoundary = captured;
+            if (AdvanceAfterCapture)
+            {
+                Value++;
+                CurrentBoundary = MakeBoundary();
+            }
+            return Task.FromResult(captured);
+        }
+        private CommittedLineBoundary MakeBoundary() => new(
+            new LineBoundaryContext(1, Value,
+                new ScriptCheckpoint(ScriptCheckpoint.CurrentFormatVersion, "fingerprint",
+                    new ScriptPlaybackSpot(new ScriptId("project", "node"), "line")),
+                new DialogueLine("line", "Narrator", new DialogueText($"Line {Value}", []), [])),
+            CreateSnapshot());
         public event Action<StateStatusChanged>? StatusChanged { add { } remove { } }
         public event Action<StateSnapshot>? Captured { add { } remove { } }
         public event Action<StateSnapshot>? Restored { add { } remove { } }

@@ -12,6 +12,7 @@ using Majo.Runtime.Auto;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
 using Majo.Runtime.Script;
+using Majo.Runtime.State;
 using YarnSpinnerGodot;
 
 namespace Majo.Runtime.Dialogue.Yarn.HotReload;
@@ -30,6 +31,7 @@ public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
     private readonly YarnProjectMaterializer materializer;
     private readonly IPlaybackModeManager? playback;
     private readonly IRuntimeLogger logger;
+    private readonly IStateManager? state;
     private readonly object sync = new();
     private readonly SemaphoreSlim compileGate = new(1, 1);
     private CancellationTokenSource? lifetime;
@@ -59,7 +61,8 @@ public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
         YarnSourceSnapshotReader? snapshotReader = null,
         YarnRuntimeCompiler? compiler = null,
         YarnProjectMaterializer? materializer = null,
-        IPlaybackModeManager? playback = null)
+        IPlaybackModeManager? playback = null,
+        IStateManager? state = null)
     {
         this.versions = versions ?? throw new ArgumentNullException(nameof(versions));
         this.script = script ?? throw new ArgumentNullException(nameof(script));
@@ -73,6 +76,7 @@ public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
         this.compiler = compiler ?? new YarnRuntimeCompiler();
         this.materializer = materializer ?? new YarnProjectMaterializer();
         this.playback = playback;
+        this.state = state;
     }
 
     public event Action<YarnHotReloadStatusChanged>? StatusChanged;
@@ -632,7 +636,10 @@ public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
             return;
         }
 
-        var checkpoint = script.CaptureCheckpoint();
+        var stableBoundary = state is IStateBoundarySource boundaries
+            ? await boundaries.CaptureSaveBoundaryAsync(cancellationToken)
+            : null;
+        var checkpoint = stableBoundary?.Context.Script ?? script.CaptureCheckpoint();
         var variables = backend.VariableStore.Capture();
         var stopwatch = Stopwatch.StartNew();
         SetStatus(new YarnHotReloadStatus(
@@ -653,14 +660,26 @@ public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
         backend.SetHotReloadProgressionFrozen(true);
         try
         {
-            versions.Activate(candidate);
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(configuration.ApplyTimeoutMilliseconds);
-            await backend.ReplaceRunningProjectAsync(
-                candidate,
-                checkpoint,
-                DialoguePresentationOrigin.HotReloadReplay,
-                timeout.Token);
+            versions.Activate(candidate);
+            if (state is not null && stableBoundary is not null)
+            {
+                var plan = await state.RestoreTransaction.PreflightAsync(
+                    stableBoundary.Snapshot,
+                    StateScope.Game,
+                    StateOperationKind.HotReload,
+                    timeout.Token);
+                await state.RestoreTransaction.ExecuteAsync(plan, timeout.Token);
+            }
+            else
+            {
+                await backend.ReplaceRunningProjectAsync(
+                    candidate,
+                    checkpoint,
+                    DialoguePresentationOrigin.HotReloadReplay,
+                    timeout.Token);
+            }
             await WaitForStableBoundaryAsync(checkpoint.Spot, timeout.Token);
             versions.MarkRunning(candidate.ProjectId, candidate.Project);
             var message = $"Yarn hot reload generation {candidate.Generation} was applied.";
@@ -678,6 +697,8 @@ public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
         }
         catch (Exception applyException)
         {
+            if (state?.Status == StateManagerStatus.Faulted)
+                throw;
             SetStatus(Status with { State = YarnHotReloadState.RollingBack });
             logger.Warning(LogCategory, "script.hot_reload.rollback_started",
                 "Yarn hot reload failed; restoring the last-known-good project.",
@@ -687,13 +708,16 @@ public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
                 versions.Activate(running);
                 using var rollbackTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 rollbackTimeout.CancelAfter(configuration.ApplyTimeoutMilliseconds);
-                await backend.ReplaceRunningProjectAsync(
-                    running,
-                    checkpoint,
-                    DialoguePresentationOrigin.CheckpointRestore,
-                    rollbackTimeout.Token);
-                backend.VariableStore.ReplaceAll(variables);
-                await WaitForStableBoundaryAsync(checkpoint.Spot, rollbackTimeout.Token);
+                if (state is null || stableBoundary is null)
+                {
+                    await backend.ReplaceRunningProjectAsync(
+                        running,
+                        checkpoint,
+                        DialoguePresentationOrigin.CheckpointRestore,
+                        rollbackTimeout.Token);
+                    backend.VariableStore.ReplaceAll(variables);
+                    await WaitForStableBoundaryAsync(checkpoint.Spot, rollbackTimeout.Token);
+                }
                 versions.MarkRunning(running.ProjectId, running.Project);
                 // Keep the successfully compiled candidate available for the
                 // next session. A live apply can fail after the active version

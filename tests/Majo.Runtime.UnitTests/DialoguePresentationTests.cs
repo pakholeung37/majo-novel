@@ -19,5 +19,8 @@ public sealed class DialoguePresentationTests
         Assert.Throws<DialogueException>(() => registry.Register(first));
     }
 
-    private sealed class ProbeMarkupHandler : IDialogueMarkupHandler;
+    private sealed class ProbeMarkupHandler : IDialogueMarkupHandler
+    {
+        public DialogueMarkupReplayPolicy ReplayPolicy => DialogueMarkupReplayPolicy.Visual;
+    }
 }

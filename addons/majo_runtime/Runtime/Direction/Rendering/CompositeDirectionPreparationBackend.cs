@@ -147,7 +147,7 @@ public sealed class CompositeDirectionPreparationBackend : IDirectionPreparation
         {
             plan.BeforeState.Stages.TryGetValue(stageId, out var before);
             plan.TargetState.Stages.TryGetValue(stageId, out var target);
-            if (!Equals(before, target) || plan.Transitions.Any(transition =>
+            if (plan.IsStateReplacement || !Equals(before, target) || plan.Transitions.Any(transition =>
                 transition.StablePaths.Contains($"stage/{stageId.Value}/backdrop")))
             {
                 preparations.Add(CapturePreparation(() =>
@@ -169,7 +169,7 @@ public sealed class CompositeDirectionPreparationBackend : IDirectionPreparation
         {
             plan.BeforeState.Views.TryGetValue(viewId, out var before);
             plan.TargetState.Views.TryGetValue(viewId, out var target);
-            if (!Equals(before, target) || plan.ViewIntents.Any(intent => intent.ViewId == viewId))
+            if (plan.IsStateReplacement || !Equals(before, target) || plan.ViewIntents.Any(intent => intent.ViewId == viewId))
             {
                 preparations.Add(CapturePreparation(() =>
                     views.PrepareAsync(plan, viewId, before, target, cancellationToken)));
@@ -184,7 +184,7 @@ public sealed class CompositeDirectionPreparationBackend : IDirectionPreparation
         CancellationToken cancellationToken)
     {
         var preparations = new List<Task<IPreparedDirectionComponent>>();
-        if (!Equals(plan.BeforeState.Screen, plan.TargetState.Screen))
+        if (plan.IsStateReplacement || !Equals(plan.BeforeState.Screen, plan.TargetState.Screen))
         {
             preparations.Add(CapturePreparation(() => screen.PrepareAsync(
                     plan,
@@ -193,7 +193,7 @@ public sealed class CompositeDirectionPreparationBackend : IDirectionPreparation
                     cancellationToken)));
         }
 
-        if (!Equals(plan.BeforeState.Effects, plan.TargetState.Effects))
+        if (plan.IsStateReplacement || !Equals(plan.BeforeState.Effects, plan.TargetState.Effects))
         {
             preparations.Add(CapturePreparation(() => effects.PrepareAsync(
                     plan,

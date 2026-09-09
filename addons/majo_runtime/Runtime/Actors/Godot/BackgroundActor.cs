@@ -27,7 +27,8 @@ public sealed class BackgroundActor : ActorBase, IBackgroundActor
 
     public override Vector2 Position => Container.Position;
 
-    public void SetSlot(string slot) => Slot = BackgroundSlotIds.Normalize(slot);
+    public void SetSlot(string slot) =>
+        PersistentWrite(() => Slot = BackgroundSlotIds.Normalize(slot));
 
     protected override void ApplyTexture(Texture2D texture)
     {

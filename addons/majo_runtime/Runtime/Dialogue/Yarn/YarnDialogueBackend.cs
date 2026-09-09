@@ -22,6 +22,7 @@ using YarnSpinnerGodot;
 namespace Majo.Runtime.Dialogue.Yarn;
 
 public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySource,
+    IScriptCheckpointReplayBackend,
     IScriptCatalogBackend,
     IScriptCheckpointBackend,
     IDisposable
@@ -60,6 +61,8 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
     private string currentLineId = string.Empty;
     private IReadOnlyList<string> currentSubstitutions = Array.Empty<string>();
     private DialogueLine? currentLine;
+
+    public DialogueLine? CurrentLine => currentLine;
     private IReadOnlyList<DialogueOption> currentOptions = Array.Empty<DialogueOption>();
     private ScriptCheckpoint? pendingRestore;
     private Exception? pendingFailure;
@@ -592,10 +595,48 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
         pendingPresentationOrigin = DialoguePresentationOrigin.CheckpointRestore;
     }
 
+    public void PrepareRestore(
+        ScriptCheckpoint checkpoint,
+        DialoguePresentationOrigin origin)
+    {
+        if (origin == DialoguePresentationOrigin.Normal)
+            throw new ScriptCheckpointException("Checkpoint replay requires a non-normal presentation origin.");
+        PrepareRestore(checkpoint);
+        pendingPresentationOrigin = origin;
+    }
+
+    public async Task StopForReplayAsync(CancellationToken cancellationToken)
+    {
+        isInternalMigration = true;
+        try { await StopAsync(cancellationToken); }
+        finally { isInternalMigration = false; }
+    }
+
+    public async Task ActivatePreparedReplayAsync(
+        ScriptCheckpoint checkpoint,
+        DialoguePresentationOrigin origin,
+        CancellationToken cancellationToken)
+    {
+        if (pendingRestore is null)
+            throw new ScriptCheckpointException("No prepared checkpoint replay is available.");
+        isInternalMigration = true;
+        try
+        {
+            var project = await projectVersions.GetActiveAsync(
+                checkpoint.Spot.Script.ProjectId, cancellationToken);
+            pendingPresentationOrigin = origin;
+            BeginProjectSession(checkpoint.Spot.Script.ProjectId,
+                checkpoint.Spot.Script.NodeName, resetCompletion: false);
+            await StartProjectAsync(project, checkpoint.Spot.Script.NodeName, cancellationToken);
+            projectVersions.MarkRunning(checkpoint.Spot.Script.ProjectId, project);
+        }
+        finally { isInternalMigration = false; }
+    }
+
     public void CancelPreparedRestore(ScriptCheckpoint checkpoint)
     {
         ArgumentNullException.ThrowIfNull(checkpoint);
-        if (ReferenceEquals(pendingRestore, checkpoint) || pendingRestore == checkpoint)
+        if (pendingRestore is null || ReferenceEquals(pendingRestore, checkpoint) || pendingRestore == checkpoint)
         {
             pendingRestore = null;
             pendingPresentationOrigin = DialoguePresentationOrigin.Normal;
@@ -746,6 +787,17 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
     }
 
     private LineBoundaryContext? activeBoundary;
+    public Task<IDisposable> AcquireRestoreAsync(CancellationToken token) =>
+        presenterAdapter!.AcquireRestoreAsync(token);
+    public Func<ScriptCheckpoint, DialoguePresentationOrigin, CancellationToken, Task>? ResumeCheckpointAsync { get; set; }
+    public Task ResumeBoundaryAsync(
+        ScriptCheckpoint checkpoint,
+        DialoguePresentationOrigin origin,
+        CancellationToken token) =>
+        ResumeCheckpointAsync?.Invoke(checkpoint, origin, token) ?? throw new ScriptCheckpointException(
+            "Script playback has not attached checkpoint recovery.");
+    public bool CanReviseBoundary(LineBoundaryContext boundary) =>
+        presenterAdapter?.CanReviseBoundary(boundary) == true;
     public bool IsCurrentBoundary(LineBoundaryContext boundary) => ReferenceEquals(activeBoundary, boundary);
     public Task WaitForPreparationAsync(CancellationToken token) =>
         presenterAdapter?.WaitForPreparationAsync(token) ?? Task.CompletedTask;

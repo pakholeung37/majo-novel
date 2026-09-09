@@ -312,6 +312,8 @@ public partial class HeadlessTestRunner
             this.order = order;
         }
 
+        public DialogueMarkupReplayPolicy ReplayPolicy => DialogueMarkupReplayPolicy.Visual;
+
         public List<DialogueText> PreparedTexts { get; } = new();
 
         public bool SawCancelledCharacterToken { get; private set; }

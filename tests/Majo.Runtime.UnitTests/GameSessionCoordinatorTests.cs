@@ -31,7 +31,7 @@ public sealed class GameSessionCoordinatorTests
         Assert.Equal(PlaybackMode.Manual, playback.Mode);
         Assert.Equal(StateOperationKind.Restore, state.Transaction.PreflightOperations[^1]);
         Assert.Equal(1, state.Transaction.ExecuteCount);
-        Assert.False(state.Transaction.SawRestorePause);
+        Assert.True(state.Transaction.SawRestorePause);
 
         history.AddEntry();
         playback.SetMode(PlaybackMode.Auto);
@@ -43,6 +43,29 @@ public sealed class GameSessionCoordinatorTests
         Assert.Equal(StateOperationKind.Rollback, state.Transaction.PreflightOperations[^1]);
         Assert.Equal(2, state.Transaction.ExecuteCount);
         Assert.True(state.Transaction.SawRestorePause);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FailedRestoreRetainsSessionHistoryAndPlaybackMode(bool rollback)
+    {
+        var sessions = new RecordingSessions();
+        var state = new RecordingStateManager();
+        var history = new RecordingHistory();
+        var playback = new RecordingPlayback();
+        var coordinator = new GameSessionCoordinator(sessions, state, history, playback);
+        await coordinator.InitializeAsync(CancellationToken.None);
+        history.AddEntry();
+        playback.SetMode(PlaybackMode.Auto);
+        state.Transaction.OnExecute = () => throw new InvalidOperationException("prepare failed");
+        var snapshot = new StateSnapshot(1, DateTimeOffset.UtcNow, []);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => rollback
+            ? coordinator.RollbackAsync(snapshot) : coordinator.LoadGameAsync(snapshot));
+        Assert.Equal(0, sessions.BeginCount);
+        Assert.Single(history.Entries);
+        Assert.Equal(PlaybackMode.Auto, playback.Mode);
+        Assert.Empty(playback.PauseReasons);
     }
 
     private sealed class RecordingSessions : IRuntimeSessionController

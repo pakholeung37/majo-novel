@@ -20,9 +20,17 @@ public interface IManosabaUiService : IRuntimeService
     void SetFrameMode(ManosabaFrameMode mode, double duration = 0);
 }
 
-public sealed class ManosabaUiService : IManosabaUiService, IStateContributor
+public sealed class ManosabaUiService : IManosabaUiService, IPreparedStateContributor, IStateMutationParticipant
 {
     private ManosabaPresentation? presentation;
+    private StateMutationGate? mutationGate;
+    public void BindStateMutationGate(StateMutationGate gate)
+    {
+        ArgumentNullException.ThrowIfNull(gate);
+        if (mutationGate is not null && !ReferenceEquals(mutationGate, gate))
+            throw new StateRuntimeException("UI state already belongs to another runtime's state gate.");
+        mutationGate = gate;
+    }
 
     public ManosabaFrameMode CurrentFrameMode { get; private set; } = ManosabaFrameMode.Default;
 
@@ -42,8 +50,14 @@ public sealed class ManosabaUiService : IManosabaUiService, IStateContributor
 
     public void SetFrameMode(ManosabaFrameMode mode, double duration = 0)
     {
-        CurrentFrameMode = mode;
-        presentation?.SetFrameMode(mode, duration);
+        if (!Enum.IsDefined(mode)) throw new ArgumentOutOfRangeException(nameof(mode));
+        void Commit()
+        {
+            CurrentFrameMode = mode;
+            presentation?.SetFrameMode(mode, duration);
+        }
+        if (mutationGate is null) Commit();
+        else mutationGate.Write(Commit);
     }
 
     public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
@@ -71,16 +85,14 @@ public sealed class ManosabaUiService : IManosabaUiService, IStateContributor
         return ValueTask.CompletedTask;
     }
 
-    public ValueTask RestoreAsync(StateRecord record, CancellationToken cancellationToken)
+    public ValueTask<IPreparedStateRestore> PrepareRestoreAsync(
+        StateRecord? record, RestoreContext context, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var payload = StateJson.Deserialize<ManosabaUiStatePayload>(record);
-        if (payload is not null)
-        {
-            SetFrameMode((ManosabaFrameMode)payload.FrameMode);
-        }
-
-        return ValueTask.CompletedTask;
+        var mode = record is null ? ManosabaFrameMode.Default :
+            (ManosabaFrameMode)StateJson.Deserialize<ManosabaUiStatePayload>(record).FrameMode;
+        if (!Enum.IsDefined(mode)) throw new StateSnapshotException("Unknown Manosaba frame mode.");
+        return ValueTask.FromResult<IPreparedStateRestore>(new PreparedStateRestore(() => SetFrameMode(mode)));
     }
 
     ValueTask IStateContributor.ResetAsync(CancellationToken cancellationToken)

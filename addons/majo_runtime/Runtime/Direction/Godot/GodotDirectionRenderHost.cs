@@ -266,6 +266,7 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (!isInitialized) return Task.CompletedTask;
+        retainedOutput?.Dispose();
         InvalidateGenerations();
         if (ownerViewport is not null && GodotObject.IsInstanceValid(ownerViewport))
             ownerViewport.SizeChanged -= Resize;

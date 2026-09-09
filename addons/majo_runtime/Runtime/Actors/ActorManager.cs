@@ -7,10 +7,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using Majo.Runtime.Core;
 using Majo.Runtime.Localization;
+using Majo.Runtime.State;
 
 namespace Majo.Runtime.Actors;
 
-public sealed class ActorManager : IActorManager, IDisposable
+public sealed class ActorManager : IActorManager, IActorReplacementSource, IStateMutationParticipant, IDisposable
 {
     private readonly object gate = new();
     private readonly Dictionary<string, ActorDefinition> definitions =
@@ -27,6 +28,19 @@ public sealed class ActorManager : IActorManager, IDisposable
     private readonly IRuntimeLogger logger;
     private readonly ActorCreationConventions conventions;
     private bool isInitialized;
+    private StateMutationGate? mutationGate;
+
+    public void BindStateMutationGate(StateMutationGate gate)
+    {
+        ArgumentNullException.ThrowIfNull(gate);
+        if (mutationGate is not null && !ReferenceEquals(mutationGate, gate))
+            throw new StateCompatibilityException("Actor manager is already bound to another runtime's state mutation gate.");
+        mutationGate = gate;
+        lock (gate)
+        {
+            foreach (var actor in actors.Values) BindActor(actor);
+        }
+    }
 
     public ActorManager(
         IEnumerable<ActorDefinition> definitions,
@@ -171,11 +185,16 @@ public sealed class ActorManager : IActorManager, IDisposable
                 $"Actor factory '{factory.FactoryId}' returned ID '{actor.Id}' for '{actorId}'.");
         }
 
-        lock (gate)
+        BindActor(actor);
+
+        Mutate(() =>
         {
-            actors.Add(actorId, actor);
-            actorOrder.Add(actorId);
-        }
+            lock (gate)
+            {
+                actors.Add(actorId, actor);
+                actorOrder.Add(actorId);
+            }
+        });
         return actor;
     }
 
@@ -243,11 +262,15 @@ public sealed class ActorManager : IActorManager, IDisposable
         var actor = factory.Create(definition, request.CreationMode) ?? throw new ActorException(
             $"Actor factory '{factory.FactoryId}' returned null for '{request.ActorId}'.");
         ValidateCreatedActor(request.ActorId, factory, actor);
-        lock (gate)
+        BindActor(actor);
+        Mutate(() =>
         {
-            actors.Add(request.ActorId, actor);
-            actorOrder.Add(request.ActorId);
-        }
+            lock (gate)
+            {
+                actors.Add(request.ActorId, actor);
+                actorOrder.Add(request.ActorId);
+            }
+        });
 
         return actor;
     }
@@ -319,19 +342,17 @@ public sealed class ActorManager : IActorManager, IDisposable
     public bool Remove(string actorId)
     {
         EnsureInitialized();
-        IActor? actor;
-        lock (gate)
+        return Mutate(() =>
         {
-            if (!actors.Remove(actorId, out actor))
+            IActor? actor;
+            lock (gate)
             {
-                return false;
+                if (!actors.Remove(actorId, out actor)) return false;
+                actorOrder.Remove(actorId);
             }
-
-            actorOrder.Remove(actorId);
-        }
-
-        actor.Destroy();
-        return true;
+            actor.Destroy();
+            return true;
+        });
     }
 
     public bool CanCreate(string actorId, string factoryId)
@@ -477,6 +498,82 @@ public sealed class ActorManager : IActorManager, IDisposable
     private static bool IsConventionFactory(string factoryId) =>
         factoryId is ActorFactoryIds.Character or ActorFactoryIds.Background;
 
+    public async Task<IPreparedActorReplacement> PrepareReplacementAsync(
+        IReadOnlyList<ActorSpawnRequest> requests, CancellationToken cancellationToken)
+    {
+        EnsureInitialized();
+        if (requests.Select(request => request.ActorId).Distinct(StringComparer.Ordinal).Count() != requests.Count)
+            throw new ActorException("An actor replacement contains duplicate IDs.");
+        var candidates = new List<IActor>();
+        try
+        {
+            foreach (var request in requests)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var definition = ResolveDefinition(request);
+                if (!factories.TryGetValue(definition.FactoryId, out var factory))
+                    throw new ActorFactoryNotFoundException(definition.FactoryId, request.ActorId);
+                var candidate = await factory.CreateAsync(definition, ActorCreationMode.Dormant, cancellationToken);
+                candidates.Add(candidate);
+                ValidateCreatedActor(request.ActorId, factory, candidate);
+                BindActor(candidate);
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+            return new PreparedReplacement(this, candidates.ToArray());
+        }
+        catch (Exception failure)
+        {
+            var failures = new List<Exception> { failure };
+            foreach (var candidate in candidates)
+                try { candidate.Destroy(); }
+                catch (Exception cleanup) { failures.Add(cleanup); }
+            if (failures.Count > 1) throw new AggregateException("Actor preparation and cleanup failed.", failures);
+            throw;
+        }
+    }
+
+    private sealed class PreparedReplacement(ActorManager owner, IActor[] candidates) : IPreparedActorReplacement
+    {
+        private IActor[]? retired;
+        private bool disposed;
+        public IReadOnlyList<IActor> Actors { get; } = Array.AsReadOnly(candidates);
+
+        public void Commit()
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
+            if (retired is not null) throw new ActorException("Actor replacement was already committed.");
+            owner.Mutate(() =>
+            {
+                lock (owner.gate)
+                {
+                    if (owner.pendingActors.Count != 0)
+                        throw new ActorException("Actor creation must quiesce before replacement.");
+                    retired = owner.actorOrder.Select(id => owner.actors[id]).ToArray();
+                    owner.actors.Clear();
+                    owner.actorOrder.Clear();
+                    foreach (var actor in candidates)
+                    {
+                        owner.actors.Add(actor.Id, actor);
+                        owner.actorOrder.Add(actor.Id);
+                    }
+                    foreach (var actor in retired) actor.SetVisible(false);
+                }
+            });
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            if (disposed) return ValueTask.CompletedTask;
+            disposed = true;
+            List<Exception>? failures = null;
+            foreach (var actor in retired ?? candidates)
+                try { actor.Destroy(); }
+                catch (Exception error) { (failures ??= new()).Add(error); }
+            if (failures is not null) throw new AggregateException("Actor replacement cleanup failed.", failures);
+            return ValueTask.CompletedTask;
+        }
+    }
+
     private void DestroyAll()
     {
         IActor[] snapshot;
@@ -562,11 +659,16 @@ public sealed class ActorManager : IActorManager, IDisposable
             actor = await factory.CreateAsync(definition, creationMode, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             ValidateCreatedActor(actorId, factory, actor);
-            lock (gate)
+            BindActor(actor);
+            await MutateAsync(_ =>
             {
-                actors.Add(actorId, actor);
-                actorOrder.Add(actorId);
-            }
+                lock (gate)
+                {
+                    actors.Add(actorId, actor);
+                    actorOrder.Add(actorId);
+                }
+                return Task.CompletedTask;
+            }, cancellationToken);
 
             completion.TrySetResult(actor);
             actor = null;
@@ -651,6 +753,30 @@ public sealed class ActorManager : IActorManager, IDisposable
             throw new ActorException("ActorManager is not initialized.");
         }
     }
+
+    private void BindActor(IActor actor)
+    {
+        if (mutationGate is null) return;
+        if (actor is not IStateMutationParticipant participant)
+            throw new StateCompatibilityException(
+                $"Actor '{actor.Id}' does not implement the persistent write gate contract.");
+        participant.BindStateMutationGate(mutationGate);
+    }
+
+    private void Mutate(Action mutation)
+    {
+        if (mutationGate is null) mutation();
+        else mutationGate.Write(mutation);
+    }
+
+    private T Mutate<T>(Func<T> mutation) =>
+        mutationGate is null ? mutation() : mutationGate.Write(mutation);
+
+    private Task MutateAsync(
+        Func<CancellationToken, Task> mutation,
+        CancellationToken cancellationToken) => mutationGate is null
+        ? mutation(cancellationToken)
+        : mutationGate.WriteAsync(mutation, cancellationToken);
 
     public void Dispose() => actorLifetime.Dispose();
 }

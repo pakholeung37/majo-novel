@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Majo.Runtime.Core;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Rendering;
+using Majo.Runtime.State;
 
 namespace Majo.Runtime.Direction.Execution;
 
@@ -196,6 +197,24 @@ public sealed class CommittedDirectionTransaction : IAsyncDisposable
             throw new AggregateException("Direction transaction cleanup failed.", failures);
     }
 
+    internal async Task StopForRestoreAsync(CancellationToken cancellationToken)
+    {
+        await lifecycleGate.WaitAsync(cancellationToken);
+        try
+        {
+            if (Volatile.Read(ref disposed) != 0) return;
+            if (cueActivity is not null && !cueActivity.Settlement.IsCompleted)
+                await cueActivity.CancelAsync(cancellationToken);
+        }
+        finally { lifecycleGate.Release(); }
+        await DisposeAsync();
+        try { await Settlement.WaitAsync(cancellationToken); }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // Disposing an in-flight visual transition is the expected retained-output stop path.
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
         await lifecycleGate.WaitAsync(CancellationToken.None);
@@ -318,7 +337,7 @@ public interface IDirectionTransactionCoordinator : IRuntimeService
         CancellationToken cancellationToken = default) => throw new NotSupportedException("Scene boundaries are not supported by this backend.");
 }
 
-public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoordinator, IDisposable
+public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoordinator, IDirectionStateReplacementSource, IStateMutationParticipant, IDisposable
 {
     private static readonly string[] WildcardSelector = ["*"];
     private static readonly DirectionTransition[] FallbackCutTransitions =
@@ -336,6 +355,15 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
     private readonly object stateGate = new();
     private readonly List<CommittedDirectionTransaction> transactions = new();
     private DirectionState state;
+    private StateMutationGate? mutationGate;
+
+    public void BindStateMutationGate(StateMutationGate gate)
+    {
+        ArgumentNullException.ThrowIfNull(gate);
+        if (mutationGate is not null && !ReferenceEquals(mutationGate, gate))
+            throw new StateCompatibilityException("Direction coordinator is already bound to another runtime's state mutation gate.");
+        mutationGate = gate;
+    }
 
     public DirectionTransactionCoordinator(
         IDirectionPlanner planner,
@@ -465,17 +493,17 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
         var capturedDirectives = directives.ToArray();
         CommittedDirectionTransaction committed;
 
-        await commitGate.WaitAsync(cancellationToken);
-        try
+        committed = await MutateAsync(async token =>
         {
-            if (sceneClosing) throw new DirectionException("Scene context is closing or failed; reset before submitting new commands.");
-            var plan = planner.Plan(State, capturedDirectives, completion);
-            committed = await PrepareAndCommitAsync(plan, cancellationToken);
-        }
-        finally
-        {
-            commitGate.Release();
-        }
+            await commitGate.WaitAsync(token);
+            try
+            {
+                if (sceneClosing) throw new DirectionException("Scene context is closing or failed; reset before submitting new commands.");
+                var plan = planner.Plan(State, capturedDirectives, completion);
+                return await PrepareAndCommitAsync(plan, token);
+            }
+            finally { commitGate.Release(); }
+        }, cancellationToken);
 
         if (completion == DirectionCompletionBarrier.Settle)
             await committed.Settlement.WaitAsync(cancellationToken);
@@ -491,46 +519,38 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
             throw new ArgumentException(
                 "The Direction transaction belongs to another coordinator.",
                 nameof(transaction));
-        await commitGate.WaitAsync(cancellationToken);
-        try
+        var committed = await MutateAsync(async token =>
         {
-            var current = State;
-            if (current.Revision != transaction.Plan.TargetState.Revision)
+            await commitGate.WaitAsync(token);
+            try
             {
-                throw new DirectionRevisionException(
-                    transaction.Plan.TargetState.Revision,
-                    current.Revision);
-            }
+                var current = State;
+                if (current.Revision != transaction.Plan.TargetState.Revision)
+                {
+                    throw new DirectionRevisionException(
+                        transaction.Plan.TargetState.Revision,
+                        current.Revision);
+                }
 
-            if (transaction.CueActivity is not null &&
-                !transaction.CueActivity.Settlement.IsCompleted)
-            {
-                await transaction.CueActivity.CancelAsync(cancellationToken);
-            }
+                if (transaction.CueActivity is not null &&
+                    !transaction.CueActivity.Settlement.IsCompleted)
+                    await transaction.CueActivity.CancelAsync(token);
 
-            var restored = transaction.Plan.BeforeState with
-            {
-                Revision = checked(current.Revision + 1),
-            };
-            var rollbackPlan = new DirectionExecutionPlan(
-                new DirectionPlan(
-                    DirectionTransactionId.New(),
-                    current,
-                    restored,
-                    FallbackCutTransitions,
-                    Array.Empty<ITransientDirectionCue>()),
-                Array.Empty<DirectionResourceClaim>(),
-                DirectionCompletionBarrier.Settle);
-            var committed = await PrepareAndCommitAsync(
-                rollbackPlan,
-                cancellationToken);
-            await committed.Settlement.WaitAsync(cancellationToken);
-            return committed;
-        }
-        finally
-        {
-            commitGate.Release();
-        }
+                var restored = transaction.Plan.BeforeState with
+                {
+                    Revision = checked(current.Revision + 1),
+                };
+                var rollbackPlan = new DirectionExecutionPlan(
+                    new DirectionPlan(
+                        DirectionTransactionId.New(), current, restored,
+                        FallbackCutTransitions, Array.Empty<ITransientDirectionCue>()),
+                    Array.Empty<DirectionResourceClaim>(), DirectionCompletionBarrier.Settle);
+                return await PrepareAndCommitAsync(rollbackPlan, token);
+            }
+            finally { commitGate.Release(); }
+        }, cancellationToken);
+        await committed.Settlement.WaitAsync(cancellationToken);
+        return committed;
     }
 
     public Task FinishAsync(
@@ -554,41 +574,89 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
         finally { commitGate.Release(); }
     }
 
-    public async Task RestoreAsync(
-        DirectionState target,
-        CancellationToken cancellationToken = default)
+    public async Task StopExecutionForRestoreAsync(CancellationToken cancellationToken)
+    {
+        await commitGate.WaitAsync(cancellationToken);
+        try
+        {
+            CommittedDirectionTransaction[] active;
+            lock (stateGate) active = transactions.ToArray();
+            foreach (var transaction in active) await transaction.StopForRestoreAsync(cancellationToken);
+            lock (stateGate) transactions.Clear();
+        }
+        finally { commitGate.Release(); }
+    }
+
+    public async Task<IPreparedDirectionReplacement> PrepareReplacementAsync(
+        DirectionState target, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(target);
         target.Validate();
         await commitGate.WaitAsync(cancellationToken);
         try
         {
-            CommittedDirectionTransaction[] active;
-            lock (stateGate) active = transactions.ToArray();
-            foreach (var transaction in active)
-                if (transaction.Status == DirectionTransactionStatus.Committed)
-                    await transaction.FinishAsync(cancellationToken);
             var current = State;
-            var plan = new DirectionExecutionPlan(
-                new DirectionPlan(
-                    DirectionTransactionId.New(),
-                    current,
-                    target with
-                    {
-                        Revision = checked(current.Revision + 1),
-                        Scene = target.Scene with
-                        { Epoch = checked(Math.Max(current.Scene.Epoch, target.Scene.Epoch) + 1) }
-                    },
-                    FallbackCutTransitions,
-                    Array.Empty<ITransientDirectionCue>()),
-                Array.Empty<DirectionResourceClaim>(),
-                DirectionCompletionBarrier.Settle);
-            var committed = await PrepareAndCommitAsync(plan, cancellationToken);
-            await committed.Settlement.WaitAsync(cancellationToken);
+            var plan = new DirectionExecutionPlan(new DirectionPlan(
+                DirectionTransactionId.New(), current,
+                target with
+                {
+                    Revision = checked(current.Revision + 1),
+                    Scene = target.Scene with
+                    { Epoch = checked(Math.Max(current.Scene.Epoch, target.Scene.Epoch) + 1) }
+                }, FallbackCutTransitions, Array.Empty<ITransientDirectionCue>())
+            { IsStateReplacement = true },
+                Array.Empty<DirectionResourceClaim>(), DirectionCompletionBarrier.Settle);
+            var candidate = await backend.PrepareAsync(plan, cancellationToken);
+            return new PreparedReplacement(this, plan, candidate);
         }
-        finally
+        catch { commitGate.Release(); throw; }
+    }
+
+    public async Task RestoreAsync(DirectionState target, CancellationToken cancellationToken = default)
+    {
+        await StopExecutionForRestoreAsync(cancellationToken);
+        await using var prepared = await PrepareReplacementAsync(target, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        prepared.Commit();
+        await prepared.Settlement;
+    }
+
+    private sealed class PreparedReplacement(
+        DirectionTransactionCoordinator owner, DirectionExecutionPlan plan,
+        IPreparedDirectionTransaction candidate) : IPreparedDirectionReplacement
+    {
+        private bool released;
+        private bool disposed;
+        public Task Settlement => candidate.Settlement;
+        public void Commit()
         {
-            commitGate.Release();
+            ObjectDisposedException.ThrowIf(disposed, this);
+            if (released) throw new DirectionException("Direction replacement was already committed.");
+            try
+            {
+                owner.Mutate(() =>
+                {
+                    if (owner.State.Revision != plan.BeforeState.Revision)
+                        throw new DirectionRevisionException(plan.BeforeState.Revision, owner.State.Revision);
+                    candidate.Commit(new DirectionCommitToken(plan.Id, plan.TargetState.Revision));
+                    lock (owner.stateGate) owner.state = plan.DomainPlan.ResolveCommitState();
+                    candidate.ConfirmCommit();
+                });
+            }
+            finally { ReleaseGate(); }
+        }
+        private void ReleaseGate()
+        {
+            if (released) return;
+            released = true;
+            owner.commitGate.Release();
+        }
+        public async ValueTask DisposeAsync()
+        {
+            if (disposed) return;
+            disposed = true;
+            try { await candidate.DisposeAsync(); }
+            finally { ReleaseGate(); }
         }
     }
 
@@ -768,4 +836,16 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
     {
         commitGate.Dispose();
     }
+
+    private void Mutate(Action mutation)
+    {
+        if (mutationGate is null) mutation();
+        else mutationGate.Write(mutation);
+    }
+
+    private Task<T> MutateAsync<T>(
+        Func<CancellationToken, Task<T>> mutation,
+        CancellationToken cancellationToken) => mutationGate is null
+        ? mutation(cancellationToken)
+        : mutationGate.WriteAsync(mutation, cancellationToken);
 }

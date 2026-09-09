@@ -15,7 +15,7 @@ using Majo.Runtime.Resources;
 
 namespace Majo.Runtime.History;
 
-public sealed class HistoryManager : IHistoryManager
+public sealed class HistoryManager : IHistoryManager, IHistoryRestoreSink
 {
     private readonly IDialoguePlayer dialogue;
     private readonly IDialoguePresentation presentation;
@@ -221,7 +221,15 @@ public sealed class HistoryManager : IHistoryManager
         }
     }
 
-    private void HandleLinePresented(DialogueLine line) => pendingLine = line;
+    public void CommitLoadedLine(DialogueLine line)
+    {
+        Clear();
+        pendingLine = line with { Origin = DialoguePresentationOrigin.Normal };
+        HandleLineDisplayCompleted();
+    }
+
+    private void HandleLinePresented(DialogueLine line) => pendingLine =
+        line.Origin == DialoguePresentationOrigin.CheckpointRestore ? null : line;
 
     private void HandleLineDisplayCompleted()
     {

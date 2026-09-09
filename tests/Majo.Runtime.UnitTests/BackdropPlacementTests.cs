@@ -25,7 +25,7 @@ public sealed class BackdropPlacementTests
         var contributor = new DirectionStateContributor(direction);
         var record = await contributor.CaptureAsync(default);
         await direction.ResetAsync(default);
-        await contributor.RestoreAsync(record, default);
+        await contributor.CommitPreparedAsync(record, default);
         Assert.Equal(new BackdropPlacement(new DirectionPoint(-50, 100), new DirectionPoint(0, 0), 2),
             direction.State.Stages[StageId.Main].Backdrop!.Placement);
         await command.ExecuteAsync(new CommandInput("backdrop", ["room"]), new CommandExecutionContext("cover"));

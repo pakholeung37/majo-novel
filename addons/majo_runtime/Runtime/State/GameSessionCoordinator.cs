@@ -149,9 +149,15 @@ public sealed class GameSessionCoordinator : IGameSessionCoordinator, IDisposabl
                 StateScope.Game,
                 StateOperationKind.Rollback,
                 cancellationToken);
+            var previousMode = playback.Mode;
             playback.SetMode(PlaybackMode.Manual);
             using var pause = playback.AcquirePause(PlaybackPauseReason.StateRestore);
-            await state.RestoreTransaction.ExecuteAsync(plan, cancellationToken);
+            try { await state.RestoreTransaction.ExecuteAsync(plan, cancellationToken); }
+            catch
+            {
+                if (state.Status != StateManagerStatus.Faulted) playback.SetMode(previousMode);
+                throw;
+            }
             SessionChanged?.Invoke(new GameSessionChanged(
                 GameSessionTransition.Rollback,
                 sessions.SessionId,
@@ -198,12 +204,24 @@ public sealed class GameSessionCoordinator : IGameSessionCoordinator, IDisposabl
         StateRestorePlan plan,
         CancellationToken cancellationToken)
     {
-        var sessionId = BeginCleanSession();
-        await state.RestoreTransaction.ExecuteAsync(plan, cancellationToken);
-        SessionChanged?.Invoke(new GameSessionChanged(
-            GameSessionTransition.LoadGame,
-            sessionId,
-            true));
+        var previousMode = playback.Mode;
+        playback.SetMode(PlaybackMode.Manual);
+        using var pause = playback.AcquirePause(PlaybackPauseReason.StateRestore);
+        try
+        {
+            await state.RestoreTransaction.ExecuteAsync(plan, cancellationToken);
+        }
+        catch
+        {
+            if (state.Status != StateManagerStatus.Faulted) playback.SetMode(previousMode);
+            throw;
+        }
+        history.Close();
+        if (history is IHistoryRestoreSink sink && state is IStateBoundarySource { CurrentBoundary: { } boundary })
+            sink.CommitLoadedLine(boundary.Context.Line);
+        else history.Clear();
+        var sessionId = sessions.BeginSession();
+        SessionChanged?.Invoke(new GameSessionChanged(GameSessionTransition.LoadGame, sessionId, true));
     }
 
     private void EnsureInitialized()
