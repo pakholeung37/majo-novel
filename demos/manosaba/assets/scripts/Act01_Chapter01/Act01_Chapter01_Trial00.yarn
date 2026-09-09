@@ -193,7 +193,7 @@ Ema: （正如梅露露所说，如果出现了在意的地方，[br /]　就试
 
 <<stopBgm duration:0 wait:true>>
 // Trial01 is not adapted yet. Keep the final shot available for inspection.
--> 重新播放审判开场 #line:trial00_replay #voice:none
+-> Replay #line:trial00_replay #voice:none
     <<curtain closed duration:0.3 wait:true>>
     <<jump Act01_Chapter01_Trial00>>
 -> 返回演示选择 #line:trial00_menu #voice:none

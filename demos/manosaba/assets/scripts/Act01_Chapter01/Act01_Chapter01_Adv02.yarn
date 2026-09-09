@@ -312,4 +312,10 @@ Hiro: 不要随便碰我。[br /]你可别忘了，我讨厌你。 #line:0101Adv
 // <<gosub Path:System/System_Subroutine.EndAdv>>
 
 // <<gotoModified Path:Act01_Chapter01/Act01_Chapter01_Adv03 SoftReset:true>>
+-> Replay #line:0101Adv02_replay #voice:none
+    <<curtain closed duration:0.3 wait:true>>
+    <<jump Act01_Chapter01_Adv02>>
+-> 返回演示选择 #line:0101Adv02_menu #voice:none
+    <<curtain closed duration:0.3 wait:true>>
+    <<jump Start>>
 ===

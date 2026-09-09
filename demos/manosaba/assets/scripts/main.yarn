@@ -2,6 +2,10 @@ title: Start
 scene: manosaba_demo_menu
 ---
 <<curtain closed duration:0>>
-// <<jump Act01_Chapter01_Adv01>>
-<<jump Act01_Chapter01_Trial00>>
+-> Act01Adv01
+    <<jump Act01_Chapter01_Adv01>>
+-> Act01Adv02
+    <<jump Act01_Chapter01_Adv02>>
+-> Act01Trial00
+    <<jump Act01_Chapter01_Trial00>>
 ===
