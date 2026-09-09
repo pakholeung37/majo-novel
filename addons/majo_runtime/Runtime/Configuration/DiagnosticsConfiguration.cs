@@ -1,12 +1,13 @@
 #nullable enable
 
+using System;
 using Godot;
 using Majo.Runtime.Core;
 
 namespace Majo.Runtime.Configuration;
 
 [GlobalClass]
-public partial class DiagnosticsConfiguration : Resource
+public partial class DiagnosticsConfiguration : Resource, IValidatableConfiguration
 {
     [Export]
     public RuntimeLogLevel MinimumLevel { get; set; } = RuntimeLogLevel.Information;
@@ -40,5 +41,31 @@ public partial class DiagnosticsConfiguration : Resource
 
     [Export]
     public string OverlayAction { get; set; } = "majo_debug";
+
+    public void Validate(ConfigurationValidationContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (RingBufferCapacity <= 0)
+        {
+            context.AddIssue(
+                nameof(RingBufferCapacity),
+                "Ring buffer capacity must be greater than zero.");
+        }
+
+        if (MaxFileSizeBytes <= 0)
+        {
+            context.AddIssue(
+                nameof(MaxFileSizeBytes),
+                "Max file size must be greater than zero.");
+        }
+
+        if (MaxFileCount <= 0)
+        {
+            context.AddIssue(
+                nameof(MaxFileCount),
+                "Max file count must be greater than zero.");
+        }
+    }
 }
 

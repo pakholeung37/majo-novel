@@ -1,8 +1,8 @@
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
-using Xunit;
 using Majo.Runtime.State;
 using Majo.Runtime.UnitTests.Testing;
+using Xunit;
 
 namespace Majo.Runtime.UnitTests;
 

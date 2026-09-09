@@ -3,7 +3,6 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
-using Majo.Runtime.Actors;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
 

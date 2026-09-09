@@ -4,10 +4,9 @@ using Godot;
 using Majo.Runtime.Audio;
 using Majo.Runtime.Audio.Godot;
 using Majo.Runtime.Core;
+using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Localization;
 using Majo.Runtime.Resources;
-
-using Majo.Runtime.Dialogue.Commands;
 
 namespace Majo.Runtime;
 

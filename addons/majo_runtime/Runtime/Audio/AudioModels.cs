@@ -1,8 +1,8 @@
 #nullable enable
 
 using System;
-using Majo.Runtime.Configuration;
 using System.Threading.Tasks;
+using Majo.Runtime.Configuration;
 
 namespace Majo.Runtime.Audio;
 

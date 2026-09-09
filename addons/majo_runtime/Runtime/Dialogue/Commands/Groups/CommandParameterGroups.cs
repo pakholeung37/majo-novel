@@ -1,7 +1,6 @@
 #nullable enable
 
 using System;
-using System.Collections.Generic;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Timing;
 

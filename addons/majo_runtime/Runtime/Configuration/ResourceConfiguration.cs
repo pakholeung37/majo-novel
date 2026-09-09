@@ -1,9 +1,11 @@
+using System;
 using Godot;
+using Majo.Runtime.Resources;
 
 namespace Majo.Runtime.Configuration;
 
 [GlobalClass]
-public partial class ResourceConfiguration : Resource
+public partial class ResourceConfiguration : Resource, IValidatableConfiguration
 {
     public const string DefaultRootPath = "res://assets";
     public const string DefaultCharactersPath = "characters";
@@ -43,4 +45,59 @@ public partial class ResourceConfiguration : Resource
 
     [Export(PropertyHint.Range, "0,1024,1,or_greater")]
     public int DefaultResourceEstimateKiB { get; set; } = 256;
+
+    public void Validate(ConfigurationValidationContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (string.IsNullOrWhiteSpace(RootPath) ||
+            !RootPath.StartsWith("res://", StringComparison.Ordinal))
+        {
+            context.AddIssue(
+                nameof(RootPath),
+                "Root path must be a Godot project path starting with 'res://'.");
+        }
+
+        ValidateResourceKeyPrefix(CharactersPath, nameof(CharactersPath), context);
+        ValidateResourceKeyPrefix(BackgroundsPath, nameof(BackgroundsPath), context);
+        ValidateResourceKeyPrefix(ScriptsPath, nameof(ScriptsPath), context);
+
+        if (MemoryBudgetMiB < 0)
+        {
+            context.AddIssue(
+                nameof(MemoryBudgetMiB),
+                "Memory budget cannot be negative.");
+        }
+
+        if (PreloadVoiceLines < 0 || PreloadVoiceLines > 32 ||
+            PreloadBudgetMiB < 0 || PreloadMaxResources < 0 ||
+            PreloadTextureEstimateMiB <= 0 || PreloadAudioEstimateKiB <= 0)
+        {
+            context.AddIssue(
+                "Preloading",
+                "Preload limits must be non-negative, voice look-ahead at most 32 lines, and estimates positive.");
+        }
+
+        if (DefaultResourceEstimateKiB < 0)
+        {
+            context.AddIssue(
+                nameof(DefaultResourceEstimateKiB),
+                "Default resource estimate cannot be negative.");
+        }
+    }
+
+    private static void ValidateResourceKeyPrefix(
+        string value,
+        string property,
+        ConfigurationValidationContext context)
+    {
+        try
+        {
+            _ = new ResourceKey(value);
+        }
+        catch (ArgumentException exception)
+        {
+            context.AddIssue(property, exception.Message);
+        }
+    }
 }

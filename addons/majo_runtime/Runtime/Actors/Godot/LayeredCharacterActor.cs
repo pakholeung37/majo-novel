@@ -10,7 +10,6 @@ using Majo.Runtime.Actors.Layered;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Transitions;
 using Majo.Runtime.Operations;
-using Majo.Runtime.Operations.Godot;
 
 namespace Majo.Runtime.Actors.Godot;
 

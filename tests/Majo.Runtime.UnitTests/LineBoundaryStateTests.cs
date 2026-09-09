@@ -1,7 +1,7 @@
 using System.Text.Json;
+using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Input;
-using Majo.Runtime.Core;
 using Majo.Runtime.Script;
 using Majo.Runtime.State;
 using Majo.Runtime.UnitTests.Testing;

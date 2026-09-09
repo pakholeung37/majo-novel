@@ -3,15 +3,12 @@
 using System;
 using Godot;
 using Majo.Runtime;
-using Majo.Runtime.Actors;
 using Majo.Runtime.Audio;
 using Majo.Runtime.Auto;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.History;
-using Majo.Runtime.Preloading;
-using Majo.Runtime.Resources;
 using Majo.Runtime.UI.SaveLoad;
 using Majo.Runtime.UI.Settings;
 

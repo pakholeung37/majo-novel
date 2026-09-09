@@ -1,14 +1,9 @@
 #nullable enable
 
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Collections.Generic;
 using Majo.Runtime.Audio;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.History;
 using Majo.Runtime.Localization;
-using Majo.Runtime.Played;
 using Majo.Runtime.Resources;
 using Majo.Runtime.Settings;
 using Xunit;

@@ -1,7 +1,6 @@
 #nullable enable
 
 using System;
-using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
@@ -11,9 +10,8 @@ using Majo.Runtime.Audio;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue.Commands;
-using Majo.Runtime.Operations;
-using Majo.Runtime.Resources;
 using Majo.Runtime.Localization;
+using Majo.Runtime.Resources;
 
 namespace Majo.Demo;
 

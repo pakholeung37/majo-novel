@@ -5,8 +5,8 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Majo.Runtime.Core;
-using Majo.Runtime.State;
 using Majo.Runtime.Localization;
+using Majo.Runtime.State;
 
 namespace Majo.Runtime.Settings;
 

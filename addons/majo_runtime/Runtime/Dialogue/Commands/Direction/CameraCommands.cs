@@ -4,10 +4,9 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Threading.Tasks;
-using Godot;
+using Majo.Runtime.Direction.Camera;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
-using Majo.Runtime.Direction.Camera;
 
 namespace Majo.Runtime.Dialogue.Commands;
 

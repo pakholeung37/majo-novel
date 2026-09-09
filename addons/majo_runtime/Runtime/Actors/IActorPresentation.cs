@@ -5,7 +5,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Direction.Transitions;
-using Majo.Runtime.Operations;
 
 namespace Majo.Runtime.Actors;
 

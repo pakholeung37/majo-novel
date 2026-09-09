@@ -2,8 +2,8 @@
 
 using System;
 using Godot;
-using Majo.Runtime.Resources;
 using Majo.Runtime.Configuration;
+using Majo.Runtime.Resources;
 
 namespace Majo.Runtime.UI.Diagnostics;
 

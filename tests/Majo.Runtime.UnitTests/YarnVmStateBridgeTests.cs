@@ -1,8 +1,8 @@
 using System.Diagnostics.CodeAnalysis;
 using Majo.YarnBridge;
+using Xunit;
 using Yarn;
 using Yarn.Compiler;
-using Xunit;
 using YarnDialogue = Yarn.Dialogue;
 
 namespace Majo.Runtime.UnitTests;

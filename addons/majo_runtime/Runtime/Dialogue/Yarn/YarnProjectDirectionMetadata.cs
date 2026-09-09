@@ -4,9 +4,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
+using Majo.Runtime.Dialogue.Yarn.HotReload;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
-using Majo.Runtime.Dialogue.Yarn.HotReload;
 
 namespace Majo.Runtime.Dialogue.Yarn
 {

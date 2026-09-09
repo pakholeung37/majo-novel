@@ -1,40 +1,34 @@
 #nullable enable
 
 using System;
-using Majo.Runtime.Direction.Actors;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Core;
+using Majo.Runtime.Direction.Actors;
 using Majo.Runtime.Direction.Camera;
 using Majo.Runtime.Direction.Core;
+using Majo.Runtime.Direction.Rendering;
 
 namespace Majo.Runtime.Direction.Godot;
 
 internal sealed partial class GodotDirectionRenderHost : IRuntimeService
 {
-    private readonly Dictionary<ActorFxTarget, IActorModifierTarget> actorModifierTargets = new();
-    private readonly Dictionary<ActorFxTarget, long> actorTargetVersions = new();
-    private long actorTargetVersion;
+    private readonly GodotActorModifierRegistry actorModifiers = new();
     private long targetGeneration;
     internal Func<ViewId, Task>? ReleaseViewEffectsAsync { get; set; }
-    internal Func<ActorFxTarget, Task>? ReleaseActorEffectsAsync { get; set; }
-    internal IActorModifierTarget? FindActorModifierTarget(ActorFxTarget target) => actorModifierTargets.GetValueOrDefault(target);
-    internal void RegisterActorModifierTarget(ActorFxTarget target, IActorModifierTarget binding)
+    internal Func<ActorFxTarget, Task>? ReleaseActorEffectsAsync
     {
-        actorModifierTargets[target] = binding;
-        actorTargetVersions[target] = ++actorTargetVersion;
+        get => actorModifiers.ReleaseActorEffectsAsync;
+        set => actorModifiers.ReleaseActorEffectsAsync = value;
     }
-    internal async Task ReleaseActorModifierTargetAsync(ActorFxTarget target, IActorModifierTarget binding)
-    {
-        if (actorModifierTargets.GetValueOrDefault(target) != binding) return;
-        var version = actorTargetVersions.GetValueOrDefault(target);
-        if (ReleaseActorEffectsAsync is { } release) await release(target);
-        if (actorTargetVersions.GetValueOrDefault(target) == version)
-        { actorModifierTargets.Remove(target); actorTargetVersions.Remove(target); }
-    }
+    internal IActorModifierTarget? FindActorModifierTarget(ActorFxTarget target) => actorModifiers.Find(target);
+    internal void RegisterActorModifierTarget(ActorFxTarget target, IActorModifierTarget binding) =>
+        actorModifiers.Register(target, binding);
+    internal Task ReleaseActorModifierTargetAsync(ActorFxTarget target, IActorModifierTarget binding) =>
+        actorModifiers.ReleaseAsync(target, binding);
 
     private static readonly Vector2I FallbackResolution = new(1280, 720);
     private readonly Node owner;
@@ -213,8 +207,7 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService
         cancellationToken.ThrowIfCancellationRequested();
         EnsureInitialized();
         InvalidateGenerations(preserveGlobal);
-        actorModifierTargets.Clear();
-        actorTargetVersions.Clear();
+        actorModifiers.Clear();
         foreach (var surface in stages.Values.ToArray())
         {
             surface.Canvas.Modulate = Colors.White;
@@ -903,16 +896,8 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService
         return output;
     }
 
-    private static Rect2 SlotRect(LayoutId layout, LayoutSlotId slot, Vector2I viewportSize)
-    {
-        var size = new Vector2(viewportSize.X, viewportSize.Y);
-        if (layout.Value.Equals("split", StringComparison.OrdinalIgnoreCase))
-            return new Rect2(slot.Value == "inset" ? new Vector2(size.X / 2, 0) : Vector2.Zero,
-                new Vector2(size.X / 2, size.Y));
-        if (layout.Value.Equals("pip", StringComparison.OrdinalIgnoreCase) && slot.Value == "inset")
-            return new Rect2(size.X * .70f, size.Y * .06f, size.X * .25f, size.Y * .25f);
-        return new Rect2(Vector2.Zero, size);
-    }
+    private static Rect2 SlotRect(LayoutId layout, LayoutSlotId slot, Vector2I viewportSize) =>
+        DirectionLayoutCalculator.CalculateSlotRect(layout, slot, viewportSize);
 
     private static void ResizeStage(GodotDirectionStageSurface surface, Vector2I resolution)
     {
@@ -929,15 +914,11 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService
             SetFullRect(surface.BackdropTransition, resolution);
     }
 
-    internal static Rect2 BackdropBounds(GodotDirectionStageSurface surface, BackdropState? state, Texture2D? texture)
-    {
-        if (state?.Placement is not { } placement || texture is null)
-            return new Rect2(Vector2.Zero, surface.Viewport.Size);
-        var size = texture.GetSize() * placement.Scale;
-        var at = Majo.Runtime.Actors.Godot.StageCoordinates.ToPixels(
-            new Vector2(placement.At.X, placement.At.Y), surface.Viewport.Size);
-        return new Rect2(at - new Vector2(placement.Origin.X, placement.Origin.Y) * size, size);
-    }
+    internal static Rect2 BackdropBounds(GodotDirectionStageSurface surface, BackdropState? state, Texture2D? texture) =>
+        DirectionLayoutCalculator.CalculateBackdropBounds(
+            surface.Viewport.Size,
+            state?.Placement,
+            texture?.GetSize() ?? Vector2.Zero);
 
     private static void LayoutBackdrop(
         GodotDirectionStageSurface surface,
@@ -955,106 +936,9 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService
         }
         var fit = state?.Fit ?? BackdropFit.Stretch;
         SetFullRect(view, surface.Viewport.Size);
-        view.StretchMode = fit switch
-        {
-            BackdropFit.Cover => TextureRect.StretchModeEnum.KeepAspectCovered,
-            BackdropFit.Contain => TextureRect.StretchModeEnum.KeepAspectCentered,
-            BackdropFit.Stretch => TextureRect.StretchModeEnum.Scale,
-            _ => throw new ArgumentOutOfRangeException(nameof(state)),
-        };
+        view.StretchMode = DirectionLayoutCalculator.ResolveBackdropStretchMode(fit);
     }
 
     private static Color ToGodot(DirectionColor color) =>
-        new(color.R, color.G, color.B, color.A);
-}
-
-internal sealed class GodotDirectionStageSurface
-{
-    public GodotDirectionStageSurface(
-        StageId id,
-        SubViewport viewport,
-        Control canvas,
-        ColorRect background,
-        TextureRect backdrop,
-        TextureRect backdropTransition,
-        Node2D actors)
-    {
-        Id = id;
-        Viewport = viewport;
-        Canvas = canvas;
-        Background = background;
-        Backdrop = backdrop;
-        BackdropTransition = backdropTransition;
-        Actors = actors;
-        BackdropFxRoot = new Node2D { Name = "BackdropFx" };
-        canvas.AddChild(BackdropFxRoot);
-        canvas.MoveChild(BackdropFxRoot, 1);
-        backdrop.Reparent(BackdropFxRoot, false);
-        backdropTransition.Reparent(BackdropFxRoot, false);
-        ModifierTarget = new GodotActorModifierTarget(BackdropFxRoot, () => new Vector2(viewport.Size.X, viewport.Size.Y) / 2);
-
-    }
-
-    public StageId Id { get; }
-    public SubViewport Viewport { get; }
-    public Control Canvas { get; }
-    public ColorRect Background { get; }
-    public TextureRect Backdrop { get; }
-    public TextureRect BackdropTransition { get; }
-    public Node2D Actors { get; }
-    public Node2D BackdropFxRoot { get; }
-    public GodotActorModifierTarget ModifierTarget { get; }
-    public BackdropState? PublishedBackdrop { get; set; }
-    public BackdropState? TransitionBackdrop { get; set; }
-}
-
-internal sealed class GodotDirectionViewSurface
-{
-    public GodotDirectionViewSurface(
-        ViewId id,
-        SubViewport viewport,
-        Control canvas,
-        Node2D transform,
-        TextureRect content,
-        TextureRect transitionSource)
-    {
-        ContentViewport = new SubViewport
-        {
-            Name = "ViewContentViewport",
-            TransparentBg = true,
-            RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled,
-        };
-        viewport.RemoveChild(canvas);
-        viewport.AddChild(ContentViewport);
-        ContentViewport.AddChild(canvas);
-        canvas.RemoveChild(transitionSource);
-        Output = new TextureRect
-        {
-            Name = "ViewOutput",
-            Texture = ContentViewport.GetTexture(),
-            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
-            StretchMode = TextureRect.StretchModeEnum.Scale,
-            MouseFilter = Control.MouseFilterEnum.Ignore,
-        };
-        viewport.AddChild(Output);
-        viewport.AddChild(transitionSource);
-        Id = id;
-        Viewport = viewport;
-        Canvas = canvas;
-        Transform = transform;
-        Content = content;
-        TransitionSource = transitionSource;
-    }
-
-    public SubViewport ContentViewport { get; }
-    public TextureRect Output { get; }
-    public ViewId Id { get; }
-    public SubViewport Viewport { get; }
-    public Control Canvas { get; }
-    public Node2D Transform { get; }
-    public TextureRect Content { get; }
-    public TextureRect TransitionSource { get; }
-    public ViewState? PublishedView { get; set; }
-    public ViewPose CurrentPose { get; set; } = ViewPose.Default;
-    public CameraPoseDelta ModifierDelta { get; set; } = CameraPoseDelta.Identity;
+        DirectionLayoutCalculator.ToGodotColor(color);
 }

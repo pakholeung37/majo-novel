@@ -1,12 +1,8 @@
 #nullable enable
 
-using System;
-using System.Collections.Generic;
-using Godot;
 using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Direction.Camera;
-using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Timing;
 using Xunit;
 

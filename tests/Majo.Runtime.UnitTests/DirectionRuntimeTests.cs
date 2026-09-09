@@ -1,18 +1,12 @@
 #nullable enable
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
 using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Direction.Rendering;
 using Majo.Runtime.Resources;
 using Majo.Runtime.State;
-using Majo.Runtime.Timing;
 using Majo.Runtime.UnitTests.Testing;
 using Xunit;
 

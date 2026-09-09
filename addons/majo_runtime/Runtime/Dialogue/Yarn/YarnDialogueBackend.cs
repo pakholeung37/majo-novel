@@ -3,20 +3,17 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
-using Google.Protobuf;
 using Majo.Runtime.Core;
-using Majo.Runtime.Script;
-using Majo.YarnBridge;
 using Majo.Runtime.Dialogue.Commands;
-using Majo.Runtime.Resources;
-using Majo.Runtime.Localization;
 using Majo.Runtime.Dialogue.Yarn.HotReload;
 using Majo.Runtime.Dialogue.Yarn.Preloading;
-using Yarn.Markup;
+using Majo.Runtime.Localization;
+using Majo.Runtime.Resources;
+using Majo.Runtime.Script;
+using Majo.YarnBridge;
 using YarnSpinnerGodot;
 
 namespace Majo.Runtime.Dialogue.Yarn;
@@ -45,7 +42,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
     private readonly bool requireExactProgramFingerprint;
     private readonly YarnVmStateBridge stateBridge = new();
     private readonly YarnDialogueVariableStore variableStore = new();
-    private readonly MajoLineBreakMarkupReplacer lineBreakMarkupReplacer = new();
+    private readonly YarnLineTextProcessor textProcessor = new();
     private readonly object sync = new();
     private DialogueRunner? runner;
     private YarnDialoguePresenterAdapter? presenterAdapter;
@@ -168,7 +165,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
         runner.VariableStorage = variableStore;
         runner.AddChild(presenterAdapter);
         runner.dialoguePresenters = new Godot.Collections.Array<Node?> { presenterAdapter };
-        runner.LineProvider.RegisterMarkerProcessor("br", lineBreakMarkupReplacer);
+        runner.LineProvider.RegisterMarkerProcessor("br", textProcessor.LineBreakMarkupReplacer);
         runner.AddCommandHandler(YarnNodeEntryTransform.CommandName, (Func<Task>)EnterPendingNodeAsync);
         owner.AddChild(runner);
         configuredLocale = localeManager?.DialogueLocale ?? TranslationServer.GetLocale();
@@ -969,74 +966,27 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
         return presenterAdapter!.WaitForPresentationBoundaryAsync(cancellationToken);
     }
 
-    private DialogueLine ConvertPresentedLine(LocalizedLine line)
-    {
-        var converted = YarnLineConverter.Convert(
+    private DialogueLine ConvertPresentedLine(LocalizedLine line) =>
+        YarnLineTextProcessor.ConvertPresentedLine(
             line,
-            ResolvePresentedLocale(line),
+            pendingPresentationOrigin,
+            out pendingPresentationOrigin,
             speakerNameResolver,
-            localeManager?.DialogueLocale ?? configuredLocale);
-        if (pendingPresentationOrigin == DialoguePresentationOrigin.Normal)
-        {
-            return converted;
-        }
-
-        converted = converted with { Origin = pendingPresentationOrigin };
-        pendingPresentationOrigin = DialoguePresentationOrigin.Normal;
-        return converted;
-    }
-
-    private string ResolvePresentedLocale(LocalizedLine line)
-    {
-        var requested = localeManager?.DialogueLocale ?? runner?.LineProvider.LocaleCode ?? "en";
-        var chain = localeManager?.GetDialogueFallbackChain(requested) ?? [requested];
-        foreach (var candidate in chain)
-        {
-            var translated = ResolveExactGodotTranslation(line.TextID, candidate);
-            if (translated is not null &&
-                string.Equals(translated, line.RawText, StringComparison.Ordinal))
-            {
-                return candidate;
-            }
-        }
-
-        return runner?.YarnProject?.baseLocalization?.LocaleCode ?? requested;
-    }
-
-    private static string? ResolveExactGodotTranslation(string lineId, string locale)
-    {
-        foreach (var translation in TranslationServer.FindTranslations(locale, exact: true))
-        {
-            var value = translation.GetMessage(new StringName(lineId)).ToString();
-            if (!string.IsNullOrEmpty(value) &&
-                !string.Equals(value, lineId, StringComparison.Ordinal))
-            {
-                return value;
-            }
-        }
-
-        return null;
-    }
+            localeManager,
+            configuredLocale,
+            runner?.LineProvider.LocaleCode,
+            runner?.YarnProject?.baseLocalization?.LocaleCode);
 
     private LocalizedLine CreateLocalizedLine(
         string lineId,
         string rawText,
         IReadOnlyList<string> substitutions,
         IReadOnlyList<string> metadata,
-        string parserLocale)
-    {
-        var expanded = LineParser.ExpandSubstitutions(rawText, substitutions.ToArray());
-        var parser = new LineParser();
-        parser.RegisterMarkerProcessor("br", lineBreakMarkupReplacer);
-        return new LocalizedLine
-        {
-            TextID = lineId,
-            RawText = rawText,
-            Substitutions = substitutions.ToArray(),
-            Metadata = metadata.ToArray(),
-            Text = parser.ParseString(expanded, parserLocale),
-        };
-    }
+        string parserLocale) =>
+        textProcessor.CreateLocalizedLine(lineId, rawText, substitutions, metadata, parserLocale);
+
+    private static string? ResolveExactGodotTranslation(string lineId, string locale) =>
+        YarnLineTextProcessor.ResolveExactGodotTranslation(lineId, locale);
 
     private void HandleCommandFailed(RuntimeCommandException failure)
     {
@@ -1095,50 +1045,8 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
         }
     }
 
-    private static ScriptDescriptor CreateDescriptor(YarnProject project, ScriptId id)
-    {
-        if (project.Program is null)
-        {
-            throw new ScriptRuntimeException(
-                $"Script project '{id.ProjectId}' has no compiled program.");
-        }
-
-        if (!project.Program.Nodes.TryGetValue(id.NodeName, out var node))
-        {
-            throw new ScriptRuntimeException(
-                $"Node '{id.NodeName}' was not found in project '{id.ProjectId}'.");
-        }
-
-        var allLineIds = project.Program.Nodes.Values
-            .SelectMany(programNode => programNode.Instructions)
-            .Where(instruction => instruction.InstructionTypeCase ==
-                global::Yarn.Instruction.InstructionTypeOneofCase.RunLine)
-            .Select(instruction => instruction.RunLine.LineID)
-            .ToArray();
-        var duplicate = allLineIds.GroupBy(lineId => lineId, StringComparer.Ordinal)
-            .FirstOrDefault(group => group.Count() > 1);
-        if (duplicate is not null)
-        {
-            throw new ScriptCheckpointException(
-                $"Project '{id.ProjectId}' contains duplicate line ID '{duplicate.Key}'.");
-        }
-
-        var lineIds = node.Instructions
-            .Where(instruction => instruction.InstructionTypeCase ==
-                global::Yarn.Instruction.InstructionTypeOneofCase.RunLine)
-            .Select(instruction => instruction.RunLine.LineID)
-            .ToArray();
-        var lineSubstitutionCounts = node.Instructions
-            .Where(instruction => instruction.InstructionTypeCase ==
-                global::Yarn.Instruction.InstructionTypeOneofCase.RunLine)
-            .ToDictionary(
-                instruction => instruction.RunLine.LineID,
-                instruction => instruction.RunLine.SubstitutionCount,
-                StringComparer.Ordinal);
-        var fingerprint = Convert.ToHexString(
-            SHA256.HashData(project.Program.ToByteArray())).ToLowerInvariant();
-        return new ScriptDescriptor(id, fingerprint, lineIds, lineSubstitutionCounts);
-    }
+    private static ScriptDescriptor CreateDescriptor(YarnProject project, ScriptId id) =>
+        YarnScriptCatalogHelper.CreateDescriptor(project, id);
 
     private void EnsureInitialized()
     {

@@ -1,6 +1,5 @@
 #nullable enable
 
-using System;
 using System.Collections.Generic;
 
 namespace Majo.Runtime.Dialogue.Commands;

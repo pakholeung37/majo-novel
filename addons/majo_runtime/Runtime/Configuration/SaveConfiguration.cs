@@ -1,11 +1,12 @@
 #nullable enable
 
+using System;
 using Godot;
 
 namespace Majo.Runtime.Configuration;
 
 [GlobalClass]
-public partial class SaveConfiguration : Resource
+public partial class SaveConfiguration : Resource, IValidatableConfiguration
 {
     [Export]
     public bool Enabled { get; set; }
@@ -42,4 +43,35 @@ public partial class SaveConfiguration : Resource
 
     [Export]
     public string[] AutoSaveMetadata { get; set; } = [];
+
+    public void Validate(ConfigurationValidationContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (Enabled && context.Root?.State?.Enabled != true)
+        {
+            context.AddIssue(
+                nameof(Enabled),
+                "Save slots require durable state to be enabled.");
+        }
+
+        ValidatePositive(ManualSlotCapacity, nameof(ManualSlotCapacity), context);
+        ValidatePositive(QuickSlotCapacity, nameof(QuickSlotCapacity), context);
+        ValidatePositive(AutoSlotCapacity, nameof(AutoSlotCapacity), context);
+        ValidatePositive(ThumbnailWidth, nameof(ThumbnailWidth), context);
+        ValidatePositive(ThumbnailHeight, nameof(ThumbnailHeight), context);
+    }
+
+    private static void ValidatePositive(
+        int value,
+        string property,
+        ConfigurationValidationContext context)
+    {
+        if (value <= 0)
+        {
+            context.AddIssue(
+                property,
+                "Value must be greater than zero.");
+        }
+    }
 }

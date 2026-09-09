@@ -4,7 +4,6 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Majo.Runtime.Audio;
-using Majo.Runtime.Core;
 
 namespace Majo.Runtime.Dialogue.Commands.Audio;
 

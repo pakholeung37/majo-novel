@@ -7,8 +7,8 @@ using Godot;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Direction.Rendering;
-using Majo.Runtime.Timing;
 using Majo.Runtime.Operations.Godot;
+using Majo.Runtime.Timing;
 
 namespace Majo.Runtime.Direction.Godot;
 

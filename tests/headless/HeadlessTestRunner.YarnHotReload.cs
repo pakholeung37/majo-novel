@@ -5,12 +5,11 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
-using Majo.Runtime.Configuration;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Presentation;
+using Majo.Runtime.Dialogue.Yarn;
 using Majo.Runtime.Dialogue.Yarn.HotReload;
 using Majo.Runtime.Script;
-using Majo.Runtime.Dialogue.Yarn;
 using YarnSpinnerGodot;
 
 namespace Majo.Runtime.HeadlessTests;

@@ -1,8 +1,8 @@
 #if TOOLS
 using System;
 using Godot;
-using Majo.Runtime.Editor;
 using Majo.Runtime.Dialogue.Yarn;
+using Majo.Runtime.Editor;
 
 namespace Majo.Runtime;
 

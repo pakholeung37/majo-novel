@@ -1,13 +1,13 @@
 #nullable enable
 
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Core;
-using Majo.Runtime.Resources;
 using Majo.Runtime.Localization;
-using System.Collections.Generic;
-using System.Linq;
+using Majo.Runtime.Resources;
 
 namespace Majo.Runtime.Actors.Godot;
 

@@ -2,12 +2,12 @@
 
 using System;
 using System.Collections.Generic;
-using Majo.Runtime.Dialogue.Commands;
 using System.Linq;
 using System.Text.RegularExpressions;
+using Majo.Runtime.Dialogue.Commands;
+using Majo.Runtime.Dialogue.Yarn.HotReload;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
-using Majo.Runtime.Dialogue.Yarn.HotReload;
 
 namespace Majo.Runtime.Dialogue.Yarn;
 

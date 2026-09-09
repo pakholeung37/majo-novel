@@ -1,13 +1,12 @@
 #nullable enable
 
 using System;
-using System.Threading.Tasks;
 using System.Threading;
+using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Transitions;
 using Majo.Runtime.Operations;
-using Majo.Runtime.Operations.Godot;
 using Majo.Runtime.Timing;
 
 namespace Majo.Runtime.Actors.Godot;

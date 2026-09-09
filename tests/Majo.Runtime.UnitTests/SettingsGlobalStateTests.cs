@@ -1,7 +1,7 @@
 using System.Text.Json;
+using Majo.Runtime.Localization;
 using Majo.Runtime.Settings;
 using Majo.Runtime.State;
-using Majo.Runtime.Localization;
 using Xunit;
 
 namespace Majo.Runtime.UnitTests;

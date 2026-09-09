@@ -2,7 +2,6 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
-using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Operations.Godot;

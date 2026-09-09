@@ -1,6 +1,6 @@
 using System.Threading.Channels;
-using Majo.Runtime.Preloading;
 using Majo.Runtime.Core;
+using Majo.Runtime.Preloading;
 using Majo.Runtime.Resources;
 using Xunit;
 

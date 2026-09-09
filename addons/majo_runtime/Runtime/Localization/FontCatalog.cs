@@ -5,7 +5,6 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
-using Majo.Runtime.Core;
 
 namespace Majo.Runtime.Localization;
 

@@ -4,14 +4,12 @@ using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Actors.Godot;
-using Majo.Runtime.Configuration;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Dialogue.Yarn;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Direction.Godot;
-using Majo.Runtime.Operations;
 using YarnSpinnerGodot;
 
 namespace Majo.Runtime.HeadlessTests;

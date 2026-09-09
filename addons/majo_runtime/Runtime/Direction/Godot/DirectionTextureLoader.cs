@@ -4,8 +4,8 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
-using Majo.Runtime.Resources;
 using Majo.Runtime.Actors.Godot;
+using Majo.Runtime.Resources;
 
 namespace Majo.Runtime.Direction.Godot;
 

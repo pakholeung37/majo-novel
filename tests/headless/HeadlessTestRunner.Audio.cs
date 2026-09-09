@@ -6,7 +6,6 @@ using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Audio;
 using Majo.Runtime.Audio.Godot;
-using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
 
 namespace Majo.Runtime.HeadlessTests;

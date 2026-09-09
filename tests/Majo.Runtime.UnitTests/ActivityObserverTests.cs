@@ -1,17 +1,9 @@
 #nullable enable
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using Majo.Runtime.Audio;
 using Majo.Runtime.Core;
 using Majo.Runtime.Diagnostics;
-using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Commands;
-using Majo.Runtime.Dialogue.Yarn;
-using Majo.Runtime.Direction.Camera;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Direction.Rendering;

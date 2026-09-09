@@ -1,6 +1,5 @@
 #nullable enable
 
-using System;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Timing;
 

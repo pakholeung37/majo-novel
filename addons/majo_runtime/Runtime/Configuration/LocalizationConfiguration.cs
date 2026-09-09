@@ -1,12 +1,13 @@
 #nullable enable
 
+using System;
 using Godot;
 using Godot.Collections;
 
 namespace Majo.Runtime.Configuration;
 
 [GlobalClass]
-public partial class LocalizationConfiguration : Resource
+public partial class LocalizationConfiguration : Resource, IValidatableConfiguration
 {
     [Export]
     public string DefaultLocale { get; set; } = "en";
@@ -31,4 +32,30 @@ public partial class LocalizationConfiguration : Resource
 
     [Export]
     public bool FailOnMissingTranslation { get; set; }
+
+    public void Validate(ConfigurationValidationContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (string.IsNullOrWhiteSpace(DefaultLocale))
+        {
+            context.AddIssue(
+                nameof(DefaultLocale),
+                "Default locale is required.");
+        }
+
+        if (!double.IsFinite(FontScale) || FontScale <= 0)
+        {
+            context.AddIssue(
+                nameof(FontScale),
+                "Font scale must be finite and positive.");
+        }
+
+        if (LineSpacing < 0)
+        {
+            context.AddIssue(
+                nameof(LineSpacing),
+                "Line spacing cannot be negative.");
+        }
+    }
 }

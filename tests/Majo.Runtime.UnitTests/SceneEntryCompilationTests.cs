@@ -1,8 +1,8 @@
 using Majo.Runtime.Dialogue.Yarn;
 using Majo.Runtime.Dialogue.Yarn.HotReload;
+using Xunit;
 using Yarn;
 using Yarn.Compiler;
-using Xunit;
 
 namespace Majo.Runtime.UnitTests;
 

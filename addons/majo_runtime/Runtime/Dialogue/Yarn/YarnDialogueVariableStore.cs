@@ -3,8 +3,8 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using YarnSpinnerGodot;
 using Majo.Runtime.State;
+using YarnSpinnerGodot;
 
 namespace Majo.Runtime.Dialogue.Yarn;
 

@@ -1,9 +1,10 @@
+using System;
 using Godot;
 
 namespace Majo.Runtime.Configuration;
 
 [GlobalClass]
-public partial class YarnHotReloadConfiguration : Resource
+public partial class YarnHotReloadConfiguration : Resource, IValidatableConfiguration
 {
     [Export]
     public bool Enabled { get; set; } = true;
@@ -22,4 +23,16 @@ public partial class YarnHotReloadConfiguration : Resource
 
     [Export(PropertyHint.Dir)]
     public string SourceRootOverride { get; set; } = string.Empty;
+
+    public void Validate(ConfigurationValidationContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (DebounceMilliseconds < 0 ||
+            ConsistencyScanMilliseconds <= 0 ||
+            ApplyTimeoutMilliseconds <= 0)
+        {
+            context.AddIssue(string.Empty, "Hot reload timing values must be positive.");
+        }
+    }
 }

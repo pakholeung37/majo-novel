@@ -1,12 +1,11 @@
 #nullable enable
 
 using System;
-using System.Collections.Generic;
 using System.Threading.Tasks;
-using Majo.Runtime.Direction.Core;
-using Majo.Runtime.Resources;
 using Majo.Runtime.Configuration;
+using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
+using Majo.Runtime.Resources;
 
 namespace Majo.Runtime.Dialogue.Commands;
 

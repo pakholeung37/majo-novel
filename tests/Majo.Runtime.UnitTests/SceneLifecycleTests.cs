@@ -3,8 +3,8 @@ using Majo.Runtime.Dialogue.Yarn;
 using Majo.Runtime.Dialogue.Yarn.HotReload;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
-using Majo.Runtime.UnitTests.Testing;
 using Majo.Runtime.State;
+using Majo.Runtime.UnitTests.Testing;
 using Xunit;
 
 namespace Majo.Runtime.UnitTests;

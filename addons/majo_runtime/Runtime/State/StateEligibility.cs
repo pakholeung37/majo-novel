@@ -8,7 +8,6 @@ using System.Threading.Tasks;
 using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue.Yarn;
 using Majo.Runtime.Input;
-using Majo.Runtime.Operations;
 using Majo.Runtime.Script;
 
 namespace Majo.Runtime.State;

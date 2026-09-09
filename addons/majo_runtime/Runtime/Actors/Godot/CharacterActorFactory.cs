@@ -2,9 +2,8 @@
 
 using System;
 using Godot;
-using Majo.Runtime.Operations;
 using Majo.Runtime.Direction.Transitions;
-
+using Majo.Runtime.Operations;
 using Majo.Runtime.Timing;
 
 namespace Majo.Runtime.Actors.Godot;

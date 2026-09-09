@@ -1,13 +1,13 @@
 #nullable enable
 
 using System;
-using Majo.Runtime.Script;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Majo.Runtime.Core;
 using Majo.Runtime.Input;
+using Majo.Runtime.Script;
 
 namespace Majo.Runtime.State;
 
@@ -170,62 +170,15 @@ public sealed class StateManager : IStateManager, IStateBoundarySource, IStateRe
         string runtimeVersion,
         string gameBuildId,
         string storageNamespace,
-        IReadOnlyDictionary<string, string>? displayMetadata = null)
-    {
-        ArgumentNullException.ThrowIfNull(snapshot);
-        var durable = PersistentContributors(scope).ToDictionary(
-            value => value.Key,
-            StringComparer.Ordinal);
-        var metadata = snapshot.Records.Values.Select(record =>
-        {
-            if (!durable.TryGetValue(record.Key, out var contributor) ||
-                record.SchemaVersion != contributor.SchemaVersion)
-            {
-                throw new StateCompatibilityException(
-                    $"Snapshot record '{record.Key}' does not match a durable contributor.");
-            }
-
-            return new StateEnvelopeRecordMetadata(
-                record.Key,
-                record.SchemaVersion,
-                contributor.Capability);
-        }).ToArray();
-
-        StateScriptSummary? script = null;
-        if (scope == StateScope.Game && snapshot.Records.TryGetValue(
-                BuiltInStateKeys.ScriptPlayback,
-                out var scriptRecord))
-        {
-            try
-            {
-                var payload = scriptRecord.Payload;
-                script = new StateScriptSummary(
-                    payload.GetProperty("projectId").GetString()!,
-                    payload.GetProperty("nodeName").GetString()!,
-                    payload.GetProperty("lineId").GetString()!,
-                    payload.GetProperty("programFingerprint").GetString()!);
-            }
-            catch (Exception exception) when (
-                exception is KeyNotFoundException or InvalidOperationException)
-            {
-                throw new StateSnapshotException(
-                    "Script state record cannot provide envelope summary metadata.",
-                    exception);
-            }
-        }
-
-        return new StateEnvelope(
-            StateEnvelope.CurrentFormatVersion,
+        IReadOnlyDictionary<string, string>? displayMetadata = null) =>
+        StateEnvelopeHelper.CreateEnvelope(
+            snapshot,
+            scope,
+            contributors,
             runtimeVersion,
             gameBuildId,
             storageNamespace,
-            DateTimeOffset.UtcNow,
-            scope,
-            snapshot,
-            metadata,
-            script,
             displayMetadata);
-    }
 
     public async Task<StateSnapshot> CaptureAsync(
         StateScope scope,
@@ -707,27 +660,11 @@ public sealed class StateManager : IStateManager, IStateBoundarySource, IStateRe
         contributors.Where(value =>
             value.Scope == scope && value.Capability.SupportsPersistence).ToArray();
 
-    private static void ValidateSnapshotFormat(StateSnapshot snapshot)
-    {
-        if (snapshot.FormatVersion != StateSnapshot.CurrentFormatVersion)
-        {
-            throw new StateCompatibilityException(
-                $"Unsupported state snapshot format '{snapshot.FormatVersion}'; " +
-                $"expected '{StateSnapshot.CurrentFormatVersion}'.");
-        }
-    }
+    private static void ValidateSnapshotFormat(StateSnapshot snapshot) =>
+        StateEnvelopeHelper.ValidateSnapshotFormat(snapshot);
 
-    private static void ValidateRecord(IStateContributor contributor, StateRecord record)
-    {
-        if (!string.Equals(record.Key, contributor.Key, StringComparison.Ordinal) ||
-            record.Scope != contributor.Scope ||
-            record.SchemaVersion != contributor.SchemaVersion)
-        {
-            throw new StateCompatibilityException(
-                $"State record '{record.Key}' does not match contributor " +
-                $"'{contributor.Key}' scope/schema.");
-        }
-    }
+    private static void ValidateRecord(IStateContributor contributor, StateRecord record) =>
+        StateEnvelopeHelper.ValidateRecord(contributor, record);
 
     private void EnsureEligible(StateOperationKind operation)
     {
@@ -778,21 +715,7 @@ public sealed class StateManager : IStateManager, IStateBoundarySource, IStateRe
     }
 
     private static string FormatMigrationChain(IReadOnlyList<string> chain) =>
-        chain.Count == 0 ? "<none>" : string.Join(" -> ", chain);
-
-    private sealed class PermissiveStateEligibility : IStateEligibility
-    {
-        public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public StateEligibilityResult Check(StateOperationKind operation) => new(operation, []);
-        public IStateBarrierHandle AcquireBarrier(
-            object owner,
-            string reasonCode,
-            StateOperationMask operations = StateOperationMask.All,
-            string? diagnostic = null,
-            string? playerMessage = null) => throw new NotSupportedException();
-    }
+        StateEnvelopeHelper.FormatMigrationChain(chain);
 
     public void Dispose()
     {

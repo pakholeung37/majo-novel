@@ -48,3 +48,18 @@ public sealed class MajoConfigurationException : MajoRuntimeException
 
     public IReadOnlyList<ConfigurationIssue> Issues { get; }
 }
+
+public static class ValidatableConfigurationExtensions
+{
+    public static ConfigurationValidationResult Validate(
+        this IValidatableConfiguration configuration,
+        Func<string, bool>? resourceExists = null,
+        MajoProjectConfiguration? root = null)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        var issues = new List<ConfigurationIssue>();
+        var context = new ConfigurationValidationContext(root, resourceExists, issues);
+        configuration.Validate(context);
+        return new ConfigurationValidationResult(issues);
+    }
+}

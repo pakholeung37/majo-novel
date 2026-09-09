@@ -1,12 +1,7 @@
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using Majo.Runtime.Core;
-using Majo.Runtime.Direction.Core;
-using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Direction.Camera;
-using Majo.Runtime.Operations;
+using Majo.Runtime.Direction.Core;
+using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Timing;
 using Majo.Runtime.UnitTests.Testing;
 using Xunit;

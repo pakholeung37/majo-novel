@@ -5,11 +5,11 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
+using Majo.Runtime.Direction.Transitions;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Operations.Godot;
-using Majo.Runtime.Timing;
-using Majo.Runtime.Direction.Transitions;
 using Majo.Runtime.State;
+using Majo.Runtime.Timing;
 
 namespace Majo.Runtime.Actors.Godot;
 

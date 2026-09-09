@@ -4,7 +4,6 @@ using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
-using Majo.Runtime.Diagnostics;
 using Majo.Runtime.Input;
 using Majo.Runtime.Resources;
 using Majo.Runtime.UI.Diagnostics;

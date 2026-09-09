@@ -6,10 +6,10 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
+using Majo.Runtime.Accessibility;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Actors.Godot;
 using Majo.Runtime.Configuration;
-using Majo.Runtime.Accessibility;
 using Majo.Runtime.Core;
 using Majo.Runtime.Direction.Actors;
 using Majo.Runtime.Direction.Camera;
@@ -18,8 +18,8 @@ using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Direction.Godot;
 using Majo.Runtime.Direction.Rendering;
 using Majo.Runtime.Operations;
-using Majo.Runtime.Resources;
 using Majo.Runtime.Operations.Godot;
+using Majo.Runtime.Resources;
 
 namespace Majo.Runtime.HeadlessTests;
 

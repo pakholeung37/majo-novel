@@ -5,9 +5,9 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
+using Majo.Runtime.Dialogue.Yarn.HotReload;
 using Majo.Runtime.Script;
 using YarnSpinnerGodot;
-using Majo.Runtime.Dialogue.Yarn.HotReload;
 
 namespace Majo.Runtime.Dialogue.Yarn;
 

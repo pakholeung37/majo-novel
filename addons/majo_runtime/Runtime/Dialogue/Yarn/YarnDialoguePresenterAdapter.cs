@@ -6,8 +6,8 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
-using YarnSpinnerGodot;
 using Majo.Runtime.Script;
+using YarnSpinnerGodot;
 using MajoDialogueOption = Majo.Runtime.Dialogue.DialogueOption;
 using YarnDialogueOption = YarnSpinnerGodot.DialogueOption;
 

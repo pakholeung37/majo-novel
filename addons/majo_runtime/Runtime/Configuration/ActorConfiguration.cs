@@ -1,12 +1,12 @@
-using Godot;
 using System;
 using System.Collections.Generic;
+using Godot;
 using Majo.Runtime.Direction.Core;
 
 namespace Majo.Runtime.Configuration;
 
 [GlobalClass]
-public partial class ActorConfiguration : Resource
+public partial class ActorConfiguration : Resource, IValidatableConfiguration
 {
     [Export]
     public Vector2I ReferenceResolution { get; set; } = Vector2I.Zero;
@@ -59,4 +59,61 @@ public partial class ActorConfiguration : Resource
 
     [Export]
     public Vector2 RightPosition { get; set; } = new(960, 540);
+
+    public void Validate(ConfigurationValidationContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        var actorIds = new HashSet<string>(StringComparer.Ordinal);
+        if ((ReferenceResolution.X == 0) != (ReferenceResolution.Y == 0) ||
+            ReferenceResolution.X < 0 || ReferenceResolution.Y < 0)
+        {
+            context.AddIssue(
+                nameof(ReferenceResolution),
+                "Reference resolution must be zero for dynamic sizing or positive on both axes.");
+        }
+
+        ValidatePosition(
+            ScenePositionOffset,
+            nameof(ScenePositionOffset),
+            context);
+
+        if (ScenePositionOffset != Vector2.Zero &&
+            (ReferenceResolution.X <= 0 || ReferenceResolution.Y <= 0))
+        {
+            context.AddIssue(
+                nameof(ScenePositionOffset),
+                "A scene-position offset requires a positive reference resolution.");
+        }
+
+        ValidatePosition(LeftPosition, nameof(LeftPosition), context);
+        ValidatePosition(CenterPosition, nameof(CenterPosition), context);
+        ValidatePosition(RightPosition, nameof(RightPosition), context);
+
+        for (var index = 0; index < Actors.Count; index++)
+        {
+            var actor = Actors[index];
+            var actorSection = $"{nameof(Actors)}[{index}]";
+            if (actor is null)
+            {
+                context.AddIssue(actorSection, "Actor definition is required.");
+                continue;
+            }
+
+            actor.Validate(context.ForSection(actorSection), actorIds);
+        }
+    }
+
+    private static void ValidatePosition(
+        Vector2 position,
+        string property,
+        ConfigurationValidationContext context)
+    {
+        if (!float.IsFinite(position.X) || !float.IsFinite(position.Y))
+        {
+            context.AddIssue(
+                property,
+                "Position components must be finite.");
+        }
+    }
 }

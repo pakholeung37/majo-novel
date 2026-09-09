@@ -1,4 +1,3 @@
-using System;
 using Majo.Runtime.Dialogue.Yarn;
 using Xunit;
 using Yarn.Markup;

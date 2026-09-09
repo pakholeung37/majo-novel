@@ -1,12 +1,13 @@
 #nullable enable
 
+using System;
 using Godot;
 using Majo.Runtime.Settings;
 
 namespace Majo.Runtime.Configuration;
 
 [GlobalClass]
-public partial class SettingsConfiguration : Resource
+public partial class SettingsConfiguration : Resource, IValidatableConfiguration
 {
     [Export]
     public bool Enabled { get; set; } = true;
@@ -46,4 +47,51 @@ public partial class SettingsConfiguration : Resource
 
     [Export]
     public bool ReduceMotion { get; set; }
+
+    public void Validate(ConfigurationValidationContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (!double.IsFinite(FlushDebounceSeconds) || FlushDebounceSeconds < 0)
+        {
+            context.AddIssue(
+                nameof(FlushDebounceSeconds),
+                "Flush debounce must be finite and non-negative.");
+        }
+
+        if (!double.IsFinite(SkipDelaySeconds) || SkipDelaySeconds < 0)
+        {
+            context.AddIssue(
+                nameof(SkipDelaySeconds),
+                "Skip delay must be finite and non-negative.");
+        }
+
+        if (!double.IsFinite(FontScale) || FontScale <= 0)
+        {
+            context.AddIssue(
+                nameof(FontScale),
+                "Font scale must be finite and positive.");
+        }
+
+        if (LineSpacing < 0)
+        {
+            context.AddIssue(
+                nameof(LineSpacing),
+                "Line spacing cannot be negative.");
+        }
+
+        if (string.IsNullOrWhiteSpace(DialogueLocale))
+        {
+            context.AddIssue(
+                nameof(DialogueLocale),
+                "Dialogue locale identity is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(VoiceLocale))
+        {
+            context.AddIssue(
+                nameof(VoiceLocale),
+                "Voice locale identity is required.");
+        }
+    }
 }

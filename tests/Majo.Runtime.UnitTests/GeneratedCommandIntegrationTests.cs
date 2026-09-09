@@ -1,6 +1,5 @@
 #nullable enable
 
-using System.Collections.Generic;
 using Majo.Runtime.Dialogue.Commands;
 using Xunit;
 

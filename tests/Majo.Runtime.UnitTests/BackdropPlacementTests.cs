@@ -1,7 +1,6 @@
 using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
-using Majo.Runtime.Resources;
 using Majo.Runtime.State;
 using Majo.Runtime.UnitTests.Testing;
 using Xunit;

@@ -8,7 +8,6 @@ using System.Security.Cryptography;
 using System.Text;
 using Google.Protobuf;
 using Yarn;
-using Yarn.Compiler;
 using YarnSpinnerGodot;
 
 namespace Majo.Runtime.Dialogue.Yarn.HotReload;

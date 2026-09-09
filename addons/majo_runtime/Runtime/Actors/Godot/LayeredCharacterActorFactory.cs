@@ -7,10 +7,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Actors.Layered;
-using Majo.Runtime.Resources;
 using Majo.Runtime.Configuration;
-using Majo.Runtime.Operations;
 using Majo.Runtime.Direction.Transitions;
+using Majo.Runtime.Operations;
+using Majo.Runtime.Resources;
 using Majo.Runtime.Timing;
 
 namespace Majo.Runtime.Actors.Godot;

@@ -7,13 +7,11 @@ using System.Threading.Tasks;
 using Godot;
 using Google.Protobuf;
 using Majo.Runtime.Actors;
-using Majo.Runtime.Configuration;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Yarn.Preloading;
-using Majo.Runtime.Localization;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
-using Majo.Runtime.Direction.Godot;
+using Majo.Runtime.Localization;
 using Majo.Runtime.Resources;
 using YarnSpinnerGodot;
 

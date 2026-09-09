@@ -7,9 +7,9 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
+using Majo.Runtime.Core;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Godot;
-using Majo.Runtime.Core;
 using Majo.Runtime.Input;
 using Majo.Runtime.State;
 

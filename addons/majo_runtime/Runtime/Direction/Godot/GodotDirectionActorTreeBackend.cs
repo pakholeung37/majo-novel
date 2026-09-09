@@ -12,7 +12,6 @@ using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Direction.Rendering;
 using Majo.Runtime.Direction.Transitions;
-using Majo.Runtime.Operations;
 using Majo.Runtime.Timing;
 
 namespace Majo.Runtime.Direction.Godot;

@@ -1,26 +1,10 @@
 #nullable enable
 
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Reflection;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
-using Majo.Runtime.Actors;
-using Majo.Runtime.Audio;
-using Majo.Runtime.Auto;
-using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
 using Majo.Runtime.Diagnostics;
-using Majo.Runtime.Dialogue;
-using Majo.Runtime.History;
-using Majo.Runtime.Input;
-using Majo.Runtime.Operations;
 using Majo.Runtime.Resources;
-using Majo.Runtime.Script;
-using Majo.Runtime.State;
 using Xunit;
 
 namespace Majo.Runtime.UnitTests;

@@ -1,8 +1,8 @@
 #nullable enable
 
 using System;
-using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Configuration;
+using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Resources;
 
 namespace Majo.Runtime.Dialogue.Commands;

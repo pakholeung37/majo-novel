@@ -1,9 +1,9 @@
 using System.Text.Json;
+using Majo.Runtime.Dialogue;
 using Majo.Runtime.History;
 using Majo.Runtime.Save;
-using Majo.Runtime.State;
 using Majo.Runtime.Script;
-using Majo.Runtime.Dialogue;
+using Majo.Runtime.State;
 using Xunit;
 
 namespace Majo.Runtime.UnitTests;
