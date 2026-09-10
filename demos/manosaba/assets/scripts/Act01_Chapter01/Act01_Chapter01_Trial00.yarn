@@ -32,17 +32,19 @@ scene: act01_chapter01_trial00
 // Original court radius is 16: subject depth is approximately 16 - distance.
 // Close shots use 14.4 / depth; the pair-wide shot is framed separately to fit both seats.
 // Unwrap seat 12 as seat -1 so Meruru and Ema remain adjacent across the circle seam.
-// Shared camera setup lives in Yarn; each shot supplies its own subject and wall framing.
-<<camera preset define court_close zoom:0.7826087 dolly:0.7826087 parallax:strong parallaxAnchor:50,46 parallaxLimit:2,50>>
+// Physical depth projection; offsets compensate the unwrapped circular wall in screen percent (Y up).
+<<camera preset define court_close zoom:0.7826087 dolly:0.7826087>>
 <<camera preset define court_medium extends:court_close zoom:0.8 dolly:0.6666667>>
-<<camera preset define ema_close extends:court_close center:35.1562,71 parallaxAnchor:35.1562,46>>
-<<camera preset define ema_medium extends:court_medium center:35.1562,66 parallaxAnchor:35.1562,46>>
-<<camera preset define meruru_split extends:court_medium center:-32,66 rotation:8 parallaxAnchor:-32,46>>
-<<camera preset define pair_wide extends:court_close center:0,50 zoom:0.75 dolly:0.2857143 parallaxAnchor:0,46>>
-<<camera preset define sherry_close extends:court_close center:180.469,68 parallaxAnchor:180.469,46>>
-// Dolly magnifies the subject to 3.6 while the distant wall remains at approximately 0.9.
-<<camera preset define leia_close extends:court_close center:241.406,78 parallaxAnchor:241.406,46>>
-<<camera preset define opening center:246.094,50 zoom:1.05 rotation:-2 parallax:subtle parallaxStrength:0.15 parallaxAnchor:351.5625,50 parallaxLimit:2,1>>
+<<camera preset define ema_close extends:court_close center:35.1562,71 backgroundOffset:11.132850,2.167870>>
+<<camera preset define ema_medium extends:court_medium center:35.1562,66 backgroundOffset:11.132850,2.565631>>
+<<camera preset define meruru_split extends:court_medium center:-32,66 rotation:8 backgroundOffset:61.102337,-12.675597>>
+<<camera preset define pair_wide extends:court_close center:0,50 zoom:0.75 dolly:0.2857143 backgroundOffset:32.812500,2.622591>>
+<<camera preset define sherry_close extends:court_close center:180.469,68 backgroundOffset:-97.851751,2.426039>>
+<<camera preset define leia_close extends:court_close center:241.406,78 backgroundOffset:-143.554501,1.312181>>
+<<camera preset define leia_entry extends:leia_close center:245.625,78 backgroundOffset:-144.880885,1.312181>>
+<<camera preset define ema_finish extends:ema_close zoom:0.626087 backgroundOffset:8.906281,1.965631>>
+<<camera preset define opening center:246.094,50 zoom:1.05 rotation:-2 backgroundOffset:-173.476504,-10.769659>>
+<<camera preset define opening_end extends:opening center:457.031,50 rotation:-1 backgroundOffset:-354.098190,-10.988101>>
 <<beat begin>>
 <<backdrop Court_Trial00 at:-140.625,115 origin:0,0 scale:1.7578125 distance:far via:cut>>
 <<character Ema appearance:Default at:ema scale:0.48 via:cut>>
@@ -75,7 +77,7 @@ scene: act01_chapter01_trial00
 <<beat end wait:false>>
 <<bgm Bgm_025_001_Loop volume:1 loop:true duration:0>>
 // Slow establishing drift continues under the opening exchange.
-<<camera move view:trial_b center:457.031,50 rotation:-1 duration:25 ease:linear>>
+<<camera move view:trial_b preset:opening_end duration:25 ease:linear>>
 <<curtain open duration:0.9>>
 <<wait 0.6>>
 <<character Alisa appearance:Angry1,Option-ArmL-Off>>
@@ -103,7 +105,7 @@ Miria: 反正我也不知道[br /]该从哪里开始讨论…… #line:0101Trial
 <<character Leia appearance:Normal1,ArmR3>>
 
 // Prepare A while B is displayed, then cut to the moving close-up.
-<<camera view:main preset:leia_close center:245.625,78 via:cut>>
+<<camera view:main preset:leia_entry via:cut>>
 <<beat begin>>
 <<camera move view:main preset:leia_close duration:0.6 ease:cubic-out>>
 <<screen show main via:cut>>
@@ -191,7 +193,7 @@ Ema: 梅露露……！ #line:0101Trial00_Ema004
 <<beat begin>>
 <<character Ema appearance:Determined2,ArmR3,ArmL7 via:cut>>
 // Preserve the original 20% optical zoom-out after converting the close shot to dolly.
-<<camera move view:trial_b preset:ema_close zoom:0.626087 duration:2 ease:sine-out>>
+<<camera move view:trial_b preset:ema_finish duration:2 ease:sine-out>>
 <<screen show trial_b via:cut>>
 <<beat end wait:false>>
 <<wait 0.2>>

@@ -224,6 +224,8 @@ public sealed record ViewPosePatch(
     DirectionSourceLocation? SourceLocation = null) : IDurableDirectionPatch
 {
     public DirectionValue<float> Dolly { get; init; }
+    public DirectionValue<DirectionPoint> BackgroundOffset { get; init; }
+    public DirectionValue<float> BackgroundScale { get; init; }
     public ViewParallaxState? Parallax { get; init; }
 }
 

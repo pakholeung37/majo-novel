@@ -7,7 +7,50 @@ namespace Majo.Runtime.UnitTests;
 public sealed class CameraProjectionTests
 {
     [Fact]
-    public void CourtPullbackShrinksBothPlanesWithoutBackgroundMagnificationReversal()
+    public void DepthProjectionHasUnclampedDistanceBasedLateralMotion()
+    {
+        var neutral = CameraProjectionCalculator.Calculate(ViewPose.Default, ViewParallaxState.Depth, ViewIdleState.Off, 6, Size);
+        var moved = CameraProjectionCalculator.Calculate(ViewPose.Default with { Center = new(650, 50) },
+            ViewParallaxState.Depth, ViewIdleState.Off, 6, Size);
+        Assert.Equal((moved.Subject.TX - neutral.Subject.TX) / 6,
+            moved.Background.TX - neutral.Background.TX, 3);
+        Assert.Equal(neutral.Subject, neutral.Background);
+    }
+
+    [Fact]
+    public void BackgroundCorrectionUsesScreenCoordinatesWithoutChangingSubjects()
+    {
+        var pose = new ViewPose(new(130, 70), 1.2f, 17) { Dolly = .4f };
+        var original = CameraProjectionCalculator.Calculate(pose, ViewParallaxState.Depth, ViewIdleState.Off, 6, Size);
+        var corrected = CameraProjectionCalculator.Calculate(pose with { BackgroundScale = 2, BackgroundOffset = new(10, 20) },
+            ViewParallaxState.Depth, ViewIdleState.Off, 6, Size);
+        Assert.Equal(original.Subject, corrected.Subject);
+        Assert.Equal(original.Background.M11 * 2, corrected.Background.M11);
+        Assert.Equal(Size.X / 2 + (original.Background.TX - Size.X / 2) * 2 + Size.X * .1f, corrected.Background.TX, 3);
+        Assert.Equal(Size.Y / 2 + (original.Background.TY - Size.Y / 2) * 2 - Size.Y * .2f, corrected.Background.TY, 3);
+    }
+
+    [Theory]
+    [InlineData(35.1562f, 71, .7826087f, .7826087f, 0, 11.132850f, 2.167870f)]
+    [InlineData(-32, 66, .8f, .6666667f, 8, 61.102337f, -12.675597f)]
+    [InlineData(0, 50, .75f, .2857143f, 0, 32.812500f, 2.622591f)]
+    [InlineData(241.406f, 78, .7826087f, .7826087f, 0, -143.554501f, 1.312181f)]
+    public void MigratedCourtEndpointsPreserveApprovedComposition(float x, float y, float zoom, float dolly, float rotation, float dx, float dy)
+    {
+        var pose = new ViewPose(new(x, y), zoom, rotation) { Dolly = dolly };
+        var old = CameraProjectionCalculator.Calculate(pose, new(1, new(x, 46), new(2, 50)), ViewIdleState.Off, 6, Size);
+        var migrated = CameraProjectionCalculator.Calculate(pose with { BackgroundOffset = new(dx, dy) },
+            ViewParallaxState.Depth, ViewIdleState.Off, 6, Size);
+        Assert.Equal(old.Subject, migrated.Subject);
+        Assert.InRange(System.Math.Abs(old.Background.TX - migrated.Background.TX), 0, .01f);
+        Assert.InRange(System.Math.Abs(old.Background.TY - migrated.Background.TY), 0, .01f);
+        Assert.Equal(old.Background.M11, migrated.Background.M11, 5);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CourtPullbackShrinksBothPlanesWithoutBackgroundMagnificationReversal(bool depth)
     {
         var lastSubject = float.PositiveInfinity;
         var lastBackground = float.PositiveInfinity;
@@ -18,7 +61,7 @@ public sealed class CameraProjectionTests
                 18f / 23f + (.75f - 18f / 23f) * t, 0)
             { Dolly = 18f / 23f + (2f / 7f - 18f / 23f) * t };
             var projection = CameraProjectionCalculator.Calculate(pose,
-                new ViewParallaxState(1, new(35.1562f * (1 - t), 46), new(2, 50)),
+                depth ? ViewParallaxState.Depth : new ViewParallaxState(1, new(35.1562f * (1 - t), 46), new(2, 50)),
                 ViewIdleState.Off, 6, Size);
             Assert.True(projection.Subject.M11 <= lastSubject);
             Assert.True(projection.Background.M11 <= lastBackground);

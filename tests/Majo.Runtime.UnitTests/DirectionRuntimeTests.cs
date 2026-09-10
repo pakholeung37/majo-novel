@@ -144,7 +144,7 @@ public sealed class DirectionRuntimeTests
     }
 
     [Fact]
-    public async Task DirectionStateV4RoundTripsCameraEnvironment()
+    public async Task DirectionStateV5RoundTripsCameraEnvironment()
     {
         var coordinator = CreateCoordinator(new FakeDirectionBackend { AutoSettle = true });
         var contributor = new DirectionStateContributor(coordinator);
@@ -153,9 +153,9 @@ public sealed class DirectionRuntimeTests
             new BackdropPatch(StageId.Main,
                 new BackdropState(new ResourceKey("court")) { Distance = 6 }, DirectionTransitionSpec.Cut),
             new ViewPosePatch(ViewId.Main, default, default, default, DirectionTransitionSpec.Cut)
-                { Dolly = DirectionValue.From(-0.25f) },
+                { Dolly = DirectionValue.From(-0.25f), BackgroundOffset = DirectionValue.From(new DirectionPoint(12, -4)), BackgroundScale = DirectionValue.From(1.2f) },
             new ViewParallaxPatch(ViewId.Main,
-                new ViewParallaxState(0.25f, new(50, 50), new(1.5f, 1)), DirectionTransitionSpec.Cut),
+                new ViewParallaxState(0.25f, new(50, 50), new(1.5f, 1)) { UseDepthProjection = true }, DirectionTransitionSpec.Cut),
             new ViewIdlePatch(ViewId.Main,
                 new ViewIdleState(new(0.15f, 0.08f), 12, 1.2), DirectionTransitionSpec.Cut),
         }, DirectionCompletionBarrier.Settle);
@@ -164,10 +164,13 @@ public sealed class DirectionRuntimeTests
         await coordinator.ResetAsync(default);
         await contributor.CommitPreparedAsync(snapshot, default);
 
-        Assert.Equal(4, snapshot.SchemaVersion);
+        Assert.Equal(5, snapshot.SchemaVersion);
         Assert.Equal(6, coordinator.State.Stages[StageId.Main].Backdrop!.Distance);
         Assert.Equal(-0.25f, coordinator.State.Views[ViewId.Main].Pose.Dolly);
+        Assert.Equal(new DirectionPoint(12, -4), coordinator.State.Views[ViewId.Main].Pose.BackgroundOffset);
+        Assert.Equal(1.2f, coordinator.State.Views[ViewId.Main].Pose.BackgroundScale);
         Assert.Equal(0.25f, coordinator.State.Views[ViewId.Main].Parallax.Strength);
+        Assert.True(coordinator.State.Views[ViewId.Main].Parallax.UseDepthProjection);
         Assert.Equal(0, coordinator.State.Views[ViewId.Main].Idle.PhaseRadians);
     }
 
@@ -191,6 +194,29 @@ public sealed class DirectionRuntimeTests
         Assert.Equal(0, coordinator.State.Views[ViewId.Main].Pose.Dolly);
         Assert.Equal(ViewParallaxState.Off, coordinator.State.Views[ViewId.Main].Parallax);
         Assert.Equal(ViewIdleState.Off, coordinator.State.Views[ViewId.Main].Idle);
+    }
+
+    [Fact]
+    public async Task DirectionStateContributorPreservesSchemaFourLegacyProjection()
+    {
+        var coordinator = CreateCoordinator(new FakeDirectionBackend { AutoSettle = true });
+        var contributor = new DirectionStateContributor(coordinator);
+        var record = new StateRecord(BuiltInStateKeys.Direction, StateScope.Game, 4,
+            JsonDocument.Parse("""
+                {
+                  "stages":[{"id":"main","actors":[]}],
+                  "views":[{"id":"main","stageId":"main","centerX":35,"centerY":71,"zoom":0.8,"rotation":0,
+                    "dolly":0.6,"parallax":{"strength":1,"anchor":{"x":35,"y":46},"limitPercent":{"x":2,"y":50}},
+                    "idle":{"amplitudePercent":{"x":0,"y":0},"periodSeconds":12,"phaseRadians":0}}],
+                  "layout":"single","bindings":{"main":"main"},"revision":0
+                }
+                """).RootElement.Clone());
+        await contributor.CommitPreparedAsync(record, default);
+        var view = coordinator.State.Views[ViewId.Main];
+        Assert.False(view.Parallax.UseDepthProjection);
+        Assert.Equal(1, view.Parallax.Strength);
+        Assert.Equal(default(DirectionPoint), view.Pose.BackgroundOffset);
+        Assert.Equal(1, view.Pose.BackgroundScale);
     }
 
     [Fact]

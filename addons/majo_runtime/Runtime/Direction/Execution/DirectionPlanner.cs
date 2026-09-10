@@ -488,7 +488,8 @@ public sealed class DirectionPlanner : IDirectionPlanner
         if (!views.TryGetValue(patch.ViewId, out var view))
             throw new DirectionReferenceException($"View '{patch.ViewId}' is not defined.");
         var paths = new List<string>();
-        if (!patch.Center.HasValue && !patch.Zoom.HasValue && !patch.RotationDegrees.HasValue && !patch.Dolly.HasValue) return;
+        if (!patch.Center.HasValue && !patch.Zoom.HasValue && !patch.RotationDegrees.HasValue && !patch.Dolly.HasValue &&
+            !patch.BackgroundOffset.HasValue && !patch.BackgroundScale.HasValue) return;
         RegisterWrite(ViewPath(patch.ViewId, "pose"), patch.SourceLocation, writes, paths);
         var pose = view.Pose with
         {
@@ -496,6 +497,8 @@ public sealed class DirectionPlanner : IDirectionPlanner
             Zoom = patch.Zoom.HasValue ? patch.Zoom.Value : view.Pose.Zoom,
             RotationDegrees = patch.RotationDegrees.HasValue ? patch.RotationDegrees.Value : view.Pose.RotationDegrees,
             Dolly = patch.Dolly.HasValue ? patch.Dolly.Value : view.Pose.Dolly,
+            BackgroundOffset = patch.BackgroundOffset.HasValue ? patch.BackgroundOffset.Value : view.Pose.BackgroundOffset,
+            BackgroundScale = patch.BackgroundScale.HasValue ? patch.BackgroundScale.Value : view.Pose.BackgroundScale,
         };
         pose.Validate();
         views[patch.ViewId] = view with { Pose = pose };

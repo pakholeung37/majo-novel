@@ -64,12 +64,17 @@ internal static class GodotDirectionRendering
             progress) * 180 / Mathf.Pi)
     {
         Dolly = Mathf.Lerp(from.Dolly, to.Dolly, progress),
+        BackgroundOffset = new DirectionPoint(
+            Mathf.Lerp(from.BackgroundOffset.X, to.BackgroundOffset.X, progress),
+            Mathf.Lerp(from.BackgroundOffset.Y, to.BackgroundOffset.Y, progress)),
+        BackgroundScale = Mathf.Lerp(from.BackgroundScale, to.BackgroundScale, progress),
     };
 
     public static ViewParallaxState Interpolate(ViewParallaxState from, ViewParallaxState to, float progress) => new(
         Mathf.Lerp(from.Strength, to.Strength, progress),
         new DirectionPoint(Mathf.Lerp(from.Anchor.X, to.Anchor.X, progress), Mathf.Lerp(from.Anchor.Y, to.Anchor.Y, progress)),
-        new DirectionPoint(Mathf.Lerp(from.LimitPercent.X, to.LimitPercent.X, progress), Mathf.Lerp(from.LimitPercent.Y, to.LimitPercent.Y, progress)));
+        new DirectionPoint(Mathf.Lerp(from.LimitPercent.X, to.LimitPercent.X, progress), Mathf.Lerp(from.LimitPercent.Y, to.LimitPercent.Y, progress)))
+        { UseDepthProjection = to.UseDepthProjection };
 
     public static ViewIdleState Interpolate(ViewIdleState from, ViewIdleState to, float progress) => new(
         new DirectionPoint(

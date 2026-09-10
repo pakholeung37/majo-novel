@@ -29,7 +29,7 @@ public sealed class DirectionStateContributor : IPreparedStateContributor, IStat
 
     public string Key => BuiltInStateKeys.Direction;
     public StateScope Scope => StateScope.Game;
-    public int SchemaVersion => 4;
+    public int SchemaVersion => 5;
     public StateContributorCapability Capability => StateContributorCapability.DurableRollback;
 
     public ValueTask<StateRecord> CaptureAsync(CancellationToken cancellationToken)
@@ -104,7 +104,7 @@ public sealed class DirectionStateContributor : IPreparedStateContributor, IStat
             view.Pose.RotationDegrees,
             view.Pose.Dolly,
             view.Parallax,
-            view.Idle)).ToArray(),
+            view.Idle, view.Pose.BackgroundOffset, view.Pose.BackgroundScale)).ToArray(),
         state.Screen.Layout.Value,
         state.Screen.Bindings.ToDictionary(pair => pair.Key.Value, pair => pair.Value.Value),
         state.Revision,
@@ -118,12 +118,17 @@ public sealed class DirectionStateContributor : IPreparedStateContributor, IStat
         {
             if (record.Key != BuiltInStateKeys.Direction ||
                 record.Scope != StateScope.Game ||
-                record.SchemaVersion is not (3 or 4))
+                record.SchemaVersion is not (3 or 4 or 5))
             {
                 throw new StateSnapshotException(
                     $"State record '{BuiltInStateKeys.Direction}' has incompatible metadata.");
             }
-            if (record.SchemaVersion == 4) ValidateV4Shape(record);
+            if (record.SchemaVersion >= 4) ValidateV4Shape(record);
+            if (record.SchemaVersion == 5)
+                foreach (var view in record.Payload.GetProperty("views").EnumerateArray())
+                    if (!view.TryGetProperty("backgroundOffset", out _) || !view.TryGetProperty("backgroundScale", out _) ||
+                        !view.GetProperty("parallax").TryGetProperty("useDepthProjection", out _))
+                        throw new StateSnapshotException("Direction v5 view is missing background projection state.");
             return FromPayload(StateJson.Deserialize<Payload>(record));
         }
         catch (StateSnapshotException)
@@ -222,6 +227,8 @@ public sealed class DirectionStateContributor : IPreparedStateContributor, IStat
                 new DirectionPoint(view.CenterX, view.CenterY), view.Zoom, view.Rotation)
             {
                 Dolly = view.Dolly,
+                BackgroundOffset = view.BackgroundOffset,
+                BackgroundScale = view.BackgroundScale,
             };
             pose.Validate();
             if (!stages.ContainsKey(stageId))
@@ -297,5 +304,7 @@ public sealed class DirectionStateContributor : IPreparedStateContributor, IStat
         float Rotation,
         float Dolly = 0,
         ViewParallaxState? Parallax = null,
-        ViewIdleState? Idle = null);
+        ViewIdleState? Idle = null,
+        DirectionPoint BackgroundOffset = default,
+        float BackgroundScale = 1);
 }

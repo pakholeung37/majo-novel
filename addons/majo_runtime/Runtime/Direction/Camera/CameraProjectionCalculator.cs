@@ -51,6 +51,20 @@ public static class CameraProjectionCalculator
 
         var subjectScale = 1 / (1 - pose.Dolly);
         var physicalBackgroundScale = backdropDistance / (backdropDistance - pose.Dolly);
+        if (parallax.UseDepthProjection)
+        {
+            // Neutral camera at the reference-frame center defines the authored layout.
+            // Lateral camera displacement is divided by depth; no strength blend or clamp.
+            var backgroundCenter = new DirectionPoint(
+                origin.X + (center.X - origin.X) / backdropDistance,
+                origin.Y + (center.Y - origin.Y) / backdropDistance);
+            var background = CreateTransform(origin, backgroundCenter,
+                pose.Zoom * physicalBackgroundScale, pose.RotationDegrees, default);
+            return new CameraProjection(
+                CreateTransform(origin, center, pose.Zoom * subjectScale, pose.RotationDegrees, default),
+                CorrectBackground(background, pose, origin, referenceSizePixels), center,
+                subjectScale, physicalBackgroundScale);
+        }
         var backgroundScale = Lerp(subjectScale, physicalBackgroundScale, parallax.Strength);
         var anchor = ToPixels(parallax.Anchor, referenceSizePixels);
         var k = parallax.Strength * (1 - 1 / backdropDistance);
@@ -65,11 +79,20 @@ public static class CameraProjectionCalculator
 
         return new CameraProjection(
             CreateTransform(origin, center, pose.Zoom * subjectScale, pose.RotationDegrees, default),
-            CreateTransform(origin, center, pose.Zoom * backgroundScale, pose.RotationDegrees, boundedOffset),
+            CorrectBackground(CreateTransform(origin, center, pose.Zoom * backgroundScale, pose.RotationDegrees, boundedOffset),
+                pose, origin, referenceSizePixels),
             center,
             subjectScale,
             backgroundScale);
     }
+
+    private static DirectionAffineTransform CorrectBackground(DirectionAffineTransform matrix, ViewPose pose,
+        DirectionPoint origin, DirectionPoint size) => pose.BackgroundScale == 1 && pose.BackgroundOffset == default
+        ? matrix : new(
+        matrix.M11 * pose.BackgroundScale, matrix.M12 * pose.BackgroundScale,
+        matrix.M21 * pose.BackgroundScale, matrix.M22 * pose.BackgroundScale,
+        origin.X + (matrix.TX - origin.X) * pose.BackgroundScale + size.X * pose.BackgroundOffset.X / 100,
+        origin.Y + (matrix.TY - origin.Y) * pose.BackgroundScale - size.Y * pose.BackgroundOffset.Y / 100);
 
     private static DirectionAffineTransform CreateTransform(
         DirectionPoint origin, DirectionPoint center, float scale, float rotationDegrees, DirectionPoint extraOffset)

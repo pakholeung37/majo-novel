@@ -687,7 +687,7 @@
       "yarnName": "camera preset define",
       "definitionName": "Majo.Runtime.Dialogue.Commands.CameraPresetDefineCommand",
       "language": "csharp",
-      "documentation": "camera preset define \u003Cname\u003E [center:\u003Cmark|x,y\u003E] [zoom:\u003Cnumber\u003E] [rotation:\u003Cnumber\u003E] [dolly:\u003Cstring\u003E] [extends:\u003Cstring\u003E] [parallax:\u003Cstring\u003E] [parallaxStrength:\u003Cnumber\u003E] [parallaxAnchor:\u003Cstring\u003E] [parallaxLimit:\u003Cstring\u003E]\nname: value\ncenter: value\nzoom: value\nrotation: degrees\ndolly: neutral|near|back|number\nextends: value\nparallax: value\nparallaxStrength: value\nparallaxAnchor: value\nparallaxLimit: value",
+      "documentation": "camera preset define \u003Cname\u003E [center:\u003Cmark|x,y\u003E] [zoom:\u003Cnumber\u003E] [rotation:\u003Cnumber\u003E] [dolly:\u003Cstring\u003E] [extends:\u003Cstring\u003E] [backgroundOffset:\u003Cstring\u003E] [backgroundScale:\u003Cnumber\u003E] [parallax:\u003Cstring\u003E] [parallaxStrength:\u003Cnumber\u003E] [parallaxAnchor:\u003Cstring\u003E] [parallaxLimit:\u003Cstring\u003E]\nname: value\ncenter: value\nzoom: value\nrotation: degrees\ndolly: neutral|near|back|number\nextends: value\nbackgroundOffset: value\nbackgroundScale: value\nparallax: value\nparallaxStrength: value\nparallaxAnchor: value\nparallaxLimit: value",
       "async": true,
       "containsErrors": false,
       "parameters": [
@@ -728,6 +728,18 @@
           "isParamsArray": false
         },
         {
+          "name": "backgroundOffset:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "backgroundScale:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
           "name": "parallax:value",
           "type": "string",
           "isOptional": true,
@@ -757,7 +769,7 @@
       "yarnName": "camera",
       "definitionName": "Majo.Runtime.Dialogue.Commands.CameraCommand",
       "language": "csharp",
-      "documentation": "camera [stage:\u003Cstring\u003E] [view:\u003Cstring\u003E] [center:\u003Cmark|x,y\u003E] [zoom:\u003Cnumber\u003E] [rotation:\u003Cnumber\u003E] [dolly:\u003Cstring\u003E] [as:\u003Cstring\u003E] [via:\u003Ckind\u003E] [preset:\u003Cstring\u003E] [duration:\u003Cnumber\u003E] [ease:\u003Ceasing-id\u003E] [wait:\u003Cbool\u003E]\nstage: value\nview: value\ncenter: value\nzoom: number\nrotation: degrees\ndolly: neutral|near|back|project preset\nas: shot\nvia: kind\npreset: value\nduration: seconds\nease: curve\nwait: bool (default false)",
+      "documentation": "camera [stage:\u003Cstring\u003E] [view:\u003Cstring\u003E] [center:\u003Cmark|x,y\u003E] [zoom:\u003Cnumber\u003E] [rotation:\u003Cnumber\u003E] [dolly:\u003Cstring\u003E] [backgroundOffset:\u003Cmark|x,y\u003E] [backgroundScale:\u003Cnumber\u003E] [as:\u003Cstring\u003E] [via:\u003Ckind\u003E] [preset:\u003Cstring\u003E] [duration:\u003Cnumber\u003E] [ease:\u003Ceasing-id\u003E] [wait:\u003Cbool\u003E]\nstage: value\nview: value\ncenter: value\nzoom: number\nrotation: degrees\ndolly: neutral|near|back|number\nbackgroundOffset: value\nbackgroundScale: value\nas: shot\nvia: kind\npreset: value\nduration: seconds\nease: curve\nwait: bool (default false)",
       "async": true,
       "containsErrors": false,
       "parameters": [
@@ -793,6 +805,18 @@
         },
         {
           "name": "dolly:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "backgroundOffset:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "backgroundScale:value",
           "type": "string",
           "isOptional": true,
           "isParamsArray": false
@@ -839,7 +863,7 @@
       "yarnName": "camera move",
       "definitionName": "Majo.Runtime.Dialogue.Commands.CameraMoveCommand",
       "language": "csharp",
-      "documentation": "camera move [stage:\u003Cstring\u003E] [view:\u003Cstring\u003E] [center:\u003Cmark|x,y\u003E] [zoom:\u003Cnumber\u003E] [rotation:\u003Cnumber\u003E] [dolly:\u003Cstring\u003E] [preset:\u003Cstring\u003E] [duration:\u003Cnumber\u003E] [ease:\u003Ceasing-id\u003E] [wait:\u003Cbool\u003E]\nstage: value\nview: value\ncenter: value\nzoom: number\nrotation: degrees\ndolly: neutral|near|back|project preset\npreset: value\nduration: seconds\nease: curve\nwait: bool (default false)",
+      "documentation": "camera move [stage:\u003Cstring\u003E] [view:\u003Cstring\u003E] [center:\u003Cmark|x,y\u003E] [zoom:\u003Cnumber\u003E] [rotation:\u003Cnumber\u003E] [dolly:\u003Cstring\u003E] [backgroundOffset:\u003Cmark|x,y\u003E] [backgroundScale:\u003Cnumber\u003E] [preset:\u003Cstring\u003E] [duration:\u003Cnumber\u003E] [ease:\u003Ceasing-id\u003E] [wait:\u003Cbool\u003E]\nstage: value\nview: value\ncenter: value\nzoom: number\nrotation: degrees\ndolly: neutral|near|back|number\nbackgroundOffset: value\nbackgroundScale: value\npreset: value\nduration: seconds\nease: curve\nwait: bool (default false)",
       "async": true,
       "containsErrors": false,
       "parameters": [
@@ -875,6 +899,18 @@
         },
         {
           "name": "dolly:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "backgroundOffset:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "backgroundScale:value",
           "type": "string",
           "isOptional": true,
           "isParamsArray": false

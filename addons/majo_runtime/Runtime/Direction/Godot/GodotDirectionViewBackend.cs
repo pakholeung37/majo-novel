@@ -249,6 +249,8 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
                         Zoom = intent.Zoom.HasValue ? intent.Zoom.Value : before.Pose.Zoom,
                         RotationDegrees = intent.RotationDegrees.HasValue ? intent.RotationDegrees.Value : before.Pose.RotationDegrees,
                         Dolly = intent.Dolly.HasValue ? intent.Dolly.Value : before.Pose.Dolly,
+                        BackgroundOffset = intent.BackgroundOffset.HasValue ? intent.BackgroundOffset.Value : before.Pose.BackgroundOffset,
+                        BackgroundScale = intent.BackgroundScale.HasValue ? intent.BackgroundScale.Value : before.Pose.BackgroundScale,
                     }
                 };
                 plan.CommitViews[viewId] = target;

@@ -137,10 +137,15 @@ public sealed record ViewPose(DirectionPoint Center, float Zoom, float RotationD
 
     /// <summary>Normalized camera displacement; positive moves toward the subject plane.</summary>
     public float Dolly { get; init; }
+    public DirectionPoint BackgroundOffset { get; init; }
+    public float BackgroundScale { get; init; } = 1;
 
     public ViewPose Validate()
     {
         Center.Validate();
+        BackgroundOffset.Validate();
+        if (!float.IsFinite(BackgroundScale) || BackgroundScale <= 0)
+            throw new ArgumentOutOfRangeException(nameof(BackgroundScale));
         if (!float.IsFinite(Zoom) || Zoom <= 0)
             throw new ArgumentOutOfRangeException(nameof(Zoom));
         if (!float.IsFinite(RotationDegrees))
@@ -157,6 +162,9 @@ public sealed record ViewParallaxState(
     DirectionPoint LimitPercent)
 {
     public static ViewParallaxState Off { get; } = new(0, new DirectionPoint(50, 50), new DirectionPoint(0, 0));
+    public static ViewParallaxState Depth { get; } = Off with { UseDepthProjection = true };
+    // False retains the pre-v5 projection for old scripts and snapshots.
+    public bool UseDepthProjection { get; init; }
 
     public ViewParallaxState Validate()
     {
@@ -196,7 +204,7 @@ public sealed record ViewState(
     StageId StageId,
     ViewPose Pose)
 {
-    public ViewParallaxState Parallax { get; init; } = ViewParallaxState.Off;
+    public ViewParallaxState Parallax { get; init; } = ViewParallaxState.Depth;
     public ViewIdleState Idle { get; init; } = ViewIdleState.Off;
 }
 

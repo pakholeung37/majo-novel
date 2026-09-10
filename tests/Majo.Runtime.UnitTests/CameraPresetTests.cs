@@ -10,6 +10,34 @@ namespace Majo.Runtime.UnitTests;
 public sealed class CameraPresetTests
 {
     [Fact]
+    public async Task BackgroundCorrectionInheritsAndCanBeOverriddenOrReset()
+    {
+        var scopes = new DirectionScopeResolver();
+        scopes.EnterNode("Court");
+        var beats = new FakeDirectionBeatRuntime();
+        var nodes = new DelegateDialogueNodeAccessor(() => "Court");
+        var policy = new DirectionCommandPolicy(beats);
+        var define = TestCatalogBuilder.CreateBound(new CameraPresetDefineCommand(scopes, nodes));
+        await define.ExecuteAsync(new CommandInput("camera preset define",
+            ["base", "backgroundOffset:12,-3", "backgroundScale:1.2"]), new("base"));
+        await define.ExecuteAsync(new CommandInput("camera preset define",
+            ["close", "extends:base", "zoom:2"]), new("child"));
+        var move = TestCatalogBuilder.CreateBound(new CameraMoveCommand(beats, scopes, nodes, policy));
+        await move.ExecuteAsync(new CommandInput("camera move", ["preset:close", "backgroundOffset:4,5", "duration:1"]), new("move"));
+        var patch = Assert.IsType<ViewPosePatch>(beats.LastSubmitted);
+        Assert.Equal(new DirectionPoint(4, 5), patch.BackgroundOffset.Value);
+        Assert.Equal(1.2f, patch.BackgroundScale.Value);
+        var plan = new Majo.Runtime.Direction.Execution.DirectionPlanner().PlanDomain(DirectionState.CreateDefault(), [patch]);
+        Assert.Equal(new DirectionPoint(4, 5), plan.TargetState.Views[ViewId.Main].Pose.BackgroundOffset);
+        Assert.Equal(1.2f, plan.TargetState.Views[ViewId.Main].Pose.BackgroundScale);
+        var reset = TestCatalogBuilder.CreateBound(new CameraResetCommand(beats, scopes, nodes, policy));
+        await reset.ExecuteAsync(new CommandInput("camera reset", []), new("reset"));
+        var cleared = Assert.IsType<ViewPosePatch>(beats.LastSubmitted);
+        Assert.Equal(default(DirectionPoint), cleared.BackgroundOffset.Value);
+        Assert.Equal(1, cleared.BackgroundScale.Value);
+    }
+
+    [Fact]
     public async Task InheritedFullPresetRestoresAndAppliesAtomicallyWithoutEnvironmentCommands()
     {
         const string source = "title: Court\n---\n<<camera preset define ema extends:base center:35,71 parallaxAnchor:35,46>>\n<<camera preset define base zoom:0.7826087 dolly:0.7826087 parallax:strong parallaxLimit:2,50>>\n===\n";
@@ -74,7 +102,7 @@ public sealed class CameraPresetTests
         Assert.Equal(0, cut.RotationDegrees.Value);
         Assert.True(cut.Dolly.HasValue);
         Assert.Equal(0, cut.Dolly.Value);
-        Assert.Equal(ViewParallaxState.Off, cut.Parallax);
+        Assert.Equal(ViewParallaxState.Depth, cut.Parallax);
         var move = TestCatalogBuilder.CreateBound(new CameraMoveCommand(beats, scopes, nodes, policy));
         await move.ExecuteAsync(new CommandInput("camera move", ["preset:close", "zoom:3", "duration:2"]), new CommandExecutionContext("move"));
         var motion = Assert.IsType<ViewPosePatch>(beats.LastSubmitted);
@@ -82,7 +110,7 @@ public sealed class CameraPresetTests
         Assert.Equal(3, motion.Zoom.Value);
         Assert.Equal(2, motion.Transition.DurationSeconds);
         Assert.Equal(0, motion.Dolly.Value);
-        Assert.Equal(ViewParallaxState.Off, motion.Parallax);
+        Assert.Equal(ViewParallaxState.Depth, motion.Parallax);
     }
 
     [Fact]

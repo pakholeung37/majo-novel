@@ -12,7 +12,7 @@ namespace Majo.Runtime.Dialogue.Commands;
 
 [Command("camera", Category = "Direction")]
 [AtMostOne(nameof(Arguments.Stage), nameof(Arguments.View))]
-[AtLeastOne(nameof(Arguments.Center), nameof(Arguments.Zoom), nameof(Arguments.Rotation), nameof(Arguments.Dolly), nameof(Arguments.As), nameof(Arguments.Preset))]
+[AtLeastOne(nameof(Arguments.Center), nameof(Arguments.Zoom), nameof(Arguments.Rotation), nameof(Arguments.Dolly), nameof(Arguments.BackgroundOffset), nameof(Arguments.BackgroundScale), nameof(Arguments.As), nameof(Arguments.Preset))]
 public sealed partial class CameraCommand : RuntimeCommand<CameraCommand.Arguments>
 {
     private readonly IDirectionBeatRuntime beats;
@@ -61,6 +61,10 @@ public sealed partial class CameraCommand : RuntimeCommand<CameraCommand.Argumen
                 ? DirectionValue.From(environment.ResolveDolly(arguments.Dolly.Value!))
                 : preset?.Dolly ?? default,
             Parallax = preset?.Parallax,
+            BackgroundOffset = arguments.BackgroundOffset.WasProvided
+                ? DirectionValue.From(scopes.ResolvePosition(node, arguments.BackgroundOffset.Value!)) : preset?.BackgroundOffset ?? default,
+            BackgroundScale = arguments.BackgroundScale.WasProvided
+                ? DirectionValue.From((float)arguments.BackgroundScale.Value) : preset?.BackgroundScale ?? default,
         };
 
         if (arguments.As.WasProvided && !string.IsNullOrWhiteSpace(arguments.As.Value))
@@ -85,7 +89,9 @@ public sealed partial class CameraCommand : RuntimeCommand<CameraCommand.Argumen
         [Option] CommandValue<PositionRef> Center,
         [Option(Minimum = 0.001, ValueHint = "number")] CommandValue<double> Zoom,
         [Option(ValueHint = "degrees")] CommandValue<double> Rotation,
-        [Option(ValueHint = "neutral|near|back|project preset")] CommandValue<string> Dolly,
+        [Option(ValueHint = "neutral|near|back|number")] CommandValue<string> Dolly,
+        [Option] CommandValue<PositionRef> BackgroundOffset,
+        [Option(Minimum = 0.001)] CommandValue<double> BackgroundScale,
         [Option(ValueHint = "shot")] CommandValue<string> As,
         [Option(ValueHint = "kind")] CommandValue<DirectionTransitionId> Via,
         [Group] TimingArguments Timing,
@@ -94,7 +100,7 @@ public sealed partial class CameraCommand : RuntimeCommand<CameraCommand.Argumen
 
 [Command("camera move", Category = "Direction")]
 [AtMostOne(nameof(Arguments.Stage), nameof(Arguments.View))]
-[AtLeastOne(nameof(Arguments.Center), nameof(Arguments.Zoom), nameof(Arguments.Rotation), nameof(Arguments.Dolly), nameof(Arguments.Preset))]
+[AtLeastOne(nameof(Arguments.Center), nameof(Arguments.Zoom), nameof(Arguments.Rotation), nameof(Arguments.Dolly), nameof(Arguments.BackgroundOffset), nameof(Arguments.BackgroundScale), nameof(Arguments.Preset))]
 public sealed partial class CameraMoveCommand : RuntimeCommand<CameraMoveCommand.Arguments>
 {
     private readonly IDirectionBeatRuntime beats;
@@ -142,6 +148,10 @@ public sealed partial class CameraMoveCommand : RuntimeCommand<CameraMoveCommand
                 ? DirectionValue.From(environment.ResolveDolly(arguments.Dolly.Value!))
                 : preset?.Dolly ?? default,
             Parallax = preset?.Parallax,
+            BackgroundOffset = arguments.BackgroundOffset.WasProvided
+                ? DirectionValue.From(scopes.ResolvePosition(node, arguments.BackgroundOffset.Value!)) : preset?.BackgroundOffset ?? default,
+            BackgroundScale = arguments.BackgroundScale.WasProvided
+                ? DirectionValue.From((float)arguments.BackgroundScale.Value) : preset?.BackgroundScale ?? default,
         };
 
         await beats.SubmitAsync(
@@ -161,7 +171,9 @@ public sealed partial class CameraMoveCommand : RuntimeCommand<CameraMoveCommand
         [Option] CommandValue<PositionRef> Center,
         [Option(Minimum = 0.001, ValueHint = "number")] CommandValue<double> Zoom,
         [Option(ValueHint = "degrees")] CommandValue<double> Rotation,
-        [Option(ValueHint = "neutral|near|back|project preset")] CommandValue<string> Dolly,
+        [Option(ValueHint = "neutral|near|back|number")] CommandValue<string> Dolly,
+        [Option] CommandValue<PositionRef> BackgroundOffset,
+        [Option(Minimum = 0.001)] CommandValue<double> BackgroundScale,
         [Group] TimingArguments Timing,
         [Option] CommandValue<string> Preset);
 }
@@ -204,6 +216,8 @@ public sealed partial class CameraResetCommand : RuntimeCommand<CameraResetComma
             transition)
         {
             Dolly = DirectionValue.From(0f),
+            BackgroundOffset = DirectionValue.From(default(DirectionPoint)),
+            BackgroundScale = DirectionValue.From(1f),
         };
 
         await beats.SubmitAsync(

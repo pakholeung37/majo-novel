@@ -26,6 +26,8 @@ public sealed partial class CameraPresetDefineCommand : RuntimeCommand<CameraPre
         if (arguments.Rotation.WasProvided) options["rotation"] = arguments.Rotation.Value.ToString(CultureInfo.InvariantCulture);
         if (arguments.Dolly.WasProvided) options["dolly"] = arguments.Dolly.Value!;
         if (arguments.Extends.WasProvided) options["extends"] = arguments.Extends.Value!;
+        if (arguments.BackgroundOffset.WasProvided) options["backgroundOffset"] = arguments.BackgroundOffset.Value!;
+        if (arguments.BackgroundScale.WasProvided) options["backgroundScale"] = arguments.BackgroundScale.Value.ToString(CultureInfo.InvariantCulture);
         if (arguments.Parallax.WasProvided) options["parallax"] = arguments.Parallax.Value!;
         if (arguments.ParallaxStrength.WasProvided) options["parallaxStrength"] = arguments.ParallaxStrength.Value.ToString(CultureInfo.InvariantCulture);
         if (arguments.ParallaxAnchor.WasProvided) options["parallaxAnchor"] = arguments.ParallaxAnchor.Value!;
@@ -41,6 +43,8 @@ public sealed partial class CameraPresetDefineCommand : RuntimeCommand<CameraPre
         [Option(ValueHint = "degrees")] CommandValue<double> Rotation,
         [Option(ValueHint = "neutral|near|back|number")] CommandValue<string> Dolly,
         [Option] CommandValue<string> Extends,
+        [Option] CommandValue<string> BackgroundOffset,
+        [Option(Minimum = 0.001)] CommandValue<double> BackgroundScale,
         [Option] CommandValue<string> Parallax,
         [Option(Minimum = 0)] CommandValue<double> ParallaxStrength,
         [Option] CommandValue<string> ParallaxAnchor,

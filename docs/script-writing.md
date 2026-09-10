@@ -255,41 +255,40 @@ Curtain 是例外：当前实现省略 `duration` 时固定用 0.35 秒、线性
 <<camera reset>>
 ```
 
-`camera` 至少指定 `preset`、`center`、`zoom`、`rotation`、`dolly`、`as` 之一；内建默认 `cut`，可用 `dissolve`。`camera move` 至少指定 preset/center/zoom/rotation/dolly 之一，不接受 `via`。Dolly 是绝对机位：内建 `neutral/near/back` 分别为 `0/0.15/-0.25`，重复 `back` 不会累积。`camera reset` 回到中心 `50,50`、zoom `1`、rotation `0`、dolly `neutral`，不修改视差或 idle。
+`camera` / `camera move` 可以指定 preset、center、zoom、rotation、dolly、backgroundOffset、backgroundScale；普通指令保留未写字段。Dolly 是绝对机位，neutral/near/back 为 0/0.15/-0.25，数值范围 [-2,0.85]。camera 默认 cut，move 不接受 via。camera reset 重置 center=50,50、zoom=1、rotation=0、dolly=0、backgroundOffset=0,0、backgroundScale=1，不改变独立的 idle 或旧版视差模式。
 
-`stage:名称` 控制该 Stage 默认 View 的镜头；`view:名称` 控制指定 View。两者互斥，都省略时目标是 `main` View。
+`stage:名称` 控制该 Stage 默认 View；`view:名称` 控制指定 View。两者互斥，默认 main。
 
 ```yarn
 <<mark witness at:250,50>>
-<<camera preset define close_base zoom:0.7826087 dolly:0.7826087 parallax:strong parallaxLimit:2,50>>
-<<camera preset define closeup extends:close_base center:witness parallaxAnchor:250,46>>
-// 定义不改变画面；同一预设可以用于不同 View。
+<<camera preset define close_base zoom:0.7826087 dolly:0.7826087>>
+<<camera preset define closeup extends:close_base center:witness backgroundOffset:-150,0>>
 <<camera preset:closeup>>
-<<camera view:reaction preset:closeup via:dissolve duration:0.3 wait:true>>
-<<camera move preset:closeup zoom:1.6 duration:0.8 wait:true>>
+<<camera move preset:closeup duration:0.8 wait:true>>
 ```
 
-`camera preset define` 一次定义完整构图，包括背景视差；没有基类时省略字段默认 center `50,50`、zoom `1`、rotation `0`、dolly `neutral`、parallax `off`。`extends:名称` 继承当前节点的基础预设，显式字段覆盖基类，支持多级继承和前向引用，循环和不存在的基类会在进入节点时拒绝。定义只保存数据，不改变画面。所有定义均写在 Yarn 中，不需要额外预设文件或 C# 注册。
+`camera preset define` 定义完整构图，默认 center=50,50、zoom=1、rotation=0、dolly=neutral、backgroundOffset=0,0、backgroundScale=1，并使用距离投影。`extends` 继承当前节点预设，显式字段覆盖基类；支持多级继承、前向引用，拒绝循环和未知基类。所有定义都在 Yarn 中，不需要预设文件或 C# 注册。
 
-`parallax` 可选内置 `off/subtle/normal/strong`；少量特殊镜头可在定义中覆盖 `parallaxStrength`（0–1）、`parallaxAnchor`（坐标或 mark）和 `parallaxLimit`（非负百分比坐标）。先应用继承，再应用 parallax 档位，最后应用显式高级字段。`dolly` 支持内置名称及 `[-2,0.85]` 内的数值机位。典型用法是把高级数值集中在基础预设，各人物只补充位置。数值求解仍属于高级创作，本版不自动求解取景目标。
+正常创作只需先摆放素材、设定背景 distance，再调整 center / dolly / zoom / rotation。distance=1 与人物同平面；更远的背景对横移和前后移动响应更小。zoom 仍统一缩放，不改变两层比例。主体倍率为 zoom/(1-dolly)，背景倍率为 zoom×distance/(distance-dolly)。横移以固定参考画面中心为中性机位，背景响应按 distance 衰减，不再经过 strength 混合或 limit 限幅。
 
-应用 preset 时，机位和视差以同一事务、同一时长和缓动更新，不必再调用 `camera parallax`。使用处的显式 center/zoom/rotation/dolly 覆盖预设字段；View、转场、时长与缓动仍在使用处指定。`center` 可引用 mark，也可使用超出 `0..100` 的有限坐标。坐标始终相对于固定舞台参考尺寸，背景变宽不会重新归一化角色或镜头坐标。普通 camera/move 未指定 preset 时继续保留未写的字段；idle 是独立持续效果，不由镜头预设启停。
+只有平面素材无法表达的环形场景对位等特殊情况，才需要背景构图补偿：
 
-兼容性：旧镜头预设没有视差声明时现在明确应用 off，不再继承 View 上一次的视差；需要保留效果的场景应在预设内声明 parallax。直接调用 `camera parallax` 仍然可用，但后续完整 preset 会覆盖它。
+- `backgroundOffset:x,y`：投影后直接移动背景，单位是固定参考画面宽/高的百分比，右/上为正；例如 0,5 将背景上移画面高度的 5%。这是位移量，不是背景中心坐标，可以超过 ±100。
+- `backgroundScale`：以画面中心额外缩放背景，默认 1，必须大于 0。不改变人物和讲台；也不修改素材 scale 或 distance。
+- 补偿在物理投影之后、camera FX 之前应用。它们属于镜头 pose，和 center/dolly 等使用同一时长、同一缓动插值。不是自动跟踪对位：更换 center 后若需要匹配环形墙壁，应为目标镜头明确设置补偿。
 
-预设属于当前节点，声明参数必须是静态字面量或 mark 名称。编译元数据保存声明，直接读档时不必重新执行节点开头。旧的 `camera ... as:` 与 `shot use` 保留兼容；`as` 会同时应用镜头，而新预设声明不会。
+应用 preset 会完整覆盖机位和背景补偿；使用处的显式字段可覆盖预设。`center` 可引用 mark 或超出 0..100 的坐标。坐标始终使用固定舞台参考尺寸，不随全景素材宽度改变。预设声明须为静态字面量或 mark；编译元数据支持不执行节点开头的读档还原。旧的 camera as / shot use 保留兼容。
 
-背景视差和静止漂移是每个 View 独立保存的环境状态：
+旧版兼容：显式 parallax:off/subtle/normal/strong 或 parallaxStrength/Anchor/Limit 会选择旧投影模型；仅用于旧脚本迁移，不建议新镜头使用。旧版 3/4 存档保留旧投影，新存档为版本 5，保存投影模式及补偿。不要在连续运动中切换新旧投影模型，模式切换不是可插值的物理运动；应在切镜时完成。没有旧参数的新预设恢复距离投影。
+
+静止漂移仍独立于构图，按距离自然产生视差：
 
 ```yarn
-<<camera parallax subtle view:main>>
-<<camera parallax off view:main duration:0.4>>
-<<camera parallax reset view:main>>
 <<camera idle gentle view:main>>
 <<camera idle off view:main duration:0.5>>
 ```
 
-视差内建 `off/subtle/normal/strong`，默认 off；idle 内建 `off/gentle`，默认 off。两者支持 `stage/view`、`duration/ease/wait`。视差省略 duration 时立即提交；idle 省略时使用 0.5 秒启停包络，显式 `duration:0` 才立即切换。构图、视差和 idle 可以并行使用不同持续时间，更新其中一项不会打断其他项。开启视差不会自动开启 idle；关闭视差也不会停止 idle。持续 idle 不阻塞 Beat，`wait:true` 只等待启停包络收敛。项目可在 `CameraEnvironment` 配置中注册同类型命名预设；连续参数中距离范围为 `[1,100]`、Dolly 为 `[-2,0.85]`、视差强度为 `[0,1]`，anchor/limit/amplitude 均使用固定参考画面的百分比。
+idle 默认 off，省略 duration 使用 0.5 秒启停包络，duration:0 为立即切换。支持 stage/view、duration/ease/wait；持续漂移不阻塞 Beat，wait:true 只等待启停收敛。旧 camera parallax 命令仍可调用，但会启用旧版模式，后续完整 preset 会覆盖该模式。
 
 ```yarn
 <<character fx hero effect:shake strength:8 axis:x frequency:20 duration:0.3 wait:true>>
