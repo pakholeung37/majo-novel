@@ -64,6 +64,9 @@ public partial class MajoProjectConfiguration : Resource, IValidatableConfigurat
     public StageConfiguration? Stage { get; set; }
 
     [Export]
+    public CameraEnvironmentConfiguration? CameraEnvironment { get; set; }
+
+    [Export]
     public GlobalStateConfiguration? GlobalState { get; set; }
 
     public static MajoProjectConfiguration CreateDefault() => new()
@@ -86,6 +89,7 @@ public partial class MajoProjectConfiguration : Resource, IValidatableConfigurat
         Settings = new SettingsConfiguration(),
         Localization = new LocalizationConfiguration(),
         Stage = new StageConfiguration(),
+        CameraEnvironment = new CameraEnvironmentConfiguration(),
         GlobalState = new GlobalStateConfiguration(),
     };
 
@@ -121,6 +125,8 @@ public partial class MajoProjectConfiguration : Resource, IValidatableConfigurat
         ValidateSection(nameof(Settings), Settings, context);
         ValidateSection(nameof(Localization), Localization, context);
         ValidateSection(nameof(Stage), Stage, context);
+        if (CameraEnvironment is not null)
+            CameraEnvironment.Validate(context.ForSection(nameof(CameraEnvironment)));
         ValidateSection(nameof(GlobalState), GlobalState, context);
     }
 

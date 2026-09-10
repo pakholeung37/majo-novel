@@ -61,7 +61,7 @@
       "yarnName": "backdrop",
       "definitionName": "Majo.Runtime.Dialogue.Commands.BackdropCommand",
       "language": "csharp",
-      "documentation": "backdrop \u003Cresource\u003E [stage:\u003Cstring\u003E] [at:\u003Cmark|x,y\u003E] [origin:\u003Cx,y\u003E] [scale:\u003Cnumber\u003E] [via:\u003Ckind\u003E] [duration:\u003Cnumber\u003E] [ease:\u003Ceasing-id\u003E] [wait:\u003Cbool\u003E]\nresource: value\nstage: value (default main)\nat: value\norigin: x,y\nscale: value\nvia: kind\nduration: seconds\nease: curve\nwait: bool (default false)",
+      "documentation": "backdrop \u003Cresource\u003E [stage:\u003Cstring\u003E] [at:\u003Cmark|x,y\u003E] [origin:\u003Cx,y\u003E] [scale:\u003Cnumber\u003E] [distance:\u003Cstring\u003E] [via:\u003Ckind\u003E] [duration:\u003Cnumber\u003E] [ease:\u003Ceasing-id\u003E] [wait:\u003Cbool\u003E]\nresource: value\nstage: value (default main)\nat: value\norigin: x,y\nscale: value\ndistance: flat|near|far|project preset\nvia: kind\nduration: seconds\nease: curve\nwait: bool (default false)",
       "async": true,
       "containsErrors": false,
       "parameters": [
@@ -91,6 +91,12 @@
         },
         {
           "name": "scale:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "distance:value",
           "type": "string",
           "isOptional": true,
           "isParamsArray": false
@@ -681,7 +687,7 @@
       "yarnName": "camera preset define",
       "definitionName": "Majo.Runtime.Dialogue.Commands.CameraPresetDefineCommand",
       "language": "csharp",
-      "documentation": "camera preset define \u003Cname\u003E [center:\u003Cmark|x,y\u003E] [zoom:\u003Cnumber\u003E] [rotation:\u003Cnumber\u003E]\nname: value\ncenter: value\nzoom: value\nrotation: degrees",
+      "documentation": "camera preset define \u003Cname\u003E [center:\u003Cmark|x,y\u003E] [zoom:\u003Cnumber\u003E] [rotation:\u003Cnumber\u003E] [dolly:\u003Cstring\u003E] [extends:\u003Cstring\u003E] [parallax:\u003Cstring\u003E] [parallaxStrength:\u003Cnumber\u003E] [parallaxAnchor:\u003Cstring\u003E] [parallaxLimit:\u003Cstring\u003E]\nname: value\ncenter: value\nzoom: value\nrotation: degrees\ndolly: neutral|near|back|number\nextends: value\nparallax: value\nparallaxStrength: value\nparallaxAnchor: value\nparallaxLimit: value",
       "async": true,
       "containsErrors": false,
       "parameters": [
@@ -708,6 +714,42 @@
           "type": "string",
           "isOptional": true,
           "isParamsArray": false
+        },
+        {
+          "name": "dolly:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "extends:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "parallax:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "parallaxStrength:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "parallaxAnchor:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "parallaxLimit:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
         }
       ]
     },
@@ -715,7 +757,7 @@
       "yarnName": "camera",
       "definitionName": "Majo.Runtime.Dialogue.Commands.CameraCommand",
       "language": "csharp",
-      "documentation": "camera [stage:\u003Cstring\u003E] [view:\u003Cstring\u003E] [center:\u003Cmark|x,y\u003E] [zoom:\u003Cnumber\u003E] [rotation:\u003Cnumber\u003E] [as:\u003Cstring\u003E] [via:\u003Ckind\u003E] [preset:\u003Cstring\u003E] [duration:\u003Cnumber\u003E] [ease:\u003Ceasing-id\u003E] [wait:\u003Cbool\u003E]\nstage: value\nview: value\ncenter: value\nzoom: number\nrotation: degrees\nas: shot\nvia: kind\npreset: value\nduration: seconds\nease: curve\nwait: bool (default false)",
+      "documentation": "camera [stage:\u003Cstring\u003E] [view:\u003Cstring\u003E] [center:\u003Cmark|x,y\u003E] [zoom:\u003Cnumber\u003E] [rotation:\u003Cnumber\u003E] [dolly:\u003Cstring\u003E] [as:\u003Cstring\u003E] [via:\u003Ckind\u003E] [preset:\u003Cstring\u003E] [duration:\u003Cnumber\u003E] [ease:\u003Ceasing-id\u003E] [wait:\u003Cbool\u003E]\nstage: value\nview: value\ncenter: value\nzoom: number\nrotation: degrees\ndolly: neutral|near|back|project preset\nas: shot\nvia: kind\npreset: value\nduration: seconds\nease: curve\nwait: bool (default false)",
       "async": true,
       "containsErrors": false,
       "parameters": [
@@ -745,6 +787,12 @@
         },
         {
           "name": "rotation:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "dolly:value",
           "type": "string",
           "isOptional": true,
           "isParamsArray": false
@@ -791,7 +839,7 @@
       "yarnName": "camera move",
       "definitionName": "Majo.Runtime.Dialogue.Commands.CameraMoveCommand",
       "language": "csharp",
-      "documentation": "camera move [stage:\u003Cstring\u003E] [view:\u003Cstring\u003E] [center:\u003Cmark|x,y\u003E] [zoom:\u003Cnumber\u003E] [rotation:\u003Cnumber\u003E] [preset:\u003Cstring\u003E] [duration:\u003Cnumber\u003E] [ease:\u003Ceasing-id\u003E] [wait:\u003Cbool\u003E]\nstage: value\nview: value\ncenter: value\nzoom: number\nrotation: degrees\npreset: value\nduration: seconds\nease: curve\nwait: bool (default false)",
+      "documentation": "camera move [stage:\u003Cstring\u003E] [view:\u003Cstring\u003E] [center:\u003Cmark|x,y\u003E] [zoom:\u003Cnumber\u003E] [rotation:\u003Cnumber\u003E] [dolly:\u003Cstring\u003E] [preset:\u003Cstring\u003E] [duration:\u003Cnumber\u003E] [ease:\u003Ceasing-id\u003E] [wait:\u003Cbool\u003E]\nstage: value\nview: value\ncenter: value\nzoom: number\nrotation: degrees\ndolly: neutral|near|back|project preset\npreset: value\nduration: seconds\nease: curve\nwait: bool (default false)",
       "async": true,
       "containsErrors": false,
       "parameters": [
@@ -821,6 +869,12 @@
         },
         {
           "name": "rotation:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "dolly:value",
           "type": "string",
           "isOptional": true,
           "isParamsArray": false
@@ -873,6 +927,98 @@
         },
         {
           "name": "via:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "duration:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "ease:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "wait:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        }
+      ]
+    },
+    {
+      "yarnName": "camera parallax",
+      "definitionName": "Majo.Runtime.Dialogue.Commands.CameraParallaxCommand",
+      "language": "csharp",
+      "documentation": "camera parallax \u003Cpreset\u003E [stage:\u003Cstring\u003E] [view:\u003Cstring\u003E] [duration:\u003Cnumber\u003E] [ease:\u003Ceasing-id\u003E] [wait:\u003Cbool\u003E]\npreset: value\nstage: value\nview: value\nduration: seconds\nease: curve\nwait: bool (default false)",
+      "async": true,
+      "containsErrors": false,
+      "parameters": [
+        {
+          "name": "preset",
+          "type": "string",
+          "isOptional": false,
+          "isParamsArray": false
+        },
+        {
+          "name": "stage:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "view:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "duration:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "ease:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "wait:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        }
+      ]
+    },
+    {
+      "yarnName": "camera idle",
+      "definitionName": "Majo.Runtime.Dialogue.Commands.CameraIdleCommand",
+      "language": "csharp",
+      "documentation": "camera idle \u003Cpreset\u003E [stage:\u003Cstring\u003E] [view:\u003Cstring\u003E] [duration:\u003Cnumber\u003E] [ease:\u003Ceasing-id\u003E] [wait:\u003Cbool\u003E]\npreset: value\nstage: value\nview: value\nduration: seconds\nease: curve\nwait: bool (default false)",
+      "async": true,
+      "containsErrors": false,
+      "parameters": [
+        {
+          "name": "preset",
+          "type": "string",
+          "isOptional": false,
+          "isParamsArray": false
+        },
+        {
+          "name": "stage:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "view:value",
           "type": "string",
           "isOptional": true,
           "isParamsArray": false

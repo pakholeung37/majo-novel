@@ -70,7 +70,9 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
             services.Get<IDirectionBeatRuntime>(),
             services.Get<IDirectionScopeResolver>(),
             services.Get<IDialogueNodeAccessor>(),
-            services.Get<IDirectionCommandPolicy>(), backgroundsPath), providerId, version);
+            services.Get<IDirectionCommandPolicy>(), backgroundsPath,
+            GetEnvironment(services),
+            services.Get<IDirectionTransactionCoordinator>()), providerId, version);
 
         commands.Add("character", services => new CharacterCommand(
             services.Get<IDirectionBeatRuntime>(),
@@ -122,25 +124,38 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
             services.Get<IDialogueNodeAccessor>()), providerId, version);
 
         commands.Add("camera preset define", services => new CameraPresetDefineCommand(
-            services.Get<IDirectionScopeResolver>(), services.Get<IDialogueNodeAccessor>()), providerId, version);
+            services.Get<IDirectionScopeResolver>(), services.Get<IDialogueNodeAccessor>(),
+            GetEnvironment(services)), providerId, version);
 
         commands.Add("camera", services => new CameraCommand(
             services.Get<IDirectionBeatRuntime>(),
             services.Get<IDirectionScopeResolver>(),
             services.Get<IDialogueNodeAccessor>(),
-            services.Get<IDirectionCommandPolicy>()), providerId, version);
+            services.Get<IDirectionCommandPolicy>(),
+            GetEnvironment(services)), providerId, version);
 
         commands.Add("camera move", services => new CameraMoveCommand(
             services.Get<IDirectionBeatRuntime>(),
             services.Get<IDirectionScopeResolver>(),
             services.Get<IDialogueNodeAccessor>(),
-            services.Get<IDirectionCommandPolicy>()), providerId, version);
+            services.Get<IDirectionCommandPolicy>(),
+            GetEnvironment(services)), providerId, version);
 
         commands.Add("camera reset", services => new CameraResetCommand(
             services.Get<IDirectionBeatRuntime>(),
             services.Get<IDirectionScopeResolver>(),
             services.Get<IDialogueNodeAccessor>(),
             services.Get<IDirectionCommandPolicy>()), providerId, version);
+
+        commands.Add("camera parallax", services => new CameraParallaxCommand(
+            services.Get<IDirectionBeatRuntime>(), services.Get<IDirectionScopeResolver>(),
+            services.Get<IDialogueNodeAccessor>(), services.Get<IDirectionCommandPolicy>(),
+            GetEnvironment(services)), providerId, version);
+
+        commands.Add("camera idle", services => new CameraIdleCommand(
+            services.Get<IDirectionBeatRuntime>(), services.Get<IDirectionScopeResolver>(),
+            services.Get<IDialogueNodeAccessor>(), services.Get<IDirectionCommandPolicy>(),
+            GetEnvironment(services)), providerId, version);
 
         commands.Add("camera fx", services => new CameraFxCommand(
             services.Get<IDirectionBeatRuntime>(),
@@ -199,4 +214,8 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
         commands.Add("beat abort", services => new BeatAbortCommand(
             services.Get<IDirectionBeatRuntime>()), providerId, version);
     }
+
+    private static Direction.Camera.CameraEnvironmentPresetCatalog GetEnvironment(Majo.Runtime.Core.IServiceResolver services) =>
+        services.TryGet<Direction.Camera.CameraEnvironmentPresetCatalog>(out var catalog) && catalog is not null
+            ? catalog : new Direction.Camera.CameraEnvironmentPresetCatalog();
 }

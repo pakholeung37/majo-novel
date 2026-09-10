@@ -29,14 +29,14 @@ public sealed class DirectionStateContributor : IPreparedStateContributor, IStat
 
     public string Key => BuiltInStateKeys.Direction;
     public StateScope Scope => StateScope.Game;
-    public int SchemaVersion => 3;
+    public int SchemaVersion => 4;
     public StateContributorCapability Capability => StateContributorCapability.DurableRollback;
 
     public ValueTask<StateRecord> CaptureAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        direction.State.Validate();
         var state = direction.State;
+        state.Validate();
         return ValueTask.FromResult(new StateRecord(
             Key,
             Scope,
@@ -86,7 +86,7 @@ public sealed class DirectionStateContributor : IPreparedStateContributor, IStat
                 : new BackdropPayload(
                     stage.Backdrop.Resource.ToString(),
                     stage.Backdrop.Fit,
-                    stage.Backdrop.Tint, stage.Backdrop.Placement),
+                    stage.Backdrop.Tint, stage.Backdrop.Placement, stage.Backdrop.Distance),
             new EffectPayload(stage.Effects.Tint),
             stage.Actors.Values.Select(actor => new ActorPayload(
                 actor.Id.Value,
@@ -101,7 +101,10 @@ public sealed class DirectionStateContributor : IPreparedStateContributor, IStat
             view.Pose.Center.X,
             view.Pose.Center.Y,
             view.Pose.Zoom,
-            view.Pose.RotationDegrees)).ToArray(),
+            view.Pose.RotationDegrees,
+            view.Pose.Dolly,
+            view.Parallax,
+            view.Idle)).ToArray(),
         state.Screen.Layout.Value,
         state.Screen.Bindings.ToDictionary(pair => pair.Key.Value, pair => pair.Value.Value),
         state.Revision,
@@ -115,11 +118,12 @@ public sealed class DirectionStateContributor : IPreparedStateContributor, IStat
         {
             if (record.Key != BuiltInStateKeys.Direction ||
                 record.Scope != StateScope.Game ||
-                record.SchemaVersion != 3)
+                record.SchemaVersion is not (3 or 4))
             {
                 throw new StateSnapshotException(
                     $"State record '{BuiltInStateKeys.Direction}' has incompatible metadata.");
             }
+            if (record.SchemaVersion == 4) ValidateV4Shape(record);
             return FromPayload(StateJson.Deserialize<Payload>(record));
         }
         catch (StateSnapshotException)
@@ -132,6 +136,20 @@ public sealed class DirectionStateContributor : IPreparedStateContributor, IStat
                 $"State record '{BuiltInStateKeys.Direction}' contains invalid Direction state.",
                 exception);
         }
+    }
+
+    private static void ValidateV4Shape(StateRecord record)
+    {
+        if (!record.Payload.TryGetProperty("stages", out var stages) || stages.ValueKind != System.Text.Json.JsonValueKind.Array ||
+            !record.Payload.TryGetProperty("views", out var views) || views.ValueKind != System.Text.Json.JsonValueKind.Array)
+            throw new StateSnapshotException("Direction v4 state payload is incomplete.");
+        foreach (var stage in stages.EnumerateArray())
+            if (stage.TryGetProperty("backdrop", out var backdrop) && backdrop.ValueKind != System.Text.Json.JsonValueKind.Null &&
+                !backdrop.TryGetProperty("distance", out _))
+                throw new StateSnapshotException("Direction v4 backdrop is missing distance.");
+        foreach (var view in views.EnumerateArray())
+            if (!view.TryGetProperty("dolly", out _) || !view.TryGetProperty("parallax", out _) || !view.TryGetProperty("idle", out _))
+                throw new StateSnapshotException("Direction v4 view is missing camera environment state.");
     }
 
     private static DirectionState FromPayload(Payload payload)
@@ -173,7 +191,7 @@ public sealed class DirectionStateContributor : IPreparedStateContributor, IStat
                     new ResourceKey(stage.Backdrop.Resource),
                     stage.Backdrop.Fit,
                     stage.Backdrop.Tint)
-                { Placement = stage.Backdrop.Placement }.Validate();
+                { Placement = stage.Backdrop.Placement, Distance = stage.Backdrop.Distance }.Validate();
             }
             (stage.Effects?.Tint ?? DirectionColor.White).Validate();
             stages[id] = new StageState(
@@ -184,7 +202,7 @@ public sealed class DirectionStateContributor : IPreparedStateContributor, IStat
                         new ResourceKey(stage.Backdrop.Resource),
                         stage.Backdrop.Fit,
                         stage.Backdrop.Tint)
-                    { Placement = stage.Backdrop.Placement },
+                    { Placement = stage.Backdrop.Placement, Distance = stage.Backdrop.Distance },
                 actors,
                 new StageEffectState(stage.Effects?.Tint ?? DirectionColor.White));
         }
@@ -201,7 +219,10 @@ public sealed class DirectionStateContributor : IPreparedStateContributor, IStat
                 throw new StateSnapshotException($"Direction state contains duplicate view '{view.Id}'.");
             var stageId = new StageId(view.StageId);
             var pose = new ViewPose(
-                new DirectionPoint(view.CenterX, view.CenterY), view.Zoom, view.Rotation);
+                new DirectionPoint(view.CenterX, view.CenterY), view.Zoom, view.Rotation)
+            {
+                Dolly = view.Dolly,
+            };
             pose.Validate();
             if (!stages.ContainsKey(stageId))
                 throw new StateSnapshotException(
@@ -209,7 +230,11 @@ public sealed class DirectionStateContributor : IPreparedStateContributor, IStat
             views[id] = new ViewState(
                 id,
                 stageId,
-                pose);
+                pose)
+            {
+                Parallax = view.Parallax ?? ViewParallaxState.Off,
+                Idle = view.Idle ?? ViewIdleState.Off,
+            };
         }
         if (!views.ContainsKey(ViewId.Main))
             throw new StateSnapshotException("Direction state is missing the main View.");
@@ -256,7 +281,8 @@ public sealed class DirectionStateContributor : IPreparedStateContributor, IStat
         BackdropPayload? Backdrop,
         EffectPayload? Effects,
         ActorPayload[] Actors);
-    private sealed record BackdropPayload(string Resource, BackdropFit Fit, DirectionColor Tint, BackdropPlacement? Placement = null);
+    private sealed record BackdropPayload(string Resource, BackdropFit Fit, DirectionColor Tint,
+        BackdropPlacement? Placement = null, float Distance = 1);
     private sealed record EffectPayload(DirectionColor Tint);
     private sealed record StableEffectsPayload(CurtainPayload Curtain);
     private sealed record CurtainPayload(DirectionColor Color, float Opacity);
@@ -268,5 +294,8 @@ public sealed class DirectionStateContributor : IPreparedStateContributor, IStat
         float CenterX,
         float CenterY,
         float Zoom,
-        float Rotation);
+        float Rotation,
+        float Dolly = 0,
+        ViewParallaxState? Parallax = null,
+        ViewIdleState? Idle = null);
 }

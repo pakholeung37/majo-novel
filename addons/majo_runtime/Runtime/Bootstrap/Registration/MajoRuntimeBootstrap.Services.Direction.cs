@@ -27,15 +27,20 @@ public partial class MajoRuntimeBootstrap : Node
     private void RegisterDirectionServices(RuntimeServiceRegistry services)
     {
         services
+            .AddSingleton<CameraEnvironmentPresetCatalog>(_ =>
+                new CameraEnvironmentPresetCatalog(Configuration!.CameraEnvironment))
             .AddSingleton<IEasingRegistry>(_ =>
                 easingRegistry)
             .AddSingleton<ITransitionDriverRegistry>(_ =>
                 transitionDrivers)
             .AddSingleton<GodotDirectionRenderHost>(
-                _ => new GodotDirectionRenderHost(
+                resolver => new GodotDirectionRenderHost(
                     this,
                     Configuration!.Actors!.ReferenceResolution,
-                    Configuration!.Stage!.MaxDirectionStages))
+                    Configuration!.Stage!.MaxDirectionStages,
+                    resolver.Get<IFrameClock>(),
+                    Logger),
+                typeof(IFrameClock))
             .AddSingleton<GodotDirectionStageBackend>(
                 resolver => new GodotDirectionStageBackend(
                     resolver.Get<GodotDirectionRenderHost>(),
@@ -138,7 +143,8 @@ public partial class MajoRuntimeBootstrap : Node
                                 try { await cleanup(); }
                                 catch (System.Exception error) { failures.Add(error); }
                             if (failures.Count > 0) throw new System.AggregateException("Scene rendering cleanup failed.", failures);
-                        });
+                        },
+                        sampleState: host.SampleDynamicState);
                 },
                 typeof(GodotDirectionRenderHost),
                 typeof(GodotDirectionStageBackend),
@@ -155,8 +161,10 @@ public partial class MajoRuntimeBootstrap : Node
                     resolver.Get<ITransientDirectionCueExecutor>()),
                 typeof(IDirectionTransactionCoordinator),
                 typeof(ITransientDirectionCueExecutor))
-            .AddSingleton<IDirectionScopeResolver>(_ =>
-                new DirectionScopeResolver(Configuration!.Actors!.CreateDirectionMarks()))
+            .AddSingleton<IDirectionScopeResolver>(resolver =>
+                new DirectionScopeResolver(Configuration!.Actors!.CreateDirectionMarks(),
+                    resolver.Get<CameraEnvironmentPresetCatalog>()),
+                typeof(CameraEnvironmentPresetCatalog))
             .AddSingleton<IDirectionCommandPolicy>(
                 resolver => new DirectionCommandPolicy(
                     resolver.Get<IDirectionBeatRuntime>(),

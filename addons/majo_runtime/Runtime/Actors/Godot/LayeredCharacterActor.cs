@@ -24,6 +24,7 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IActorTr
     private readonly CharacterPositionMap positions;
     private readonly ITransitionDriverRegistry transitions;
     private readonly LayerCompositionResolver resolver;
+    private readonly LayeredCharacterMasking masking;
     private readonly HashSet<string> activeLayers;
     private readonly HashSet<string> targetLayers;
     private readonly ShaderMaterial multiplyMaterial;
@@ -69,6 +70,7 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IActorTr
         View.AddChild(layerComposite);
         SetCompositeOpacity(1);
         resolver = new LayerCompositionResolver(manifest);
+        masking = new LayeredCharacterMasking(manifest);
         activeLayers = resolver.CreateDefaultState();
         targetLayers = new HashSet<string>(activeLayers, StringComparer.Ordinal);
         if (buildLayerViews)
@@ -204,6 +206,7 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IActorTr
         {
             sprite.Visible = nodeNameToLayerPath.TryGetValue(sprite.Name, out var path) && layers.Contains(path);
         }
+        masking.Apply(composite);
         return composite;
     }
 
@@ -398,6 +401,7 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IActorTr
         {
             layer.Value.Visible = visibleLayers.Contains(layer.Key);
         }
+        masking.Apply(layerComposite);
     }
 
     private Rect2 CalculateCanvasBounds()

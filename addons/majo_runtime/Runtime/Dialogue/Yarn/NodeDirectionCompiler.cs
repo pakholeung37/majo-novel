@@ -36,7 +36,10 @@ public sealed record DirectionImport(
 public sealed record DirectionMark(
     string Name, DirectionPoint Position, string File, int Line, int Column);
 
-public sealed record DirectionCameraPreset(string Name, string Center, float Zoom, float Rotation);
+public sealed record DirectionCameraPreset(string Name, string Center, float Zoom, float Rotation, string Dolly = "neutral")
+{
+    public IReadOnlyDictionary<string, string>? Options { get; init; }
+}
 
 public sealed record DirectionPreloadManifest(
     IReadOnlyList<TypedDirectionResourceReference> References)
@@ -296,9 +299,13 @@ public sealed class NodeDirectionCompiler
                     _ = PositionRefConverter.Instance.Parse(center);
                     var zoom = float.Parse(command.Options.GetValueOrDefault("zoom", "1"), System.Globalization.CultureInfo.InvariantCulture);
                     var rotation = float.Parse(command.Options.GetValueOrDefault("rotation", "0"), System.Globalization.CultureInfo.InvariantCulture);
+                    var dollyName = command.Options.GetValueOrDefault("dolly", "neutral");
+                    if (string.IsNullOrWhiteSpace(dollyName))
+                        throw new CommandValueFormatException("Camera dolly preset name cannot be empty.");
                     if (!float.IsFinite(zoom) || zoom < 0.001f || !float.IsFinite(rotation)) throw new CommandValueFormatException("Invalid camera preset zoom or rotation.");
                     if (presets.Any(value => value.Name == name)) throw new CommandValueFormatException($"Duplicate camera preset '{name}'.");
-                    presets.Add(new DirectionCameraPreset(name, center, zoom, rotation));
+                    presets.Add(new DirectionCameraPreset(name, center, zoom, rotation, dollyName)
+                    { Options = new Dictionary<string, string>(command.Options) });
                     aliases.Add(name);
                 }
                 catch (Exception error) when (error is FormatException or OverflowException or CommandValueFormatException)

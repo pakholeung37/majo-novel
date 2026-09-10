@@ -98,6 +98,7 @@ internal sealed class GodotDirectionActorTreeBackend
                 state.Kind == DirectionActorKind.SceneObject ? ActorFactoryIds.SceneObject : ActorFactoryIds.Character,
                 state.Appearance ?? "Default", creationMode: ActorCreationMode.Dormant)
             { DefinitionId = state.DefinitionId }, token);
+            GodotDirectionRenderHost.AssignVisibilityLayer(root, GodotDirectionRenderHost.SubjectVisibilityLayer);
             var binding = new Binding(host, new ActorFxTarget(default, ActorFxSlot.Instance, state.Id), root, manager, actor);
             if (restore) binding.Apply(state);
             return binding;

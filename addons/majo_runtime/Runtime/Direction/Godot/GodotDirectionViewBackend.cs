@@ -17,7 +17,9 @@ namespace Majo.Runtime.Direction.Godot;
 
 internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
 {
-    private readonly Dictionary<ViewId, PreparedView> active = new();
+    private static readonly string[] Channels = ["pose", "parallax", "idle"];
+    private static readonly string[] WholeViewChannel = ["all"];
+    private readonly Dictionary<(ViewId View, string Channel), PreparedView> active = new();
     private readonly GodotDirectionRenderHost host;
     private readonly ITransitionDriverRegistry drivers;
     private readonly IEasingRegistry easings;
@@ -49,6 +51,7 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
         }
         var createdView = !host.HasView(viewId);
         host.GetOrCreateView(viewId);
+        var components = new List<IPreparedDirectionComponent>();
         try
         {
             Texture2D? beforeTexture = before is null
@@ -57,43 +60,54 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
             Texture2D targetTexture = host.GetStageTexture(target.StageId);
 
             await host.WaitForRenderFenceAsync(cancellationToken);
-            var transition = GodotDirectionRendering.ResolveTransition(
-                plan,
-                path => path.StartsWith($"view/{viewId.Value}/", StringComparison.Ordinal));
-            GodotDirectionRendering.ValidateTransition(transition, TransitionDomains.View, drivers, easings);
-            ImageTexture? capture = null;
-            if (transition.DurationSeconds > 0 &&
-                transition.Kind != DirectionTransitionId.Cut &&
-                transition.Kind != DirectionTransitionId.Move)
+            var wholeView = before is null || plan.IsStateReplacement || before.StageId != target.StageId ||
+                plan.ViewIntents.Any(intent => intent.ViewId == viewId && intent.Parallax is not null &&
+                    intent.Transition.Kind != DirectionTransitionId.Move && intent.Transition.Kind != DirectionTransitionId.Cut);
+            var channels = wholeView ? WholeViewChannel : Channels
+                .Where(channel => plan.Transitions.Any(t => t.StablePaths.Contains($"view/{viewId.Value}/{channel}")))
+                .ToArray();
+            foreach (var channel in channels)
             {
-                capture = await host.CaptureViewAsync(viewId, cancellationToken,
-                    active.TryGetValue(viewId, out var previous) && !previous.IsMotion);
-            }
-
-            var source = before ?? target;
-            if (before is not null)
-                source = source with
+                var transition = GodotDirectionRendering.ResolveTransition(
+                    plan,
+                    path => channel == "all" ? path.StartsWith($"view/{viewId.Value}/", StringComparison.Ordinal)
+                        : path == $"view/{viewId.Value}/{channel}");
+                GodotDirectionRendering.ValidateTransition(transition, TransitionDomains.View, drivers, easings);
+                ImageTexture? capture = null;
+                if (transition.DurationSeconds > 0 &&
+                    transition.Kind != DirectionTransitionId.Cut &&
+                    transition.Kind != DirectionTransitionId.Move)
                 {
-                    Pose = host.GetCurrentViewPose(viewId),
-                };
-            var prepared = new PreparedView(
-                this,
-                plan,
-                host,
-                viewId,
-                before,
-                source,
-                beforeTexture,
-                target,
-                targetTexture,
-                capture,
-                transition,
-                drivers,
-                easings);
-            return createdView ? new PreparedViewLifecycle(host, viewId, prepared) : prepared;
+                    capture = await host.CaptureViewAsync(viewId, cancellationToken,
+                        active.TryGetValue((viewId, channel), out var previous) && !previous.IsMotion);
+                }
+
+                var source = before ?? target;
+                if (before is not null)
+                    source = host.GetCurrentViewState(viewId, source);
+                var prepared = new PreparedView(
+                    this,
+                    channel,
+                    plan,
+                    host,
+                    viewId,
+                    before,
+                    source,
+                    beforeTexture,
+                    target,
+                    targetTexture,
+                    capture,
+                    transition,
+                    drivers,
+                    easings);
+                components.Add(prepared);
+            }
+            var group = new GodotPreparedDirectionComponentGroup(components.ToArray());
+            return createdView ? new PreparedViewLifecycle(host, viewId, group) : group;
         }
         catch
         {
+            foreach (var component in components) await component.DisposeAsync();
             if (createdView) host.ReleasePreparedView(viewId);
             throw;
         }
@@ -153,6 +167,11 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
         private readonly ViewId viewId;
         private readonly ViewState? restoreState;
         private readonly GodotDirectionViewBackend backend;
+        private readonly string channel;
+        private (ViewId View, string Channel) Key => (viewId, channel);
+        private bool OwnsPose => channel is "pose" or "all";
+        private bool IsCurrent => backend.active.TryGetValue(Key, out var current) && ReferenceEquals(current, this)
+            && host.IsCurrentViewGeneration(viewId, generation, channel);
         private readonly DirectionPlan plan;
         private ViewState before;
         private readonly Texture2D? restoreTexture;
@@ -174,6 +193,7 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
 
         public PreparedView(
             GodotDirectionViewBackend backend,
+            string channel,
             DirectionPlan plan,
             GodotDirectionRenderHost host,
             ViewId viewId,
@@ -188,6 +208,7 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
             IEasingRegistry? easings = null)
         {
             this.host = host;
+            this.channel = channel;
             this.viewId = viewId;
             this.backend = backend;
             this.plan = plan;
@@ -209,15 +230,16 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
             if (committed || rolledBack || disposed)
                 throw new InvalidOperationException("View is no longer preparable.");
             committed = true;
-            if (backend.active.TryGetValue(viewId, out var previous))
+            foreach (var previous in backend.active.Where(pair => pair.Key.View == viewId &&
+                (channel == "all" || pair.Key.Channel == "all" || pair.Key.Channel == channel)).Select(pair => pair.Value).ToArray())
             {
                 // A visual mix is completed before replacement; motion is sampled in place.
                 if (previous.transition.Kind == DirectionTransitionId.Move) previous.Supersede();
                 else previous.Complete();
             }
-            before = before with { Pose = host.GetCurrentViewPose(viewId) };
+            before = host.GetCurrentViewState(viewId, before);
             var intent = plan.ViewIntents.SingleOrDefault(patch => patch.ViewId == viewId);
-            if (intent is not null)
+            if (OwnsPose && intent is not null)
             {
                 target = target with
                 {
@@ -226,13 +248,14 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
                         Center = intent.Center.HasValue ? intent.Center.Value : before.Pose.Center,
                         Zoom = intent.Zoom.HasValue ? intent.Zoom.Value : before.Pose.Zoom,
                         RotationDegrees = intent.RotationDegrees.HasValue ? intent.RotationDegrees.Value : before.Pose.RotationDegrees,
+                        Dolly = intent.Dolly.HasValue ? intent.Dolly.Value : before.Pose.Dolly,
                     }
                 };
                 plan.CommitViews[viewId] = target;
             }
-            backend.active[viewId] = this;
-            generation = host.BeginViewGeneration(viewId);
-            host.ClearViewTransition(viewId);
+            backend.active[Key] = this;
+            generation = host.BeginViewGeneration(viewId, channel);
+            if (OwnsPose) host.ClearViewTransition(viewId);
             var transitionSource = host.GetViewTransitionSource(viewId);
 
             if (capture is not null)
@@ -242,10 +265,7 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
                 transitionSource.Visible = true;
             }
 
-            host.PublishView(
-                viewId,
-                target,
-                targetTexture);
+            Publish(target);
             if (transition.DurationSeconds <= 0 || transition.Kind == DirectionTransitionId.Cut)
             {
                 Complete();
@@ -254,11 +274,16 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
 
             if (transition.Kind == DirectionTransitionId.Move)
             {
-                host.ApplyViewPose(viewId, before.Pose);
+                Apply(before);
                 clock = host.Animate(transition, easings.GetRequired(transition.Easing), p =>
                 {
-                    if (host.IsCurrentViewGeneration(viewId, generation))
-                        host.ApplyViewPose(viewId, GodotDirectionRendering.Interpolate(before.Pose, target.Pose, p));
+                    if (IsCurrent)
+                        Apply(target with
+                        {
+                            Pose = GodotDirectionRendering.Interpolate(before.Pose, target.Pose, p),
+                            Parallax = GodotDirectionRendering.Interpolate(before.Parallax, target.Parallax, p),
+                            Idle = GodotDirectionRendering.Interpolate(before.Idle, target.Idle, p),
+                        });
                 }, OnFinished, exception => settlement.TrySetException(exception));
             }
             else
@@ -266,13 +291,13 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
                 if (capture is null) { Complete(); return; }
                 var surface = host.GetOrCreateView(viewId);
                 var context = new VisualTransitionContext(transitionSource, transition, capture,
-                    surface.ContentViewport.GetTexture(), true, true,
-                    () => host.IsCurrentViewGeneration(viewId, generation));
+                    surface.CompositeViewport.GetTexture(), true, true,
+                    () => IsCurrent);
                 preparedTransition = drivers.GetRequired(transition.Kind).Prepare(context);
-                if (transition.Kind != DirectionTransitionId.Fade) surface.Output.Visible = false;
+                if (transition.Kind != DirectionTransitionId.Fade) surface.CompositeOutput.Visible = false;
                 clock = host.Animate(transition, easings.GetRequired(transition.Easing), p =>
                 {
-                    if (host.IsCurrentViewGeneration(viewId, generation)) preparedTransition.ApplyProgress(p);
+                    if (IsCurrent) preparedTransition.ApplyProgress(p);
                 }, OnFinished, exception => settlement.TrySetException(exception));
             }
         }
@@ -290,14 +315,18 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
         {
             if (rolledBack || disposed) return;
             rolledBack = true;
-            generation = host.BeginViewGeneration(viewId);
+            var wasCurrent = IsCurrent;
             clock?.Dispose();
             clock = null;
             preparedTransition?.Dispose();
             preparedTransition = null;
-            host.ClearViewTransition(viewId);
-            if (restoreState is not null && restoreTexture is not null)
-                host.PublishView(viewId, restoreState, restoreTexture);
+            if (wasCurrent)
+            {
+                if (OwnsPose) host.ClearViewTransition(viewId);
+                if (restoreState is not null && restoreTexture is not null)
+                    host.PublishView(viewId, Merge(restoreState), restoreTexture, channel == "all");
+                Retire();
+            }
             settlement.TrySetCanceled();
         }
 
@@ -310,7 +339,7 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
             clock = null;
             preparedTransition?.Dispose();
             preparedTransition = null;
-            if (host.IsCurrentViewGeneration(viewId, generation))
+            if (IsCurrent && OwnsPose)
                 host.ClearViewTransition(viewId);
             Retire();
             capture?.Dispose();
@@ -329,8 +358,8 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
 
         private void Retire()
         {
-            if (backend.active.TryGetValue(viewId, out var current) && ReferenceEquals(current, this))
-                backend.active.Remove(viewId);
+            if (backend.active.TryGetValue(Key, out var current) && ReferenceEquals(current, this))
+                backend.active.Remove(Key);
         }
 
         private void OnFinished() => Complete();
@@ -340,17 +369,38 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
             if (settlement.Task.IsCompleted || rolledBack || disposed) return;
             clock?.Dispose();
             clock = null;
-            if (host.IsCurrentViewGeneration(viewId, generation))
+            if (IsCurrent)
             {
                 preparedTransition?.ApplyProgress(1.0f);
-                host.PublishView(viewId, target, targetTexture);
-                host.ClearViewTransition(viewId);
+                Publish(target);
+                if (OwnsPose) host.ClearViewTransition(viewId);
             }
             preparedTransition?.Dispose();
             preparedTransition = null;
             Retire();
             settlement.TrySetResult();
         }
+
+        private ViewState Merge(ViewState value)
+        {
+            if (channel == "all") return value;
+            var current = host.GetCurrentViewState(viewId, value);
+            return current with
+            {
+                Pose = channel == "pose" ? value.Pose : current.Pose,
+                Parallax = channel == "parallax" ? value.Parallax : current.Parallax,
+                Idle = channel == "idle" ? value.Idle : current.Idle,
+            };
+        }
+
+        private void Apply(ViewState value)
+        {
+            var merged = Merge(value);
+            host.ApplyViewState(viewId, merged.Pose, merged.Parallax, merged.Idle);
+        }
+
+        private void Publish(ViewState value) =>
+            host.PublishView(viewId, Merge(value), targetTexture, plan.IsStateReplacement);
     }
 
     private sealed class PreparedViewLifecycle : IPreparedDirectionComponent

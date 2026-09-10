@@ -61,7 +61,22 @@ internal static class GodotDirectionRendering
         Mathf.LerpAngle(
             Mathf.DegToRad(from.RotationDegrees),
             Mathf.DegToRad(to.RotationDegrees),
-            progress) * 180 / Mathf.Pi);
+            progress) * 180 / Mathf.Pi)
+    {
+        Dolly = Mathf.Lerp(from.Dolly, to.Dolly, progress),
+    };
+
+    public static ViewParallaxState Interpolate(ViewParallaxState from, ViewParallaxState to, float progress) => new(
+        Mathf.Lerp(from.Strength, to.Strength, progress),
+        new DirectionPoint(Mathf.Lerp(from.Anchor.X, to.Anchor.X, progress), Mathf.Lerp(from.Anchor.Y, to.Anchor.Y, progress)),
+        new DirectionPoint(Mathf.Lerp(from.LimitPercent.X, to.LimitPercent.X, progress), Mathf.Lerp(from.LimitPercent.Y, to.LimitPercent.Y, progress)));
+
+    public static ViewIdleState Interpolate(ViewIdleState from, ViewIdleState to, float progress) => new(
+        new DirectionPoint(
+            Mathf.Lerp(from.AmplitudePercent.X, to.AmplitudePercent.X, progress),
+            Mathf.Lerp(from.AmplitudePercent.Y, to.AmplitudePercent.Y, progress)),
+        Mathf.Lerp((float)from.PeriodSeconds, (float)to.PeriodSeconds, progress),
+        from.PhaseRadians);
 
     public static void Kill(Tween? tween)
     {

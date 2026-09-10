@@ -350,6 +350,7 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
     private readonly ITransientDirectionCueExecutor? cues;
     private readonly Func<CancellationToken, Task>? resetRendering;
     private readonly Func<CancellationToken, Task>? clearSceneRendering;
+    private readonly Func<DirectionState, DirectionState>? sampleState;
     private bool sceneClosing;
     private readonly SemaphoreSlim commitGate = new(1, 1);
     private readonly object stateGate = new();
@@ -372,7 +373,8 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
         IRuntimeActivityRegistry? activities = null,
         ITransientDirectionCueExecutor? cues = null,
         Func<CancellationToken, Task>? resetRendering = null,
-        Func<CancellationToken, Task>? clearSceneRendering = null)
+        Func<CancellationToken, Task>? clearSceneRendering = null,
+        Func<DirectionState, DirectionState>? sampleState = null)
     {
         this.planner = planner ?? throw new ArgumentNullException(nameof(planner));
         this.backend = backend ?? throw new ArgumentNullException(nameof(backend));
@@ -380,6 +382,7 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
         this.cues = cues;
         this.resetRendering = resetRendering;
         this.clearSceneRendering = clearSceneRendering;
+        this.sampleState = sampleState;
         state = initialState ?? DirectionState.CreateDefault();
         state.Validate();
     }
@@ -388,7 +391,7 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
     {
         get
         {
-            lock (stateGate) return state;
+            lock (stateGate) return sampleState?.Invoke(state) ?? state;
         }
     }
 

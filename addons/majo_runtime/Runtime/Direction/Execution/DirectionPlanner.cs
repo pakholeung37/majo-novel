@@ -90,6 +90,12 @@ public sealed class DirectionPlanner : IDirectionPlanner
                 case ViewPosePatch patch:
                     ApplyViewPose(patch, views, writes, transitions);
                     break;
+                case ViewParallaxPatch patch:
+                    ApplyViewParallax(patch, views, writes, transitions);
+                    break;
+                case ViewIdlePatch patch:
+                    ApplyViewIdle(patch, views, writes, transitions);
+                    break;
                 case ViewReleasePatch patch:
                     ApplyViewRelease(patch, views, screen, writes);
                     break;
@@ -482,16 +488,53 @@ public sealed class DirectionPlanner : IDirectionPlanner
         if (!views.TryGetValue(patch.ViewId, out var view))
             throw new DirectionReferenceException($"View '{patch.ViewId}' is not defined.");
         var paths = new List<string>();
-        if (!patch.Center.HasValue && !patch.Zoom.HasValue && !patch.RotationDegrees.HasValue) return;
+        if (!patch.Center.HasValue && !patch.Zoom.HasValue && !patch.RotationDegrees.HasValue && !patch.Dolly.HasValue) return;
         RegisterWrite(ViewPath(patch.ViewId, "pose"), patch.SourceLocation, writes, paths);
         var pose = view.Pose with
         {
             Center = patch.Center.HasValue ? patch.Center.Value : view.Pose.Center,
             Zoom = patch.Zoom.HasValue ? patch.Zoom.Value : view.Pose.Zoom,
             RotationDegrees = patch.RotationDegrees.HasValue ? patch.RotationDegrees.Value : view.Pose.RotationDegrees,
+            Dolly = patch.Dolly.HasValue ? patch.Dolly.Value : view.Pose.Dolly,
         };
         pose.Validate();
         views[patch.ViewId] = view with { Pose = pose };
+        AddTransition(patch.Transition, paths, transitions, patch.SourceLocation);
+        if (patch.Parallax is { } parallax)
+            ApplyViewParallax(new ViewParallaxPatch(patch.ViewId, parallax, patch.Transition, patch.SourceLocation),
+                views, writes, transitions);
+    }
+
+    private static void ApplyViewParallax(
+        ViewParallaxPatch patch,
+        Dictionary<ViewId, ViewState> views,
+        Dictionary<string, DirectionSourceLocation?> writes,
+        List<DirectionTransition> transitions)
+    {
+        if (!views.TryGetValue(patch.ViewId, out var view))
+            throw new DirectionReferenceException($"View '{patch.ViewId}' is not defined.");
+        patch.Parallax.Validate();
+        var paths = new List<string>();
+        RegisterWrite(ViewPath(patch.ViewId, "parallax"), patch.SourceLocation, writes, paths);
+        views[patch.ViewId] = view with { Parallax = patch.Parallax };
+        AddTransition(patch.Transition, paths, transitions, patch.SourceLocation);
+    }
+
+    private static void ApplyViewIdle(
+        ViewIdlePatch patch,
+        Dictionary<ViewId, ViewState> views,
+        Dictionary<string, DirectionSourceLocation?> writes,
+        List<DirectionTransition> transitions)
+    {
+        if (!views.TryGetValue(patch.ViewId, out var view))
+            throw new DirectionReferenceException($"View '{patch.ViewId}' is not defined.");
+        patch.Idle.Validate();
+        var paths = new List<string>();
+        RegisterWrite(ViewPath(patch.ViewId, "idle"), patch.SourceLocation, writes, paths);
+        views[patch.ViewId] = view with
+        {
+            Idle = patch.Idle with { PhaseRadians = view.Idle.PhaseRadians },
+        };
         AddTransition(patch.Transition, paths, transitions, patch.SourceLocation);
     }
 
@@ -642,7 +685,8 @@ public sealed class DirectionPlanner : IDirectionPlanner
         var kind = kindSeparator > 0 ? path[..kindSeparator] : path;
         return kind switch
         {
-            "stage" or "view" => path[..separator],
+            "stage" => path[..separator],
+            "view" => path,
             "actor" => path,
             "screen" => "screen",
             "effect" => "effect",

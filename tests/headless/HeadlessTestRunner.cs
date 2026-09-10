@@ -59,6 +59,11 @@ public partial class HeadlessTestRunner : Node
 
     private async Task RunSuiteAsync()
     {
+        if (OS.GetCmdlineUserArgs().Contains("--majo-layered-masks"))
+        {
+            await ValidateLayeredMasksAsync();
+            return;
+        }
         if (OS.GetCmdlineUserArgs().Contains("--majo-render-restore"))
         {
             await ValidateRenderedRestoreAsync();

@@ -221,6 +221,22 @@ public sealed record ViewPosePatch(
     DirectionValue<float> Zoom,
     DirectionValue<float> RotationDegrees,
     DirectionTransitionSpec Transition,
+    DirectionSourceLocation? SourceLocation = null) : IDurableDirectionPatch
+{
+    public DirectionValue<float> Dolly { get; init; }
+    public ViewParallaxState? Parallax { get; init; }
+}
+
+public sealed record ViewParallaxPatch(
+    ViewId ViewId,
+    ViewParallaxState Parallax,
+    DirectionTransitionSpec Transition,
+    DirectionSourceLocation? SourceLocation = null) : IDurableDirectionPatch;
+
+public sealed record ViewIdlePatch(
+    ViewId ViewId,
+    ViewIdleState Idle,
+    DirectionTransitionSpec Transition,
     DirectionSourceLocation? SourceLocation = null) : IDurableDirectionPatch;
 
 public sealed record ViewReleasePatch(

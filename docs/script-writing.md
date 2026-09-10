@@ -122,10 +122,10 @@ title: Chapter01_Investigation
 `backdrop <资源ID>` 默认操作 `stage:main`。内建默认转场是 `cut`；需要交叉淡化时显式使用 `via:dissolve`。背景资源 ID 相对于配置的背景资源路径解析。
 
 ```yarn
-<<backdrop Court_Trial00 at:0,100 origin:0,0 scale:1>>
+<<backdrop Court_Trial00 at:0,100 origin:0,0 scale:1 distance:far>>
 ```
 
-指定 `at`、`origin`、`scale` 中任一个，就使用纹理原始像素尺寸进行空间摆放；省略全部三个参数仍使用原有 Cover 行为。默认 `at:50,50 origin:0.5,0.5 scale:1`。`at` 是舞台坐标（X 向右、Y 向上），支持 mark；`origin` 是纹理内锚点（0..1，X 向右、Y 向下）；`scale` 是正数，作用于纹理像素尺寸。舞台 `0..100` 对应固定参考尺寸，不是背景外接框，也不是位置限制。
+指定 `at`、`origin`、`scale` 中任一个，就使用纹理原始像素尺寸进行空间摆放；省略全部三个参数仍使用原有 Cover 行为。默认 `at:50,50 origin:0.5,0.5 scale:1`。`at` 是舞台坐标（X 向右、Y 向上），支持 mark；`origin` 是纹理内锚点（0..1，X 向右、Y 向下）；`scale` 是正数，作用于纹理像素尺寸。舞台 `0..100` 对应固定参考尺寸，不是背景外接框，也不是位置限制。`distance` 是背景相对主体平面的命名距离，内建 `flat/near/far` 分别为 `1/2/6`；默认 `flat`。它只影响 Dolly 下的视差，不会在中性机位直接缩小贴图。
 
 拼接、程序绘图等资源生成由开发者通过[场景资源准备接口](scene-resources.md)完成，不增加 backdrop 特有的 repeat 参数或额外配置 schema。
 
@@ -247,30 +247,49 @@ Curtain 是例外：当前实现省略 `duration` 时固定用 0.35 秒、线性
 
 ```yarn
 // 直接设置镜头。
-<<camera center:50,50 zoom:1 rotation:0>>
+<<camera center:50,50 zoom:1 rotation:0 dolly:neutral>>
 // 镜头连续移动。
-<<camera move center:65,50 zoom:1.5 duration:0.8 wait:true>>
+<<camera move center:65,50 zoom:1.5 dolly:near duration:0.8 wait:true>>
 // 混合到另一镜头构图。
 <<camera center:30,50 zoom:1.2 via:dissolve duration:0.4 wait:true>>
 <<camera reset>>
 ```
 
-`camera` 至少指定 `preset`、`center`、`zoom`、`rotation`、`as` 之一；内建默认 `cut`，可用 `dissolve`。`camera move` 至少指定 preset/center/zoom/rotation 之一，不接受 `via`。`camera reset` 回到中心 `50,50`、zoom `1`、rotation `0`，默认直接设置，不会自动移动过去。
+`camera` 至少指定 `preset`、`center`、`zoom`、`rotation`、`dolly`、`as` 之一；内建默认 `cut`，可用 `dissolve`。`camera move` 至少指定 preset/center/zoom/rotation/dolly 之一，不接受 `via`。Dolly 是绝对机位：内建 `neutral/near/back` 分别为 `0/0.15/-0.25`，重复 `back` 不会累积。`camera reset` 回到中心 `50,50`、zoom `1`、rotation `0`、dolly `neutral`，不修改视差或 idle。
 
 `stage:名称` 控制该 Stage 默认 View 的镜头；`view:名称` 控制指定 View。两者互斥，都省略时目标是 `main` View。
 
 ```yarn
 <<mark witness at:250,50>>
-<<camera preset define closeup center:witness zoom:1.4 rotation:0>>
+<<camera preset define close_base zoom:0.7826087 dolly:0.7826087 parallax:strong parallaxLimit:2,50>>
+<<camera preset define closeup extends:close_base center:witness parallaxAnchor:250,46>>
 // 定义不改变画面；同一预设可以用于不同 View。
 <<camera preset:closeup>>
 <<camera view:reaction preset:closeup via:dissolve duration:0.3 wait:true>>
 <<camera move preset:closeup zoom:1.6 duration:0.8 wait:true>>
 ```
 
-`camera preset define` 一次定义完整构图，省略字段默认 center `50,50`、zoom `1`、rotation `0`。使用时显式参数覆盖预设字段；View、转场、时长与缓动在使用处指定。`center` 可引用 mark，也可使用超出 `0..100` 的有限坐标。坐标始终相对于固定舞台参考尺寸，背景变宽不会重新归一化角色或镜头坐标。
+`camera preset define` 一次定义完整构图，包括背景视差；没有基类时省略字段默认 center `50,50`、zoom `1`、rotation `0`、dolly `neutral`、parallax `off`。`extends:名称` 继承当前节点的基础预设，显式字段覆盖基类，支持多级继承和前向引用，循环和不存在的基类会在进入节点时拒绝。定义只保存数据，不改变画面。所有定义均写在 Yarn 中，不需要额外预设文件或 C# 注册。
+
+`parallax` 可选内置 `off/subtle/normal/strong`；少量特殊镜头可在定义中覆盖 `parallaxStrength`（0–1）、`parallaxAnchor`（坐标或 mark）和 `parallaxLimit`（非负百分比坐标）。先应用继承，再应用 parallax 档位，最后应用显式高级字段。`dolly` 支持内置名称及 `[-2,0.85]` 内的数值机位。典型用法是把高级数值集中在基础预设，各人物只补充位置。数值求解仍属于高级创作，本版不自动求解取景目标。
+
+应用 preset 时，机位和视差以同一事务、同一时长和缓动更新，不必再调用 `camera parallax`。使用处的显式 center/zoom/rotation/dolly 覆盖预设字段；View、转场、时长与缓动仍在使用处指定。`center` 可引用 mark，也可使用超出 `0..100` 的有限坐标。坐标始终相对于固定舞台参考尺寸，背景变宽不会重新归一化角色或镜头坐标。普通 camera/move 未指定 preset 时继续保留未写的字段；idle 是独立持续效果，不由镜头预设启停。
+
+兼容性：旧镜头预设没有视差声明时现在明确应用 off，不再继承 View 上一次的视差；需要保留效果的场景应在预设内声明 parallax。直接调用 `camera parallax` 仍然可用，但后续完整 preset 会覆盖它。
 
 预设属于当前节点，声明参数必须是静态字面量或 mark 名称。编译元数据保存声明，直接读档时不必重新执行节点开头。旧的 `camera ... as:` 与 `shot use` 保留兼容；`as` 会同时应用镜头，而新预设声明不会。
+
+背景视差和静止漂移是每个 View 独立保存的环境状态：
+
+```yarn
+<<camera parallax subtle view:main>>
+<<camera parallax off view:main duration:0.4>>
+<<camera parallax reset view:main>>
+<<camera idle gentle view:main>>
+<<camera idle off view:main duration:0.5>>
+```
+
+视差内建 `off/subtle/normal/strong`，默认 off；idle 内建 `off/gentle`，默认 off。两者支持 `stage/view`、`duration/ease/wait`。视差省略 duration 时立即提交；idle 省略时使用 0.5 秒启停包络，显式 `duration:0` 才立即切换。构图、视差和 idle 可以并行使用不同持续时间，更新其中一项不会打断其他项。开启视差不会自动开启 idle；关闭视差也不会停止 idle。持续 idle 不阻塞 Beat，`wait:true` 只等待启停包络收敛。项目可在 `CameraEnvironment` 配置中注册同类型命名预设；连续参数中距离范围为 `[1,100]`、Dolly 为 `[-2,0.85]`、视差强度为 `[0,1]`，anchor/limit/amplitude 均使用固定参考画面的百分比。
 
 ```yarn
 <<character fx hero effect:shake strength:8 axis:x frequency:20 duration:0.3 wait:true>>

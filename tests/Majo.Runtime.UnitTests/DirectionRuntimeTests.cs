@@ -53,6 +53,8 @@ public sealed class DirectionRuntimeTests
                 "camera",
                 "camera move",
                 "camera reset",
+                "camera parallax",
+                "camera idle",
                 "camera fx",
                 "shot use",
                 "screen show",
@@ -139,6 +141,56 @@ public sealed class DirectionRuntimeTests
         Assert.Equal(illustration, coordinator.State.Views[illustrationView].StageId);
         Assert.Equal(illustrationPose, coordinator.State.Views[illustrationView].Pose);
         Assert.Equal(illustrationView, coordinator.State.Screen.Bindings[LayoutSlotId.Main]);
+    }
+
+    [Fact]
+    public async Task DirectionStateV4RoundTripsCameraEnvironment()
+    {
+        var coordinator = CreateCoordinator(new FakeDirectionBackend { AutoSettle = true });
+        var contributor = new DirectionStateContributor(coordinator);
+        await coordinator.ExecuteAsync(new IDirectionDirective[]
+        {
+            new BackdropPatch(StageId.Main,
+                new BackdropState(new ResourceKey("court")) { Distance = 6 }, DirectionTransitionSpec.Cut),
+            new ViewPosePatch(ViewId.Main, default, default, default, DirectionTransitionSpec.Cut)
+                { Dolly = DirectionValue.From(-0.25f) },
+            new ViewParallaxPatch(ViewId.Main,
+                new ViewParallaxState(0.25f, new(50, 50), new(1.5f, 1)), DirectionTransitionSpec.Cut),
+            new ViewIdlePatch(ViewId.Main,
+                new ViewIdleState(new(0.15f, 0.08f), 12, 1.2), DirectionTransitionSpec.Cut),
+        }, DirectionCompletionBarrier.Settle);
+
+        var snapshot = await contributor.CaptureAsync(default);
+        await coordinator.ResetAsync(default);
+        await contributor.CommitPreparedAsync(snapshot, default);
+
+        Assert.Equal(4, snapshot.SchemaVersion);
+        Assert.Equal(6, coordinator.State.Stages[StageId.Main].Backdrop!.Distance);
+        Assert.Equal(-0.25f, coordinator.State.Views[ViewId.Main].Pose.Dolly);
+        Assert.Equal(0.25f, coordinator.State.Views[ViewId.Main].Parallax.Strength);
+        Assert.Equal(0, coordinator.State.Views[ViewId.Main].Idle.PhaseRadians);
+    }
+
+    [Fact]
+    public async Task DirectionStateContributorMigratesSchemaThreeDefaults()
+    {
+        var coordinator = CreateCoordinator(new FakeDirectionBackend { AutoSettle = true });
+        var contributor = new DirectionStateContributor(coordinator);
+        var record = new StateRecord(BuiltInStateKeys.Direction, StateScope.Game, 3,
+            JsonDocument.Parse("""
+                {
+                  "stages":[{"id":"main","backdrop":{"resource":"court","fit":0,"tint":{"r":1,"g":1,"b":1,"a":1}},"actors":[]}],
+                  "views":[{"id":"main","stageId":"main","centerX":50,"centerY":50,"zoom":1,"rotation":0}],
+                  "layout":"single","bindings":{"main":"main"},"revision":0
+                }
+                """).RootElement.Clone());
+
+        await contributor.CommitPreparedAsync(record, default);
+
+        Assert.Equal(1, coordinator.State.Stages[StageId.Main].Backdrop!.Distance);
+        Assert.Equal(0, coordinator.State.Views[ViewId.Main].Pose.Dolly);
+        Assert.Equal(ViewParallaxState.Off, coordinator.State.Views[ViewId.Main].Parallax);
+        Assert.Equal(ViewIdleState.Off, coordinator.State.Views[ViewId.Main].Idle);
     }
 
     [Fact]

@@ -79,6 +79,10 @@ public partial class HeadlessTestRunner
             "Layered character did not map scene percentages, baseline offset, or root scale correctly.");
 
         var previousAppearance = character.Appearance;
+        // Runtime actors are culled separately from backgrounds. Transient overlays
+        // must retain the actor's non-default layer in both appearance APIs.
+        Majo.Runtime.Direction.Godot.GodotDirectionRenderHost.AssignVisibilityLayer(
+            character.View, Majo.Runtime.Direction.Godot.GodotDirectionRenderHost.SubjectVisibilityLayer);
         var actorHost = character.View.GetParent();
         var nodesBeforeTransition = actorHost.GetChildren().ToHashSet();
         var actorChildrenBeforeTransition = character.View.GetChildren().ToHashSet();
@@ -92,12 +96,30 @@ public partial class HeadlessTestRunner
             "Layered character appearance change did not initialize endpoint dissolve.");
         Assert(actorHost.GetChildren().All(nodesBeforeTransition.Contains),
             "Layered character appearance change changed its actor host nodes.");
+        Assert(character.View.GetNode<Sprite2D>($"{character.View.Name}_DissolveOverlay").VisibilityLayer ==
+            character.View.VisibilityLayer, "Direct appearance overlay must be visible to the subject camera.");
         await appearanceTransition.Completion;
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         Assert(Mathf.IsEqualApprox(character.Opacity, 1),
             "Layered character appearance change did not finish its dissolve phase.");
         Assert(character.View.GetChildren().ToHashSet().SetEquals(actorChildrenBeforeTransition),
             "Layered character appearance change left transient scene nodes.");
+        using (var prepared = await ((IActorAppearanceTarget)character).PrepareAppearanceTransitionAsync(
+            "Default", new AnimationSpec(.2),
+            new Majo.Runtime.Direction.Transitions.DissolveTransitionDriver()))
+        {
+            prepared.Commit();
+            var preparedOverlay = character.View.GetChildren().OfType<Sprite2D>().Single();
+            Assert(preparedOverlay.VisibilityLayer == character.View.VisibilityLayer && preparedOverlay.Visible,
+                "Prepared appearance overlay must retain the subject layer after reparenting.");
+            prepared.ApplyProgress(.5f);
+            Assert(!layerComposite.Visible && preparedOverlay.Visible,
+                "Appearance transition must keep a visible replacement while the stable actor is hidden.");
+            prepared.Finish();
+            Assert(layerComposite.Visible, "Finishing appearance must restore the stable actor.");
+        }
+        character.SetAppearance("Surprised1");
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         Assert(actorHost.GetChildren().All(nodesBeforeTransition.Contains),
             "Layered character appearance change changed its actor host nodes.");
         Assert(LayerVisible(layers,

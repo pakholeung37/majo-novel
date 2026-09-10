@@ -37,6 +37,7 @@ internal sealed class GodotActorAppearanceTransition : IPreparedVisualTransition
             Centered = false,
             Position = bounds.Position,
             Visible = false,
+            VisibilityLayer = owner.VisibilityLayer,
             Modulate = new Color(1, 1, 1, opacity),
         };
         owner.AddChild(source);
@@ -79,7 +80,10 @@ internal sealed class GodotActorAppearanceTransition : IPreparedVisualTransition
         Action<bool> showOriginal, Action<Sprite2D?> publishOverlay, Action publishTarget, Action finish,
         ITransitionDriver driver, AnimationSpec animation, CancellationToken cancellationToken)
     {
-        var staging = new Node2D { Name = "PreparedAppearance", Visible = false };
+        var staging = new Node2D
+        {
+            Name = "PreparedAppearance", Visible = false, VisibilityLayer = owner.VisibilityLayer,
+        };
         owner.GetParent().AddChild(staging);
         try
         {
@@ -116,6 +120,7 @@ internal sealed class GodotActorAppearanceTransition : IPreparedVisualTransition
             effect.source.Reparent(owner, false);
             effect.target.Reparent(owner, false);
             effect.overlay.Reparent(owner, false);
+            effect.overlay.VisibilityLayer = owner.VisibilityLayer;
             committed = true;
             publishTarget();
             showOriginal(false);

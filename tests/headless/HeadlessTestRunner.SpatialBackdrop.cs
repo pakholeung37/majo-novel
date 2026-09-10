@@ -1,8 +1,11 @@
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
+using Majo.Runtime.Direction.Camera;
 using Majo.Runtime.Direction.Core;
+using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Direction.Godot;
+using Majo.Runtime.Direction.Transitions;
 using Majo.Runtime.Resources;
 
 namespace Majo.Runtime.HeadlessTests;
@@ -15,6 +18,10 @@ public partial class HeadlessTestRunner
         AddChild(owner);
         var host = new GodotDirectionRenderHost(owner, new Vector2I(640, 360));
         await host.InitializeAsync(CancellationToken.None);
+        Assert(host.StageCanvas.VisibilityLayer == GodotDirectionRenderHost.StageVisibilityLayers,
+            "The shared Stage parent must remain visible to background, transition, and subject viewports.");
+        Assert(host.Actors.VisibilityLayer == GodotDirectionRenderHost.SubjectVisibilityLayer,
+            "The actor tree must remain visible to the subject viewport.");
         using var pixels = Image.CreateEmpty(16, 12, false, Image.Format.Rgba8);
         pixels.Fill(Colors.Red);
         using var texture = ImageTexture.CreateFromImage(pixels);
@@ -28,14 +35,47 @@ public partial class HeadlessTestRunner
         var far = new ViewId("far");
         host.PublishView(far, new ViewState(far, StageId.Main, new ViewPose(new DirectionPoint(250, 50), 1, 0)), texture);
         var view = host.GetOrCreateView(far);
+        var metrics = host.GetRenderResourceMetrics();
+        Assert(metrics.ViewCount == 2 && metrics.RenderTargetCount == 12,
+            "Render metrics must account for five targets per layered View plus Stage and Screen targets.");
+        Assert(metrics.EstimatedRgba8ColorBytes > 0,
+            "Render metrics must expose the minimum RGBA8 color-buffer cost.");
         Assert(view.ContentViewport.World2D == host.StageViewport.World2D, "Views must observe the same Stage world rather than a clipped texture.");
         Assert((view.ContentViewport.CanvasTransform * new Vector2(1600, 180)).IsEqualApprox(new Vector2(320, 180)), "Far content must map to the view center.");
+        var sourceState = state with { Distance = 2 };
+        var targetState = state with { Distance = 5 };
+        host.PublishBackdropTransition(StageId.Main, sourceState, texture);
+        host.PublishBackdrop(StageId.Main, targetState, texture);
+        var expectedSource = CameraProjectionCalculator.Calculate(
+            view.CurrentPose, view.CurrentParallax, view.CurrentIdle, sourceState.Distance,
+            new DirectionPoint(view.Viewport.Size.X, view.Viewport.Size.Y));
+        var expectedTarget = CameraProjectionCalculator.Calculate(
+            view.CurrentPose, view.CurrentParallax, view.CurrentIdle, targetState.Distance,
+            new DirectionPoint(view.Viewport.Size.X, view.Viewport.Size.Y));
+        Assert(view.TransitionBackgroundViewport.CanvasTransform.IsEqualApprox(new Transform2D(
+            new Vector2(expectedSource.Background.M11, expectedSource.Background.M12),
+            new Vector2(expectedSource.Background.M21, expectedSource.Background.M22),
+            new Vector2(expectedSource.Background.TX, expectedSource.Background.TY))),
+            "Backdrop transition source must use its own distance projection.");
+        Assert(view.BackgroundViewport.CanvasTransform.IsEqualApprox(new Transform2D(
+            new Vector2(expectedTarget.Background.M11, expectedTarget.Background.M12),
+            new Vector2(expectedTarget.Background.M21, expectedTarget.Background.M22),
+            new Vector2(expectedTarget.Background.TX, expectedTarget.Background.TY))),
+            "Backdrop transition target must use its own distance projection.");
+        using (var fade = host.PrepareBackdropVisualTransition(
+            StageId.Main,
+            new DirectionTransitionSpec(DirectionTransitionId.Fade, 1),
+            new FadeTransitionDriver()))
+        {
+            fade.ApplyProgress(.5f);
+            Assert(view.BackgroundOutput.Visible && view.TransitionBackgroundOutput.Visible,
+                "Fade must composite the independently projected source over the target.");
+            Assert(Mathf.IsEqualApprox(view.TransitionBackgroundOutput.Modulate.A, .5f),
+                "Fade progress must be applied after source projection.");
+        }
+        host.ClearBackdropTransition(StageId.Main);
         var other = host.GetOrCreateStage(new StageId("other"));
         Assert(other.Viewport.World2D != view.ContentViewport.World2D, "Separate stages must retain separate worlds.");
-        var bounds = GodotDirectionRenderHost.BackdropBounds(host.RequireStage(StageId.Main), state, texture);
-        var input = host.PrepareBackdropInput(host.RequireStage(StageId.Main), state, texture, bounds);
-        Assert(input.Size == new Vector2I(32, 24), "Backdrop transitions must capture the spatial bounds, not crop to the reference viewport.");
-        input.QueueFree();
         var splitState = new ScreenState(new LayoutId("split"),
             new System.Collections.Generic.Dictionary<LayoutSlotId, ViewId>
             { [LayoutSlotId.Main] = ViewId.Main, [new LayoutSlotId("inset")] = far })
@@ -87,7 +127,74 @@ public partial class HeadlessTestRunner
                     "Diagonal split must contain fractional pixel coverage, not a hard staircase.");
             }
         }
+        await ValidateCameraChannelsAsync(host, texture);
         await host.ShutdownAsync(CancellationToken.None);
         owner.QueueFree();
+    }
+
+    private static async Task ValidateCameraChannelsAsync(GodotDirectionRenderHost host, Texture2D texture)
+    {
+        var initial = DirectionState.CreateDefault();
+        host.PublishView(ViewId.Main, initial.Views[ViewId.Main], texture);
+        var backend = new GodotDirectionViewBackend(host);
+        var planner = new DirectionPlanner();
+        var motionPlan = planner.PlanDomain(initial,
+        [new ViewPosePatch(ViewId.Main, DirectionValue.From(new DirectionPoint(80, 50)),
+            default, default, new DirectionTransitionSpec(DirectionTransitionId.Move, 30))]);
+        await using var motion = await backend.PrepareAsync(motionPlan, ViewId.Main,
+            initial.Views[ViewId.Main], motionPlan.TargetState.Views[ViewId.Main], CancellationToken.None);
+        motion.Commit(default);
+        var environmentPlan = planner.PlanDomain(motionPlan.TargetState,
+        [new ViewParallaxPatch(ViewId.Main, new ViewParallaxState(.5f, new(50, 50), new(3, 2)),
+            DirectionTransitionSpec.Cut)]);
+        await using var environment = await backend.PrepareAsync(environmentPlan, ViewId.Main,
+            motionPlan.TargetState.Views[ViewId.Main], environmentPlan.TargetState.Views[ViewId.Main], CancellationToken.None);
+        environment.Commit(default);
+        var surface = host.GetOrCreateView(ViewId.Main);
+        Assert(!motion.Settlement.IsCompleted, "Changing parallax must not settle an active camera motion.");
+        Assert(surface.CurrentPose.Center.X < 70, "Changing parallax must not jump to the motion destination.");
+        await motion.FinishAsync(CancellationToken.None);
+        Assert(surface.CurrentParallax.Strength == .5f, "Finishing camera motion must preserve the new parallax state.");
+
+        var combinedPlan = planner.PlanDomain(environmentPlan.TargetState,
+        [
+            new ViewPosePatch(ViewId.Main, DirectionValue.From(new DirectionPoint(20, 50)), default, default,
+                new DirectionTransitionSpec(DirectionTransitionId.Move, 30)),
+            new ViewIdlePatch(ViewId.Main, new ViewIdleState(new(.15f, .08f), 12),
+                new DirectionTransitionSpec(DirectionTransitionId.Move, 40)),
+        ]);
+        await using var combined = await backend.PrepareAsync(combinedPlan, ViewId.Main,
+            environmentPlan.TargetState.Views[ViewId.Main], combinedPlan.TargetState.Views[ViewId.Main], CancellationToken.None);
+        combined.Commit(default);
+        Assert(!combined.Settlement.IsCompleted, "Independent timing in one beat must remain active.");
+        var cutPlan = planner.PlanDomain(combinedPlan.TargetState,
+        [new ViewPosePatch(ViewId.Main, DirectionValue.From(new DirectionPoint(40, 50)), default, default,
+            DirectionTransitionSpec.Cut)]);
+        await using var cut = await backend.PrepareAsync(cutPlan, ViewId.Main,
+            combinedPlan.TargetState.Views[ViewId.Main], cutPlan.TargetState.Views[ViewId.Main], CancellationToken.None);
+        cut.Commit(default);
+        Assert(!combined.Settlement.IsCompleted, "Replacing pose must leave the idle envelope running.");
+        await combined.FinishAsync(CancellationToken.None);
+        Assert(surface.CurrentPose.Center.X == 40 && surface.CurrentIdle.IsEnabled,
+            "Finishing an older group must not overwrite its successor's pose.");
+
+        host.ApplyViewState(ViewId.Main, new ViewPose(new(250, 50), 2, 8),
+            new ViewParallaxState(1, new(50, 50), new(1.5f, 1)), ViewIdleState.Off);
+        host.PublishBackdrop(StageId.Main, new BackdropState(new ResourceKey("generated")) { Distance = 6 }, texture);
+        var subject = surface.ContentViewport.CanvasTransform;
+        var background = surface.BackgroundViewport.CanvasTransform;
+        var sourceBackground = surface.TransitionBackgroundViewport.CanvasTransform;
+        var center = new Vector2(surface.Viewport.Size.X, surface.Viewport.Size.Y) / 2;
+        var basis = new Transform2D(Mathf.DegToRad(7), new Vector2(1.4f, 1.4f), 0, Vector2.Zero);
+        var offset = new Vector2(5, -3);
+        var screenFx = new Transform2D(basis.X, basis.Y, center - basis * center + offset);
+        host.ApplyViewModifierDelta(ViewId.Main, new CameraPoseDelta(offset, 1.4f, 7));
+        Assert(surface.ContentViewport.CanvasTransform.IsEqualApprox(screenFx * subject),
+            "Camera FX must uniformly transform the subject output.");
+        Assert(surface.BackgroundViewport.CanvasTransform.IsEqualApprox(screenFx * background),
+            "Camera FX must scale even saturated background compensation uniformly.");
+        Assert(surface.TransitionBackgroundViewport.CanvasTransform.IsEqualApprox(screenFx * sourceBackground),
+            "Camera FX must uniformly transform both background transition inputs.");
+        host.ClearViewModifierDelta(ViewId.Main);
     }
 }

@@ -62,6 +62,8 @@ public sealed record BackdropState(
     DirectionColor Tint)
 {
     public BackdropPlacement? Placement { get; init; }
+    /// <summary>Relative distance from the subject plane. One means coplanar.</summary>
+    public float Distance { get; init; } = 1;
 
     public BackdropState(ResourceKey resource)
         : this(resource, BackdropFit.Cover, DirectionColor.White)
@@ -73,6 +75,8 @@ public sealed record BackdropState(
         if (!Enum.IsDefined(Fit)) throw new ArgumentOutOfRangeException(nameof(Fit));
         Tint.Validate();
         Placement?.Validate();
+        if (!float.IsFinite(Distance) || Distance is < 1 or > 100)
+            throw new ArgumentOutOfRangeException(nameof(Distance), "Backdrop distance must be in [1, 100].");
         return this;
     }
 }
@@ -131,6 +135,9 @@ public sealed record ViewPose(DirectionPoint Center, float Zoom, float RotationD
 {
     public static ViewPose Default { get; } = new(new DirectionPoint(50, 50), 1, 0);
 
+    /// <summary>Normalized camera displacement; positive moves toward the subject plane.</summary>
+    public float Dolly { get; init; }
+
     public ViewPose Validate()
     {
         Center.Validate();
@@ -138,6 +145,48 @@ public sealed record ViewPose(DirectionPoint Center, float Zoom, float RotationD
             throw new ArgumentOutOfRangeException(nameof(Zoom));
         if (!float.IsFinite(RotationDegrees))
             throw new ArgumentOutOfRangeException(nameof(RotationDegrees));
+        if (!float.IsFinite(Dolly) || Dolly is < -2 or > 0.85f)
+            throw new ArgumentOutOfRangeException(nameof(Dolly), "Camera dolly must be in [-2, 0.85].");
+        return this;
+    }
+}
+
+public sealed record ViewParallaxState(
+    float Strength,
+    DirectionPoint Anchor,
+    DirectionPoint LimitPercent)
+{
+    public static ViewParallaxState Off { get; } = new(0, new DirectionPoint(50, 50), new DirectionPoint(0, 0));
+
+    public ViewParallaxState Validate()
+    {
+        Anchor.Validate();
+        LimitPercent.Validate();
+        if (!float.IsFinite(Strength) || Strength is < 0 or > 1)
+            throw new ArgumentOutOfRangeException(nameof(Strength), "Parallax strength must be in [0, 1].");
+        if (LimitPercent.X < 0 || LimitPercent.Y < 0)
+            throw new ArgumentOutOfRangeException(nameof(LimitPercent), "Parallax limits cannot be negative.");
+        return this;
+    }
+}
+
+public sealed record ViewIdleState(
+    DirectionPoint AmplitudePercent,
+    double PeriodSeconds,
+    double PhaseRadians = 0)
+{
+    public static ViewIdleState Off { get; } = new(new DirectionPoint(0, 0), 12, 0);
+    public bool IsEnabled => AmplitudePercent.X != 0 || AmplitudePercent.Y != 0;
+
+    public ViewIdleState Validate()
+    {
+        AmplitudePercent.Validate();
+        if (AmplitudePercent.X < 0 || AmplitudePercent.Y < 0)
+            throw new ArgumentOutOfRangeException(nameof(AmplitudePercent), "Idle amplitude cannot be negative.");
+        if (!double.IsFinite(PeriodSeconds) || PeriodSeconds <= 0)
+            throw new ArgumentOutOfRangeException(nameof(PeriodSeconds));
+        if (!double.IsFinite(PhaseRadians))
+            throw new ArgumentOutOfRangeException(nameof(PhaseRadians));
         return this;
     }
 }
@@ -145,7 +194,11 @@ public sealed record ViewPose(DirectionPoint Center, float Zoom, float RotationD
 public sealed record ViewState(
     ViewId Id,
     StageId StageId,
-    ViewPose Pose);
+    ViewPose Pose)
+{
+    public ViewParallaxState Parallax { get; init; } = ViewParallaxState.Off;
+    public ViewIdleState Idle { get; init; } = ViewIdleState.Off;
+}
 
 public sealed record SplitLayout(float Divider = 50, float Angle = 0,
     DirectionPoint? MainAt = null, DirectionPoint? InsetAt = null)
@@ -275,6 +328,8 @@ public sealed record DirectionState(
                 pair.Value.Id != pair.Key)
                 throw new DirectionException($"Direction state has an invalid View '{pair.Key}'.");
             pair.Value.Pose.Validate();
+            pair.Value.Parallax.Validate();
+            pair.Value.Idle.Validate();
             if (string.IsNullOrWhiteSpace(pair.Value.StageId.Value) ||
                 !Stages.ContainsKey(pair.Value.StageId))
                 throw new DirectionReferenceException(

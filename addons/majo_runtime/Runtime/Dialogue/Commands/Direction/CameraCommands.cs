@@ -12,24 +12,27 @@ namespace Majo.Runtime.Dialogue.Commands;
 
 [Command("camera", Category = "Direction")]
 [AtMostOne(nameof(Arguments.Stage), nameof(Arguments.View))]
-[AtLeastOne(nameof(Arguments.Center), nameof(Arguments.Zoom), nameof(Arguments.Rotation), nameof(Arguments.As), nameof(Arguments.Preset))]
+[AtLeastOne(nameof(Arguments.Center), nameof(Arguments.Zoom), nameof(Arguments.Rotation), nameof(Arguments.Dolly), nameof(Arguments.As), nameof(Arguments.Preset))]
 public sealed partial class CameraCommand : RuntimeCommand<CameraCommand.Arguments>
 {
     private readonly IDirectionBeatRuntime beats;
     private readonly IDirectionScopeResolver scopes;
     private readonly IDialogueNodeAccessor nodeAccessor;
     private readonly IDirectionCommandPolicy policy;
+    private readonly CameraEnvironmentPresetCatalog environment;
 
     public CameraCommand(
         IDirectionBeatRuntime beats,
         IDirectionScopeResolver scopes,
         IDialogueNodeAccessor nodeAccessor,
-        IDirectionCommandPolicy policy)
+        IDirectionCommandPolicy policy,
+        CameraEnvironmentPresetCatalog? environment = null)
     {
         this.beats = beats ?? throw new ArgumentNullException(nameof(beats));
         this.scopes = scopes ?? throw new ArgumentNullException(nameof(scopes));
         this.nodeAccessor = nodeAccessor ?? throw new ArgumentNullException(nameof(nodeAccessor));
         this.policy = policy ?? throw new ArgumentNullException(nameof(policy));
+        this.environment = environment ?? new CameraEnvironmentPresetCatalog();
     }
 
     protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
@@ -52,7 +55,13 @@ public sealed partial class CameraCommand : RuntimeCommand<CameraCommand.Argumen
             arguments.Rotation.WasProvided
                 ? DirectionValue.From((float)arguments.Rotation.Value)
                 : preset?.RotationDegrees ?? default,
-            transition);
+            transition)
+        {
+            Dolly = arguments.Dolly.WasProvided
+                ? DirectionValue.From(environment.ResolveDolly(arguments.Dolly.Value!))
+                : preset?.Dolly ?? default,
+            Parallax = preset?.Parallax,
+        };
 
         if (arguments.As.WasProvided && !string.IsNullOrWhiteSpace(arguments.As.Value))
         {
@@ -76,6 +85,7 @@ public sealed partial class CameraCommand : RuntimeCommand<CameraCommand.Argumen
         [Option] CommandValue<PositionRef> Center,
         [Option(Minimum = 0.001, ValueHint = "number")] CommandValue<double> Zoom,
         [Option(ValueHint = "degrees")] CommandValue<double> Rotation,
+        [Option(ValueHint = "neutral|near|back|project preset")] CommandValue<string> Dolly,
         [Option(ValueHint = "shot")] CommandValue<string> As,
         [Option(ValueHint = "kind")] CommandValue<DirectionTransitionId> Via,
         [Group] TimingArguments Timing,
@@ -84,24 +94,27 @@ public sealed partial class CameraCommand : RuntimeCommand<CameraCommand.Argumen
 
 [Command("camera move", Category = "Direction")]
 [AtMostOne(nameof(Arguments.Stage), nameof(Arguments.View))]
-[AtLeastOne(nameof(Arguments.Center), nameof(Arguments.Zoom), nameof(Arguments.Rotation), nameof(Arguments.Preset))]
+[AtLeastOne(nameof(Arguments.Center), nameof(Arguments.Zoom), nameof(Arguments.Rotation), nameof(Arguments.Dolly), nameof(Arguments.Preset))]
 public sealed partial class CameraMoveCommand : RuntimeCommand<CameraMoveCommand.Arguments>
 {
     private readonly IDirectionBeatRuntime beats;
     private readonly IDirectionScopeResolver scopes;
     private readonly IDialogueNodeAccessor nodeAccessor;
     private readonly IDirectionCommandPolicy policy;
+    private readonly CameraEnvironmentPresetCatalog environment;
 
     public CameraMoveCommand(
         IDirectionBeatRuntime beats,
         IDirectionScopeResolver scopes,
         IDialogueNodeAccessor nodeAccessor,
-        IDirectionCommandPolicy policy)
+        IDirectionCommandPolicy policy,
+        CameraEnvironmentPresetCatalog? environment = null)
     {
         this.beats = beats ?? throw new ArgumentNullException(nameof(beats));
         this.scopes = scopes ?? throw new ArgumentNullException(nameof(scopes));
         this.nodeAccessor = nodeAccessor ?? throw new ArgumentNullException(nameof(nodeAccessor));
         this.policy = policy ?? throw new ArgumentNullException(nameof(policy));
+        this.environment = environment ?? new CameraEnvironmentPresetCatalog();
     }
 
     protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
@@ -123,7 +136,13 @@ public sealed partial class CameraMoveCommand : RuntimeCommand<CameraMoveCommand
             arguments.Rotation.WasProvided
                 ? DirectionValue.From((float)arguments.Rotation.Value)
                 : preset?.RotationDegrees ?? default,
-            transition);
+            transition)
+        {
+            Dolly = arguments.Dolly.WasProvided
+                ? DirectionValue.From(environment.ResolveDolly(arguments.Dolly.Value!))
+                : preset?.Dolly ?? default,
+            Parallax = preset?.Parallax,
+        };
 
         await beats.SubmitAsync(
             patch,
@@ -142,6 +161,7 @@ public sealed partial class CameraMoveCommand : RuntimeCommand<CameraMoveCommand
         [Option] CommandValue<PositionRef> Center,
         [Option(Minimum = 0.001, ValueHint = "number")] CommandValue<double> Zoom,
         [Option(ValueHint = "degrees")] CommandValue<double> Rotation,
+        [Option(ValueHint = "neutral|near|back|project preset")] CommandValue<string> Dolly,
         [Group] TimingArguments Timing,
         [Option] CommandValue<string> Preset);
 }
@@ -181,7 +201,10 @@ public sealed partial class CameraResetCommand : RuntimeCommand<CameraResetComma
             DirectionValue.From(new DirectionPoint(50, 50)),
             DirectionValue.From(1f),
             DirectionValue.From(0f),
-            transition);
+            transition)
+        {
+            Dolly = DirectionValue.From(0f),
+        };
 
         await beats.SubmitAsync(
             patch,

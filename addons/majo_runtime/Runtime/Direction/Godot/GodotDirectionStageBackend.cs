@@ -224,12 +224,7 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
             transition,
             drivers,
             easings);
-        try
-        {
-            await prepared.PrepareInputsAsync(cancellationToken);
-            return prepared;
-        }
-        catch { await prepared.DisposeAsync(); throw; }
+        return prepared;
 
     }
 
@@ -386,8 +381,6 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
             TaskCreationOptions.RunContinuationsAsynchronously);
         private GodotProgressTween? clock;
         private IPreparedVisualTransition? preparedTransition;
-        private SubViewport? sourceInput;
-        private SubViewport? targetInput;
         private bool committed;
         private bool rolledBack;
         private bool disposed;
@@ -417,28 +410,6 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
             this.easings = easings ?? BuiltInEasings.CreateDefaultRegistry();
         }
 
-        private Rect2 inputBounds;
-
-        public async Task PrepareInputsAsync(CancellationToken cancellationToken)
-        {
-            if (transition.DurationSeconds <= 0 || transition.Kind == DirectionTransitionId.Cut ||
-                transition.Kind == DirectionTransitionId.Fade) return;
-            inputBounds = GodotDirectionRenderHost.BackdropBounds(surface, source, sourceTexture)
-                .Merge(GodotDirectionRenderHost.BackdropBounds(surface, target, targetTexture));
-            sourceInput = host.PrepareBackdropInput(surface, source, sourceTexture, inputBounds);
-            targetInput = host.PrepareBackdropInput(surface, target, targetTexture, inputBounds);
-            await host.WaitForRenderFenceAsync(cancellationToken);
-            sourceInput.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
-            targetInput.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
-        }
-
-        private void ReleaseInputs()
-        {
-            if (sourceInput is not null && GodotObject.IsInstanceValid(sourceInput)) sourceInput.Free();
-            if (targetInput is not null && GodotObject.IsInstanceValid(targetInput)) targetInput.Free();
-            sourceInput = targetInput = null;
-        }
-
         public Task Settlement => settlement.Task;
 
         public void Commit(DirectionCommitToken token)
@@ -456,19 +427,7 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
                 (source is not null || target is not null);
             if (animate)
             {
-                if (sourceInput is not null)
-                {
-                    var inputState = (source ?? target)! with
-                    {
-                        Fit = BackdropFit.Stretch,
-                        Placement = new BackdropPlacement(new DirectionPoint(
-                            inputBounds.Position.X / surface.Viewport.Size.X * 100,
-                            100 - inputBounds.Position.Y / surface.Viewport.Size.Y * 100), new DirectionPoint(0, 0), 1),
-                        Tint = new DirectionColor(1, 1, 1, 1),
-                    };
-                    host.PublishBackdropTransition(surface.Id, inputState, sourceInput.GetTexture());
-                }
-                else if (source is not null && sourceTexture is not null)
+                if (source is not null && sourceTexture is not null)
                     host.PublishBackdropTransition(surface.Id, source, sourceTexture);
             }
 
@@ -480,11 +439,7 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
             }
 
             var driver = drivers.GetRequired(transition.Kind);
-            var context = new VisualTransitionContext(surface.BackdropTransition, transition,
-                sourceInput?.GetTexture() ?? sourceTexture, targetInput?.GetTexture() ?? targetTexture,
-                SourceIsPremultiplied: sourceInput is not null, TargetIsPremultiplied: targetInput is not null, IsActive: () => host.IsCurrentStageGeneration(surface.Id, generation));
-            preparedTransition = driver.Prepare(context);
-            if (transition.Kind != DirectionTransitionId.Fade) surface.Backdrop.Visible = false;
+            preparedTransition = host.PrepareBackdropVisualTransition(surface.Id, transition, driver);
             clock = host.Animate(transition, easings.GetRequired(transition.Easing), p =>
             {
                 if (host.IsCurrentStageGeneration(surface.Id, generation)) preparedTransition.ApplyProgress(p);
@@ -511,7 +466,6 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
             clock = null;
             preparedTransition?.Dispose();
             preparedTransition = null;
-            ReleaseInputs();
             if (host.IsCurrentStageGeneration(surface.Id, generation))
             {
                 host.PublishBackdrop(surface.Id, source, sourceTexture);
@@ -531,7 +485,6 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
             clock = null;
             preparedTransition?.Dispose();
             preparedTransition = null;
-            ReleaseInputs();
             if (host.IsCurrentStageGeneration(surface.Id, generation))
                 host.ClearBackdropTransition(surface.Id);
             return ValueTask.CompletedTask;
@@ -552,7 +505,6 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
             }
             preparedTransition?.Dispose();
             preparedTransition = null;
-            ReleaseInputs();
             Retire();
             _ = SettleAsync();
         }

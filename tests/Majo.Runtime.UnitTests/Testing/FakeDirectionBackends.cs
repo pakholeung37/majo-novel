@@ -336,6 +336,7 @@ public sealed class RecordingCueExecutor : ITransientDirectionCueExecutor
 public sealed class FakeDirectionBeatRuntime : IDirectionBeatRuntime
 {
     public IDirectionDirective? LastSubmitted { get; private set; }
+    public DirectionCompletionBarrier LastBarrier { get; private set; }
 
     public bool HasOpenBeat => OpenBeatId is not null;
     public string? OpenBeatId { get; set; }
@@ -353,6 +354,7 @@ public sealed class FakeDirectionBeatRuntime : IDirectionBeatRuntime
         CancellationToken cancellationToken = default)
     {
         LastSubmitted = directive;
+        LastBarrier = completion;
         return Task.FromResult<CommittedDirectionTransaction?>(null);
     }
 

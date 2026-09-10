@@ -29,7 +29,7 @@ public sealed class ActorLifecyclePlanTests
         var actor = direction.State.Stages[StageId.Main].Actors[Hero];
         var contributor = new DirectionStateContributor(direction);
         var snapshot = await contributor.CaptureAsync(default);
-        Assert.Equal(3, snapshot.SchemaVersion);
+        Assert.Equal(4, snapshot.SchemaVersion);
         await direction.ClearSceneAsync(new DirectionSceneContext("project", "next", 8), _ => Task.CompletedTask);
         await contributor.CommitPreparedAsync(snapshot, default);
         Assert.Equal(actor, direction.State.Stages[StageId.Main].Actors[Hero]);

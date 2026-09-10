@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue.Yarn;
 using Majo.Runtime.Direction.Core;
+using Majo.Runtime.Direction.Camera;
 
 namespace Majo.Runtime.Dialogue.Commands;
 
@@ -51,9 +52,12 @@ public sealed class DirectionScopeResolver : IDirectionScopeResolver
     private readonly Dictionary<(string Node, string Alias), ViewPosePatch> cameraPresets = new();
     private readonly Dictionary<(string Node, string Name), DirectionPoint> marks = new();
     private readonly Dictionary<string, DirectionPoint> defaultMarks;
+    private readonly CameraEnvironmentPresetCatalog environment;
 
-    public DirectionScopeResolver(IReadOnlyDictionary<string, DirectionPoint>? defaultMarks = null)
+    public DirectionScopeResolver(IReadOnlyDictionary<string, DirectionPoint>? defaultMarks = null,
+        CameraEnvironmentPresetCatalog? environment = null)
     {
+        this.environment = environment ?? new CameraEnvironmentPresetCatalog();
         this.defaultMarks = new Dictionary<string, DirectionPoint>(StringComparer.OrdinalIgnoreCase);
         foreach (var (name, point) in defaultMarks ?? new Dictionary<string, DirectionPoint>
         {
@@ -214,10 +218,23 @@ public sealed class DirectionScopeResolver : IDirectionScopeResolver
         }
         foreach (var mark in directionModule.MarkDefinitions)
             DefineMark(directionModule.NodeId, mark.Name, mark.Position);
-        foreach (var preset in directionModule.CameraPresets)
-            DefineCameraPreset(directionModule.NodeId, preset.Name, new ViewPosePatch(ViewId.Main,
-                DirectionValue.From(ResolvePosition(directionModule.NodeId, PositionRefConverter.Instance.Parse(preset.Center))),
-                DirectionValue.From(preset.Zoom), DirectionValue.From(preset.Rotation), DirectionTransitionSpec.Cut));
+        var definitions = directionModule.CameraPresets.ToDictionary(preset => preset.Name, StringComparer.Ordinal);
+        var resolving = new HashSet<string>(StringComparer.Ordinal);
+        var resolved = new HashSet<string>(StringComparer.Ordinal);
+        void ResolveDefinition(string name)
+        {
+            if (resolved.Contains(name)) return;
+            if (!definitions.TryGetValue(name, out var definition))
+                throw new DirectionReferenceException($"Camera preset '{name}' is not defined in Node '{directionModule.NodeId}'.");
+            if (!resolving.Add(name))
+                throw new DirectionReferenceException($"Camera preset inheritance cycle at '{name}' in Node '{directionModule.NodeId}'.");
+            if (definition.Options?.TryGetValue("extends", out var parent) == true) ResolveDefinition(parent);
+            DefineCameraPreset(directionModule.NodeId, name,
+                CameraPresetDefinition.Resolve(directionModule.NodeId, definition, this, environment));
+            resolving.Remove(name);
+            resolved.Add(name);
+        }
+        foreach (var name in definitions.Keys) ResolveDefinition(name);
         activeModule = directionModule;
     }
 
