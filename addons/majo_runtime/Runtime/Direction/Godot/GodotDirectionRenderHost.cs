@@ -224,6 +224,7 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
         owner.AddChild(StageViewport);
         owner.AddChild(ViewViewport);
         owner.AddChild(ScreenViewport);
+        RenderingServer.ViewportSetParentViewport(ViewViewport.GetViewportRid(), ScreenViewport.GetViewportRid());
         owner.AddChild(OutputLayer);
         Resize();
         ViewContent.Texture = StageViewport.GetTexture();
@@ -1130,6 +1131,9 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
         var surface = new GodotDirectionViewSurface(viewId, viewport, canvas, transform, content, viewTransition);
         views.Add(viewId, surface);
         owner.AddChild(viewport);
+        // Screen samples this View. Declare the dependency so a same-frame camera cut
+        // renders the new pose before Screen reads its texture, regardless of creation order.
+        RenderingServer.ViewportSetParentViewport(viewport.GetViewportRid(), ScreenViewport.GetViewportRid());
         viewport.Size = ViewViewport.Size;
         surface.ContentViewport.Size = viewport.Size;
         surface.BackgroundViewport.Size = viewport.Size;

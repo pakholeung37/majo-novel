@@ -14,6 +14,7 @@ namespace Majo.Runtime.Actors.Godot;
 /// <summary>Owns two actor-local inputs. Neither input captures the scene behind the actor.</summary>
 internal sealed class GodotActorAppearanceTransition : IPreparedVisualTransition
 {
+    private readonly GodotActorCapturePool.Capture capture;
     private readonly SubViewport source;
     private readonly SubViewport target;
     private readonly Sprite2D overlay;
@@ -28,20 +29,20 @@ internal sealed class GodotActorAppearanceTransition : IPreparedVisualTransition
     {
         this.showOriginal = showOriginal;
         this.publishOverlay = publishOverlay;
-        source = CreateInput("AppearanceSource", sourceContent, bounds);
-        target = CreateInput("AppearanceTarget", targetContent, bounds);
+        capture = GodotActorCapturePool.For(owner).Acquire(sourceContent, targetContent, bounds);
+        source = capture.Source;
+        target = capture.Target;
         overlay = new Sprite2D
         {
             Name = $"{owner.Name}_DissolveOverlay",
             Texture = target.GetTexture(),
             Centered = false,
             Position = bounds.Position,
+            Scale = bounds.Size.Ceil() / (Vector2)target.Size,
             Visible = false,
             VisibilityLayer = owner.VisibilityLayer,
             Modulate = new Color(1, 1, 1, opacity),
         };
-        owner.AddChild(source);
-        owner.AddChild(target);
         owner.AddChild(overlay);
     }
 
@@ -82,7 +83,9 @@ internal sealed class GodotActorAppearanceTransition : IPreparedVisualTransition
     {
         var staging = new Node2D
         {
-            Name = "PreparedAppearance", Visible = false, VisibilityLayer = owner.VisibilityLayer,
+            Name = "PreparedAppearance",
+            Visible = false,
+            VisibilityLayer = owner.VisibilityLayer,
         };
         owner.GetParent().AddChild(staging);
         try
@@ -117,8 +120,7 @@ internal sealed class GodotActorAppearanceTransition : IPreparedVisualTransition
         public void Commit()
         {
             if (disposed || committed) throw new InvalidOperationException("Appearance is no longer preparable.");
-            effect.source.Reparent(owner, false);
-            effect.target.Reparent(owner, false);
+            // Leased inputs stay in the pool; only the visible overlay follows the actor.
             effect.overlay.Reparent(owner, false);
             effect.overlay.VisibilityLayer = owner.VisibilityLayer;
             committed = true;
@@ -152,22 +154,6 @@ internal sealed class GodotActorAppearanceTransition : IPreparedVisualTransition
             await tree.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
     }
 
-    private static SubViewport CreateInput(string name, CanvasItem content, Rect2 bounds)
-    {
-        var viewport = new SubViewport
-        {
-            Name = name,
-            Size = (Vector2I)bounds.Size.Ceil(),
-            TransparentBg = true,
-            RenderTargetUpdateMode = SubViewport.UpdateMode.Always,
-        };
-        var offset = new Node2D { Position = -bounds.Position };
-        viewport.AddChild(offset);
-        offset.AddChild(content);
-        content.Visible = true;
-        return viewport;
-    }
-
     public void ApplyProgress(float progress) => effect?.ApplyProgress(progress);
 
     public void Dispose()
@@ -183,8 +169,7 @@ internal sealed class GodotActorAppearanceTransition : IPreparedVisualTransition
             {
                 publishOverlay(null);
                 if (GodotObject.IsInstanceValid(overlay)) overlay.Free();
-                if (GodotObject.IsInstanceValid(source)) source.Free();
-                if (GodotObject.IsInstanceValid(target)) target.Free();
+                capture.Release();
             }
         }
     }

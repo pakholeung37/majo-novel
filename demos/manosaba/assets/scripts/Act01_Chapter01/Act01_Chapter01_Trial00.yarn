@@ -115,11 +115,10 @@ Leia: 好，那就拜托雪莉你讲一下，[br /]你找到的证据是什么�
 
 <<character Sherry appearance:Default,ArmR12>>
 
-<<camera view:trial_b preset:sherry_close center:176.25,78 via:cut>>
 <<beat begin>>
 <<camera view:trial_b preset:sherry_close via:cut>>
 <<screen show trial_b via:cut>>
-<<beat end wait:false>>
+<<beat end>>
 <<wait 0.2>>
 Sherry: 好的！交给我吧！ #line:0101Trial00_Sherry003
 

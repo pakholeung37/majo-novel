@@ -1,11 +1,11 @@
 #nullable enable
 
-using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Resources;
+using Majo.Runtime.Resources.Godot;
 
 namespace Majo.Demos.Manosaba;
 
@@ -19,21 +19,11 @@ public static class ManosabaCourtPreparation
         using var lease = context.Resources.LeaseAsync<Texture2D>(new ResourceKey("backgrounds/Court_Wall"),
             cancellationToken: cancellationToken);
         await lease.Completion;
-        var source = lease.Resource!;
-        using var tile = source.GetImage();
-        if (tile is null || tile.IsEmpty()) throw new InvalidOperationException("Court wall has no readable image.");
-        if (tile.IsCompressed()) tile.Decompress();
-        tile.Convert(Image.Format.Rgba8);
-        // Thirteen seats plus one guard panel at either end; 15 × 1024 fits the demo's texture budget; stage scale remains a script choice.
-        tile.Resize(1024, 1024, Image.Interpolation.Lanczos);
-        using var panorama = Image.CreateEmpty(15 * 1024, 1024, false, Image.Format.Rgba8);
-        for (var seat = 0; seat < 15; seat++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            panorama.BlitRect(tile, new Rect2I(0, 0, 1024, 1024), new Vector2I(seat * 1024, 0));
-        }
         cancellationToken.ThrowIfCancellationRequested();
-        var texture = ImageTexture.CreateFromImage(panorama);
+        // Preserve the script's 15 × 1024 logical strip (13 seats + two guards).
+        // Canvas drawing references the original wall for each panel; no readback,
+        // resampling, panorama allocation, or additional GPU texture upload.
+        var texture = new HorizontalRepeatTexture2D(lease.Resource!, new Vector2I(1024, 1024), 15);
         try { context.Resources.Register<Texture2D>(key, texture, value => value.Dispose()); }
         catch { texture.Dispose(); throw; }
     }

@@ -32,16 +32,19 @@ public sealed class DirectionStateContributor : IPreparedStateContributor, IStat
     public int SchemaVersion => 5;
     public StateContributorCapability Capability => StateContributorCapability.DurableRollback;
 
-    public ValueTask<StateRecord> CaptureAsync(CancellationToken cancellationToken)
+    public async ValueTask<StateRecord> CaptureAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var state = direction.State;
         state.Validate();
-        return ValueTask.FromResult(new StateRecord(
-            Key,
-            Scope,
-            SchemaVersion,
-            StateJson.Serialize(ToPayload(state))));
+        // Read and detach the state on its owning thread while the capture gate
+        // is held. Only immutable managed payload data reaches the worker; no
+        // Godot objects or live coordinator state are accessed there.
+        var payload = ToPayload(state);
+        var record = await Task.Run(() => new StateRecord(
+            Key, Scope, SchemaVersion, StateJson.Serialize(payload)), cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        return record;
     }
 
     public ValueTask PreflightAsync(StateRecord record, CancellationToken cancellationToken)

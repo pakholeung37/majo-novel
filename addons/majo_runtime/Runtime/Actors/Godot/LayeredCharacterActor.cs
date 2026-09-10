@@ -307,6 +307,20 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IActorTr
         canvasBounds = CalculateCanvasBounds();
     }
 
+    internal async Task WarmAppearanceRenderingAsync(CancellationToken cancellationToken)
+    {
+        // Populate both retained capture pairs before publishing this actor. This
+        // also exercises its existing layer materials without changing appearance.
+        using var first = await GodotActorAppearanceTransition.PrepareAsync(View,
+            CreateComposite(activeLayers), CreateComposite(activeLayers), canvasBounds, 1,
+            _ => { }, _ => { }, transitions.GetRequired(DirectionTransitionId.Dissolve),
+            new AnimationSpec(.1), cancellationToken);
+        using var second = await GodotActorAppearanceTransition.PrepareAsync(View,
+            CreateComposite(activeLayers), CreateComposite(activeLayers), canvasBounds, 1,
+            _ => { }, _ => { }, transitions.GetRequired(DirectionTransitionId.Dissolve),
+            new AnimationSpec(.1), cancellationToken);
+    }
+
     private void BuildLayerViews(
         LayeredCharacterManifest manifest,
         string manifestPath,

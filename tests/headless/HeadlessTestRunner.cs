@@ -59,6 +59,16 @@ public partial class HeadlessTestRunner : Node
 
     private async Task RunSuiteAsync()
     {
+        if (OS.GetCmdlineUserArgs().Contains("--majo-camera-cut"))
+        {
+            await ValidateCameraCutFrameAsync();
+            return;
+        }
+        if (OS.GetCmdlineUserArgs().Contains("--majo-repeated-wall"))
+        {
+            await ValidateRepeatedWallAsync();
+            return;
+        }
         if (OS.GetCmdlineUserArgs().Contains("--majo-layered-masks"))
         {
             await ValidateLayeredMasksAsync();

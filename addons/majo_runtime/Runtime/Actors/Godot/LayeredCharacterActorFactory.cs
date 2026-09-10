@@ -225,6 +225,7 @@ public sealed class LayeredCharacterActorFactory : IConventionActorFactory
                 atlases,
                 frameClock,
                 cancellationToken);
+            await actor.WarmAppearanceRenderingAsync(cancellationToken);
             actor.SetVisible(true);
             return actor;
         }

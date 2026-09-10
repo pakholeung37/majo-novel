@@ -6,6 +6,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using Godot;
 using Majo.Runtime.Resources;
+using Majo.Runtime.Resources.Godot;
 
 namespace Majo.Runtime.UI.Diagnostics;
 
@@ -34,7 +35,12 @@ internal sealed class ResourceMemorySampler
             if (resource is Texture2D texture)
             {
                 // Atlas regions share the backing texture's allocation.
-                while (texture is AtlasTexture atlas && atlas.Atlas is not null) texture = atlas.Atlas;
+                while (true)
+                {
+                    if (texture is AtlasTexture atlas && atlas.Atlas is not null) texture = atlas.Atlas;
+                    else if (texture is HorizontalRepeatTexture2D repeated) texture = repeated.Source;
+                    else break;
+                }
                 if (!textures.Add(texture.GetRid())) continue;
                 var size = EstimateTexture(texture);
                 if (size is null) unknown++;
