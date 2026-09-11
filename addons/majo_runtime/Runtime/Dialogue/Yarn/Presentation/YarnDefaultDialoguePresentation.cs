@@ -182,6 +182,7 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, I
         cancellationToken.ThrowIfCancellationRequested();
         inputPresenter?.ResetInput();
         speakerNamePresenter?.Reset();
+        linePresenter?.ResetVisibility();
         markupBridge?.ResetState();
         return Task.CompletedTask;
     }
@@ -205,6 +206,7 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, I
 
         inputPresenter?.ResetInput();
         speakerNamePresenter?.Reset();
+        linePresenter?.ResetVisibility();
         backend.SetPresentationQuiescenceWaiter(null);
         if (markupBridge is not null)
         {
@@ -326,6 +328,7 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, I
 
         presenter.typewriterStyle = LinePresenter.TypewriterType.ByLetter;
         presenter.lettersPerSecond = configuration.LettersPerSecond;
+        presenter.HideDebounceMilliseconds = 50;
         presenter.useFadeEffect = configuration.UseFadeEffect;
         presenter.fadeUpDuration = (float)configuration.FadeUpDurationSeconds;
         presenter.fadeDownDuration = (float)configuration.FadeDownDurationSeconds;

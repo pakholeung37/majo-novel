@@ -24,6 +24,12 @@ public partial class HeadlessTestRunner
 
     private async Task ValidateDefaultPresentationAsync()
     {
+        await ValidateDefaultPresentationAsync(false);
+        await ValidateDefaultPresentationAsync(true);
+    }
+
+    private async Task ValidateDefaultPresentationAsync(bool useFadeEffect)
+    {
         var customScene = new PackedScene();
         var defaultScene = ResourceLoader.Load<PackedScene>(
             DialoguePresentationConfiguration.DefaultScenePath);
@@ -41,7 +47,9 @@ public partial class HeadlessTestRunner
         configuration.Presentation!.Enabled = true;
         configuration.Presentation.PresenterScene = customScene;
         configuration.Presentation.LettersPerSecond = 1;
-        configuration.Presentation.UseFadeEffect = false;
+        configuration.Presentation.UseFadeEffect = useFadeEffect;
+        configuration.Presentation.FadeUpDurationSeconds = 0.02;
+        configuration.Presentation.FadeDownDurationSeconds = 0.02;
 
         var handlerOrder = new List<string>();
         var firstHandler = new PresentationMarkupProbe("first", handlerOrder);
@@ -157,10 +165,11 @@ public partial class HeadlessTestRunner
 
         await InjectMouseClickAsync(
             nativeLinePresenter.presenterControl!.GetGlobalRect().GetCenter());
-        Assert(characterNamePanel?.Visible == true,
-            "Default presentation hid the speaker panel without its debounce buffer.");
+        Assert(characterNamePanel?.Visible == true && nativeLinePresenter.presenterControl.Visible,
+            "Default presentation hid the speaker or dialogue panel without its debounce buffer.");
         await WaitForConditionAsync(
-            () => characterNamePanel?.Visible == false && !dialogue.IsPresentingOptions,
+            () => characterNamePanel?.Visible == false &&
+                !nativeLinePresenter.presenterControl.Visible && !dialogue.IsPresentingOptions,
             1);
         Assert(characterNamePanel?.Visible == false,
             "Default presentation did not hide the speaker after the debounce expired during a command.");
@@ -198,6 +207,24 @@ public partial class HeadlessTestRunner
                 presentation.IsLineActive,
             2);
 
+        await InjectKeyAsync(Key.Space);
+        await WaitForConditionAsync(() => presentation.IsLineDisplayComplete, 2);
+        var panelHiddenBetweenLines = false;
+        void ObservePanelVisibility()
+        {
+            panelHiddenBetweenLines |= !nativeLinePresenter.presenterControl.Visible;
+        }
+        nativeLinePresenter.presenterControl.VisibilityChanged += ObservePanelVisibility;
+        await InjectKeyAsync(Key.Space);
+        await WaitForConditionAsync(
+            () => dialogue.CurrentLineId == "line:presentation-consecutive" && presentation.IsLineActive,
+            2);
+        // Remain on the next line past the previous line's hide deadline.
+        await ToSignal(GetTree().CreateTimer(0.1), SceneTreeTimer.SignalName.Timeout);
+        nativeLinePresenter.presenterControl.VisibilityChanged -= ObservePanelVisibility;
+        Assert(!panelHiddenBetweenLines && nativeLinePresenter.presenterControl.Visible &&
+                nativeLinePresenter.presenterControl.Modulate.A == 1,
+            "Default dialogue panel flashed or retained a stale hide between consecutive lines.");
         await InjectKeyAsync(Key.Space);
         await WaitForConditionAsync(() => presentation.IsLineDisplayComplete, 2);
         await InjectKeyAsync(Key.Space);

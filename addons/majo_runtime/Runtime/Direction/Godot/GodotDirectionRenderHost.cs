@@ -46,6 +46,7 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
     private static readonly Vector2I FallbackResolution = new(1280, 720);
     private readonly Node owner;
     private readonly Vector2I configuredResolution;
+    private Vector2I logicalViewSize = FallbackResolution;
     private readonly int maxStages;
     private readonly IFrameClock? frameClock;
     private readonly IRuntimeLogger logger;
@@ -692,7 +693,8 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
     {
         var pose = surface.CurrentPose;
         var delta = surface.ModifierDelta;
-        var size = new Vector2(surface.Viewport.Size.X, surface.Viewport.Size.Y);
+        var size = (Vector2)logicalViewSize;
+        var rasterScale = Transform2D.Identity.Scaled((Vector2)surface.Viewport.Size / size);
         var modifierBasis = new Transform2D(Mathf.DegToRad(delta.RotationDegreesOffset),
             new Vector2(delta.ZoomMultiplier, delta.ZoomMultiplier), 0, Vector2.Zero);
         var modifier = new Transform2D(modifierBasis.X, modifierBasis.Y,
@@ -705,8 +707,8 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
             surface.CurrentIdle,
             distance,
             new DirectionPoint(size.X, size.Y));
-        surface.ContentViewport.CanvasTransform = modifier * ToGodot(projection.Subject, Vector2.Zero);
-        surface.BackgroundViewport.CanvasTransform = modifier * ToGodot(projection.Background, Vector2.Zero);
+        surface.ContentViewport.CanvasTransform = rasterScale * modifier * ToGodot(projection.Subject, Vector2.Zero);
+        surface.BackgroundViewport.CanvasTransform = rasterScale * modifier * ToGodot(projection.Background, Vector2.Zero);
         var transitionDistance = view is null ? distance
             : stages[view.StageId].TransitionBackdrop?.Distance ?? distance;
         var transitionProjection = CameraProjectionCalculator.Calculate(
@@ -715,16 +717,16 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
             surface.CurrentIdle,
             transitionDistance,
             new DirectionPoint(size.X, size.Y));
-        surface.TransitionBackgroundViewport.CanvasTransform = modifier * ToGodot(
+        surface.TransitionBackgroundViewport.CanvasTransform = rasterScale * modifier * ToGodot(
             transitionProjection.Background, Vector2.Zero);
-        surface.Transform.Transform = surface.ContentViewport.CanvasTransform;
+        surface.Transform.Transform = modifier * ToGodot(projection.Subject, Vector2.Zero);
         if (view is not null)
         {
             var stage = stages[view.StageId];
             CheckBackdropCoverage(surface, stage, stage.Backdrop, stage.PublishedBackdrop,
-                FromGodot(surface.BackgroundViewport.CanvasTransform), Vector2.Zero, "target");
+                FromGodot(modifier * ToGodot(projection.Background, Vector2.Zero)), Vector2.Zero, "target");
             CheckBackdropCoverage(surface, stage, stage.BackdropTransition, stage.TransitionBackdrop,
-                FromGodot(surface.TransitionBackgroundViewport.CanvasTransform), Vector2.Zero, "source");
+                FromGodot(modifier * ToGodot(transitionProjection.Background, Vector2.Zero)), Vector2.Zero, "source");
         }
     }
 
@@ -748,7 +750,7 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
             new DirectionPoint(bounds.Position.X, bounds.Position.Y),
             new DirectionPoint(bounds.Size.X, bounds.Size.Y),
             withModifier,
-            new DirectionPoint(view.Viewport.Size.X, view.Viewport.Size.Y));
+            new DirectionPoint(logicalViewSize.X, logicalViewSize.Y));
         var key = $"{view.Id.Value}/{stage.Id.Value}/{input}/{state.Resource.Path}";
         if (result.IsCovered)
         {
@@ -946,34 +948,36 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
                     Math.Max(1, Mathf.RoundToInt(visibleSize.X)),
                     Math.Max(1, Mathf.RoundToInt(visibleSize.Y)))
                 : FallbackResolution;
+        logicalViewSize = resolution;
+        var outputSize = visibleSize.X > 0 && visibleSize.Y > 0 ? ToSize(visibleSize) : resolution;
+        // Layout remains in authored coordinates. Only raster targets follow the
+        // window's stretch scale, avoiding a 1080p image enlarged on a 1440p display.
+        // Headless rendering retains deterministic reference-sized targets.
+        var stretch = owner.GetViewport().GetStretchTransform().Scale.Abs();
+        var density = DisplayServer.GetName() == "headless" ? 1f :
+            Mathf.Max(1f, outputSize.Y * Mathf.Max(stretch.X, stretch.Y) / resolution.Y);
+        var rasterSize = ToSize((Vector2)resolution * density);
         foreach (var surface in stages.Values) ResizeStage(surface, resolution);
         foreach (var view in RenderViews)
         {
-            view.Viewport.Size = resolution;
-            view.ContentViewport.Size = resolution;
-            view.BackgroundViewport.Size = resolution;
-            view.TransitionBackgroundViewport.Size = resolution;
-            view.CompositeViewport.Size = resolution;
-            SetFullRect(view.Output, resolution);
-            SetFullRect(view.BackgroundOutput, resolution);
-            SetFullRect(view.TransitionBackgroundOutput, resolution);
-            SetFullRect(view.TransitionBlendOutput, resolution);
-            SetFullRect(view.CompositeOutput, resolution);
-            SetFullRect(view.Canvas, resolution);
-            SetFullRect(view.Content, resolution);
-            SetFullRect(view.TransitionSource, resolution);
+            view.Viewport.Size = rasterSize;
+            view.ContentViewport.Size = rasterSize;
+            view.BackgroundViewport.Size = rasterSize;
+            view.TransitionBackgroundViewport.Size = rasterSize;
+            view.CompositeViewport.Size = rasterSize;
+            SetFullRect(view.Output, rasterSize);
+            SetFullRect(view.BackgroundOutput, rasterSize);
+            SetFullRect(view.TransitionBackgroundOutput, rasterSize);
+            SetFullRect(view.TransitionBlendOutput, rasterSize);
+            SetFullRect(view.CompositeOutput, rasterSize);
+            SetFullRect(view.Canvas, rasterSize);
+            SetFullRect(view.Content, rasterSize);
+            SetFullRect(view.TransitionSource, rasterSize);
             if (view.PublishedView is not null)
-                ApplyViewPose(view.Id, view.CurrentPose);
+                ApplyViewTransform(view);
         }
-        var outputSize = visibleSize.X > 0 && visibleSize.Y > 0
-            ? ToSize(visibleSize)
-            : resolution;
-        // Keep composition at the view's pixel density, rather than downsampling to
-        // root canvas coordinates before the window stretches it back up. Preserve
-        // the output aspect ratio for expanded windows; only the final output uses
-        // logical canvas dimensions.
         var screenSize = ToSize(new Vector2(
-            (float)outputSize.X / outputSize.Y * resolution.Y, resolution.Y));
+            (float)outputSize.X / outputSize.Y * rasterSize.Y, rasterSize.Y));
         ScreenViewport.Size = screenSize;
         SetFullRect(ScreenCanvas, screenSize);
         SetFullRect(LiveOutput, outputSize);

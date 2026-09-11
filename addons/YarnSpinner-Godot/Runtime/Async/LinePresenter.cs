@@ -104,6 +104,46 @@ public partial class LinePresenter : Node, DialoguePresenterBase
     /// <seealso cref="fadeDownDuration"/>
     [Export] public bool useFadeEffect = true;
 
+    // Opt-in buffer for hosts that keep the dialogue panel visible between lines.
+    public ulong HideDebounceMilliseconds { get; set; }
+    private ulong? pendingHideDeadline;
+    private Tween? hideTween;
+
+    public void ResetVisibility()
+    {
+        CancelPendingHide();
+        if (IsInstanceValid(presenterControl)) presenterControl!.Visible = false;
+    }
+
+    private void CancelPendingHide()
+    {
+        pendingHideDeadline = null;
+        hideTween?.Kill();
+        hideTween = null;
+    }
+
+    public override void _ExitTree() => CancelPendingHide();
+
+    public override void _Process(double delta)
+    {
+        if (pendingHideDeadline is not ulong deadline || Time.GetTicksMsec() < deadline)
+            return;
+
+        pendingHideDeadline = null;
+        if (!IsInstanceValid(presenterControl)) return;
+        if (useFadeEffect && fadeDownDuration > 0)
+        {
+            hideTween = CreateTween();
+            hideTween.TweenProperty(presenterControl!, "modulate:a", 0f, fadeDownDuration);
+            hideTween.TweenCallback(Callable.From(ResetVisibility));
+        }
+        else
+        {
+            ResetVisibility();
+        }
+    }
+
+
     /// <summary>
     /// The time that the fade effect will take to fade lines in.
     /// </summary>
@@ -190,11 +230,7 @@ public partial class LinePresenter : Node, DialoguePresenterBase
     /// <inheritdoc/>
     public YarnTask OnDialogueCompleteAsync()
     {
-        if (IsInstanceValid(presenterControl))
-        {
-            presenterControl!.Visible = false;
-        }
-
+        ResetVisibility();
         return YarnTask.CompletedTask;
     }
 
@@ -204,6 +240,7 @@ public partial class LinePresenter : Node, DialoguePresenterBase
     /// <inheritdoc/>
     public YarnTask OnDialogueStartedAsync()
     {
+        if (HideDebounceMilliseconds > 0) ResetVisibility();
         return YarnTask.CompletedTask;
     }
 
@@ -288,6 +325,9 @@ public partial class LinePresenter : Node, DialoguePresenterBase
             return;
         }
 
+        var continuingPanel = HideDebounceMilliseconds > 0 &&
+            IsInstanceValid(presenterControl) && presenterControl!.Visible;
+        CancelPendingHide();
         MarkupParseResult text;
 
         if (!IsInstanceValid(characterNameText))
@@ -339,7 +379,10 @@ public partial class LinePresenter : Node, DialoguePresenterBase
             presenterControl!.Visible = true;
             if (useFadeEffect)
             {
-                await Effects.FadeAlphaAsync(presenterControl, 0, 1, fadeUpDuration, token.HurryUpToken);
+                await Effects.FadeAlphaAsync(presenterControl,
+                    continuingPanel ? presenterControl.Modulate.A : 0, 1,
+                    continuingPanel && presenterControl.Modulate.A >= 1 ? 0 : fadeUpDuration,
+                    token.HurryUpToken);
                 if (!IsInstanceValid(this))
                 {
                     return;
@@ -371,7 +414,12 @@ public partial class LinePresenter : Node, DialoguePresenterBase
 
         Typewriter.ContentWillDismiss();
 
-        if (IsInstanceValid(presenterControl))
+        if (HideDebounceMilliseconds > 0)
+        {
+            // Return immediately so Yarn can deliver the next line and cancel the hide.
+            pendingHideDeadline = Time.GetTicksMsec() + HideDebounceMilliseconds;
+        }
+        else if (IsInstanceValid(presenterControl))
         {
             // we fade down the UI
             if (useFadeEffect)
@@ -398,6 +446,7 @@ public partial class LinePresenter : Node, DialoguePresenterBase
     public YarnTask<DialogueOption?> RunOptionsAsync(DialogueOption[] dialogueOptions,
         CancellationToken cancellationToken)
     {
+        if (HideDebounceMilliseconds > 0) ResetVisibility();
         return YarnTask<DialogueOption?>.FromResult(null);
     }
 

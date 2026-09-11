@@ -7,4 +7,5 @@ Narrator: [mystery count=3 enabled=true label="alpha"][b]A deliberately long fir
     Narrator: first route selected #line:presentation-first-option
 -> Second route
     Narrator: second route selected #line:presentation-second-option
+    Narrator: consecutive line #line:presentation-consecutive
 ===
