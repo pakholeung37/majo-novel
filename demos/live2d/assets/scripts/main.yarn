@@ -1,0 +1,49 @@
+title: Start
+tags: live2d witch daily life demo
+scene: live2d_demo
+---
+<<curtain closed duration:0>>
+<<backdrop witch-workshop scale:1.2 via:cut>>
+<<character mao appearance:sleepy at:center scale:1 via:cut>>
+<<curtain open duration:0.8 wait:true>>
+
+旁白: 清晨六点四十分，见习魔女真央正在进行一项高风险仪式——准时起床。
+<<live2d motion mao motion:puzzled>>
+真央: 奇怪，我明明给闹钟施了“响三遍”的魔法……
+<<character mao appearance:shocked via:cut>>
+<<camera fx shake duration:0.35 strength:12 frequency:28 wait:true>>
+旁白: 炉子里的粥锅突然打了个喷嚏，喷出一只由燕麦组成的小龙。
+真央: 啊！原来第三遍是锅在响！
+
+<<live2d motion mao motion:panic>>
+<<camera move center:50,46 zoom:1.16 duration:0.7 ease:cubic-out wait:true>>
+<<character mao appearance:serious via:cut>>
+真央: 镇定。魔女守则第七条：早餐逃跑时，先关窗，再拿勺。
+<<live2d motion mao motion:magic>>
+<<camera fx pulse duration:0.5 strength:0.12 wait:true>>
+旁白: 一阵星光闪过，小龙变回了粥，还非常懂礼貌地自己撒上肉桂粉。
+<<character mao appearance:sparkle via:cut>>
+真央: 完美！这叫全自动摆盘，不叫事故。
+
+<<camera reset via:dissolve duration:0.5 wait:true>>
+<<curtain closed duration:0.45 wait:true>>
+<<backdrop witch-rooftop scale:1.2 via:cut>>
+<<character mao appearance:neutral at:right scale:0.95 via:cut>>
+<<curtain open duration:0.65 wait:true>>
+旁白: 八点整，屋顶花园。今日课程：扫帚的日常保养。
+<<live2d motion mao motion:wave>>
+真央: 大家早。记住，扫帚和猫一样，顺着毛摸就很配合。
+<<character mao appearance:smug via:cut>>
+真央: 至于逆着摸——
+<<camera move center:42,49 zoom:1.1 rotation:-1.5 duration:0.45 ease:sine-out wait:true>>
+<<live2d motion mao motion:flourish>>
+旁白: 三把扫帚同时起飞，把晾衣绳上的袜子排成了“禁止逆毛”的警告标志。
+<<character mao appearance:blush via:cut>>
+真央: ……这也是教学的一部分。
+
+<<camera move center:50,50 zoom:1 rotation:0 duration:0.55 ease:sine-in-out wait:true>>
+<<live2d motion mao motion:cheer>>
+<<character mao appearance:smile via:cut>>
+真央: 总之，粥没有糊，袜子也只飞丢了一只。今天是非常成功的魔女日常！
+旁白: 远处，一只穿着条纹袜的乌鸦表示赞同。
+===

@@ -1,0 +1,14 @@
+[remap]
+
+importer="yarnscript"
+type="Resource"
+uid="uid://kuuoodt3ea24"
+path="res://.godot/imported/main.yarn-75daa07732ba6032c97617f8521ed64a.tres"
+
+[deps]
+
+source_file="res://demos/live2d/assets/scripts/main.yarn"
+dest_files=["res://.godot/imported/main.yarn-75daa07732ba6032c97617f8521ed64a.tres"]
+
+[params]
+

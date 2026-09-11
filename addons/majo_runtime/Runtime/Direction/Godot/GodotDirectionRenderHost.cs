@@ -225,6 +225,7 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
         owner.AddChild(ViewViewport);
         owner.AddChild(ScreenViewport);
         RenderingServer.ViewportSetParentViewport(ViewViewport.GetViewportRid(), ScreenViewport.GetViewportRid());
+        BindStageRenderDependency(StageViewport);
         owner.AddChild(OutputLayer);
         Resize();
         ViewContent.Texture = StageViewport.GetTexture();
@@ -1077,6 +1078,7 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
         AssignVisibilityLayer(actors, SubjectVisibilityLayer);
         stages.Add(stageId, surface);
         owner.AddChild(viewport);
+        BindStageRenderDependency(viewport);
         ResizeStage(surface, StageViewport.Size);
         if (isInitialized)
             viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
@@ -1084,6 +1086,19 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
     }
 
     internal bool HasStage(StageId stageId) => stages.ContainsKey(stageId);
+
+    private void BindStageRenderDependency(SubViewport viewport)
+    {
+        // Views draw the shared Stage World2D directly. Actor-owned render targets
+        // (for example Live2D clipping masks) must finish before ANY View draws it.
+        // Anchor every Stage below the permanent main View's content pass: Godot
+        // sorts viewports by parent depth, placing Stages and their descendants
+        // ahead of all equally deep View content/background passes, including
+        // secondary Views. Parenting only to Screen or View is not deep enough.
+        RenderingServer.ViewportSetParentViewport(
+            viewport.GetViewportRid(),
+            views[ViewId.Main].ContentViewport.GetViewportRid());
+    }
 
     internal void ReleasePreparedStage(StageId stageId)
     {
