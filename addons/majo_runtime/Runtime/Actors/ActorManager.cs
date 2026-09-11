@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Majo.Runtime.Core;
@@ -13,8 +14,12 @@ namespace Majo.Runtime.Actors;
 
 public sealed class ActorManager : IActorManager, IActorReplacementSource, IStateMutationParticipant, IDisposable
 {
+    private static readonly ConditionalWeakTable<IActor, ActorManager> ActorOwners = new();
+    private static readonly object ActorOwnerGate = new();
     private readonly object gate = new();
     private readonly Dictionary<string, ActorDefinition> definitions =
+        new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ActorDefinition> unsupportedDefinitions =
         new(StringComparer.Ordinal);
     private readonly Dictionary<string, IActorFactory> factories =
         new(StringComparer.Ordinal);
@@ -36,7 +41,7 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
         if (mutationGate is not null && !ReferenceEquals(mutationGate, gate))
             throw new StateCompatibilityException("Actor manager is already bound to another runtime's state mutation gate.");
         mutationGate = gate;
-        lock (gate)
+        lock (this.gate)
         {
             foreach (var actor in actors.Values) BindActor(actor);
         }
@@ -47,7 +52,8 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
         IEnumerable<IActorFactory>? factories = null,
         ILocaleManager? locales = null,
         IRuntimeLogger? logger = null,
-        ActorCreationConventions? conventions = null)
+        ActorCreationConventions? conventions = null,
+        IEnumerable<ActorDefinition>? unsupportedDefinitions = null)
     {
         this.locales = locales;
         this.logger = logger ?? NullRuntimeLogger.Instance;
@@ -59,6 +65,12 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
             {
                 throw new DuplicateActorIdException(definition.Id);
             }
+        }
+        foreach (var definition in unsupportedDefinitions ?? Array.Empty<ActorDefinition>())
+        {
+            if (this.definitions.ContainsKey(definition.Id) ||
+                !this.unsupportedDefinitions.TryAdd(definition.Id, definition))
+                throw new DuplicateActorIdException(definition.Id);
         }
 
         if (factories is null)
@@ -111,12 +123,8 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
 
         foreach (var definition in definitions.Values)
         {
-            if (!factories.TryGetValue(definition.FactoryId, out var factory))
-            {
+            if (!factories.ContainsKey(definition.FactoryId))
                 throw new ActorFactoryNotFoundException(definition.FactoryId, definition.Id);
-            }
-
-            factory.ValidateDefinition(definition);
         }
 
         if (locales is not null)
@@ -154,50 +162,6 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
         actorLifetime.Dispose();
     }
 
-    public IActor Create(string actorId)
-    {
-        EnsureInitialized();
-        ArgumentException.ThrowIfNullOrWhiteSpace(actorId);
-        lock (gate)
-        {
-            if (actors.ContainsKey(actorId) || pendingActors.ContainsKey(actorId))
-            {
-                throw new DuplicateActorIdException(actorId);
-            }
-        }
-
-        if (!definitions.TryGetValue(actorId, out var definition))
-        {
-            throw new ActorNotFoundException(actorId);
-        }
-
-        if (!factories.TryGetValue(definition.FactoryId, out var factory))
-        {
-            throw new ActorFactoryNotFoundException(definition.FactoryId, actorId);
-        }
-
-        var actor = factory.Create(definition) ?? throw new ActorException(
-            $"Actor factory '{factory.FactoryId}' returned null for '{actorId}'.");
-        if (!string.Equals(actor.Id, actorId, StringComparison.Ordinal))
-        {
-            actor.Destroy();
-            throw new ActorException(
-                $"Actor factory '{factory.FactoryId}' returned ID '{actor.Id}' for '{actorId}'.");
-        }
-
-        BindActor(actor);
-
-        Mutate(() =>
-        {
-            lock (gate)
-            {
-                actors.Add(actorId, actor);
-                actorOrder.Add(actorId);
-            }
-        });
-        return actor;
-    }
-
     public Task<IActor> CreateAsync(
         string actorId,
         CancellationToken cancellationToken = default)
@@ -220,6 +184,7 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
             {
                 if (!definitions.TryGetValue(actorId, out var definition))
                 {
+                    ThrowIfUnsupported(actorId);
                     throw new ActorNotFoundException(actorId);
                 }
 
@@ -235,46 +200,6 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
         return creation.WaitAsync(cancellationToken);
     }
 
-    public IActor GetOrCreate(ActorSpawnRequest request)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        EnsureInitialized();
-        lock (gate)
-        {
-            if (actors.TryGetValue(request.ActorId, out var existing))
-            {
-                ValidateRequiredFactory(request, existing.FactoryId);
-                return existing;
-            }
-
-            if (pendingActors.ContainsKey(request.ActorId))
-            {
-                throw new DuplicateActorIdException(request.ActorId);
-            }
-        }
-
-        var definition = ResolveDefinition(request);
-        if (!factories.TryGetValue(definition.FactoryId, out var factory))
-        {
-            throw new ActorFactoryNotFoundException(definition.FactoryId, request.ActorId);
-        }
-
-        var actor = factory.Create(definition, request.CreationMode) ?? throw new ActorException(
-            $"Actor factory '{factory.FactoryId}' returned null for '{request.ActorId}'.");
-        ValidateCreatedActor(request.ActorId, factory, actor);
-        BindActor(actor);
-        Mutate(() =>
-        {
-            lock (gate)
-            {
-                actors.Add(request.ActorId, actor);
-                actorOrder.Add(request.ActorId);
-            }
-        });
-
-        return actor;
-    }
-
     public Task<IActor> GetOrCreateAsync(
         ActorSpawnRequest request,
         CancellationToken cancellationToken = default)
@@ -287,13 +212,14 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
         {
             if (actors.TryGetValue(request.ActorId, out var existing))
             {
-                ValidateRequiredFactory(request, existing.FactoryId);
+                ValidateExistingActor(request, existing);
                 return Task.FromResult(existing);
             }
 
             if (pendingActors.TryGetValue(request.ActorId, out var pending))
             {
                 ValidateRequiredFactory(request, pending.FactoryId);
+                ValidateDefinitionIdentity(request, pending.DefinitionId);
                 return pending.Task.WaitAsync(cancellationToken);
             }
 
@@ -350,26 +276,26 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
                 if (!actors.Remove(actorId, out actor)) return false;
                 actorOrder.Remove(actorId);
             }
+            ReleaseActor(actor);
             actor.Destroy();
             return true;
         });
     }
 
-    public bool CanCreate(string actorId, string factoryId)
+    public bool CanCreate(ActorSpawnRequest request)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(actorId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(factoryId);
+        ArgumentNullException.ThrowIfNull(request);
+        var factoryId = request.RequiredFactoryId ?? request.FallbackFactoryId;
         if (!factories.ContainsKey(factoryId))
         {
             return false;
         }
 
-        if (definitions.TryGetValue(actorId, out var definition))
+        if (definitions.TryGetValue(request.DefinitionId ?? request.ActorId, out var definition))
         {
             return string.Equals(definition.FactoryId, factoryId, StringComparison.Ordinal);
         }
 
-        var request = new ActorSpawnRequest(actorId, factoryId, "Default");
         return TryResolveConventionDefinition(request, out var inferred)
             ? string.Equals(inferred.FactoryId, factoryId, StringComparison.Ordinal)
             : IsConventionFactory(factoryId);
@@ -382,25 +308,39 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
         {
             if (actors.TryGetValue(request.ActorId, out var existing))
             {
-                ValidateRequiredFactory(request, existing.FactoryId);
+                ValidateExistingActor(request, existing);
+                request = request with { DefinitionId = existing.DefinitionId };
                 if (factories.TryGetValue(existing.FactoryId, out var existingFactory) &&
                     !existingFactory.PreloadExistingAppearances)
                     return Array.Empty<Majo.Runtime.Resources.ResourcePreloadEntry>();
             }
             var definition = ResolveDefinition(request);
-            return factories.TryGetValue(definition.FactoryId, out var factory)
-                ? factory.GetPreloadResources(definition, request.InitialAppearance)
-                : Array.Empty<Majo.Runtime.Resources.ResourcePreloadEntry>();
+            if (!factories.TryGetValue(definition.FactoryId, out var factory))
+                return Array.Empty<Majo.Runtime.Resources.ResourcePreloadEntry>();
+            factory.ValidateDefinition(definition);
+            var appearance = request.UseDefinitionDefaultAppearance
+                ? factory.GetInitialAppearance(definition)
+                : request.InitialAppearance;
+            return appearance is null
+                ? Array.Empty<Majo.Runtime.Resources.ResourcePreloadEntry>()
+                : factory.GetPreloadResources(definition, appearance);
         }
     }
 
     private ActorDefinition ResolveDefinition(ActorSpawnRequest request)
     {
-        if (definitions.TryGetValue(request.DefinitionId ?? request.ActorId, out var definition))
+        var definitionId = request.DefinitionId ?? request.ActorId;
+        ThrowIfUnsupported(definitionId);
+        if (definitions.TryGetValue(definitionId, out var definition))
         {
             ValidateRequiredFactory(request, definition.FactoryId);
-            return request.DefinitionId is null ? definition :
-                new ActorDefinition(request.ActorId, definition.FactoryId, definition.FactoryData);
+            return string.Equals(request.ActorId, definition.Id, StringComparison.Ordinal)
+                ? definition
+                : new ActorDefinition(
+                    request.ActorId,
+                    definition.FactoryId,
+                    definition.FactoryData,
+                    definition.DefinitionId);
         }
 
         if (TryResolveConventionDefinition(request, out var conventionalDefinition))
@@ -430,10 +370,14 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
         var inferred = new ActorDefinition(
             request.ActorId,
             request.FallbackFactoryId,
-            resourcePathPrefix,
-            request.InitialAppearance,
-            [],
-            request.InitialPosition ?? CharacterPositionPreset.Center);
+            new TextureActorDefinitionData(
+                definitionId,
+                resourcePathPrefix,
+                request.InitialAppearance,
+                [],
+                request.InitialPosition ?? CharacterPositionPreset.Center)
+            { ResourceId = definitionId },
+            definitionId);
         logger.Debug(
             "actor",
             "actor.definition_inferred",
@@ -448,34 +392,49 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
         return inferred;
     }
 
+    private void ThrowIfUnsupported(string definitionId)
+    {
+        if (unsupportedDefinitions.TryGetValue(definitionId, out var unsupported))
+            throw new ActorDefinitionException(definitionId,
+                $"Factory '{unsupported.FactoryId}' does not support this actor manager environment.");
+    }
+
     private bool TryResolveConventionDefinition(
         ActorSpawnRequest request,
         out ActorDefinition definition)
     {
+        ActorDefinition? match = null;
         foreach (var factory in factories.Values)
         {
+            if (request.RequiredFactoryId is not null &&
+                !string.Equals(factory.FactoryId, request.RequiredFactoryId, StringComparison.Ordinal))
+                continue;
             if (factory is not IConventionActorFactory convention ||
-                !convention.TryResolveDefinition(request, out definition!))
+                !convention.TryResolveDefinition(request, out var candidate))
             {
                 continue;
             }
 
             if (request.FallbackFactoryId != ActorFactoryIds.SceneObject && !string.Equals(
-                    definition.FactoryId,
+                    candidate.FactoryId,
                     factory.FactoryId,
                     StringComparison.Ordinal))
             {
                 throw new ActorDefinitionException(
                     request.ActorId,
                     $"Convention factory '{factory.FactoryId}' inferred definition for " +
-                    $"factory '{definition.FactoryId}'.");
+                    $"factory '{candidate.FactoryId}'.");
             }
 
-            return true;
+            if (match is not null)
+                throw new ActorDefinitionException(
+                    request.DefinitionId ?? request.ActorId,
+                    $"Convention actor definition is ambiguous between factories '{match.FactoryId}' and '{candidate.FactoryId}'. Specify a factory explicitly.");
+            match = candidate;
         }
 
-        definition = null!;
-        return false;
+        definition = match!;
+        return match is not null;
     }
 
     private static void ValidateRequiredFactory(
@@ -493,6 +452,21 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
                 factoryId,
                 request.RequiredFactoryId);
         }
+    }
+
+    private static void ValidateDefinitionIdentity(ActorSpawnRequest request, string definitionId)
+    {
+        if (request.DefinitionId is not null &&
+            !string.Equals(request.DefinitionId, definitionId, StringComparison.Ordinal))
+            throw new ActorDefinitionException(
+                request.ActorId,
+                $"Actor instance already uses definition '{definitionId}', not '{request.DefinitionId}'.");
+    }
+
+    private static void ValidateExistingActor(ActorSpawnRequest request, IActor actor)
+    {
+        ValidateRequiredFactory(request, actor.FactoryId);
+        ValidateDefinitionIdentity(request, actor.DefinitionId);
     }
 
     private static bool IsConventionFactory(string factoryId) =>
@@ -513,9 +487,11 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
                 var definition = ResolveDefinition(request);
                 if (!factories.TryGetValue(definition.FactoryId, out var factory))
                     throw new ActorFactoryNotFoundException(definition.FactoryId, request.ActorId);
+                factory.ValidateDefinition(definition);
                 var candidate = await factory.CreateAsync(definition, ActorCreationMode.Dormant, cancellationToken);
+                ClaimCreatedActor(candidate);
                 candidates.Add(candidate);
-                ValidateCreatedActor(request.ActorId, factory, candidate);
+                ValidateCreatedActor(request.ActorId, definition, factory, candidate);
                 BindActor(candidate);
                 cancellationToken.ThrowIfCancellationRequested();
             }
@@ -525,7 +501,11 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
         {
             var failures = new List<Exception> { failure };
             foreach (var candidate in candidates)
-                try { candidate.Destroy(); }
+                try
+                {
+                    ReleaseActor(candidate);
+                    candidate.Destroy();
+                }
                 catch (Exception cleanup) { failures.Add(cleanup); }
             if (failures.Count > 1) throw new AggregateException("Actor preparation and cleanup failed.", failures);
             throw;
@@ -567,7 +547,7 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
             disposed = true;
             List<Exception>? failures = null;
             foreach (var actor in retired ?? candidates)
-                try { actor.Destroy(); }
+                try { owner.ReleaseActor(actor); actor.Destroy(); }
                 catch (Exception error) { (failures ??= new()).Add(error); }
             if (failures is not null) throw new AggregateException("Actor replacement cleanup failed.", failures);
             return ValueTask.CompletedTask;
@@ -588,6 +568,7 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
         {
             try
             {
+                ReleaseActor(actor);
                 actor.Destroy();
             }
             catch (Exception exception)
@@ -635,15 +616,17 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
         IActorFactory factory,
         ActorCreationMode creationMode)
     {
+        factory.ValidateDefinition(definition);
         var completion = new TaskCompletionSource<IActor>(
             TaskCreationOptions.RunContinuationsAsynchronously);
-        pendingActors.Add(actorId, new PendingActorCreation(completion.Task, definition.FactoryId));
+        pendingActors.Add(actorId, new PendingActorCreation(
+            completion.Task, definition.FactoryId, definition.DefinitionId));
         _ = CompleteCreationAsync(
             actorId, definition, factory, creationMode, completion, actorLifetime.Token);
         return completion.Task;
     }
 
-    private sealed record PendingActorCreation(Task<IActor> Task, string FactoryId);
+    private sealed record PendingActorCreation(Task<IActor> Task, string FactoryId, string DefinitionId);
 
     private async Task CompleteCreationAsync(
         string actorId,
@@ -654,11 +637,14 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
         CancellationToken cancellationToken)
     {
         IActor? actor = null;
+        var claimed = false;
         try
         {
             actor = await factory.CreateAsync(definition, creationMode, cancellationToken);
+            ClaimCreatedActor(actor);
+            claimed = true;
             cancellationToken.ThrowIfCancellationRequested();
-            ValidateCreatedActor(actorId, factory, actor);
+            ValidateCreatedActor(actorId, definition, factory, actor);
             BindActor(actor);
             await MutateAsync(_ =>
             {
@@ -683,10 +669,17 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
         }
         finally
         {
-            actor?.Destroy();
-            lock (gate)
+            try
             {
-                pendingActors.Remove(actorId);
+                if (actor is not null && claimed)
+                {
+                    ReleaseActor(actor);
+                    actor.Destroy();
+                }
+            }
+            finally
+            {
+                lock (gate) pendingActors.Remove(actorId);
             }
         }
     }
@@ -730,6 +723,7 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
 
     private static void ValidateCreatedActor(
         string actorId,
+        ActorDefinition definition,
         IActorFactory factory,
         IActor actor)
     {
@@ -744,6 +738,12 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
             throw new ActorException(
                 $"Actor factory '{factory.FactoryId}' returned ID '{actor.Id}' for '{actorId}'.");
         }
+        if (!string.Equals(actor.FactoryId, factory.FactoryId, StringComparison.Ordinal))
+            throw new ActorException(
+                $"Actor factory '{factory.FactoryId}' returned actor with factory ID '{actor.FactoryId}'.");
+        if (!string.Equals(actor.DefinitionId, definition.DefinitionId, StringComparison.Ordinal))
+            throw new ActorException(
+                $"Actor factory '{factory.FactoryId}' returned definition ID '{actor.DefinitionId}' for '{definition.DefinitionId}'.");
     }
 
     private void EnsureInitialized()
@@ -754,13 +754,30 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
         }
     }
 
+    private void ClaimCreatedActor(IActor actor)
+    {
+        ArgumentNullException.ThrowIfNull(actor);
+        lock (ActorOwnerGate)
+        {
+            if (ActorOwners.TryGetValue(actor, out _))
+                throw new ActorException($"Actor '{actor.Id}' is already managed. Factories must return a new instance.");
+            ActorOwners.Add(actor, this);
+        }
+    }
+
     private void BindActor(IActor actor)
     {
-        if (mutationGate is null) return;
         if (actor is not IStateMutationParticipant participant)
             throw new StateCompatibilityException(
                 $"Actor '{actor.Id}' does not implement the persistent write gate contract.");
-        participant.BindStateMutationGate(mutationGate);
+        if (mutationGate is not null) participant.BindStateMutationGate(mutationGate);
+    }
+
+    private void ReleaseActor(IActor actor)
+    {
+        lock (ActorOwnerGate)
+            if (ActorOwners.TryGetValue(actor, out var owner) && ReferenceEquals(owner, this))
+                ActorOwners.Remove(actor);
     }
 
     private void Mutate(Action mutation)

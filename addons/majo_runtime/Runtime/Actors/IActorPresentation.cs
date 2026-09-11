@@ -8,6 +8,16 @@ using Majo.Runtime.Direction.Transitions;
 
 namespace Majo.Runtime.Actors;
 
+public interface ISceneActor :
+    IActor,
+    IGodotActorView,
+    IActorTransformTarget,
+    IActorAppearanceTarget,
+    IActorVisibilityTarget,
+    Majo.Runtime.State.IStateMutationParticipant
+{
+}
+
 /// <summary>Unqueued, complete base-space access for Direction's single transform slot.</summary>
 public interface IActorTransformTarget
 {
@@ -21,22 +31,54 @@ public interface IActorTransformTarget
 
 public interface IActorAppearanceTarget
 {
+    string ResolveAppearance(string sourceAppearance, string appearance) => appearance;
     IDisposable? RetainVisualPreparation() => null;
-    Task PrepareAppearanceAsync(string appearance, CancellationToken cancellationToken = default);
-    void SetAppearance(string appearance);
-    Task<IPreparedActorAppearance> PrepareAppearanceTransitionAsync(string appearance,
+    Task<IPreparedActorAppearance> PrepareAppearanceTransitionAsync(
+        string sourceAppearance,
+        string appearance,
         AnimationSpec animation, ITransitionDriver driver, CancellationToken cancellationToken = default);
 }
 
 public interface IPreparedActorAppearance : IPreparedVisualTransition
 {
+    string ResolvedAppearance { get; }
     void Commit();
     void Finish();
 }
 
+/// <summary>
+/// Prepares actor-local snapshot transitions. Input nodes are temporary content
+/// whose lifetime is transferred to the returned prepared transition.
+/// </summary>
+public interface IActorAppearanceTransitionService
+{
+    Task<IPreparedActorAppearance> PrepareForCommitAsync(
+        Node2D owner,
+        CanvasItem sourceContent,
+        CanvasItem targetContent,
+        Rect2 bounds,
+        Action<bool> showOriginal,
+        Action<Sprite2D?> publishOverlay,
+        Action publishTarget,
+        Action finish,
+        string resolvedAppearance,
+        ITransitionDriver driver,
+        AnimationSpec animation,
+        CancellationToken cancellationToken = default);
+
+    Task<IPreparedVisualTransition> PrepareSnapshotAsync(
+        Node2D owner,
+        CanvasItem sourceContent,
+        CanvasItem targetContent,
+        Rect2 bounds,
+        float opacity,
+        Action<bool> showOriginal,
+        Action<Sprite2D?> publishOverlay,
+        ITransitionDriver driver,
+        AnimationSpec animation,
+        CancellationToken cancellationToken = default);
+}
+
 public interface IActorVisibilityTarget
 {
-    float Opacity { get; }
-    void SetOpacity(float opacity);
-    void SetVisible(bool visible);
 }

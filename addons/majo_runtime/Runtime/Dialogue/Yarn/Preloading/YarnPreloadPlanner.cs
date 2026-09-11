@@ -7,7 +7,12 @@ using YarnSpinnerGodot;
 
 namespace Majo.Runtime.Dialogue.Yarn.Preloading;
 
-public sealed record YarnPreloadReference(string Kind, string Id, string? Asset = null, string? Appearance = null);
+public sealed record YarnPreloadReference(
+    string Kind,
+    string Id,
+    string? Asset = null,
+    string? Appearance = null,
+    string? Stage = null);
 
 /// <summary>Reads only straight-line instructions; never evaluates Yarn expressions.</summary>
 public sealed class YarnPreloadPlanner
@@ -45,6 +50,7 @@ public sealed class YarnPreloadPlanner
         Func<string, bool>? hasVoice = null)
     {
         var result = new List<YarnPreloadReference>();
+        var characterDefinitions = new Dictionary<(string Stage, string Instance), string>();
         if (node is null || cursor < 0) return result;
         var lines = 0;
         var beats = 0;
@@ -61,7 +67,20 @@ public sealed class YarnPreloadPlanner
             {
                 var tokens = DialogueRunner.SplitCommandText(command.CommandText).ToArray();
                 if (tokens.Length >= 2 && tokens[0] == "beat" && tokens[1] == "begin" && beats++ > 0) break;
-                result.AddRange(Resources(tokens));
+                var references = Resources(tokens);
+                foreach (var reference in references)
+                {
+                    if (reference.Kind != "character")
+                    {
+                        result.Add(reference);
+                        continue;
+                    }
+                    var key = (reference.Stage ?? "main", reference.Id);
+                    var definition = reference.Asset;
+                    if (definition is null) characterDefinitions.TryGetValue(key, out definition);
+                    if (definition is not null) characterDefinitions[key] = definition;
+                    result.Add(reference with { Asset = definition });
+                }
             }
             else
             {
@@ -89,9 +108,15 @@ public sealed class YarnPreloadPlanner
             return new[] { new YarnPreloadReference(kind, tokens[1]) };
         if (kind == "character")
         {
+            var asset = tokens.Skip(2).FirstOrDefault(token => token.StartsWith("asset:", StringComparison.OrdinalIgnoreCase));
             var appearance = tokens.Skip(2).FirstOrDefault(token => token.StartsWith("appearance:", StringComparison.OrdinalIgnoreCase));
-            if (appearance is not null && appearance.Length > "appearance:".Length)
-                return new[] { new YarnPreloadReference(kind, $"{tokens[1]}/{appearance["appearance:".Length..]}") };
+            var stage = tokens.Skip(2).FirstOrDefault(token => token.StartsWith("stage:", StringComparison.OrdinalIgnoreCase));
+            return new[] { new YarnPreloadReference(
+                kind,
+                tokens[1],
+                asset?["asset:".Length..],
+                appearance?["appearance:".Length..],
+                stage?["stage:".Length..]) };
         }
         return Array.Empty<YarnPreloadReference>();
     }

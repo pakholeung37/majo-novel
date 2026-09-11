@@ -40,20 +40,20 @@ public partial class HeadlessTestRunner
         using var textures = new ResourceActorTextureLoader(failOnMissingAssets: true);
         using var config = new ActorConfiguration { ReferenceResolution = new Vector2I(640, 360) };
         var definitions = SlotActorIds.Select(id => new ActorDefinition(id, ActorFactoryIds.Character,
-            "Default", new Dictionary<string, string>
+            new TextureActorDefinitionData(id, "characters", "Default", new Dictionary<string, string>
             {
                 ["Default"] = "res://tests/headless/fixtures/character_red.svg",
                 ["blue"] = "res://tests/headless/fixtures/character_blue.svg",
-            })).ToArray();
+            }))).ToArray();
         using var resourceConfig = new ResourceConfiguration { RootPath = "res://tests/headless/fixtures", ObjectsPath = "objects" };
         IActorManager Create(Node2D root)
         {
             var backgroundRoot = new Control();
             root.AddChild(backgroundRoot);
             return new ActorManager(definitions,
-            new IActorFactory[] { new CharacterActorFactory(root, runner, textures, new CharacterPositionMap(config)),
-                new SceneObjectActorFactory(root, runner, textures, resourceConfig, config.ReferenceResolution),
-                new BackgroundActorFactory(backgroundRoot, runner, textures) });
+            new IActorFactory[] { new CharacterActorFactory(root, textures, new CharacterPositionMap(config)),
+                new SceneObjectActorFactory(root, textures, ActorResourceSettings.Capture(resourceConfig), config.ReferenceResolution),
+                new BackgroundActorFactory(backgroundRoot, textures) });
         }
         var stage = new GodotDirectionStageBackend(host, new HeadlessDirectionTextureLoader(), Create);
         var backend = new CompositeDirectionPreparationBackend(stage, new GodotDirectionViewBackend(host),

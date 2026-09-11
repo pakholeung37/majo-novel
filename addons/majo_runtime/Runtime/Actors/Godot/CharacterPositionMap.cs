@@ -6,41 +6,50 @@ namespace Majo.Runtime.Actors.Godot;
 
 public sealed class CharacterPositionMap
 {
-    private readonly ActorConfiguration configuration;
+    private readonly Vector2 left;
+    private readonly Vector2 center;
+    private readonly Vector2 right;
+    private readonly Vector2 offset;
+    private readonly Vector2I resolution;
 
     public CharacterPositionMap(ActorConfiguration configuration)
+        : this(ActorRenderSettings.Capture(configuration)) { }
+
+    public CharacterPositionMap(ActorRenderSettings configuration)
     {
-        this.configuration = configuration ??
-            throw new ArgumentNullException(nameof(configuration));
+        ArgumentNullException.ThrowIfNull(configuration);
+        left = configuration.LeftPosition;
+        center = configuration.CenterPosition;
+        right = configuration.RightPosition;
+        offset = configuration.ScenePositionOffset;
+        resolution = configuration.ReferenceResolution;
     }
 
     public Vector2 Get(CharacterPositionPreset preset)
     {
         var position = preset switch
         {
-            CharacterPositionPreset.Left => configuration.LeftPosition,
-            CharacterPositionPreset.Center => configuration.CenterPosition,
-            CharacterPositionPreset.Right => configuration.RightPosition,
+            CharacterPositionPreset.Left => left,
+            CharacterPositionPreset.Center => center,
+            CharacterPositionPreset.Right => right,
             _ => throw new ArgumentOutOfRangeException(nameof(preset), preset, null),
         };
         return position + GetPixelOffset();
     }
 
     public Vector2 GetScenePosition(Vector2 scenePosition) =>
-        StageCoordinates.ToPixels(scenePosition, configuration.ReferenceResolution) + GetPixelOffset();
+        StageCoordinates.ToPixels(scenePosition, resolution) + GetPixelOffset();
 
     public Vector2 GetScenePercent(Vector2 pixels) =>
-        StageCoordinates.ToPercent(pixels - GetPixelOffset(), configuration.ReferenceResolution);
+        StageCoordinates.ToPercent(pixels - GetPixelOffset(), resolution);
 
     private Vector2 GetPixelOffset()
     {
-        var offset = configuration.ScenePositionOffset;
         if (offset == Vector2.Zero)
         {
             return Vector2.Zero;
         }
 
-        var resolution = configuration.ReferenceResolution;
         if (resolution.X <= 0 || resolution.Y <= 0)
         {
             throw new ActorException(

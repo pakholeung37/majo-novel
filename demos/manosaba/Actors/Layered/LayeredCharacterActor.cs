@@ -6,27 +6,27 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
-using Majo.Runtime.Actors.Layered;
+using Majo.Runtime.Actors;
+using Majo.Runtime.Actors.Godot;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Transitions;
 using Majo.Runtime.Operations;
 
-namespace Majo.Runtime.Actors.Godot;
+namespace Majo.Demos.Manosaba.Actors.Layered;
 
-public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IActorTransformTarget, IActorAppearanceTarget, IActorVisibilityTarget, IDisposable
+public sealed class LayeredCharacterActor : GodotCharacterActorBase, IDisposable
 {
     private const string GroupOpacityParameter = "group_opacity";
     private const ulong LayerBuildBudgetMicroseconds = 2_000;
     private const string AlphaAwareMultiplyShaderPath =
-        "res://addons/majo_runtime/Runtime/Actors/Godot/Shaders/AlphaAwareMultiply.gdshader";
+        "res://demos/manosaba/Actors/Layered/Shaders/AlphaAwareMultiply.gdshader";
     private const string LayeredCompositeShaderPath =
-        "res://addons/majo_runtime/Runtime/Actors/Godot/Shaders/LayeredComposite.gdshader";
-    private readonly CharacterPositionMap positions;
-    private readonly ITransitionDriverRegistry transitions;
+        "res://demos/manosaba/Actors/Layered/Shaders/LayeredComposite.gdshader";
+    private readonly TextureAppearanceSupport textureSupport;
+    private readonly IActorAppearanceTransitionService transitions;
     private readonly LayerCompositionResolver resolver;
     private readonly LayeredCharacterMasking masking;
     private readonly HashSet<string> activeLayers;
-    private readonly HashSet<string> targetLayers;
     private readonly ShaderMaterial multiplyMaterial;
     private readonly CanvasGroup layerComposite;
     private readonly Dictionary<string, Sprite2D> layerViews =
@@ -39,7 +39,6 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IActorTr
     public LayeredCharacterActor(
         ActorDefinition definition,
         Sprite2D view,
-        IOperationRunner runner,
         IActorTextureLoader textureLoader,
         CharacterPositionMap positions,
         LayeredCharacterManifest manifest,
@@ -47,20 +46,13 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IActorTr
         CharacterPositionPreset initialPosition,
         ShaderMaterial? multiplyMaterial = null,
         bool buildLayerViews = true,
-        Majo.Runtime.Timing.IEasingRegistry? easings = null, ITransitionDriverRegistry? transitions = null)
-        : base(
-            definition,
-            view,
-            runner,
-            textureLoader,
-            manifest.DefaultAppearance,
-            easings)
+        IActorAppearanceTransitionService? transitions = null)
+        : base(definition, view, positions, initialPosition, manifest.DefaultAppearance)
     {
-
-        this.transitions = transitions ?? new TransitionDriverRegistry();
-        this.positions = positions ?? throw new ArgumentNullException(nameof(positions));
         ArgumentNullException.ThrowIfNull(manifest);
         ArgumentException.ThrowIfNullOrWhiteSpace(manifestPath);
+        textureSupport = new TextureAppearanceSupport(textureLoader, view);
+        this.transitions = transitions ?? new GodotActorAppearanceTransitionService();
         this.multiplyMaterial = multiplyMaterial ?? CreateAlphaAwareMultiplyMaterial();
         layerComposite = new CanvasGroup
         {
@@ -72,52 +64,17 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IActorTr
         resolver = new LayerCompositionResolver(manifest);
         masking = new LayeredCharacterMasking(manifest);
         activeLayers = resolver.CreateDefaultState();
-        targetLayers = new HashSet<string>(activeLayers, StringComparer.Ordinal);
         if (buildLayerViews)
         {
             BuildLayerViews(manifest, manifestPath, null);
             ApplyLayerVisibility(activeLayers);
         }
         Appearance = resolver.Canonicalize(activeLayers);
-        TargetAppearance = Appearance;
-        PositionPreset = initialPosition;
-        ApplyPosition(positions.Get(PositionPreset));
-        TargetPosition = Position;
     }
 
     public new Sprite2D View => (Sprite2D)base.View;
-    CanvasItem ICharacterActor.View => View;
-
-    public override Vector2 Position => View.Position;
-
     public override float Opacity =>
         (float)layerComposite.GetInstanceShaderParameter(GroupOpacityParameter);
-
-    public Vector2 Scale => View.Scale;
-    public Vector2 ScenePosition => positions.GetScenePercent(Position);
-    public float RotationDegrees => View.RotationDegrees;
-    public void SetRotationDegrees(float rotation)
-    {
-        PersistentWrite(() =>
-        {
-            if (!float.IsFinite(rotation)) throw new ArgumentOutOfRangeException(nameof(rotation));
-            View.RotationDegrees = rotation;
-        });
-    }
-
-    public CharacterPositionPreset PositionPreset { get; private set; }
-
-    public void SetScenePosition(Vector2 scenePosition) =>
-        SetPosition(positions.GetScenePosition(scenePosition));
-
-    public void SetPosition(CharacterPositionPreset preset)
-    {
-        PersistentWrite(() =>
-        {
-            PositionPreset = preset;
-            SetPosition(positions.Get(preset));
-        });
-    }
 
     protected override void ApplyOpacity(float opacity)
     {
@@ -128,64 +85,27 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IActorTr
         }
     }
 
-    public void SetScale(Vector2 scale)
+    public override IDisposable RetainVisualPreparation() => textureSupport.RetainVisualPreparation();
+
+    public override string ResolveAppearance(string sourceAppearance, string appearance)
     {
-        PersistentWrite(() =>
-        {
-            ValidateScale(scale);
-            View.Scale = scale;
-        });
+        var layers = resolver.CreateDefaultState();
+        resolver.Apply(layers, sourceAppearance);
+        resolver.Apply(layers, appearance);
+        return resolver.Canonicalize(layers);
     }
 
-    public IOperationHandle ChangeAppearance(
+    public override Task<IPreparedActorAppearance> PrepareAppearanceTransitionAsync(
+        string sourceAppearance,
         string appearance,
-        double durationSeconds) =>
-        ChangeAppearance(appearance, new AnimationSpec(durationSeconds));
-
-    public IOperationHandle ChangeAppearance(string appearance, AnimationSpec animation) =>
-        ChangeAppearance(appearance, animation, transitions.GetRequired(DirectionTransitionId.Dissolve));
-
-    public IOperationHandle ChangeAppearance(string appearance, AnimationSpec animation, ITransitionDriver driver)
-    {
-        return PersistentWrite(() =>
-        {
-            EnsureAlive();
-            ArgumentException.ThrowIfNullOrWhiteSpace(appearance);
-            var easing = Easings.GetRequired(animation.Easing);
-            var nextLayers = new HashSet<string>(targetLayers, StringComparer.Ordinal);
-            resolver.Apply(nextLayers, appearance);
-            var canonicalAppearance = resolver.Canonicalize(nextLayers);
-            var epoch = AppearanceEpoch;
-            targetLayers.Clear(); targetLayers.UnionWith(nextLayers);
-            TargetAppearance = canonicalAppearance;
-            var operation = GodotActorAppearanceTransition.CreateOperation(View, animation, easing,
-            token => GodotActorAppearanceTransition.PrepareAsync(View,
-                CreateComposite(activeLayers), CreateComposite(nextLayers), canvasBounds, Opacity,
-                visible => { if (IsAlive) layerComposite.Visible = visible; },
-                overlay =>
-                {
-                    activeOverlay = overlay;
-                    if (overlay is not null) overlay.Modulate = new Color(1, 1, 1, Opacity);
-                }, driver, animation, token),
-            () =>
-            {
-                if (!IsAlive || AppearanceEpoch != epoch) return;
-                activeLayers.Clear(); activeLayers.UnionWith(nextLayers);
-                ApplyLayerVisibility(activeLayers);
-                Appearance = canonicalAppearance;
-            });
-            return StartSequencedOperation(AppearanceProperty, operation, animation.ConflictPolicy);
-        });
-    }
-
-    public Task<IPreparedActorAppearance> PrepareAppearanceTransitionAsync(string appearance,
         AnimationSpec animation, ITransitionDriver driver, CancellationToken cancellationToken = default)
     {
-        var sourceLayers = new HashSet<string>(targetLayers, StringComparer.Ordinal);
-        var nextLayers = new HashSet<string>(targetLayers, StringComparer.Ordinal);
-        resolver.Apply(nextLayers, appearance);
-        var canonical = resolver.Canonicalize(nextLayers);
-        return GodotActorAppearanceTransition.PrepareForCommitAsync(View,
+        var sourceLayers = resolver.CreateDefaultState();
+        resolver.Apply(sourceLayers, sourceAppearance);
+        var nextLayers = resolver.CreateDefaultState();
+        var canonical = ResolveAppearance(sourceAppearance, appearance);
+        resolver.Apply(nextLayers, canonical);
+        return transitions.PrepareForCommitAsync(View,
             CreateComposite(sourceLayers), CreateComposite(nextLayers), canvasBounds,
             visible => { if (IsAlive) layerComposite.Visible = visible; },
             overlay =>
@@ -193,8 +113,8 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IActorTr
                 activeOverlay = overlay;
                 if (overlay is not null) overlay.Modulate = new Color(1, 1, 1, Opacity);
             },
-            () => { targetLayers.Clear(); targetLayers.UnionWith(nextLayers); TargetAppearance = canonical; },
-            () => SetAppearance(canonical), driver, animation, cancellationToken);
+            () => { },
+            () => SetAppearance(canonical), canonical, driver, animation, cancellationToken);
     }
 
     private CanvasGroup CreateComposite(HashSet<string> layers)
@@ -216,14 +136,10 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IActorTr
         {
             EnsureAlive();
             InvalidateAppearance();
-            CancelPropertyAnimation(AppearanceProperty);
             resolver.Apply(activeLayers, appearance);
-            targetLayers.Clear();
-            targetLayers.UnionWith(activeLayers);
             ApplyLayerVisibility(activeLayers);
             ResetLayerOpacities();
             Appearance = resolver.Canonicalize(activeLayers);
-            TargetAppearance = Appearance;
         });
     }
 
@@ -232,36 +148,9 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IActorTr
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var preparedLayers = new HashSet<string>(targetLayers, StringComparer.Ordinal);
+        var preparedLayers = new HashSet<string>(activeLayers, StringComparer.Ordinal);
         resolver.Apply(preparedLayers, appearance);
         return Task.CompletedTask;
-    }
-
-    public IOperationHandle ChangePosition(
-        CharacterPositionPreset preset,
-        double durationSeconds) => ChangePosition(
-            preset,
-            new AnimationSpec(durationSeconds));
-
-    public IOperationHandle ChangePosition(
-        CharacterPositionPreset preset,
-        AnimationSpec animation)
-    {
-        return PersistentWrite(() =>
-        {
-            PositionPreset = preset;
-            return ChangePosition(positions.Get(preset), animation);
-        });
-    }
-
-    protected override void ApplyTexture(Texture2D texture)
-    {
-        // Layered actors keep the public Sprite2D as a transform/visibility host.
-    }
-
-    protected override void ApplyPosition(Vector2 position)
-    {
-        View.Position = position;
     }
 
     internal async Task BuildLayerViewsAsync(
@@ -311,13 +200,13 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IActorTr
     {
         // Populate both retained capture pairs before publishing this actor. This
         // also exercises its existing layer materials without changing appearance.
-        using var first = await GodotActorAppearanceTransition.PrepareAsync(View,
+        using var first = await transitions.PrepareSnapshotAsync(View,
             CreateComposite(activeLayers), CreateComposite(activeLayers), canvasBounds, 1,
-            _ => { }, _ => { }, transitions.GetRequired(DirectionTransitionId.Dissolve),
+            _ => { }, _ => { }, new DissolveTransitionDriver(),
             new AnimationSpec(.1), cancellationToken);
-        using var second = await GodotActorAppearanceTransition.PrepareAsync(View,
+        using var second = await transitions.PrepareSnapshotAsync(View,
             CreateComposite(activeLayers), CreateComposite(activeLayers), canvasBounds, 1,
-            _ => { }, _ => { }, transitions.GetRequired(DirectionTransitionId.Dissolve),
+            _ => { }, _ => { }, new DissolveTransitionDriver(),
             new AnimationSpec(.1), cancellationToken);
     }
 
@@ -341,7 +230,7 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IActorTr
         {
             if (!atlases.TryGetValue(layer.Atlas, out var atlas))
             {
-                atlas = TextureLoader.Load($"{manifestDirectory}/{layer.Atlas}");
+                atlas = textureSupport.Loader.Load($"{manifestDirectory}/{layer.Atlas}");
                 atlases.Add(layer.Atlas, atlas);
             }
 
@@ -495,15 +384,6 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IActorTr
                 $"Layered composite shader could not be loaded: '{LayeredCompositeShaderPath}'."),
     };
 
-    private static void ValidateScale(Vector2 scale)
-    {
-        if (!float.IsFinite(scale.X) || !float.IsFinite(scale.Y) ||
-            scale.X <= 0 || scale.Y <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(scale), "Scale must be positive and finite.");
-        }
-    }
-
     public void Dispose()
     {
         if (activeOverlay is not null && GodotObject.IsInstanceValid(activeOverlay))
@@ -513,4 +393,6 @@ public sealed class LayeredCharacterActor : ActorBase, ICharacterActor, IActorTr
         }
         layerComposite.Dispose();
     }
+
+    protected override void OnDestroy() => Dispose();
 }

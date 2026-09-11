@@ -5,9 +5,6 @@ using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Transitions;
-using Majo.Runtime.Operations;
-using Majo.Runtime.Operations.Godot;
-using Majo.Runtime.Timing;
 
 namespace Majo.Runtime.Actors.Godot;
 
@@ -79,6 +76,7 @@ internal sealed class GodotActorAppearanceTransition : IPreparedVisualTransition
     public static async Task<IPreparedActorAppearance> PrepareForCommitAsync(Node2D owner,
         CanvasItem sourceContent, CanvasItem targetContent, Rect2 bounds,
         Action<bool> showOriginal, Action<Sprite2D?> publishOverlay, Action publishTarget, Action finish,
+        string resolvedAppearance,
         ITransitionDriver driver, AnimationSpec animation, CancellationToken cancellationToken)
     {
         var staging = new Node2D
@@ -92,7 +90,8 @@ internal sealed class GodotActorAppearanceTransition : IPreparedVisualTransition
         {
             var effect = (GodotActorAppearanceTransition)await PrepareAsync(staging,
                 sourceContent, targetContent, bounds, 1, _ => { }, _ => { }, driver, animation, cancellationToken);
-            return new PreparedAppearance(owner, staging, effect, showOriginal, publishOverlay, publishTarget, finish);
+            return new PreparedAppearance(owner, staging, effect, showOriginal, publishOverlay,
+                publishTarget, finish, resolvedAppearance);
         }
         catch { staging.QueueFree(); throw; }
     }
@@ -110,12 +109,16 @@ internal sealed class GodotActorAppearanceTransition : IPreparedVisualTransition
         private bool disposed;
 
         public PreparedAppearance(Node2D owner, Node2D staging, GodotActorAppearanceTransition effect,
-            Action<bool> showOriginal, Action<Sprite2D?> publishOverlay, Action publishTarget, Action finish)
+            Action<bool> showOriginal, Action<Sprite2D?> publishOverlay, Action publishTarget, Action finish,
+            string resolvedAppearance)
         {
             this.owner = owner; this.staging = staging; this.effect = effect;
             this.showOriginal = showOriginal; this.publishOverlay = publishOverlay;
             this.publishTarget = publishTarget; this.finish = finish;
+            ResolvedAppearance = resolvedAppearance;
         }
+
+        public string ResolvedAppearance { get; }
 
         public void Commit()
         {
@@ -174,47 +177,24 @@ internal sealed class GodotActorAppearanceTransition : IPreparedVisualTransition
         }
     }
 
-    public static OperationDefinition CreateOperation(Node owner, AnimationSpec animation,
-        EasingDefinition easing, Func<CancellationToken, Task<IPreparedVisualTransition>> prepare,
-        Action commit)
-    {
-        IPreparedVisualTransition? prepared = null;
-        OperationDefinition? progress = null;
-        var complete = false;
-        void Cleanup() { prepared?.Dispose(); prepared = null; }
-        void Complete()
-        {
-            if (complete) return;
-            complete = true;
-            Cleanup();
-            commit();
-        }
-        return new OperationDefinition(
-            async context =>
-            {
-                try
-                {
-                    context.CancellationToken.ThrowIfCancellationRequested();
-                    if (animation.DurationSeconds == 0) { Complete(); return; }
-                    prepared = await prepare(context.CancellationToken);
-                    progress = GodotTweenOperation.CreateProgressOperation(owner, animation.Timing,
-                        easing, p => prepared?.ApplyProgress(p));
-                    await progress.ExecuteAsync(context);
-                    Complete();
-                }
-                catch (OperationCanceledException) when (context.CancellationToken.IsCancellationRequested)
-                { throw; }
-                catch { Cleanup(); throw; }
-            },
-            onFinish: async token =>
-            {
-                try { if (progress is not null) await progress.FinishAsync(token); }
-                finally { Complete(); }
-            },
-            onCancel: async token =>
-            {
-                try { if (progress is not null) await progress.CancelAsync(token); }
-                finally { Complete(); }
-            });
-    }
+}
+
+public sealed class GodotActorAppearanceTransitionService : IActorAppearanceTransitionService
+{
+    public Task<IPreparedActorAppearance> PrepareForCommitAsync(
+        Node2D owner, CanvasItem sourceContent, CanvasItem targetContent, Rect2 bounds,
+        Action<bool> showOriginal, Action<Sprite2D?> publishOverlay, Action publishTarget,
+        Action finish, string resolvedAppearance, ITransitionDriver driver,
+        AnimationSpec animation, CancellationToken cancellationToken = default) =>
+        GodotActorAppearanceTransition.PrepareForCommitAsync(owner, sourceContent, targetContent,
+            bounds, showOriginal, publishOverlay, publishTarget, finish, resolvedAppearance,
+            driver, animation, cancellationToken);
+
+    public Task<IPreparedVisualTransition> PrepareSnapshotAsync(
+        Node2D owner, CanvasItem sourceContent, CanvasItem targetContent, Rect2 bounds,
+        float opacity, Action<bool> showOriginal, Action<Sprite2D?> publishOverlay,
+        ITransitionDriver driver, AnimationSpec animation,
+        CancellationToken cancellationToken = default) =>
+        GodotActorAppearanceTransition.PrepareAsync(owner, sourceContent, targetContent, bounds,
+            opacity, showOriginal, publishOverlay, driver, animation, cancellationToken);
 }

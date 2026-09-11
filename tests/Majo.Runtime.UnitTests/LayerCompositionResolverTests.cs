@@ -1,5 +1,5 @@
 using Majo.Runtime.Actors;
-using Majo.Runtime.Actors.Layered;
+using Majo.Demos.Manosaba.Actors.Layered;
 using Xunit;
 
 namespace Majo.Runtime.UnitTests;

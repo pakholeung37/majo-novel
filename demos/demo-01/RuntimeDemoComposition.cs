@@ -267,9 +267,12 @@ public static class RuntimeDemoComposition
         {
             Id = id,
             FactoryId = factoryId,
-            DefaultAppearance = defaultAppearance,
-            InitialPosition = initialPosition,
-            ResourcePathPrefix = resourcePathPrefix,
+            FactoryConfiguration = new TextureActorConfiguration
+            {
+                DefaultAppearance = defaultAppearance,
+                InitialPosition = initialPosition,
+                ResourcePathPrefix = resourcePathPrefix,
+            },
         };
         return definition;
     }

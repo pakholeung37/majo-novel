@@ -37,7 +37,7 @@ public sealed class SessionHistoryStateContributor : IImmediateStateContributor
 
     public StateScope Scope => StateScope.Session;
 
-    public int SchemaVersion => 1;
+    public int SchemaVersion => 2;
 
     public StateContributorCapability Capability => StateContributorCapability.Transient;
 
@@ -192,7 +192,7 @@ public sealed class ActorStateContributor : IPreparedStateContributor, IStateMut
 
     public StateScope Scope => StateScope.Game;
 
-    public int SchemaVersion => 1;
+    public int SchemaVersion => 2;
 
     public StateContributorCapability Capability =>
         StateContributorCapability.DurableRollback;
@@ -203,18 +203,19 @@ public sealed class ActorStateContributor : IPreparedStateContributor, IStateMut
         var entries = actors.Actors
             .Select(actor => new ActorEntry(
                 actor.Id,
+                actor.DefinitionId,
                 actor.FactoryId,
                 actor is IBackgroundActor background ? background.Slot : null,
-                actor.TargetAppearance,
-                actor.TargetVisible,
-                actor.TargetPosition.X,
-                actor.TargetPosition.Y,
+                actor.Appearance,
+                actor.Visible,
+                actor.Position.X,
+                actor.Position.Y,
                 actor is ICharacterActor character ? character.Scale.X : null,
                 actor is ICharacterActor scaledCharacter ? scaledCharacter.Scale.Y : null,
                 actor.Tint.R,
                 actor.Tint.G,
                 actor.Tint.B,
-                actor.TargetOpacity,
+                actor.Opacity,
                 actor.ZIndex))
             .ToArray();
         return ValueTask.FromResult(new StateRecord(
@@ -239,7 +240,8 @@ public sealed class ActorStateContributor : IPreparedStateContributor, IStateMut
             throw new StateCompatibilityException("Actor backend does not support prepared replacement.");
         var prepared = await replacement.PrepareReplacementAsync(entries.Select(entry =>
             new ActorSpawnRequest(entry.Id, entry.FactoryId, entry.Appearance,
-                requiredFactoryId: entry.FactoryId, creationMode: ActorCreationMode.Dormant)).ToArray(), cancellationToken);
+                requiredFactoryId: entry.FactoryId, creationMode: ActorCreationMode.Dormant)
+            { DefinitionId = entry.DefinitionId }).ToArray(), cancellationToken);
         try
         {
             for (var index = 0; index < entries.Length; index++)
@@ -278,6 +280,7 @@ public sealed class ActorStateContributor : IPreparedStateContributor, IStateMut
         foreach (var entry in entries)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(entry.Id);
+            ArgumentException.ThrowIfNullOrWhiteSpace(entry.DefinitionId);
             ArgumentException.ThrowIfNullOrWhiteSpace(entry.FactoryId);
             ArgumentException.ThrowIfNullOrWhiteSpace(entry.Appearance);
             if (entry.FactoryId == ActorFactoryIds.Background)
@@ -299,7 +302,12 @@ public sealed class ActorStateContributor : IPreparedStateContributor, IStateMut
                     $"State record '{Key}' contains duplicate actor '{entry.Id}'.");
             }
 
-            if (!actors.CanCreate(entry.Id, entry.FactoryId))
+            if (!actors.CanCreate(new ActorSpawnRequest(
+                    entry.Id,
+                    entry.FactoryId,
+                    entry.Appearance,
+                    requiredFactoryId: entry.FactoryId)
+            { DefinitionId = entry.DefinitionId }))
             {
                 throw new StateSnapshotException(
                     $"Actor '{entry.Id}' cannot be restored by factory '{entry.FactoryId}'.");
@@ -325,6 +333,7 @@ public sealed class ActorStateContributor : IPreparedStateContributor, IStateMut
 
     private sealed record ActorEntry(
         string Id,
+        string DefinitionId,
         string FactoryId,
         string? Slot,
         string Appearance,

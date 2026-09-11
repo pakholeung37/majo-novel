@@ -49,8 +49,10 @@ internal static class CameraPresetDefinition
         return new ViewPosePatch(ViewId.Main, DirectionValue.From(center), DirectionValue.From(zoom),
             DirectionValue.From(rotation), DirectionTransitionSpec.Cut)
         {
-            Dolly = DirectionValue.From(dolly), Parallax = parallax.Validate(),
-            BackgroundOffset = DirectionValue.From(backgroundOffset), BackgroundScale = DirectionValue.From(backgroundScale),
+            Dolly = DirectionValue.From(dolly),
+            Parallax = parallax.Validate(),
+            BackgroundOffset = DirectionValue.From(backgroundOffset),
+            BackgroundScale = DirectionValue.From(backgroundScale),
         };
     }
 
@@ -58,5 +60,6 @@ internal static class CameraPresetDefinition
         name, options.GetValueOrDefault("center", "50,50"),
         float.Parse(options.GetValueOrDefault("zoom", "1"), CultureInfo.InvariantCulture),
         float.Parse(options.GetValueOrDefault("rotation", "0"), CultureInfo.InvariantCulture),
-        options.GetValueOrDefault("dolly", "neutral")) { Options = options };
+        options.GetValueOrDefault("dolly", "neutral"))
+    { Options = options };
 }

@@ -105,7 +105,8 @@ public partial class MajoRuntimeBootstrap : Node
                         resolver.Get<IDirectionScopeResolver>(),
                         new YarnWindowPreloader(resolver.Get<IResourceManager>(),
                             Configuration.Resources, Configuration.Audio!,
-                            resolver.Get<ILocaleManager>(), resolver.Get<ILocalizedResourceResolver>(), resolver.Get<IActorManager>(), Logger));
+                            resolver.Get<ILocaleManager>(), resolver.Get<ILocalizedResourceResolver>(), resolver.Get<IActorManager>(), Logger,
+                            resolver.Get<IDirectionTransactionCoordinator>(), resolver.Get<IDirectionScopeResolver>()));
                     return yarnDialogueBackend;
                 },
                 typeof(IResourceManager),
@@ -114,6 +115,7 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(ILocalizedResourceResolver),
                 typeof(IYarnProjectVersionStore),
                 typeof(IDirectionScopeResolver),
+                typeof(IDirectionTransactionCoordinator),
                 typeof(IActorManager))
             .AddSingleton<IDialoguePresentation>(
                 resolver =>

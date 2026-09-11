@@ -4,6 +4,7 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Godot;
+using Majo.Demos.Manosaba.Actors.Layered;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Preloading;
 using Majo.Runtime.Resources;
@@ -23,6 +24,7 @@ public partial class HeadlessTestRunner
             Name = "LayeredCharacterRuntime",
             Configuration = configuration,
         };
+        bootstrap.AddPlugin(new LayeredCharacterPlugin());
         AddChild(bootstrap);
         await bootstrap.InitializationCompletion;
 
@@ -56,7 +58,7 @@ public partial class HeadlessTestRunner
         character.SetVisible(true);
         var layerComposite = character.View.GetNode<CanvasGroup>("LayerComposite");
         var layers = layerComposite.GetChildren().OfType<Sprite2D>().ToArray();
-        Assert(character.FactoryId == ActorFactoryIds.LayeredCharacter,
+        Assert(character.FactoryId == LayeredActorIds.Factory,
             "Layered character used the wrong actor factory.");
         Assert(layers.Length == 9,
             "Layered character did not create every synthetic fixture layer.");
@@ -78,7 +80,6 @@ public partial class HeadlessTestRunner
                 character.Scale.IsEqualApprox(new Vector2(0.75f, 0.75f)),
             "Layered character did not map scene percentages, baseline offset, or root scale correctly.");
 
-        var previousAppearance = character.Appearance;
         // Runtime actors are culled separately from backgrounds. Transient overlays
         // must retain the actor's non-default layer in both appearance APIs.
         Majo.Runtime.Direction.Godot.GodotDirectionRenderHost.AssignVisibilityLayer(
@@ -86,26 +87,8 @@ public partial class HeadlessTestRunner
         var actorHost = character.View.GetParent();
         var nodesBeforeTransition = actorHost.GetChildren().ToHashSet();
         var actorChildrenBeforeTransition = character.View.GetChildren().ToHashSet();
-        var appearanceTransition = character.ChangeAppearance("Surprised1", 0.2);
-        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        Assert(character.TargetAppearance != previousAppearance &&
-                Mathf.IsEqualApprox(layerComposite.SelfModulate.A, 1) &&
-                layers.All(l => Mathf.IsEqualApprox(l.SelfModulate.A, 1)) &&
-                character.View.GetNodeOrNull<Sprite2D>($"{character.View.Name}_DissolveOverlay") is not null,
-            "Layered character appearance change did not initialize endpoint dissolve.");
-        Assert(actorHost.GetChildren().All(nodesBeforeTransition.Contains),
-            "Layered character appearance change changed its actor host nodes.");
-        Assert(character.View.GetNode<Sprite2D>($"{character.View.Name}_DissolveOverlay").VisibilityLayer ==
-            character.View.VisibilityLayer, "Direct appearance overlay must be visible to the subject camera.");
-        await appearanceTransition.Completion;
-        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        Assert(Mathf.IsEqualApprox(character.Opacity, 1),
-            "Layered character appearance change did not finish its dissolve phase.");
-        Assert(character.View.GetChildren().ToHashSet().SetEquals(actorChildrenBeforeTransition),
-            "Layered character appearance change left transient scene nodes.");
         using (var prepared = await ((IActorAppearanceTarget)character).PrepareAppearanceTransitionAsync(
-            "Default", new AnimationSpec(.2),
+            character.Appearance, "Default", new AnimationSpec(.2),
             new Majo.Runtime.Direction.Transitions.DissolveTransitionDriver()))
         {
             prepared.Commit();
@@ -144,30 +127,11 @@ public partial class HeadlessTestRunner
                 "Eyes_Fearful"),
             "Canonical layered appearance did not restore a stable actor state.");
 
-        var firstChange = character.ChangeAppearance("Surprised1", 1);
-        await WaitForTransitionAsync((Sprite2D)character.View);
-        var secondChange = character.ChangeAppearance("Normal1", 1);
-        await firstChange.Completion;
-        character.SetOpacity(.4f); // Also exercise a change while inputs are being prepared.
-        await WaitForTransitionAsync((Sprite2D)character.View);
-        var overlay = character.View.GetChildren().OfType<Sprite2D>().Single();
-        Assert(Mathf.IsEqualApprox(overlay.Modulate.A, .4f), "Capture preparation lost concurrent opacity.");
-        Assert(character.View.GetChildren().OfType<SubViewport>()
-            .SelectMany(viewport => viewport.GetChildren().OfType<Node2D>())
-            .SelectMany(offset => offset.GetChildren().OfType<CanvasGroup>()).All(group => group.Visible),
-            "Preemption cloned a hidden composite.");
-        secondChange.Finish(); await secondChange.Completion;
-        Assert(character.Appearance == character.TargetAppearance && LayerVisible(layers,
-            "Eyes_Normal"), "Newest layered appearance was not committed.");
-        Assert(character.View.GetChildren().ToHashSet().SetEquals(actorChildrenBeforeTransition),
-            "Preempted layered appearances retained capture nodes.");
-        var cancelledChange = character.ChangeAppearance("Surprised1", 1);
-        character.SetAppearance(canonical);
-        await AssertThrowsAsync<OperationCanceledException>(() => cancelledChange.Completion);
-        Assert(character.Appearance == canonical, "Cancelled layered appearance overwrote an immediate SetAppearance.");
+        Assert(character.Appearance == canonical && character.View.GetChildren().ToHashSet().SetEquals(actorChildrenBeforeTransition),
+            "Layered canonical appearance did not remain stable after prepared transitions.");
         character.SetOpacity(1);
 
-        var warden = (ICharacterActor)actors.GetOrCreate(new ActorSpawnRequest(
+        var warden = (ICharacterActor)await actors.GetOrCreateAsync(new ActorSpawnRequest(
             "Plain",
             ActorFactoryIds.Character,
             "1",

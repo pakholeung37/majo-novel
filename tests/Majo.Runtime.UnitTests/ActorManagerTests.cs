@@ -9,6 +9,78 @@ namespace Majo.Runtime.UnitTests;
 
 public sealed class ActorManagerTests
 {
+    [Fact]
+    public async Task ExistingAliasPreloadUsesItsDefinitionWhenRequestOmitsAsset()
+    {
+        var factory = new DefinitionPreloadFactory();
+        using var manager = new ActorManager([CreateDefinition("Ema")], [factory]);
+        await manager.InitializeAsync(default);
+        await manager.GetOrCreateAsync(new ActorSpawnRequest("ema_left", "test", "happy") { DefinitionId = "Ema" });
+        var entry = Assert.Single(manager.GetPreloadResources(new ActorSpawnRequest("ema_left", "test", "happy")));
+        Assert.Equal("Ema/happy", entry.Key.Path);
+        Assert.Throws<ActorDefinitionException>(() => manager.GetPreloadResources(
+            new ActorSpawnRequest("ema_left", "test", "happy") { DefinitionId = "other" }));
+        await manager.ShutdownAsync(default);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FailedCreationCannotDestroyAnAlreadyOwnedActor(bool otherManager)
+    {
+        var factory = new ReusingActorFactory();
+        using var owner = new ActorManager([CreateDefinition("hero")], [factory]);
+        using var second = new ActorManager([CreateDefinition("hero")], [factory]);
+        await owner.InitializeAsync(default);
+        await second.InitializeAsync(default);
+        var original = (FakeActor)await owner.CreateAsync("hero");
+        var target = otherManager ? second : owner;
+        await Assert.ThrowsAsync<ActorException>(() => target.PrepareReplacementAsync(
+            [new ActorSpawnRequest("hero", "test", "happy")], default));
+        Assert.Same(original, owner.GetActor<FakeActor>("hero"));
+        Assert.False(original.IsDestroyed);
+        if (otherManager)
+        {
+            await Assert.ThrowsAsync<ActorException>(() => second.CreateAsync("hero"));
+            Assert.False(original.IsDestroyed);
+        }
+        owner.BindStateMutationGate(new Majo.Runtime.State.StateMutationGate());
+        Assert.False(original.IsDestroyed);
+        await second.ShutdownAsync(default);
+        await owner.ShutdownAsync(default);
+        Assert.True(original.IsDestroyed);
+    }
+
+    [Fact]
+    public async Task DefinitionValidationIsLimitedToRequestedResources()
+    {
+        var factory = new DefinitionPreloadFactory();
+        using var manager = new ActorManager([CreateDefinition("hero"), CreateDefinition("unused")], [factory]);
+        await manager.InitializeAsync(default);
+        Assert.Empty(factory.Validated);
+        await manager.CreateAsync("hero");
+        Assert.Equal(["hero"], factory.Validated);
+        manager.GetPreloadResources(new ActorSpawnRequest("hero", "test", "happy"));
+        Assert.DoesNotContain("unused", factory.Validated);
+        await manager.ShutdownAsync(default);
+    }
+
+    private sealed class DefinitionPreloadFactory : FakeActorFactory, IActorFactory
+    {
+        public List<string> Validated { get; } = [];
+        public override void ValidateDefinition(ActorDefinition definition) => Validated.Add(definition.DefinitionId);
+        public IReadOnlyList<ResourcePreloadEntry> GetPreloadResources(ActorDefinition definition, string appearance) =>
+            [ResourcePreloadEntry.Create<object>(new ResourceKey($"{definition.DefinitionId}/{appearance}"))];
+    }
+
+    private sealed class ReusingActorFactory : FakeActorFactory
+    {
+        private IActor? actor;
+        public override async Task<IActor> CreateAsync(ActorDefinition definition, ActorCreationMode mode, CancellationToken token) =>
+            actor ??= await base.CreateAsync(definition, mode, token);
+    }
+
+    private const string SpecialFactoryId = "test-special";
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -20,7 +92,7 @@ public sealed class ActorManagerTests
         var request = new ActorSpawnRequest("hero", "test", "happy");
         Assert.Single(manager.GetPreloadResources(request));
         Assert.Empty(manager.Actors);
-        manager.Create("hero");
+        await manager.CreateAsync("hero");
         Assert.Equal(preloadExisting ? 1 : 0, manager.GetPreloadResources(request).Count);
         Assert.Throws<ActorFactoryConflictException>(() => manager.GetPreloadResources(
             new ActorSpawnRequest("hero", "test", "happy", requiredFactoryId: "other")));
@@ -33,7 +105,8 @@ public sealed class ActorManagerTests
     {
         public string FactoryId => "test";
         public bool PreloadExistingAppearances => preloadExisting;
-        public IActor Create(ActorDefinition definition) => new FakeActor(definition.Id, "happy", FactoryId);
+        public Task<IActor> CreateAsync(ActorDefinition definition, ActorCreationMode mode, CancellationToken token) =>
+            Task.FromResult<IActor>(new FakeActor(definition.Id, "happy", FactoryId, definition.DefinitionId));
         public IReadOnlyList<ResourcePreloadEntry> GetPreloadResources(ActorDefinition definition, string appearance) =>
             new[] { ResourcePreloadEntry.Create<object>(new ResourceKey("atlas")) };
     }
@@ -62,13 +135,13 @@ public sealed class ActorManagerTests
         var manager = new ActorManager([CreateDefinition("hero")], [factory]);
         await manager.InitializeAsync(CancellationToken.None);
 
-        var actor = manager.Create("hero");
+        var actor = await manager.CreateAsync("hero");
 
         Assert.Same(actor, manager.GetActor<FakeActor>("hero"));
         Assert.True(manager.TryGet("hero", out var queried));
         Assert.Same(actor, queried);
         Assert.Single(manager.Actors);
-        Assert.Throws<DuplicateActorIdException>(() => manager.Create("hero"));
+        await Assert.ThrowsAsync<DuplicateActorIdException>(() => manager.CreateAsync("hero"));
 
         Assert.True(manager.Remove("hero"));
         Assert.False(manager.Remove("hero"));
@@ -86,16 +159,16 @@ public sealed class ActorManagerTests
             [factory]);
         await manager.InitializeAsync(CancellationToken.None);
 
-        manager.Create("stills");
-        manager.Create("scenes");
-        manager.Create("hero");
+        await manager.CreateAsync("stills");
+        await manager.CreateAsync("scenes");
+        await manager.CreateAsync("hero");
 
         Assert.Equal(["stills", "scenes", "hero"], manager.Actors.Select(a => a.Id));
 
         manager.Remove("scenes");
         Assert.Equal(["stills", "hero"], manager.Actors.Select(a => a.Id));
 
-        manager.Create("scenes");
+        await manager.CreateAsync("scenes");
         Assert.Equal(["stills", "hero", "scenes"], manager.Actors.Select(a => a.Id));
 
         await manager.ShutdownAsync(CancellationToken.None);
@@ -114,33 +187,33 @@ public sealed class ActorManagerTests
         Assert.Throws<ActorDefinitionException>(() => new ActorDefinition(
             "hero",
             "test",
-            "default",
-            [new KeyValuePair<string, string>("default", "")]));
+            new TextureActorDefinitionData("hero", "test", "default",
+                [new KeyValuePair<string, string>("default", "")])));
         Assert.Throws<ActorDefinitionException>(() => new ActorDefinition(
             "hero",
             "test",
-            "default",
-            [
+            new TextureActorDefinitionData("hero", "test", "default", [
                 new KeyValuePair<string, string>("default", "res://a.svg"),
                 new KeyValuePair<string, string>("default", "res://b.svg"),
-            ]));
+            ])));
 
         var definition = CreateDefinition("hero");
-        Assert.Equal("res://hero.svg", definition.GetAppearancePath("default"));
-        Assert.Equal("test/hero/unknown", definition.GetAppearancePath("unknown"));
+        var data = definition.GetFactoryData<TextureActorDefinitionData>();
+        Assert.Equal("res://hero.svg", data.GetAppearancePath(definition.DefinitionId, "default"));
+        Assert.Equal("test/hero/unknown", data.GetAppearancePath(definition.DefinitionId, "unknown"));
         Assert.Equal(
             new ResourceKey("test/hero/unknown"),
-            definition.GetAppearanceResourceKey("unknown"));
-        Assert.Null(definition.GetAppearanceOverride("unknown"));
+            data.GetAppearanceResourceKey(definition.DefinitionId, "unknown"));
+        Assert.Null(data.GetAppearanceOverride("unknown"));
 
         var conventional = new ActorDefinition(
             "hero",
             ActorFactoryIds.Character,
-            "calm",
-            []);
+            new TextureActorDefinitionData("hero", "characters", "calm", []));
         Assert.Equal(
             "characters/hero/calm",
-            conventional.GetAppearanceResourceKey("calm").Path);
+            conventional.GetFactoryData<TextureActorDefinitionData>()
+                .GetAppearanceResourceKey(conventional.DefinitionId, "calm").Path);
     }
 
     [Fact(Timeout = 5_000)]
@@ -161,7 +234,7 @@ public sealed class ActorManagerTests
         var factory = new FakeActorFactory("test");
         var manager = new ActorManager([CreateDefinition("hero")], [factory]);
         await manager.InitializeAsync(CancellationToken.None);
-        var actor = (FakeActor)manager.Create("hero");
+        var actor = (FakeActor)await manager.CreateAsync("hero");
         actor.ActiveOperation = new FakeOperationHandle();
 
         await manager.ResetAsync(CancellationToken.None);
@@ -184,7 +257,7 @@ public sealed class ActorManagerTests
         manager.RegisterFactory(replacement, replace: true);
 
         await manager.InitializeAsync(CancellationToken.None);
-        manager.Create("hero");
+        await manager.CreateAsync("hero");
 
         Assert.Equal(0, original.CreateCount);
         Assert.Equal(1, replacement.CreateCount);
@@ -202,7 +275,7 @@ public sealed class ActorManagerTests
         var manager = new ActorManager([definition], [factory]);
 
         await manager.InitializeAsync(CancellationToken.None);
-        var actor = manager.Create("custom");
+        var actor = await manager.CreateAsync("custom");
 
         Assert.Same(payload, factory.ValidatedPayload);
         Assert.Equal("custom", actor.Id);
@@ -224,6 +297,25 @@ public sealed class ActorManagerTests
         Assert.Same(await first, await second);
         Assert.Single(manager.Actors);
         await manager.ShutdownAsync(CancellationToken.None);
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task OneDefinitionCreatesIndependentAliasedInstancesAndRejectsIdentityChanges()
+    {
+        var factory = new FakeActorFactory("test");
+        using var manager = new ActorManager([CreateDefinition("Ema")], [factory]);
+        await manager.InitializeAsync(default);
+        var left = await manager.GetOrCreateAsync(new ActorSpawnRequest("ema_left", "test", "default")
+        { DefinitionId = "Ema" });
+        var right = await manager.GetOrCreateAsync(new ActorSpawnRequest("ema_right", "test", "default")
+        { DefinitionId = "Ema" });
+
+        Assert.NotSame(left, right);
+        Assert.Equal("Ema", left.DefinitionId);
+        Assert.Equal("Ema", right.DefinitionId);
+        Assert.Equal(2, factory.CreateCount);
+        await Assert.ThrowsAsync<ActorDefinitionException>(() => manager.GetOrCreateAsync(
+            new ActorSpawnRequest("ema_left", "test", "default") { DefinitionId = "Other" }));
     }
 
     [Theory(Timeout = 5_000)]
@@ -268,12 +360,13 @@ public sealed class ActorManagerTests
 
         Assert.Equal("new-hero", actor.Id);
         Assert.NotNull(factory.LastDefinition);
-        Assert.Equal("happy", factory.LastDefinition.DefaultAppearance);
-        Assert.Equal(CharacterPositionPreset.Left, factory.LastDefinition.InitialPosition);
+        var data = factory.LastDefinition.GetFactoryData<TextureActorDefinitionData>();
+        Assert.Equal("happy", data.DefaultAppearance);
+        Assert.Equal(CharacterPositionPreset.Left, data.InitialPosition);
         Assert.Equal(
             "portraits/new-hero/happy",
-            factory.LastDefinition.GetAppearanceResourceKey("happy").Path);
-        Assert.True(manager.CanCreate("another-hero", ActorFactoryIds.Character));
+            data.GetAppearanceResourceKey(factory.LastDefinition.DefinitionId, "happy").Path);
+        Assert.True(manager.CanCreate(new ActorSpawnRequest("another-hero", ActorFactoryIds.Character, "Default")));
         await manager.ShutdownAsync(CancellationToken.None);
     }
 
@@ -304,9 +397,9 @@ public sealed class ActorManagerTests
         var manager = new ActorManager([], [characterFactory, layeredFactory]);
         await manager.InitializeAsync(CancellationToken.None);
 
-        Assert.True(manager.CanCreate("Ema", ActorFactoryIds.LayeredCharacter));
-        Assert.False(manager.CanCreate("Ema", ActorFactoryIds.Character));
-        Assert.True(manager.CanCreate("Other", ActorFactoryIds.Character));
+        Assert.True(manager.CanCreate(new ActorSpawnRequest("Ema", SpecialFactoryId, "Default")));
+        Assert.True(manager.CanCreate(new ActorSpawnRequest("Ema", ActorFactoryIds.Character, "Default", requiredFactoryId: ActorFactoryIds.Character)));
+        Assert.True(manager.CanCreate(new ActorSpawnRequest("Other", ActorFactoryIds.Character, "Default")));
 
         var actor = await manager.GetOrCreateAsync(new ActorSpawnRequest(
             "Ema",
@@ -314,20 +407,20 @@ public sealed class ActorManagerTests
             "Surprised1",
             CharacterPositionPreset.Right));
 
-        Assert.Equal(ActorFactoryIds.LayeredCharacter, actor.FactoryId);
+        Assert.Equal(SpecialFactoryId, actor.FactoryId);
         Assert.NotNull(layeredFactory.LastDefinition);
         Assert.Equal(
             CharacterPositionPreset.Right,
-            layeredFactory.LastDefinition.InitialPosition);
+            layeredFactory.LastDefinition.GetFactoryData<TextureActorDefinitionData>().InitialPosition);
         Assert.Null(characterFactory.LastDefinition);
 
         Assert.True(manager.Remove("Ema"));
         var restored = await manager.GetOrCreateAsync(new ActorSpawnRequest(
             "Ema",
-            ActorFactoryIds.LayeredCharacter,
+            SpecialFactoryId,
             "Surprised1",
-            requiredFactoryId: ActorFactoryIds.LayeredCharacter));
-        Assert.Equal(ActorFactoryIds.LayeredCharacter, restored.FactoryId);
+            requiredFactoryId: SpecialFactoryId));
+        Assert.Equal(SpecialFactoryId, restored.FactoryId);
         await manager.ShutdownAsync(CancellationToken.None);
     }
 
@@ -337,8 +430,7 @@ public sealed class ActorManagerTests
         var definition = new ActorDefinition(
             "stage",
             ActorFactoryIds.Background,
-            "courtroom",
-            []);
+            new TextureActorDefinitionData("stage", "backgrounds", "courtroom", []));
         var manager = new ActorManager(
             [definition],
             [
@@ -365,9 +457,7 @@ public sealed class ActorManagerTests
         var definition = new ActorDefinition(
             "hero",
             "portrait",
-            "portraits",
-            "calm",
-            []);
+            new TextureActorDefinitionData("hero", "portraits", "calm", []));
         var manager = new ActorManager([definition], [factory]);
         await manager.InitializeAsync(CancellationToken.None);
 
@@ -381,11 +471,32 @@ public sealed class ActorManagerTests
         await manager.ShutdownAsync(CancellationToken.None);
     }
 
+    [Fact(Timeout = 5_000)]
+    public async Task SameActorInstanceCannotBeManagedByTwoManagers()
+    {
+        var sharedActor = new FakeActor("hero", "default", "test");
+        var factory = new SharedActorFactory(sharedActor);
+        using var first = new ActorManager([CreateDefinition("hero")], [factory]);
+        using var second = new ActorManager([CreateDefinition("hero")], [factory]);
+        await first.InitializeAsync(default);
+        await second.InitializeAsync(default);
+
+        Assert.Same(sharedActor, await first.CreateAsync("hero"));
+        var exception = await Assert.ThrowsAsync<ActorException>(() => second.CreateAsync("hero"));
+
+        Assert.Contains("already managed", exception.Message, StringComparison.Ordinal);
+        Assert.False(sharedActor.IsDestroyed);
+        Assert.Same(sharedActor, first.GetActor<IActor>("hero"));
+        await second.ShutdownAsync(default);
+        await first.ShutdownAsync(default);
+        Assert.True(sharedActor.IsDestroyed);
+    }
+
     private static ActorDefinition CreateDefinition(string id) => new(
         id,
         "test",
-        "default",
-        [new KeyValuePair<string, string>("default", $"res://{id}.svg")]);
+        new TextureActorDefinitionData(id, "test", "default",
+            [new KeyValuePair<string, string>("default", $"res://{id}.svg")]));
 
 
 
@@ -397,13 +508,14 @@ public sealed class ActorManagerTests
 
         public ActorDefinition? LastDefinition { get; private set; }
 
-        public IActor Create(ActorDefinition definition)
+        public Task<IActor> CreateAsync(ActorDefinition definition, ActorCreationMode mode, CancellationToken token)
         {
             LastDefinition = definition;
-            return new FakeActor(
+            return Task.FromResult<IActor>(new FakeActor(
                 definition.Id,
-                definition.DefaultAppearance,
-                definition.FactoryId);
+                definition.GetFactoryData<TextureActorDefinitionData>().DefaultAppearance,
+                definition.FactoryId,
+                definition.DefinitionId));
         }
     }
 
@@ -414,7 +526,7 @@ public sealed class ActorManagerTests
         public ConventionActorFactory(string conventionalActorId) =>
             this.conventionalActorId = conventionalActorId;
 
-        public string FactoryId => ActorFactoryIds.LayeredCharacter;
+        public string FactoryId => SpecialFactoryId;
 
         public ActorDefinition? LastDefinition { get; private set; }
 
@@ -427,7 +539,7 @@ public sealed class ActorManagerTests
                     conventionalActorId,
                     StringComparison.Ordinal) ||
                 request.FallbackFactoryId is not ActorFactoryIds.Character and
-                    not ActorFactoryIds.LayeredCharacter)
+                    not SpecialFactoryId)
             {
                 definition = null!;
                 return false;
@@ -436,20 +548,21 @@ public sealed class ActorManagerTests
             definition = new ActorDefinition(
                 request.ActorId,
                 FactoryId,
-                "layered",
-                request.InitialAppearance,
-                [],
-                request.InitialPosition ?? CharacterPositionPreset.Center);
+                new TextureActorDefinitionData(request.DefinitionId ?? request.ActorId, "layered",
+                    request.InitialAppearance, [],
+                    request.InitialPosition ?? CharacterPositionPreset.Center),
+                request.DefinitionId);
             return true;
         }
 
-        public IActor Create(ActorDefinition definition)
+        public Task<IActor> CreateAsync(ActorDefinition definition, ActorCreationMode mode, CancellationToken token)
         {
             LastDefinition = definition;
-            return new FakeActor(
+            return Task.FromResult<IActor>(new FakeActor(
                 definition.Id,
-                definition.DefaultAppearance,
-                definition.FactoryId);
+                definition.GetFactoryData<TextureActorDefinitionData>().DefaultAppearance,
+                definition.FactoryId,
+                definition.DefinitionId));
         }
     }
 
@@ -464,8 +577,8 @@ public sealed class ActorManagerTests
         public void ValidateDefinition(ActorDefinition definition) =>
             ValidatedPayload = definition.GetFactoryData<CustomActorPayload>();
 
-        public IActor Create(ActorDefinition definition) =>
-            new FakeActor(definition.Id, "custom");
+        public Task<IActor> CreateAsync(ActorDefinition definition, ActorCreationMode mode, CancellationToken token) =>
+            Task.FromResult<IActor>(new FakeActor(definition.Id, "custom", FactoryId, definition.DefinitionId));
     }
 
     private sealed class DeferredActorFactory : IActorFactory
@@ -477,11 +590,9 @@ public sealed class ActorManagerTests
 
         public int CreateCount { get; private set; }
 
-        public IActor Create(ActorDefinition definition) =>
-            throw new NotSupportedException();
-
         public async Task<IActor> CreateAsync(
             ActorDefinition definition,
+            ActorCreationMode mode,
             CancellationToken cancellationToken)
         {
             CreateCount++;
@@ -489,6 +600,16 @@ public sealed class ActorManagerTests
         }
 
         public void Complete(IActor actor) => completion.SetResult(actor);
+    }
+
+    private sealed class SharedActorFactory(IActor actor) : IActorFactory
+    {
+        public string FactoryId => "test";
+
+        public Task<IActor> CreateAsync(
+            ActorDefinition definition,
+            ActorCreationMode mode,
+            CancellationToken cancellationToken) => Task.FromResult(actor);
     }
 
 }

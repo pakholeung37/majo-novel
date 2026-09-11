@@ -131,7 +131,7 @@
       "yarnName": "character",
       "definitionName": "Majo.Runtime.Dialogue.Commands.CharacterCommand",
       "language": "csharp",
-      "documentation": "character \u003Cactor\u003E [stage:\u003Cstring\u003E] [appearance:\u003Cstring\u003E] [at:\u003Cmark|x,y\u003E] [scale:\u003Cnumber\u003E] [z:\u003Cinteger\u003E] [rotation:\u003Cnumber\u003E] [via:\u003Ckind\u003E] [duration:\u003Cnumber\u003E] [ease:\u003Ceasing-id\u003E] [wait:\u003Cbool\u003E]\nactor: value\nstage: value (default main)\nappearance: value\nat: value\nscale: value\nz: value\nrotation: degrees\nvia: kind\nduration: seconds\nease: curve\nwait: bool (default false)",
+      "documentation": "character \u003Cactor\u003E [stage:\u003Cstring\u003E] [appearance:\u003Cstring\u003E] [at:\u003Cmark|x,y\u003E] [scale:\u003Cnumber\u003E] [z:\u003Cinteger\u003E] [rotation:\u003Cnumber\u003E] [asset:\u003Cstring\u003E] [via:\u003Ckind\u003E] [duration:\u003Cnumber\u003E] [ease:\u003Ceasing-id\u003E] [wait:\u003Cbool\u003E]\nactor: value\nstage: value (default main)\nappearance: value\nat: value\nscale: value\nz: value\nrotation: degrees\nasset: value\nvia: kind\nduration: seconds\nease: curve\nwait: bool (default false)",
       "async": true,
       "containsErrors": false,
       "parameters": [
@@ -173,6 +173,12 @@
         },
         {
           "name": "rotation:value",
+          "type": "string",
+          "isOptional": true,
+          "isParamsArray": false
+        },
+        {
+          "name": "asset:value",
           "type": "string",
           "isOptional": true,
           "isParamsArray": false

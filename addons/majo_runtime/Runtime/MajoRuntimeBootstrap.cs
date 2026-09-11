@@ -65,6 +65,8 @@ public partial class MajoRuntimeBootstrap : Node
     private readonly CameraModifierRegistry cameraModifiers = new();
     public Action<ActorModifierRegistry>? ConfigureActorModifiers { get; set; }
     private readonly ActorModifierRegistry actorModifiers = new();
+    private readonly ActorFactoryRegistry actorFactories = new();
+    private Majo.Runtime.Actors.Godot.ActorFactoryCatalog? actorCatalog;
     private readonly TransientCueHandlerRegistry transientCueHandlers;
     private readonly PluginRegistrationContext pluginRegistration;
 
@@ -77,7 +79,9 @@ public partial class MajoRuntimeBootstrap : Node
             transitionDrivers,
             cameraModifiers,
             transientCueHandlers,
-            easingRegistry);
+            easingRegistry,
+            actorFactories);
+        RegisterBuiltInActorFactories();
     }
 
     public IPluginManager Plugins => pluginManager;
@@ -103,7 +107,7 @@ public partial class MajoRuntimeBootstrap : Node
 
     public Action<DiagnosticContributorRegistry>? ConfigureDiagnosticContributors { get; set; }
 
-    public Action<ActorManager>? ConfigureActorFactories { get; set; }
+    public Action<ActorFactoryRegistry>? ConfigureActorFactories { get; set; }
 
     public Action<CommandRegistrationContext>? ConfigureCommands { get; set; }
 
@@ -291,6 +295,10 @@ public partial class MajoRuntimeBootstrap : Node
         ConfigureCommands?.Invoke(commandRegistry.Registration);
 
         pluginManager.Configure(pluginRegistration);
+
+        ConfigureActorFactories?.Invoke(actorFactories);
+        actorFactories.Seal();
+        actorCatalog = new Majo.Runtime.Actors.Godot.ActorFactoryCatalog(actorFactories, Configuration!.Actors!, Configuration.Resources!);
 
         commandRegistry.SealRegistrations();
         easingRegistry.Seal();

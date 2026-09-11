@@ -330,16 +330,16 @@ public sealed class StateManagerTests
         var factory = new FakeActorFactory("test");
         var definitions = new[]
         {
-            new ActorDefinition("stills", "test", "default", []),
-            new ActorDefinition("scenes", "test", "default", []),
-            new ActorDefinition("hero", "test", "default", []),
+            new ActorDefinition("stills", "test", new TextureActorDefinitionData("stills", "test", "default", [])),
+            new ActorDefinition("scenes", "test", new TextureActorDefinitionData("scenes", "test", "default", [])),
+            new ActorDefinition("hero", "test", new TextureActorDefinitionData("hero", "test", "default", [])),
         };
         var manager = new ActorManager(definitions, [factory]);
         await manager.InitializeAsync(CancellationToken.None);
 
-        manager.Create("stills").SetZIndex(-10);
-        manager.Create("scenes");
-        manager.Create("hero").SetZIndex(20);
+        (await manager.CreateAsync("stills")).SetZIndex(-10);
+        await manager.CreateAsync("scenes");
+        (await manager.CreateAsync("hero")).SetZIndex(20);
 
         var contributor = new ActorStateContributor(manager);
         var record = await contributor.CaptureAsync(CancellationToken.None);

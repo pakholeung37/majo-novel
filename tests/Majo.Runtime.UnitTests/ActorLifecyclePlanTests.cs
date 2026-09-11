@@ -96,4 +96,18 @@ public sealed class ActorLifecyclePlanTests
             new IDirectionDirective[] { Place(), move }));
         Assert.Throws<DirectionReferenceException>(() => planner.PlanDomain(plan.TargetState, new[] { move }));
     }
+
+    [Fact]
+    public void ConsecutiveAppearanceRequestsRemainOrderedWithinOneBeat()
+    {
+        var planner = new DirectionPlanner();
+        var state = VisibleState();
+        var first = Place() with { Appearance = DirectionValue.From<string?>("+Angry") };
+        var second = Place() with { Appearance = DirectionValue.From<string?>("Face>Smile") };
+
+        var plan = planner.PlanDomain(state, new[] { first, second });
+
+        Assert.Equal(new IDurableDirectionPatch[] { first, second }, plan.ActorIntents);
+        Assert.Equal("Face>Smile", plan.TargetState.Stages[StageId.Main].Actors[Hero].Appearance);
+    }
 }

@@ -1,0 +1,14 @@
+<Project Sdk="Godot.NET.Sdk/4.7.2">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);SYSLIB1220;CS0618</NoWarn>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+  <Import Project="addons\YarnSpinner-Godot\YarnSpinner-Godot.props" />
+  <Import Project="addons\majo_runtime\MajoRuntime.props" />
+  <ItemGroup>
+    <Compile Remove="addons\majo_runtime\Editor\**" />
+    <Compile Remove="addons\majo_runtime\MajoRuntimePlugin.cs" />
+  </ItemGroup>
+</Project>

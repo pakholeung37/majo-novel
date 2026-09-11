@@ -74,7 +74,7 @@ internal static class GodotDirectionRendering
         Mathf.Lerp(from.Strength, to.Strength, progress),
         new DirectionPoint(Mathf.Lerp(from.Anchor.X, to.Anchor.X, progress), Mathf.Lerp(from.Anchor.Y, to.Anchor.Y, progress)),
         new DirectionPoint(Mathf.Lerp(from.LimitPercent.X, to.LimitPercent.X, progress), Mathf.Lerp(from.LimitPercent.Y, to.LimitPercent.Y, progress)))
-        { UseDepthProjection = to.UseDepthProjection };
+    { UseDepthProjection = to.UseDepthProjection };
 
     public static ViewIdleState Interpolate(ViewIdleState from, ViewIdleState to, float progress) => new(
         new DirectionPoint(

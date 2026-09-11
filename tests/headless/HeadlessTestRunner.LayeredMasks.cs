@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Actors.Godot;
-using Majo.Runtime.Actors.Layered;
+using Majo.Demos.Manosaba.Actors.Layered;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Direction.Transitions;
 using Majo.Runtime.Operations;
@@ -50,8 +50,8 @@ public partial class HeadlessTestRunner
                 var view = new Sprite2D();
                 viewport.AddChild(view);
                 using var actor = new LayeredCharacterActor(
-                    new ActorDefinition(name, ActorFactoryIds.LayeredCharacter, "Default", new Dictionary<string, string>()),
-                    view, runner, loader, new CharacterPositionMap(new ActorConfiguration()),
+                    new ActorDefinition(name, LayeredActorIds.Factory),
+                    view, loader, new CharacterPositionMap(new ActorConfiguration()),
                     manifest, path, CharacterPositionPreset.Center);
                 actor.SetPosition(new Vector2(320, name == "Miria" ? 1020 : 920));
                 actor.SetScale(new Vector2(.7f, .7f));
@@ -67,7 +67,7 @@ public partial class HeadlessTestRunner
                     using var source = await ReadTransitionFrameAsync(viewport);
                     // Source and target use different eye sprites. Preparing the
                     // target must not mutate the source's shared mask material.
-                    using (var prepared = await actor.PrepareAppearanceTransitionAsync(appearance,
+                    using (var prepared = await actor.PrepareAppearanceTransitionAsync("Default", appearance,
                         new AnimationSpec(.1), new DissolveTransitionDriver()))
                     {
                         prepared.Commit();
@@ -245,9 +245,10 @@ public partial class HeadlessTestRunner
         using var material = new ShaderMaterial { Shader = shader };
         try
         {
-            using var prepared = await GodotActorAppearanceTransition.PrepareForCommitAsync(owner,
+            using var prepared = await new GodotActorAppearanceTransitionService().PrepareForCommitAsync(owner,
                 Content(Colors.Red, 16), Content(Colors.Blue, 16), new Rect2(0, 0, 16, 16),
                 _ => { }, _ => { }, () => { }, () => { },
+                "target",
                 new ShaderTransitionDriver(new Majo.Runtime.Direction.Core.DirectionTransitionId("pool-wipe"), material),
                 new AnimationSpec(.1), CancellationToken.None);
             prepared.Commit();

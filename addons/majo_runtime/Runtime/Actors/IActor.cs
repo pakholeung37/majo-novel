@@ -45,25 +45,19 @@ public interface IActor
 {
     string Id { get; }
 
-    string FactoryId => string.Empty;
+    string DefinitionId { get; }
+
+    string FactoryId { get; }
 
     string Appearance { get; }
 
-    string TargetAppearance => Appearance;
-
     bool Visible { get; }
 
-    bool TargetVisible => Visible;
-
     Vector2 Position { get; }
-
-    Vector2 TargetPosition => Position;
 
     Color Tint { get; }
 
     float Opacity { get; }
-
-    float TargetOpacity => Opacity;
 
     int ZIndex { get; }
 
@@ -88,24 +82,6 @@ public interface IActor
 
     void SetZIndex(int zIndex);
 
-    IOperationHandle ChangePosition(
-        Vector2 position,
-        double durationSeconds);
-
-    IOperationHandle ChangePosition(
-        Vector2 position,
-        AnimationSpec animation) => ChangePosition(
-            position, animation.DurationSeconds);
-
-    IOperationHandle ChangeOpacity(
-        float opacity,
-        double durationSeconds);
-
-    IOperationHandle ChangeOpacity(
-        float opacity,
-        AnimationSpec animation) => ChangeOpacity(
-            opacity, animation.DurationSeconds);
-
     void Destroy();
 }
 
@@ -114,39 +90,14 @@ public interface IGodotActorView
     Node SceneNode { get; }
 }
 
-public interface ICharacterActor : IActor, IGodotActorView
+public interface ICharacterActor : ISceneActor
 {
     CanvasItem View { get; }
-    Vector2 Scale { get; }
 
     CharacterPositionPreset PositionPreset { get; }
 
-    void SetScale(Vector2 scale);
-
-    void SetScenePosition(Vector2 scenePosition);
-
     void SetPosition(CharacterPositionPreset preset);
 
-    IOperationHandle ChangeAppearance(
-        string appearance,
-        double durationSeconds);
-
-    IOperationHandle ChangeAppearance(
-        string appearance,
-        AnimationSpec animation) => ChangeAppearance(
-            appearance, animation.DurationSeconds);
-
-    IOperationHandle ChangeAppearance(string appearance, AnimationSpec animation, ITransitionDriver driver) =>
-        throw new ActorException($"Actor '{Id}' does not provide visual transition inputs for '{driver.Id}'.");
-
-    IOperationHandle ChangePosition(
-        CharacterPositionPreset preset,
-        double durationSeconds);
-
-    IOperationHandle ChangePosition(
-        CharacterPositionPreset preset,
-        AnimationSpec animation) => ChangePosition(
-            preset, animation.DurationSeconds);
 }
 
 public interface IBackgroundActor : IActor, IGodotActorView

@@ -10,6 +10,9 @@ using Majo.Runtime.Actors;
 using Majo.Runtime.Audio;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
+using Majo.Runtime.Dialogue.Commands;
+using Majo.Runtime.Direction.Core;
+using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Localization;
 using Majo.Runtime.Preloading;
 using Majo.Runtime.Resources;
@@ -33,6 +36,9 @@ public sealed class YarnWindowPreloader : IDisposable
     private readonly List<YarnPreloadReference> beatResources = new();
     private bool inBeat;
     private string? preparedRestoreNode;
+    private string? currentNode;
+    private readonly IDirectionTransactionCoordinator? direction;
+    private readonly IDirectionScopeResolver? scopes;
 
     public async Task PrepareStartAsync(YarnProject value, string node, CancellationToken token, string? restoreLine = null)
     {
@@ -40,6 +46,7 @@ public sealed class YarnWindowPreloader : IDisposable
         beatResources.Clear();
         if (!ReferenceEquals(project, value)) textureEstimates.Clear();
         project = value;
+        currentNode = node;
         planner.Enter(value.Program.Nodes.TryGetValue(node, out var found) ? found : null);
         preparedRestoreNode = restoreLine is null ? null : node;
         if (restoreLine is not null) planner.Line(restoreLine);
@@ -49,7 +56,9 @@ public sealed class YarnWindowPreloader : IDisposable
 
     public YarnWindowPreloader(IResourceManager resources, ResourceConfiguration configuration,
         AudioConfiguration audio, ILocaleManager locales, ILocalizedResourceResolver localized,
-        IActorManager actors, IRuntimeLogger? logger = null)
+        IActorManager actors, IRuntimeLogger? logger = null,
+        IDirectionTransactionCoordinator? direction = null,
+        IDirectionScopeResolver? scopes = null)
     {
         this.resources = resources;
         this.actors = actors;
@@ -58,6 +67,8 @@ public sealed class YarnWindowPreloader : IDisposable
         this.audio = audio;
         this.locales = locales;
         this.localized = localized;
+        this.direction = direction;
+        this.scopes = scopes;
         window = new ResourceLookAheadWindow(resources, logger);
         locales.VoiceLocaleChanged += OnLocaleChanged;
         locales.DialogueLocaleChanged += OnLocaleChanged;
@@ -75,6 +86,7 @@ public sealed class YarnWindowPreloader : IDisposable
         beatResources.Clear();
         if (!ReferenceEquals(project, value)) textureEstimates.Clear();
         project = value;
+        currentNode = node;
         planner.Enter(value.Program.Nodes.TryGetValue(node, out var found) ? found : null);
         // Node-start is synchronous. The first command/line supplies the barrier.
         _ = PrimeAsync();
@@ -141,6 +153,7 @@ public sealed class YarnWindowPreloader : IDisposable
     private ResourcePreloadEntry[] Resolve(IEnumerable<YarnPreloadReference> references)
     {
         var result = new List<ResourcePreloadEntry>();
+        var definitions = new Dictionary<(string Stage, string Instance), string>();
         foreach (var reference in references)
         {
             var kind = reference.Kind;
@@ -172,8 +185,14 @@ public sealed class YarnWindowPreloader : IDisposable
                     ? actors.GetPreloadResources(new ActorSpawnRequest(id, ActorFactoryIds.SceneObject, reference.Appearance ?? "Default")
                     { DefinitionId = reference.Asset })
                     : kind == "character"
-                    ? actors.GetPreloadResources(new ActorSpawnRequest(id[..id.IndexOf('/')],
-                        ActorFactoryIds.Character, id[(id.IndexOf('/') + 1)..]))
+                    ? actors.GetPreloadResources(new ActorSpawnRequest(
+                        id,
+                        ActorFactoryIds.Character,
+                        reference.Appearance ?? "Default")
+                    {
+                        DefinitionId = ResolveCharacterDefinition(reference, definitions),
+                        UseDefinitionDefaultAppearance = reference.Appearance is null,
+                    })
                     : new[] { ResourcePreloadEntry.Create<Texture2D>(new BackdropId(id).ToResourceKey(root)) };
                 foreach (var entry in entries)
                 {
@@ -209,6 +228,24 @@ public sealed class YarnWindowPreloader : IDisposable
         // Do not charge shared, already-active textures to speculative capacity.
         return result.Distinct().Where(entry => entry.ResourceType != typeof(Texture2D) ||
             !resources.IsPinned<Texture2D>(entry.Key, entry.OverridePath)).ToArray();
+    }
+
+    private string ResolveCharacterDefinition(YarnPreloadReference reference,
+        Dictionary<(string Stage, string Instance), string> definitions)
+    {
+        var stage = scopes is not null && currentNode is not null
+            ? scopes.ResolveStage(currentNode, reference.Stage ?? StageId.Main.Value)
+            : new StageId(reference.Stage ?? StageId.Main.Value);
+        var key = (stage.Value, reference.Id);
+        if (!string.IsNullOrWhiteSpace(reference.Asset))
+            return definitions[key] = reference.Asset;
+        if (definitions.TryGetValue(key, out var known)) return known;
+        // An open beat's earlier explicit definitions are not in DirectionState yet.
+        // The per-resolution map above handles them without leaking across stages.
+        return direction is not null && direction.State.Stages.TryGetValue(stage, out var stageState) &&
+            stageState.Actors.TryGetValue(new ActorId(reference.Id), out var actor)
+                ? actor.DefinitionId ?? actor.Id.Value
+                : reference.Id;
     }
 
     private long EstimateTexture(ResourcePreloadEntry entry)

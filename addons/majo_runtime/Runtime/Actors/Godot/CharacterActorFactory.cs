@@ -1,57 +1,62 @@
 #nullable enable
 
 using System;
+using System.Threading;
+using System.Threading.Tasks;
 using Godot;
-using Majo.Runtime.Direction.Transitions;
-using Majo.Runtime.Operations;
-using Majo.Runtime.Timing;
 
 namespace Majo.Runtime.Actors.Godot;
 
 public sealed class CharacterActorFactory : IActorFactory
 {
     private readonly Node2D host;
-    private readonly IOperationRunner runner;
     private readonly IActorTextureLoader textureLoader;
     private readonly CharacterPositionMap positions;
-    private readonly IEasingRegistry? easings;
-    private readonly ITransitionDriverRegistry? transitions;
+    private readonly IActorAppearanceTransitionService transitions;
 
     public CharacterActorFactory(
         Node2D host,
-        IOperationRunner runner,
         IActorTextureLoader textureLoader,
         CharacterPositionMap positions,
-        IEasingRegistry? easings = null, ITransitionDriverRegistry? transitions = null)
+        IActorAppearanceTransitionService? transitions = null)
     {
         this.host = host ?? throw new ArgumentNullException(nameof(host));
-        this.runner = runner ?? throw new ArgumentNullException(nameof(runner));
         this.textureLoader = textureLoader ?? throw new ArgumentNullException(nameof(textureLoader));
         this.positions = positions ?? throw new ArgumentNullException(nameof(positions));
-        this.easings = easings;
-        this.transitions = transitions;
+        this.transitions = transitions ?? new GodotActorAppearanceTransitionService();
     }
 
     public string FactoryId => ActorFactoryIds.Character;
+
+    public string GetInitialAppearance(ActorDefinition definition) =>
+        definition.GetFactoryData<TextureActorDefinitionData>().DefaultAppearance;
 
     public System.Collections.Generic.IReadOnlyList<Majo.Runtime.Resources.ResourcePreloadEntry> GetPreloadResources(
         ActorDefinition definition, string appearance) => new[]
         {
             Majo.Runtime.Resources.ResourcePreloadEntry.Create<Texture2D>(
-                definition.GetAppearanceResourceKey(appearance), definition.GetAppearanceOverride(appearance)),
+                definition.GetFactoryData<TextureActorDefinitionData>().GetAppearanceResourceKey(
+                    definition.DefinitionId, appearance),
+                definition.GetFactoryData<TextureActorDefinitionData>().GetAppearanceOverride(appearance)),
         };
 
     public void ValidateDefinition(ActorDefinition definition) =>
         _ = definition.GetFactoryData<TextureActorDefinitionData>();
 
-    public IActor Create(ActorDefinition definition)
+    public Task<IActor> CreateAsync(
+        ActorDefinition definition,
+        ActorCreationMode mode,
+        CancellationToken cancellationToken)
     {
-        var view = new Sprite2D { Name = definition.Id, Centered = true };
+        cancellationToken.ThrowIfCancellationRequested();
+        var view = new Sprite2D { Name = definition.Id, Centered = true, Visible = false };
         host.AddChild(view);
         try
         {
-            return new CharacterActor(
-                definition, view, runner, textureLoader, positions, easings, transitions);
+            var actor = new TextureCharacterActor(
+                definition, view, textureLoader, positions, transitions);
+            actor.SetVisible(mode == ActorCreationMode.Active);
+            return Task.FromResult<IActor>(actor);
         }
         catch
         {

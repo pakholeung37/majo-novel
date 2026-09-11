@@ -1,13 +1,16 @@
 #nullable enable
 
+using System.Linq;
 using Godot;
 using Majo.Runtime.Accessibility;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Actors.Godot;
 using Majo.Runtime.Core;
+using Majo.Runtime.Direction.Transitions;
 using Majo.Runtime.Localization;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Plugins;
+using Majo.Runtime.Resources;
 using Majo.Runtime.Timing;
 
 namespace Majo.Runtime;
@@ -19,74 +22,87 @@ public partial class MajoRuntimeBootstrap : Node
         services
             .AddSingleton<GodotActorHost>(_ => new GodotActorHost(this, Configuration!.Actors!))
             .AddSingleton<IActorManager>(
-                resolver => CreateActorManager(
-                    resolver.Get<GodotActorHost>(),
-                    resolver.Get<IOperationRunner>(),
-                    resolver.Get<IActorTextureLoader>(),
-                    resolver.Get<IFrameClock>(),
-                    resolver.Get<ILocaleManager>(),
-                    resolver.Get<IEasingRegistry>()),
-                typeof(GodotActorHost),
-                typeof(IOperationRunner),
-                typeof(IActorTextureLoader),
-                typeof(IFrameClock),
-                typeof(ILocaleManager),
-                typeof(IEasingRegistry))
+                resolver => CreateActorManager(resolver, resolver.Get<GodotActorHost>()),
+                ActorFactoryServiceDependencies(
+                    ActorFactoryDomains.Runtime,
+                    typeof(GodotActorHost),
+                    typeof(IActorTextureLoader),
+                    typeof(IFrameClock),
+                    typeof(ILocaleManager),
+                    typeof(IResourceManager)))
 
             .AddSingleton<IPluginManager>(_ => pluginManager)
             .AddSingleton<IDirectionAccessibility>(
                 _ => new DirectionAccessibility(Configuration!.Stage!.ReduceMotion));
     }
 
-    private ActorManager CreateActorManager(
-        GodotActorHost host,
-        IOperationRunner scheduler,
-        IActorTextureLoader textureLoader,
-        IFrameClock frameClock,
-        ILocaleManager locales,
-        IEasingRegistry easingRegistry)
+    private ActorManager CreateActorManager(IServiceResolver resolver, GodotActorHost host)
     {
-        var actorConfiguration = Configuration!.Actors!;
-        var manager = new ActorManager(
-            ActorConfigurationCompiler.Compile(actorConfiguration, Configuration.Resources!),
-            new IActorFactory[]
-            {
-                new SceneObjectActorFactory(host.CharacterLayer, scheduler, textureLoader, Configuration.Resources!,
-                    actorConfiguration.ReferenceResolution, easingRegistry, transitionDrivers),
-                new CharacterActorFactory(
-                    host.CharacterLayer,
-                    scheduler,
-                    textureLoader,
-                    new CharacterPositionMap(actorConfiguration),
-                    easingRegistry, transitionDrivers),
-                new LayeredCharacterActorFactory(
-                    host.CharacterLayer,
-                    scheduler,
-                    textureLoader,
-                    frameClock,
-                    new CharacterPositionMap(actorConfiguration),
-                    Configuration.Resources!.RootPath,
-                    Configuration.Resources.CharactersPath,
-                    easingRegistry, transitionDrivers),
-                new BackgroundActorFactory(
-                    host.BackgroundLayer,
-                    scheduler,
-                    textureLoader),
-            },
-
-            locales,
-            Logger,
+        var context = CreateActorFactoryContext(
+            ActorFactoryDomains.Runtime, host.CharacterLayer, host.BackgroundLayer, resolver);
+        return ActorManagerBuilder.Create(
+            context,
+            resolver.Get<ILocaleManager>(),
             new ActorCreationConventions(
-                Configuration.Resources!.CharactersPath,
-                Configuration.Resources.BackgroundsPath));
-        ConfigurePluginActorFactories(manager);
-        ConfigureActorFactories?.Invoke(manager);
-        return manager;
+                context.ResourceSettings.CharactersPath,
+                context.ResourceSettings.BackgroundsPath));
     }
 
-    private void ConfigurePluginActorFactories(ActorManager manager)
+    private ActorFactoryContext CreateActorFactoryContext(
+        ActorFactoryDomains domain,
+        Node2D characterRoot,
+        Control? backgroundRoot,
+        IServiceResolver resolver)
     {
-        foreach (var configure in pluginRegistration.ActorFactoryConfigurations)
-            configure(manager);
+        return new ActorFactoryContext(
+            domain,
+            characterRoot,
+            backgroundRoot,
+            resolver.Get<IActorTextureLoader>(),
+            resolver.Get<Majo.Runtime.Resources.IResourceManager>(),
+            resolver.Get<IFrameClock>(),
+            actorCatalog!,
+            resolver,
+            Logger!);
     }
+
+    private void RegisterBuiltInActorFactories()
+    {
+        actorFactories
+            .Register(
+                ActorFactoryIds.SceneObject,
+                ActorFactoryDomains.Runtime | ActorFactoryDomains.Direction,
+                context => new SceneObjectActorFactory(
+                    context.CharacterRoot,
+                    context.TextureLoader,
+                    context.ResourceSettings,
+                    context.ActorSettings.ReferenceResolution,
+                    context.AppearanceTransitions),
+                ActorConfigurationCompiler.CompileSceneObjectTextureDefinition)
+            .Register(
+                ActorFactoryIds.Character,
+                ActorFactoryDomains.Runtime | ActorFactoryDomains.Direction,
+                context => new CharacterActorFactory(
+                    context.CharacterRoot,
+                    context.TextureLoader,
+                    context.CharacterPositions,
+                    context.AppearanceTransitions),
+                ActorConfigurationCompiler.CompileCharacterTextureDefinition)
+            .Register(
+                ActorFactoryIds.Background,
+                ActorFactoryDomains.Runtime,
+                context => new BackgroundActorFactory(
+                    context.BackgroundRoot,
+                    context.TextureLoader),
+                ActorConfigurationCompiler.CompileBackgroundTextureDefinition);
+    }
+
+    private System.Type[] ActorFactoryServiceDependencies(
+        ActorFactoryDomains domain,
+        params System.Type[] builtIns) => builtIns
+        .Concat(actorFactories.Registrations
+            .Where(entry => (entry.Domains & domain) != 0)
+            .SelectMany(entry => entry.ServiceDependencies))
+        .Distinct()
+        .ToArray();
 }

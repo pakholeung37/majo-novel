@@ -295,11 +295,14 @@ public sealed class DirectionPlanner : IDirectionPlanner
             throw new DirectionReferenceException($"Stage '{patch.StageId}' is not defined.");
         var actors = stage.Actors.ToDictionary(pair => pair.Key, pair => pair.Value);
         var actorExists = actors.TryGetValue(patch.ActorId, out var actor);
-        actor ??= ActorState.CreateDefault(patch.ActorId) with { Kind = patch.Kind, DefinitionId = patch.DefinitionId };
+        actor ??= ActorState.CreateDefault(patch.ActorId) with
+        {
+            Kind = patch.Kind,
+            DefinitionId = patch.DefinitionId ??
+                (patch.Kind == DirectionActorKind.Character ? patch.ActorId.Value : null),
+        };
         ValidateActorIdentity(actor, patch.Kind, patch.DefinitionId);
-        ActorState? original = null;
-        beforeState.Stages.GetValueOrDefault(patch.StageId)?.Actors.TryGetValue(patch.ActorId, out original);
-        var showing = original is null || !original.Visible;
+        var showing = !actorExists || !actor.Visible;
         var prefix = ActorPath(patch.StageId, patch.ActorId, string.Empty);
         var presencePath = ActorPath(patch.StageId, patch.ActorId, "presence");
         if (removePaths.Contains(presencePath))
@@ -332,7 +335,9 @@ public sealed class DirectionPlanner : IDirectionPlanner
             var appearance = patch.Appearance.Value;
             if (appearance is not null && string.IsNullOrWhiteSpace(appearance))
                 throw new ArgumentException("Actor appearance cannot be blank.", nameof(patch));
-            RegisterWrite(prefix + "appearance", patch.SourceLocation, writes, paths);
+            var appearancePath = prefix + "appearance";
+            if (!writes.ContainsKey(appearancePath)) writes.Add(appearancePath, patch.SourceLocation);
+            paths.Add(appearancePath);
             actor = actor with { Appearance = appearance };
             if (appearance is not null)
             {

@@ -11,6 +11,7 @@ using Majo.Runtime.Dialogue;
 using Majo.Runtime.History;
 using Majo.Runtime.UI.SaveLoad;
 using Majo.Runtime.UI.Settings;
+using Majo.Demos.Manosaba.Actors.Layered;
 
 namespace Majo.Demos.Manosaba;
 
@@ -76,6 +77,8 @@ public partial class ManosabaDemoController : Node
                     contributors.Register(uiService);
                 },
             };
+
+            runtime.AddPlugin(new LayeredCharacterPlugin());
 
             AddChild(runtime);
             await runtime.InitializationCompletion;

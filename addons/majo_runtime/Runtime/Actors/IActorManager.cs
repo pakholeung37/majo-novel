@@ -14,34 +14,14 @@ public interface IActorManager : IRuntimeService
     IReadOnlyList<Majo.Runtime.Resources.ResourcePreloadEntry> GetPreloadResources(ActorSpawnRequest request) =>
         System.Array.Empty<Majo.Runtime.Resources.ResourcePreloadEntry>();
 
-    IActor Create(string actorId);
-
     Task<IActor> CreateAsync(
         string actorId,
-        CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(Create(actorId));
-    }
-
-    IActor GetOrCreate(ActorSpawnRequest request)
-    {
-        System.ArgumentNullException.ThrowIfNull(request);
-        if (TryGet(request.ActorId, out var existing))
-        {
-            return existing!;
-        }
-
-        return Create(request.ActorId);
-    }
+        CancellationToken cancellationToken = default);
 
     Task<IActor> GetOrCreateAsync(
         ActorSpawnRequest request,
         CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(GetOrCreate(request));
-    }
+        ;
 
     TActor GetActor<TActor>(string actorId) where TActor : class, IActor;
 
@@ -49,5 +29,5 @@ public interface IActorManager : IRuntimeService
 
     bool Remove(string actorId);
 
-    bool CanCreate(string actorId, string factoryId) => true;
+    bool CanCreate(ActorSpawnRequest request) => true;
 }

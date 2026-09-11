@@ -43,7 +43,7 @@ public sealed class YarnPreloadPlannerTests
         {
             new YarnPreloadReference("backdrop", "Room"),
             new YarnPreloadReference("line", "line:first"),
-            new YarnPreloadReference("character", "Warden/1"),
+            new YarnPreloadReference("character", "Warden", null, "1"),
         }, planner.LookAhead(1));
         planner.Command(new[] { "backdrop", "Room" });
         Assert.DoesNotContain(planner.LookAhead(), item => item.Id == "Room");
@@ -120,6 +120,47 @@ public sealed class YarnPreloadPlannerTests
         Assert.Empty(planner.LookAhead());
         planner.Line("missing");
         Assert.Empty(planner.LookAhead());
+    }
+
+    [Fact]
+    public void StraightLineCharacterAliasesCarryDefinitionAndStageWithoutInventingAppearance()
+    {
+        var planner = Compile("""
+            <<character ema_left asset:Ema stage:main>>
+            <<character ema_left appearance:+Angry stage:main>>
+            """);
+
+        Assert.Equal(new[]
+        {
+            new YarnPreloadReference("character", "ema_left", "Ema", null, "main"),
+            new YarnPreloadReference("character", "ema_left", "Ema", "+Angry", "main"),
+        }, planner.LookAhead());
+    }
+
+    [Fact]
+    public void LookAheadDoesNotInventDefinitionAfterCreationHasAdvancedPastCursor()
+    {
+        var planner = Compile("""
+            <<character ema_left asset:Ema stage:main>>
+            <<character ema_left appearance:Fearful1 stage:main>>
+            """);
+        planner.Command(["character", "ema_left", "asset:Ema", "stage:main"]);
+        var next = Assert.Single(planner.LookAhead());
+        Assert.Equal("ema_left", next.Id);
+        Assert.Null(next.Asset);
+        Assert.Equal("Fearful1", next.Appearance);
+    }
+
+    [Fact]
+    public void DefinitionInferenceDoesNotCrossStages()
+    {
+        var planner = Compile("""
+            <<character ema_left asset:Ema stage:first>>
+            <<character ema_left appearance:Fearful1 stage:second>>
+            """);
+        var references = planner.LookAhead();
+        Assert.Equal("Ema", references[0].Asset);
+        Assert.Null(references[1].Asset);
     }
 
     private static YarnPreloadPlanner Compile(string body)

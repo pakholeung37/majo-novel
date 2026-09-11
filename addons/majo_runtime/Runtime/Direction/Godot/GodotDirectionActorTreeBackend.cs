@@ -47,6 +47,11 @@ internal sealed class GodotDirectionActorTreeBackend
             catch (KeyNotFoundException error) { throw new DirectionException(error.Message); }
         var prepared = new Dictionary<ActorId, Binding>();
         var visuals = new Dictionary<ActorId, IPreparedActorAppearance>();
+        var appearanceIntents = plan.ActorIntents.OfType<ActorPatch>()
+            .Where(patch => patch.StageId == target?.Id && patch.Appearance.HasValue)
+            .GroupBy(patch => patch.ActorId)
+            .ToDictionary(group => group.Key, group => group.ToArray());
+        var resolvedAppearances = new Dictionary<ActorId, string>();
         var retentions = new List<IDisposable>();
         try
         {
@@ -60,21 +65,33 @@ internal sealed class GodotDirectionActorTreeBackend
                         prepared.Add(state.Id, binding);
                     }
                     if (binding.Appearance.RetainVisualPreparation() is { } retention) retentions.Add(retention);
-                    if (state.Appearance is { } appearance && binding.Actor.Appearance != appearance)
+                    if (!appearanceIntents.ContainsKey(state.Id) &&
+                        state.Appearance is { } appearance && binding.Actor.Appearance != appearance)
                         await binding.Appearance.PrepareAppearanceAsync(appearance, cancellationToken);
                 }
-            foreach (var patch in plan.ActorIntents.OfType<ActorPatch>())
-                if (patch.StageId == target?.Id && patch.Appearance.HasValue &&
-                    before?.Actors.TryGetValue(patch.ActorId, out var original) == true && original.Visible &&
-                    patch.Transition.Kind != DirectionTransitionId.Cut && patch.Transition.DurationSeconds > 0)
-                {
-                    var binding = active[patch.ActorId];
-                    visuals.Add(patch.ActorId, await binding.Appearance.PrepareAppearanceTransitionAsync(
-                        patch.Appearance.Value ?? "Default",
-                        new AnimationSpec(patch.Transition.DurationSeconds, patch.Transition.Easing),
-                        drivers.GetRequired(patch.Transition.Kind), cancellationToken));
-                }
-            return new PreparedUpdate(this, plan, before, target, prepared, visuals, retentions);
+            foreach (var (id, patches) in appearanceIntents)
+            {
+                var binding = active.GetValueOrDefault(id) ?? prepared[id];
+                ActorState? original = null;
+                before?.Actors.TryGetValue(id, out original);
+                var sourceAppearance = original?.Appearance ?? binding.Actor.Appearance;
+                var resolved = sourceAppearance;
+                foreach (var patch in patches)
+                    resolved = binding.Appearance.ResolveAppearance(
+                        resolved, patch.Appearance.Value ?? "Default");
+                resolvedAppearances[id] = resolved;
+                await binding.Appearance.PrepareAppearanceAsync(resolved, cancellationToken);
+                var last = patches[^1];
+                if (original?.Visible == true &&
+                    last.Transition.Kind != DirectionTransitionId.Cut && last.Transition.DurationSeconds > 0)
+                    visuals.Add(id, await binding.Appearance.PrepareAppearanceTransitionAsync(
+                        sourceAppearance, resolved,
+                        new AnimationSpec(last.Transition.DurationSeconds, last.Transition.Easing),
+                        drivers.GetRequired(last.Transition.Kind), cancellationToken));
+            }
+            return new PreparedUpdate(this, plan, before, target, prepared, visuals, retentions,
+                appearanceIntents.ToDictionary(pair => pair.Key, pair => pair.Value[^1]),
+                resolvedAppearances);
         }
         catch
         {
@@ -149,9 +166,10 @@ internal sealed class GodotDirectionActorTreeBackend
         public readonly Node2D Root;
         public readonly IActorManager Manager;
         public readonly IActor Actor;
-        public readonly IActorTransformTarget Transform;
-        public readonly IActorAppearanceTarget Appearance;
-        public readonly IActorVisibilityTarget Visibility;
+        public readonly ISceneActor SceneActor;
+        public IActorTransformTarget Transform => SceneActor;
+        public ISceneActor Appearance => SceneActor;
+        public ISceneActor Visibility => SceneActor;
         public readonly DirectionAnimationSlot Space = new();
         public readonly DirectionAnimationSlot Presence = new();
         public readonly DirectionAnimationSlot AppearanceSlot = new();
@@ -164,9 +182,10 @@ internal sealed class GodotDirectionActorTreeBackend
             this.host = host; FxTarget = fxTarget;
             Root = root; Manager = manager; Actor = actor;
             Modifier = new GodotActorModifierTarget(root, () => actor.Position);
-            Transform = actor as IActorTransformTarget ?? throw new DirectionException($"Actor '{actor.Id}' lacks transform capability.");
-            Appearance = actor as IActorAppearanceTarget ?? throw new DirectionException($"Actor '{actor.Id}' lacks appearance capability.");
-            Visibility = actor as IActorVisibilityTarget ?? throw new DirectionException($"Actor '{actor.Id}' lacks visibility capability.");
+            SceneActor = actor as ISceneActor ?? throw new DirectionException(
+                $"Actor '{actor.Id}' does not implement the complete scene actor contract.");
+            if (!root.IsAncestorOf(SceneActor.SceneNode) && !ReferenceEquals(SceneActor.SceneNode, root))
+                throw new DirectionException($"Actor '{actor.Id}' created its scene node outside the current Direction root.");
         }
 
         public ActorState CurrentPose(ActorState state) => state with
@@ -222,6 +241,8 @@ internal sealed class GodotDirectionActorTreeBackend
         private readonly List<DirectionSlotAction> slots = new();
         private readonly Dictionary<ActorId, IPreparedActorAppearance> visuals;
         private readonly List<IDisposable> retentions;
+        private readonly IReadOnlyDictionary<ActorId, ActorPatch> lastAppearanceIntents;
+        private readonly IReadOnlyDictionary<ActorId, string> resolvedAppearances;
         private readonly List<Task> waits = new();
         private readonly TaskCompletionSource<bool> confirmation = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly TaskCompletionSource settlement = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -231,8 +252,15 @@ internal sealed class GodotDirectionActorTreeBackend
 
         public PreparedUpdate(GodotDirectionActorTreeBackend backend, DirectionPlan plan,
             StageState? before, StageState? target, Dictionary<ActorId, Binding> added,
-            Dictionary<ActorId, IPreparedActorAppearance> visuals, List<IDisposable> retentions)
-        { this.retentions = retentions; this.backend = backend; this.plan = plan; this.before = before; this.target = target; this.added = added; this.visuals = visuals; }
+            Dictionary<ActorId, IPreparedActorAppearance> visuals, List<IDisposable> retentions,
+            IReadOnlyDictionary<ActorId, ActorPatch> lastAppearanceIntents,
+            IReadOnlyDictionary<ActorId, string> resolvedAppearances)
+        {
+            this.retentions = retentions; this.backend = backend; this.plan = plan;
+            this.before = before; this.target = target; this.added = added; this.visuals = visuals;
+            this.lastAppearanceIntents = lastAppearanceIntents;
+            this.resolvedAppearances = resolvedAppearances;
+        }
 
         public Task Settlement => settlement.Task;
 
@@ -304,15 +332,20 @@ internal sealed class GodotDirectionActorTreeBackend
             if (intent is ActorPatch patch)
             {
                 var showing = original is null || !original.Visible;
-                if (patch.Appearance.HasValue)
+                if (patch.Appearance.HasValue && ReferenceEquals(lastAppearanceIntents[id], patch))
                 {
                     binding.AppearanceSlot.Finish();
+                    var resolvedAppearance = resolvedAppearances[id];
                     if (showing || patch.Transition.Kind == DirectionTransitionId.Cut || patch.Transition.DurationSeconds == 0)
-                        binding.Appearance.SetAppearance(state.Appearance ?? "Default");
+                    {
+                        binding.Appearance.SetAppearance(resolvedAppearance);
+                        MergeCommittedActor(id, state with { Appearance = binding.Actor.Appearance });
+                    }
                     else
                     {
                         var visual = visuals[id];
                         visual.Commit();
+                        MergeCommittedActor(id, state with { Appearance = visual.ResolvedAppearance });
                         var action = backend.Animate(binding.AppearanceSlot, patch.Transition,
                             visual.ApplyProgress, visual.Finish);
                         slots.Add(action);
@@ -345,7 +378,9 @@ internal sealed class GodotDirectionActorTreeBackend
                 Scale = scale.HasValue ? scale.Value : source.Scale,
                 RotationDegrees = rotation.HasValue ? rotation.Value : source.RotationDegrees,
             };
-            plan.CommitActors[(target!.Id, state.Id)] = destination;
+            if (plan.CommitActors.TryGetValue((target!.Id, state.Id), out var committed))
+                destination = destination with { Appearance = committed.Appearance };
+            MergeCommittedActor(state.Id, destination);
             slots.Add(backend.Animate(binding.Space, transition, p => binding.ApplySpace(destination with
             {
                 Position = new DirectionPoint(Mathf.Lerp(source.Position.X, destination.Position.X, p),
@@ -353,6 +388,25 @@ internal sealed class GodotDirectionActorTreeBackend
                 Scale = Mathf.Lerp(source.Scale, destination.Scale, p),
                 RotationDegrees = Mathf.Lerp(source.RotationDegrees, destination.RotationDegrees, p),
             })));
+        }
+
+        private void MergeCommittedActor(ActorId id, ActorState update)
+        {
+            var key = (target!.Id, id);
+            if (plan.CommitActors.TryGetValue(key, out var current))
+            {
+                plan.CommitActors[key] = current with
+                {
+                    Position = update.Position,
+                    Scale = update.Scale,
+                    RotationDegrees = update.RotationDegrees,
+                    Appearance = update.Appearance,
+                    Visible = update.Visible,
+                    Z = update.Z,
+                    DefinitionId = update.DefinitionId,
+                };
+            }
+            else plan.CommitActors[key] = update;
         }
 
         private void ApplyHide(ActorHidePatch patch)

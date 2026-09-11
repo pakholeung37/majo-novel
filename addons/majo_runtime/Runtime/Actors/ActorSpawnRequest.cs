@@ -50,6 +50,9 @@ public sealed record ActorSpawnRequest
 
     public string InitialAppearance { get; }
 
+    /// <summary>Resource discovery should ask the resolved factory for its configured initial appearance.</summary>
+    public bool UseDefinitionDefaultAppearance { get; init; }
+
     public CharacterPositionPreset? InitialPosition { get; }
 
     /// <summary>

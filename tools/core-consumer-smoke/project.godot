@@ -1,0 +1,12 @@
+config_version=5
+
+[application]
+config/name="Majo Core Consumer Smoke"
+run/main_scene="res://Smoke.tscn"
+config/features=PackedStringArray("4.7", "C#", "Forward Plus")
+
+[dotnet]
+project/assembly_name="CoreConsumerSmoke"
+
+[rendering]
+renderer/rendering_method="gl_compatibility"

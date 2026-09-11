@@ -147,26 +147,32 @@ public partial class HeadlessTestRunner
         configuration.Actors!.Actors.Add(new ActorDefinitionConfiguration
         {
             Id = "hero",
-            DefaultAppearance = "default",
-            Appearances =
+            FactoryConfiguration = new TextureActorConfiguration
             {
-                new ActorAppearanceConfiguration
+                DefaultAppearance = "default",
+                Appearances =
                 {
-                    Id = "default",
-                    TexturePath = "res://missing/hero-a.png",
+                    new ActorAppearanceConfiguration
+                    {
+                        Id = "default",
+                        TexturePath = "res://missing/hero-a.png",
+                    },
                 },
             },
         });
         configuration.Actors.Actors.Add(new ActorDefinitionConfiguration
         {
             Id = "hero",
-            DefaultAppearance = "default",
-            Appearances =
+            FactoryConfiguration = new TextureActorConfiguration
             {
-                new ActorAppearanceConfiguration
+                DefaultAppearance = "default",
+                Appearances =
                 {
-                    Id = "default",
-                    TexturePath = "res://missing/hero-b.png",
+                    new ActorAppearanceConfiguration
+                    {
+                        Id = "default",
+                        TexturePath = "res://missing/hero-b.png",
+                    },
                 },
             },
         });

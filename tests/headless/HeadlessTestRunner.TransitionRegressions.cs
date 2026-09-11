@@ -40,42 +40,6 @@ public partial class HeadlessTestRunner
             Assert(operation.State == OperationState.Faulted && !finished,
                 "A failing callable must fault the operation instead of committing its target.");
 
-            using var red = SolidTexture(new Color(1, 0, 0, .5f));
-            using var blue = SolidTexture(new Color(0, 0, 1, .5f));
-            using var green = SolidTexture(Colors.Green);
-            var loader = new TransitionTextureLoader(new Dictionary<string, Texture2D>
-            { ["red"] = red, ["blue"] = blue, ["green"] = green });
-            var registry = new TransitionDriverRegistry();
-            var custom = new RecordingTransitionDriver(); registry.Register(custom);
-            var view = new Sprite2D { Name = "RegressionActor", Centered = false };
-            owner.AddChild(view);
-            var actor = new CharacterActor(new ActorDefinition("RegressionActor", ActorFactoryIds.Character,
-                "red", new Dictionary<string, string> { ["red"] = "red", ["blue"] = "blue", ["green"] = "green" }),
-                view, runner, loader, new CharacterPositionMap(new ActorConfiguration()),
-                BuiltInEasings.CreateDefaultRegistry(), registry);
-            var baselineChildren = view.GetChildCount();
-            var appearance = actor.ChangeAppearance("blue", new AnimationSpec(1), custom);
-            var opacity = actor.ChangeOpacity(.5f, new AnimationSpec(1));
-            await WaitForTransitionAsync(view);
-            Assert(!appearance.Completion.IsCompleted && !opacity.Completion.IsCompleted,
-                "Appearance and opacity must own independent operation slots.");
-            actor.SetAppearance("green");
-            await AssertThrowsAsync<OperationCanceledException>(() => appearance.Completion);
-            Assert(actor.Appearance == "green" && ReferenceEquals(view.Texture, green),
-                "Cancelling an appearance must not overwrite SetAppearance's new texture.");
-            opacity.Finish(); await opacity.Completion;
-            Assert(view.GetChildCount() == baselineChildren, "Cancelled appearance leaked capture nodes.");
-            Assert(custom.Preparations == 1, "The selected actor driver was bypassed.");
-
-            var first = actor.ChangeAppearance("red", new AnimationSpec(1));
-            await WaitForTransitionAsync(view);
-            var second = actor.ChangeAppearance("blue", new AnimationSpec(1));
-            await first.Completion;
-            await WaitForTransitionAsync(view);
-            second.Finish(); await second.Completion;
-            Assert(actor.Appearance == "blue" && actor.TargetAppearance == "blue" && view.GetChildCount() == baselineChildren,
-                "Preemption failed to settle the newest appearance or release old inputs.");
-            actor.Destroy();
         }
         finally
         {

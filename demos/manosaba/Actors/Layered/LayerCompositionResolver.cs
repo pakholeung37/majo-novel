@@ -3,8 +3,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Majo.Runtime.Actors;
 
-namespace Majo.Runtime.Actors.Layered;
+namespace Majo.Demos.Manosaba.Actors.Layered;
 
 public sealed class LayerCompositionResolver
 {

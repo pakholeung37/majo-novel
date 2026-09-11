@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 
-namespace Majo.Runtime.Actors.Layered;
+namespace Majo.Demos.Manosaba.Actors.Layered;
 
 public sealed class LayeredCharacterManifest
 {

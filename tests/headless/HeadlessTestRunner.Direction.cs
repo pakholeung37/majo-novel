@@ -98,12 +98,12 @@ public partial class HeadlessTestRunner
             new ActorDefinition(
                 "hero",
                 ActorFactoryIds.Character,
-                "red",
+                new TextureActorDefinitionData("hero", "characters", "red",
                 new Dictionary<string, string>
                 {
                     ["red"] = "res://tests/headless/fixtures/character_red.svg",
                     ["blue"] = "res://tests/headless/fixtures/character_blue.svg",
-                }),
+                })),
         };
         var actorLifetime = new HeadlessDirectionRuntimeLifetime();
         var actorFrameClock = new GodotFrameClock(GetTree());
@@ -123,10 +123,8 @@ public partial class HeadlessTestRunner
             {
                 new CharacterActorFactory(
                     actorRoot,
-                    actorScheduler,
                     actorTextureLoader,
-                    new CharacterPositionMap(actorConfiguration),
-                    customEasings),
+                    new CharacterPositionMap(actorConfiguration)),
             });
         var actorDrivers = new TransitionDriverRegistry();
         var customActorDriver = new RecordingTransitionDriver();

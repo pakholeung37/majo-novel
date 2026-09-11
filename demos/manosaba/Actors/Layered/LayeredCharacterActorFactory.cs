@@ -6,81 +6,90 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
-using Majo.Runtime.Actors.Layered;
+using Majo.Runtime.Actors;
+using Majo.Runtime.Actors.Godot;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Direction.Transitions;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Resources;
 using Majo.Runtime.Timing;
 
-namespace Majo.Runtime.Actors.Godot;
+namespace Majo.Demos.Manosaba.Actors.Layered;
 
 
 public sealed class LayeredCharacterActorFactory : IConventionActorFactory
 {
     private const string ManifestFileName = "layered_character.json";
     private readonly Node2D host;
-    private readonly IOperationRunner runner;
     private readonly IActorTextureLoader textureLoader;
     private readonly IFrameClock? frameClock;
     private readonly CharacterPositionMap positions;
+    private readonly IActorAppearanceTransitionService transitions;
     private readonly string charactersPath;
-    private readonly ShaderMaterial multiplyMaterial;
-    private readonly IEasingRegistry? easings;
-    private readonly ITransitionDriverRegistry? transitions;
-    private readonly Dictionary<string, Task<LayeredCharacterManifest>> manifestLoads =
-        new(StringComparer.Ordinal);
-    private readonly object manifestGate = new();
+    private readonly LayeredCharacterManifestCache manifests;
+
+    public LayeredCharacterActorFactory(ActorFactoryContext context)
+        : this(
+            context.CharacterRoot,
+            context.TextureLoader,
+            context.FrameClock,
+            context.CharacterPositions,
+            context.ResourceSettings.RootPath,
+            context.ResourceSettings.CharactersPath,
+            context.AppearanceTransitions,
+            context.Services.Resolve<LayeredCharacterManifestCache>())
+    {
+    }
 
     public LayeredCharacterActorFactory(
         Node2D host,
-        IOperationRunner runner,
         IActorTextureLoader textureLoader,
         CharacterPositionMap positions,
         string resourceRootPath,
         string charactersPath,
-        IEasingRegistry? easings = null, ITransitionDriverRegistry? transitions = null)
+        IActorAppearanceTransitionService? transitions = null,
+        LayeredCharacterManifestCache? manifests = null)
         : this(
             host,
-            runner,
             textureLoader,
             null!,
             positions,
             resourceRootPath,
             charactersPath,
-            easings, transitions)
+            transitions, manifests)
     {
     }
 
     public LayeredCharacterActorFactory(
         Node2D host,
-        IOperationRunner runner,
         IActorTextureLoader textureLoader,
         IFrameClock frameClock,
         CharacterPositionMap positions,
         string resourceRootPath,
         string charactersPath,
-        IEasingRegistry? easings = null, ITransitionDriverRegistry? transitions = null)
+        IActorAppearanceTransitionService? transitions = null,
+        LayeredCharacterManifestCache? manifests = null)
     {
         this.host = host ?? throw new ArgumentNullException(nameof(host));
-        this.runner = runner ?? throw new ArgumentNullException(nameof(runner));
         this.textureLoader = textureLoader ?? throw new ArgumentNullException(nameof(textureLoader));
         this.frameClock = frameClock;
         this.positions = positions ?? throw new ArgumentNullException(nameof(positions));
+        this.transitions = transitions ?? new GodotActorAppearanceTransitionService();
+        this.manifests = manifests ?? new LayeredCharacterManifestCache();
         ArgumentException.ThrowIfNullOrWhiteSpace(resourceRootPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(charactersPath);
         this.charactersPath = ResolveCharactersPath(resourceRootPath, charactersPath);
-        multiplyMaterial = LayeredCharacterActor.CreateAlphaAwareMultiplyMaterial();
-        this.easings = easings;
-        this.transitions = transitions;
     }
 
 
-    public string FactoryId => ActorFactoryIds.LayeredCharacter;
+    public string FactoryId => LayeredActorIds.Factory;
 
     // Creation loads every atlas; the actor's layer sprites retain them even if
     // ResourceManager later evicts its separate cache entry.
     public bool PreloadExistingAppearances => false;
+
+    public string GetInitialAppearance(ActorDefinition definition) =>
+        GetManifest(definition.GetFactoryData<LayeredCharacterDefinitionData>().ManifestPath).DefaultAppearance;
 
     public bool TryResolveDefinition(
         ActorSpawnRequest request,
@@ -88,13 +97,14 @@ public sealed class LayeredCharacterActorFactory : IConventionActorFactory
     {
         ArgumentNullException.ThrowIfNull(request);
         if (request.FallbackFactoryId is not ActorFactoryIds.Character and
-            not ActorFactoryIds.LayeredCharacter)
+            not LayeredActorIds.Factory)
         {
             definition = null!;
             return false;
         }
 
-        var manifestPath = $"{charactersPath}/{request.ActorId}/{ManifestFileName}";
+        var definitionId = request.DefinitionId ?? request.ActorId;
+        var manifestPath = $"{charactersPath}/{definitionId}/{ManifestFileName}";
         if (!global::Godot.FileAccess.FileExists(manifestPath))
         {
             definition = null!;
@@ -104,17 +114,16 @@ public sealed class LayeredCharacterActorFactory : IConventionActorFactory
         definition = new ActorDefinition(
             request.ActorId,
             FactoryId,
-            new LayeredCharacterConfiguration
-            {
-                ManifestPath = manifestPath,
-                InitialPosition = request.InitialPosition ?? CharacterPositionPreset.Center,
-            });
+            new LayeredCharacterDefinitionData(
+                definitionId, manifestPath,
+                request.InitialPosition ?? CharacterPositionPreset.Center),
+            definitionId);
         return true;
     }
 
     public IReadOnlyList<ResourcePreloadEntry> GetPreloadResources(ActorDefinition definition, string appearance)
     {
-        var path = definition.GetFactoryData<LayeredCharacterConfiguration>().ManifestPath;
+        var path = definition.GetFactoryData<LayeredCharacterDefinitionData>().ManifestPath;
         var directory = GetDirectory(path);
         return GetManifest(path).Layers.Select(layer => layer.Atlas).Distinct(StringComparer.Ordinal)
             .Select(atlas => $"{directory}/{atlas}")
@@ -125,60 +134,25 @@ public sealed class LayeredCharacterActorFactory : IConventionActorFactory
 
     public void ValidateDefinition(ActorDefinition definition)
     {
-        var configuration = definition.GetFactoryData<LayeredCharacterConfiguration>();
+        var configuration = definition.GetFactoryData<LayeredCharacterDefinitionData>();
+        ArgumentException.ThrowIfNullOrWhiteSpace(configuration.AssetId);
         ArgumentException.ThrowIfNullOrWhiteSpace(configuration.ManifestPath);
-        if (!global::Godot.FileAccess.FileExists(configuration.ManifestPath))
-        {
-            throw new ActorDefinitionException(
-                definition.Id,
-                $"Layered character manifest does not exist: '{configuration.ManifestPath}'.");
-        }
-
-        var manifest = GetManifest(configuration.ManifestPath);
-        ValidateManifestId(definition.Id, manifest);
-    }
-
-    public IActor Create(ActorDefinition definition)
-    {
-        var configuration = definition.GetFactoryData<LayeredCharacterConfiguration>();
-        var manifest = GetManifest(configuration.ManifestPath);
-        ValidateManifestId(definition.Id, manifest);
-        var view = new Sprite2D
-        {
-            Name = definition.Id,
-            Centered = true,
-        };
-        host.AddChild(view);
-        try
-        {
-            return new LayeredCharacterActor(
-                definition,
-                view,
-                runner,
-                textureLoader,
-                positions,
-                manifest,
-                configuration.ManifestPath,
-                configuration.InitialPosition,
-                multiplyMaterial,
-                easings: easings, transitions: transitions);
-        }
-        catch
-        {
-            view.QueueFree();
-            throw;
-        }
     }
 
     public async Task<IActor> CreateAsync(
         ActorDefinition definition,
+        ActorCreationMode mode,
         CancellationToken cancellationToken)
     {
-        var configuration = definition.GetFactoryData<LayeredCharacterConfiguration>();
+        var configuration = definition.GetFactoryData<LayeredCharacterDefinitionData>();
         var manifest = await GetManifestAsync(
             configuration.ManifestPath,
             cancellationToken);
-        ValidateManifestId(definition.Id, manifest);
+        ValidateManifestId(
+            string.IsNullOrWhiteSpace(configuration.AssetId)
+                ? definition.DefinitionId
+                : configuration.AssetId,
+            manifest);
         var manifestDirectory = GetDirectory(configuration.ManifestPath);
         var atlasNames = manifest.Layers
             .Select(layer => layer.Atlas)
@@ -210,15 +184,14 @@ public sealed class LayeredCharacterActorFactory : IConventionActorFactory
             actor = new LayeredCharacterActor(
                 definition,
                 view,
-                runner,
                 textureLoader,
                 positions,
                 manifest,
                 configuration.ManifestPath,
                 configuration.InitialPosition,
-                multiplyMaterial,
+                LayeredCharacterActor.CreateAlphaAwareMultiplyMaterial(),
                 buildLayerViews: false,
-                easings: easings, transitions: transitions);
+                transitions: transitions);
 
             await actor.BuildLayerViewsAsync(
                 manifest,
@@ -226,7 +199,7 @@ public sealed class LayeredCharacterActorFactory : IConventionActorFactory
                 frameClock,
                 cancellationToken);
             await actor.WarmAppearanceRenderingAsync(cancellationToken);
-            actor.SetVisible(true);
+            actor.SetVisible(mode == ActorCreationMode.Active);
             return actor;
         }
         catch
@@ -244,43 +217,10 @@ public sealed class LayeredCharacterActorFactory : IConventionActorFactory
         }
     }
 
-    private LayeredCharacterManifest GetManifest(string path) =>
-        GetOrStartManifestLoad(path).GetAwaiter().GetResult();
+    private LayeredCharacterManifest GetManifest(string path) => manifests.Get(path);
 
-    private Task<LayeredCharacterManifest> GetManifestAsync(
-        string path,
-        CancellationToken cancellationToken) =>
-        GetOrStartManifestLoad(path).WaitAsync(cancellationToken);
-
-    private Task<LayeredCharacterManifest> GetOrStartManifestLoad(string path)
-    {
-        lock (manifestGate)
-        {
-            if (manifestLoads.TryGetValue(path, out var loading))
-            {
-                return loading;
-            }
-
-            var json = ReadManifest(path);
-            loading = Task.Run(() => LayeredCharacterManifest.Parse(json));
-            manifestLoads.Add(path, loading);
-            return loading;
-        }
-    }
-
-    private static string ReadManifest(string path)
-    {
-        using var file = global::Godot.FileAccess.Open(
-            path,
-            global::Godot.FileAccess.ModeFlags.Read);
-        if (file is null)
-        {
-            throw new ActorException(
-                $"Layered character manifest could not be opened: '{path}'.");
-        }
-
-        return file.GetAsText();
-    }
+    private Task<LayeredCharacterManifest> GetManifestAsync(string path, CancellationToken token) =>
+        manifests.GetAsync(path, token);
 
     private static void ValidateManifestId(
         string actorId,

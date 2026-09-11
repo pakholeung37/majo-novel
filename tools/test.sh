@@ -99,6 +99,26 @@ restore_dotnet_projects() {
     fi
 }
 
+run_core_consumer_smoke() {
+    local smoke_directory
+    smoke_directory="$(mktemp -d)"
+    trap 'rm -rf "$smoke_directory"' RETURN
+    copy_clean_addon "$REPOSITORY_ROOT/addons/majo_runtime" "$smoke_directory/addons/majo_runtime"
+    copy_clean_addon "$REPOSITORY_ROOT/addons/YarnSpinner-Godot" "$smoke_directory/addons/YarnSpinner-Godot"
+    cp -R "$REPOSITORY_ROOT/tools/core-consumer-smoke/." "$smoke_directory/"
+    if find "$smoke_directory" -path '*/demos/*' -print -quit | grep -q .; then
+        printf 'Core consumer smoke unexpectedly copied demo sources.\n' >&2
+        return 1
+    fi
+    (
+        cd "$smoke_directory"
+        run_with_timeout 180 dotnet restore CoreConsumerSmoke.csproj --nologo
+        run_with_timeout 180 dotnet build CoreConsumerSmoke.csproj --nologo --no-restore
+        run_with_timeout 180 "$GODOT_EXECUTABLE" --headless --path "$smoke_directory" --editor --quit
+        run_with_timeout 60 "$GODOT_EXECUTABLE" --headless --path "$smoke_directory"
+    )
+}
+
 if [[ "$TEST_MODE" != "unit" && ! -x "$GODOT_EXECUTABLE" ]]; then
     printf 'Godot Mono executable was not found or is not executable: %s\n' "$GODOT_EXECUTABLE" >&2
     exit 1
@@ -148,6 +168,9 @@ if [[ "$failure_probe_status" -eq 0 ]]; then
 fi
 
 if [[ "$TEST_MODE" == "full" ]]; then
+    printf 'Running independent core consumer smoke without demos...\n'
+    run_core_consumer_smoke
+
     # Godot export publishes ExportRelease (optimized, release API); a separate Release build is redundant.
     case "$(uname -s)" in
         Darwin)

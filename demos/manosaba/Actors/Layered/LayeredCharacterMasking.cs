@@ -6,9 +6,8 @@ using System.Globalization;
 using System.Linq;
 using System.Text;
 using Godot;
-using Majo.Runtime.Actors.Layered;
 
-namespace Majo.Runtime.Actors.Godot;
+namespace Majo.Demos.Manosaba.Actors.Layered;
 
 /// <summary>
 /// Replays the imported stencil writers in layer order in each masked sprite's

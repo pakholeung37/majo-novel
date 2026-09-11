@@ -2,11 +2,14 @@
 
 using System;
 using System.Linq;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
 using Google.Protobuf;
+using Majo.Demos.Manosaba.Actors.Layered;
 using Majo.Runtime.Actors;
+using Majo.Runtime.Configuration;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Yarn.Preloading;
 using Majo.Runtime.Direction.Core;
@@ -26,10 +29,33 @@ public partial class HeadlessTestRunner
         configuration.Resources.PreloadTextureEstimateMiB = 1;
         configuration.Presentation!.Enabled = false;
         configuration.Actors!.ReferenceResolution = new Vector2I(2560, 1440);
-        var bootstrap = new MajoRuntimeBootstrap { Name = "WindowPreloadRuntime", Configuration = configuration };
+        configuration.Actors.Actors.Add(new ActorDefinitionConfiguration
+        {
+            Id = "UnusedLayered",
+            FactoryId = LayeredActorIds.Factory,
+            FactoryConfiguration = new LayeredCharacterConfiguration
+            {
+                AssetId = "UnusedLayered",
+                ManifestPath = "res://missing-unused-layered.json",
+            },
+        });
+        var manifestReads = new Dictionary<string, int>(StringComparer.Ordinal);
+        var cache = new LayeredCharacterManifestCache(path =>
+        {
+            manifestReads[path] = manifestReads.GetValueOrDefault(path) + 1;
+            return Task.FromResult(LayeredCharacterManifest.Parse(FileAccess.GetFileAsString(path)));
+        });
+        var bootstrap = new MajoRuntimeBootstrap
+        {
+            Name = "WindowPreloadRuntime",
+            Configuration = configuration,
+            ConfigureServices = registry => registry.ReplaceSingleton<LayeredCharacterManifestCache>(_ => cache),
+        };
+        bootstrap.AddPlugin(new LayeredCharacterPlugin());
         AddChild(bootstrap);
         await bootstrap.InitializationCompletion;
         var services = bootstrap.Host!.Services;
+        Assert(manifestReads.Count == 0, "Runtime initialization loaded unrequested layered metadata.");
         var resources = services.Get<IResourceManager>();
         var actors = services.Get<IActorManager>();
         var program = new global::Yarn.Program();
@@ -103,6 +129,33 @@ public partial class HeadlessTestRunner
         Assert(pairSnapshot.Entries.Single(entry => entry.ResolvedPath.Contains("LayeredB/atlas", StringComparison.Ordinal)).EstimatedBytes == 512L * 512 * 4,
             "LayeredB estimate charged mipmaps disabled by the texture importer.");
         Assert(!pairSnapshot.IsOverBudget, "LayeredB/LayeredA pair exceeded the global cache budget.");
+
+        var left = ActorPatchFor("ema_left", new DirectionPoint(35, 0), "Normal1,ArmR3", 1, 0) with
+        { DefinitionId = "LayeredA" };
+        var leftIncrement = ActorPatch.Place(StageId.Main, new ActorId("ema_left")) with
+        {
+            DefinitionId = "LayeredA",
+            Appearance = DirectionValue.From<string?>("Fearful1"),
+        };
+        var right = ActorPatchFor("ema_right", new DirectionPoint(65, 0), "Surprised1", 1, 0) with
+        { DefinitionId = "LayeredA" };
+        await coordinator.ExecuteAsync([left, leftIncrement, right], DirectionCompletionBarrier.Settle);
+        var leftState = coordinator.State.Stages[StageId.Main].Actors[new ActorId("ema_left")];
+        Assert(manifestReads.Values.All(count => count == 1) && !manifestReads.ContainsKey("res://missing-unused-layered.json"),
+            "Actor factories did not share metadata loads or validated an unrelated definition.");
+        Assert(leftState.DefinitionId == "LayeredA" && leftState.Appearance?.StartsWith("-,", StringComparison.Ordinal) == true,
+            "Same-beat incremental appearances did not commit a complete canonical value.");
+        Assert(leftState.Appearance!.Contains("Arm+Raised", StringComparison.Ordinal) &&
+            leftState.Appearance.Contains("Eyes+Fearful", StringComparison.Ordinal),
+            "Same-beat appearance resolution lost the first patch's arm or the second patch's eyes.");
+        Assert(coordinator.State.Stages[StageId.Main].Actors[new ActorId("ema_right")].DefinitionId == "LayeredA",
+            "Two instances did not retain their shared resource definition identity.");
+        await coordinator.ExecuteAsync([new ActorHidePatch(StageId.Main, new ActorId("ema_left"),
+            DirectionActorKind.Character, DirectionTransitionSpec.Cut)], DirectionCompletionBarrier.Settle);
+        Assert(coordinator.State.Stages[StageId.Main].Actors[new ActorId("ema_right")].Visible &&
+            resources.IsPinned<Texture2D>(atlas.Key, atlas.OverridePath),
+            "Destroying one aliased instance invalidated the other instance's shared atlas.");
+
         preloader.Clear();
         Assert(resources.IsPinned<Texture2D>(atlas.Key, atlas.OverridePath), "Preload window release invalidated an active tree.");
         var savedDirection = coordinator.State;

@@ -142,13 +142,13 @@ public partial class HeadlessTestRunner
 
         variables.SetString("name", "Maya");
         variables.SetNumber("score", 7);
-        var hero = actors.Create("state-hero");
+        var hero = await actors.CreateAsync("state-hero");
         hero.SetAppearance("red");
         hero.SetPosition(new Vector2(123, 234));
         hero.SetTint(new Color(0.2f, 0.4f, 0.8f));
         hero.SetOpacity(0.65f);
         hero.SetVisible(true);
-        var room = actors.Create("state-room");
+        var room = await actors.CreateAsync("state-room");
         room.SetAppearance("dark");
         await audio.PlayBgmAsync("calm", "music", volume: 0.7f);
 

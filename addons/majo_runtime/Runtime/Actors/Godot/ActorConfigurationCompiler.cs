@@ -1,3 +1,5 @@
+#nullable enable
+
 using System.Collections.Generic;
 using Majo.Runtime.Configuration;
 
@@ -5,81 +7,70 @@ namespace Majo.Runtime.Actors.Godot;
 
 public static class ActorConfigurationCompiler
 {
-    public static IReadOnlyList<ActorDefinition> Compile(ActorConfiguration configuration) =>
-        Compile(configuration, new ResourceConfiguration());
-
     public static IReadOnlyList<ActorDefinition> Compile(
         ActorConfiguration configuration,
-        ResourceConfiguration resources)
+        ActorResourceSettings resources,
+        ActorFactoryRegistry registry)
     {
         var definitions = new List<ActorDefinition>(configuration.Actors.Count);
-        foreach (var configuredActor in configuration.Actors)
+        foreach (var configured in configuration.Actors)
         {
-            if (configuredActor is null)
-            {
+            if (configured is null)
                 throw new ActorDefinitionException("<null>", "Definition is required.");
-            }
-
-            if (configuredActor.FactoryConfiguration is not null)
-            {
-                definitions.Add(new ActorDefinition(
-                    configuredActor.Id,
-                    configuredActor.FactoryId,
-                    configuredActor.FactoryConfiguration));
-                continue;
-            }
-
-            if (configuredActor.FactoryId is not ActorFactoryIds.Character and
-                not ActorFactoryIds.Background &&
-                configuredActor.Appearances.Count == 0 &&
-                string.IsNullOrWhiteSpace(configuredActor.ResourcePathPrefix))
-            {
-                definitions.Add(new ActorDefinition(
-                    configuredActor.Id, configuredActor.FactoryId));
-                continue;
-            }
-
-            var appearances = new List<KeyValuePair<string, string>>(
-                configuredActor.Appearances.Count);
-            foreach (var configuredAppearance in configuredActor.Appearances)
-            {
-                if (configuredAppearance is null)
-                {
-                    throw new ActorDefinitionException(
-                        configuredActor.Id, "Appearance definition is required.");
-                }
-
-                appearances.Add(new KeyValuePair<string, string>(
-                    configuredAppearance.Id,
-                    configuredAppearance.TexturePath));
-            }
-
-            definitions.Add(new ActorDefinition(
-                configuredActor.Id,
-                configuredActor.FactoryId,
-                ResolveResourcePathPrefix(configuredActor, resources),
-                configuredActor.DefaultAppearance,
-                appearances,
-                configuredActor.InitialPosition));
+            var registration = registry.GetRequired(configured.FactoryId);
+            definitions.Add(registration.CompileDefinition is { } compile
+                ? compile(configured, resources)
+                : new ActorDefinition(configured.Id, configured.FactoryId, configured.FactoryConfiguration));
         }
-
         return definitions;
     }
 
-    private static string ResolveResourcePathPrefix(
-        ActorDefinitionConfiguration actor,
-        ResourceConfiguration resources)
-    {
-        if (!string.IsNullOrWhiteSpace(actor.ResourcePathPrefix))
-        {
-            return actor.ResourcePathPrefix;
-        }
+    public static ActorDefinition CompileTextureDefinition(
+        ActorDefinitionConfiguration configured,
+        ActorResourceSettings resources) =>
+        CompileTextureDefinition(configured, resources.CharactersPath);
 
-        return actor.FactoryId switch
+    public static ActorDefinition CompileCharacterTextureDefinition(
+        ActorDefinitionConfiguration configured,
+        ActorResourceSettings resources) =>
+        CompileTextureDefinition(configured, resources.CharactersPath);
+
+    public static ActorDefinition CompileBackgroundTextureDefinition(
+        ActorDefinitionConfiguration configured,
+        ActorResourceSettings resources) =>
+        CompileTextureDefinition(configured, resources.BackgroundsPath);
+
+    public static ActorDefinition CompileSceneObjectTextureDefinition(
+        ActorDefinitionConfiguration configured,
+        ActorResourceSettings resources) =>
+        CompileTextureDefinition(configured, resources.ObjectsPath);
+
+    private static ActorDefinition CompileTextureDefinition(
+        ActorDefinitionConfiguration configured,
+        string defaultPrefix)
+    {
+        var texture = configured.FactoryConfiguration as TextureActorConfiguration ??
+            throw new ActorDefinitionException(
+                configured.Id,
+                $"Factory '{configured.FactoryId}' requires {nameof(TextureActorConfiguration)}.");
+        var appearances = new List<KeyValuePair<string, string>>(texture.Appearances.Count);
+        foreach (var appearance in texture.Appearances)
         {
-            ActorFactoryIds.Character => resources.CharactersPath,
-            ActorFactoryIds.Background => resources.BackgroundsPath,
-            _ => actor.FactoryId,
-        };
+            if (appearance is null)
+                throw new ActorDefinitionException(configured.Id, "Appearance definition is required.");
+            appearances.Add(new(appearance.Id, appearance.TexturePath));
+        }
+        var prefix = !string.IsNullOrWhiteSpace(texture.ResourcePathPrefix)
+            ? texture.ResourcePathPrefix
+            : defaultPrefix;
+        return new ActorDefinition(
+            configured.Id,
+            configured.FactoryId,
+            new TextureActorDefinitionData(
+                configured.Id,
+                prefix,
+                texture.DefaultAppearance,
+                appearances,
+                texture.InitialPosition));
     }
 }

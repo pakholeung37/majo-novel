@@ -55,7 +55,14 @@ public sealed partial class CharacterCommand : RuntimeCommand<CharacterCommand.A
                 arguments.Scale.WasProvided ? DirectionValue.From((float)arguments.Scale.Value) : default,
                 arguments.Z.WasProvided ? DirectionValue.From(arguments.Z.Value) : default,
                 transition)
-            { RotationDegrees = arguments.Rotation.WasProvided ? DirectionValue.From((float)arguments.Rotation.Value) : default },
+            {
+                DefinitionId = arguments.Asset.WasProvided
+                    ? arguments.Asset.Value
+                    : existing?.DefinitionId ?? arguments.Actor,
+                RotationDegrees = arguments.Rotation.WasProvided
+                    ? DirectionValue.From((float)arguments.Rotation.Value)
+                    : default,
+            },
             wait ? DirectionCompletionBarrier.Settle : DirectionCompletionBarrier.Commit,
             context.CancellationToken);
     }
@@ -68,7 +75,8 @@ public sealed partial class CharacterCommand : RuntimeCommand<CharacterCommand.A
         [Option(Minimum = 0.001)] CommandValue<double> Scale,
         [Option] CommandValue<int> Z,
         [Group] TransitionArguments Transition,
-        [Option(ValueHint = "degrees")] CommandValue<double> Rotation);
+        [Option(ValueHint = "degrees")] CommandValue<double> Rotation,
+        [Option] CommandValue<string> Asset);
 }
 
 [Command("character hide", Category = "Direction")]

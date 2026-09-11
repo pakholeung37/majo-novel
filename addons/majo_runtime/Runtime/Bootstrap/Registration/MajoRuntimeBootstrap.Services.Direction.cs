@@ -45,24 +45,20 @@ public partial class MajoRuntimeBootstrap : Node
                 resolver => new GodotDirectionStageBackend(
                     resolver.Get<GodotDirectionRenderHost>(),
                     new DirectionTextureLoader(resolver.Get<IActorTextureLoader>()),
-                    root => CreateDirectionActorManager(
-                        root,
-                        resolver.Get<IOperationRunner>(),
-                        resolver.Get<IActorTextureLoader>(),
-                        resolver.Get<IFrameClock>(),
-                        resolver.Get<ILocaleManager>(),
-                        resolver.Get<IEasingRegistry>()),
+                    root => CreateDirectionActorManager(root, resolver),
                     resolver.Get<ITransitionDriverRegistry>(),
                     resolver.Get<IEasingRegistry>()),
 
-                typeof(GodotDirectionRenderHost),
-                typeof(IResourceManager),
-                typeof(IOperationRunner),
-                typeof(IActorTextureLoader),
-                typeof(IFrameClock),
-                typeof(ILocaleManager),
-                typeof(ITransitionDriverRegistry),
-                typeof(IEasingRegistry))
+                ActorFactoryServiceDependencies(
+                    ActorFactoryDomains.Direction,
+                    typeof(GodotDirectionRenderHost),
+                    typeof(IResourceManager),
+                    typeof(IOperationRunner),
+                    typeof(IActorTextureLoader),
+                    typeof(IFrameClock),
+                    typeof(ILocaleManager),
+                    typeof(ITransitionDriverRegistry),
+                    typeof(IEasingRegistry)))
             .AddSingleton<ICameraModifierManager>(
                 resolver =>
                 {
@@ -197,55 +193,30 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(IDirectionBeatRuntime));
     }
 
-    private ActorManager CreateDirectionActorManager(
-        Node2D root,
-        IOperationRunner scheduler,
-        IActorTextureLoader textureLoader,
-        IFrameClock frameClock,
-        ILocaleManager locales,
-        IEasingRegistry easingRegistry)
+    private ActorManager CreateDirectionActorManager(Node2D root, IServiceResolver resolver)
     {
+        IActorTextureLoader textureLoader = resolver.Get<IActorTextureLoader>();
         if (textureLoader is ResourceActorTextureLoader resourceLoader)
         {
             var scope = resourceLoader.CreateRetainedScope();
             root.TreeExiting += scope.Dispose;
             textureLoader = scope;
         }
-        var actorConfiguration = Configuration!.Actors!;
-        var manager = new ActorManager(
-            ActorConfigurationCompiler.Compile(
-                actorConfiguration,
-                Configuration.Resources!)
-                .Where(definition =>
-                    definition.FactoryId != ActorFactoryIds.Background)
-                .ToArray(),
-            new IActorFactory[]
-            {
-                new SceneObjectActorFactory(root, scheduler, textureLoader, Configuration.Resources!,
-                    actorConfiguration.ReferenceResolution, easingRegistry, transitionDrivers),
-                new CharacterActorFactory(
-                    root,
-                    scheduler,
-                    textureLoader,
-                    new CharacterPositionMap(actorConfiguration),
-                    easingRegistry, transitionDrivers),
-                new LayeredCharacterActorFactory(
-                    root,
-                    scheduler,
-                    textureLoader,
-                    frameClock,
-                    new CharacterPositionMap(actorConfiguration),
-                    Configuration.Resources!.RootPath,
-                    Configuration.Resources.CharactersPath,
-                    easingRegistry, transitionDrivers),
-            },
-
-            locales,
-            Logger,
+        var context = new ActorFactoryContext(
+            ActorFactoryDomains.Direction,
+            root,
+            null,
+            textureLoader,
+            resolver.Get<IResourceManager>(),
+            resolver.Get<IFrameClock>(),
+            actorCatalog!,
+            resolver,
+            Logger!);
+        return ActorManagerBuilder.Create(
+            context,
+            resolver.Get<ILocaleManager>(),
             new ActorCreationConventions(
-                Configuration.Resources!.CharactersPath,
-                Configuration.Resources.BackgroundsPath));
-        ConfigurePluginActorFactories(manager);
-        return manager;
+                context.ResourceSettings.CharactersPath,
+                context.ResourceSettings.BackgroundsPath));
     }
 }

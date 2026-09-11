@@ -3,6 +3,7 @@
 using Godot;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Operations;
+using Majo.Runtime.State;
 
 namespace Majo.Runtime.UnitTests.Testing;
 
@@ -42,29 +43,28 @@ public class FakeOperationHandle : IOperationHandle
     }
 }
 
-public class FakeActor : IActor
+public class FakeActor : IActor, IStateMutationParticipant
 {
     public FakeActor(
         string id,
         string appearance = "default",
-        string factoryId = "test")
+        string factoryId = "test",
+        string? definitionId = null)
     {
         Id = id;
-        Appearance = TargetAppearance = appearance;
+        DefinitionId = definitionId ?? id;
+        Appearance = appearance;
         FactoryId = factoryId;
     }
 
     public string Id { get; }
+    public string DefinitionId { get; }
     public string FactoryId { get; }
     public string Appearance { get; set; }
-    public string TargetAppearance { get; }
     public bool Visible { get; set; } = true;
-    public bool TargetVisible => Visible;
     public Vector2 Position { get; set; }
-    public Vector2 TargetPosition => Position;
     public Color Tint { get; set; } = Colors.White;
     public float Opacity { get; set; } = 1;
-    public float TargetOpacity => Opacity;
     public int ZIndex { get; set; }
     public Node SceneNode => null!;
     public bool IsDestroyed { get; private set; }
@@ -82,22 +82,6 @@ public class FakeActor : IActor
     {
         ActorZIndexRange.Validate(zIndex);
         ZIndex = zIndex;
-    }
-
-    public virtual IOperationHandle ChangePosition(
-        Vector2 position,
-        double durationSeconds)
-    {
-        Position = position;
-        return LastOperation = new FakeOperationHandle(OperationState.Completed);
-    }
-
-    public virtual IOperationHandle ChangeOpacity(
-        float opacity,
-        double durationSeconds)
-    {
-        Opacity = opacity;
-        return LastOperation = new FakeOperationHandle(OperationState.Completed);
     }
 
     public virtual IOperationHandle Show(
@@ -119,6 +103,8 @@ public class FakeActor : IActor
         IsDestroyed = true;
         ActiveOperation.Cancel();
     }
+
+    public void BindStateMutationGate(StateMutationGate gate) { }
 }
 
 public class FakeActorFactory : IActorFactory
@@ -133,17 +119,18 @@ public class FakeActorFactory : IActorFactory
 
     public virtual void ValidateDefinition(ActorDefinition definition) { }
 
-    public virtual IActor Create(ActorDefinition definition)
+    public virtual Task<IActor> CreateAsync(
+        ActorDefinition definition,
+        ActorCreationMode mode,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         CreateCount++;
-        return new FakeActor(definition.Id, definition.DefaultAppearance, definition.FactoryId);
-    }
-
-    public virtual IActor Create(ActorDefinition definition, ActorCreationMode mode)
-    {
-        CreateCount++;
-        var actor = new FakeActor(definition.Id, definition.DefaultAppearance, definition.FactoryId);
+        var appearance = definition.TryGetFactoryData<TextureActorDefinitionData>(out var data)
+            ? data!.DefaultAppearance
+            : "default";
+        var actor = new FakeActor(definition.Id, appearance, definition.FactoryId, definition.DefinitionId);
         actor.SetVisible(mode == ActorCreationMode.Active);
-        return actor;
+        return Task.FromResult<IActor>(actor);
     }
 }

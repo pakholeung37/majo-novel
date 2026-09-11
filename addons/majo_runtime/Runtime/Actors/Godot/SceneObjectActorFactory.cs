@@ -3,12 +3,11 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Configuration;
-using Majo.Runtime.Direction.Transitions;
-using Majo.Runtime.Operations;
 using Majo.Runtime.Resources;
-using Majo.Runtime.Timing;
 
 namespace Majo.Runtime.Actors.Godot;
 
@@ -16,29 +15,28 @@ namespace Majo.Runtime.Actors.Godot;
 public sealed class SceneObjectActorFactory : IConventionActorFactory
 {
     private readonly Node2D host;
-    private readonly IOperationRunner runner;
     private readonly IActorTextureLoader textures;
     private readonly string rootPath;
     private readonly string objectsPath;
     private readonly Vector2I resolution;
-    private readonly IEasingRegistry? easings;
-    private readonly ITransitionDriverRegistry? transitions;
+    private readonly IActorAppearanceTransitionService transitions;
 
-    public SceneObjectActorFactory(Node2D host, IOperationRunner runner, IActorTextureLoader textures,
-        ResourceConfiguration resources, Vector2I resolution, IEasingRegistry? easings = null,
-        ITransitionDriverRegistry? transitions = null)
+    public SceneObjectActorFactory(Node2D host, IActorTextureLoader textures,
+        ActorResourceSettings resources, Vector2I resolution,
+        IActorAppearanceTransitionService? transitions = null)
     {
         this.host = host;
-        this.runner = runner;
         this.textures = textures;
         rootPath = resources.RootPath.TrimEnd('/');
         objectsPath = resources.ObjectsPath.Trim('/');
         this.resolution = resolution;
-        this.easings = easings;
-        this.transitions = transitions;
+        this.transitions = transitions ?? new GodotActorAppearanceTransitionService();
     }
 
     public string FactoryId => ActorFactoryIds.SceneObject;
+
+    public string GetInitialAppearance(ActorDefinition definition) =>
+        definition.GetFactoryData<TextureActorDefinitionData>().DefaultAppearance;
 
     public bool TryResolveDefinition(ActorSpawnRequest request, out ActorDefinition definition)
     {
@@ -70,23 +68,34 @@ public sealed class SceneObjectActorFactory : IConventionActorFactory
         if (!float.IsFinite(anchor.X) || !float.IsFinite(anchor.Y))
             throw new ActorDefinitionException(asset, "Object anchor must be finite.");
         definition = new ActorDefinition(request.ActorId, selectedFactory,
-            new TextureActorDefinitionData(request.ActorId, objectsPath, "Default", appearances)
-            { ResourceId = asset, Anchor = anchor });
+            new TextureActorDefinitionData(asset, objectsPath, "Default", appearances)
+            { ResourceId = asset, Anchor = anchor }, asset);
         return true;
     }
 
     public IReadOnlyList<ResourcePreloadEntry> GetPreloadResources(ActorDefinition definition, string appearance) =>
-        new[] { ResourcePreloadEntry.Create<Texture2D>(definition.GetAppearanceResourceKey(appearance),
-            definition.GetAppearanceOverride(appearance)) };
+        new[] { ResourcePreloadEntry.Create<Texture2D>(
+            definition.GetFactoryData<TextureActorDefinitionData>().GetAppearanceResourceKey(
+                definition.DefinitionId, appearance),
+            definition.GetFactoryData<TextureActorDefinitionData>().GetAppearanceOverride(appearance)) };
 
     public void ValidateDefinition(ActorDefinition definition) =>
         _ = definition.GetFactoryData<TextureActorDefinitionData>();
 
-    public IActor Create(ActorDefinition definition)
+    public Task<IActor> CreateAsync(
+        ActorDefinition definition,
+        ActorCreationMode mode,
+        CancellationToken cancellationToken)
     {
-        var view = new Sprite2D { Name = definition.Id };
+        cancellationToken.ThrowIfCancellationRequested();
+        var view = new Sprite2D { Name = definition.Id, Visible = false };
         host.AddChild(view);
-        try { return new SceneObjectActor(definition, view, runner, textures, resolution, easings, transitions); }
+        try
+        {
+            var actor = new SceneObjectActor(definition, view, textures, resolution, transitions);
+            actor.SetVisible(mode == ActorCreationMode.Active);
+            return Task.FromResult<IActor>(actor);
+        }
         catch { view.QueueFree(); throw; }
     }
 }

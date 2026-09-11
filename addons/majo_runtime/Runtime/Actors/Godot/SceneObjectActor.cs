@@ -6,161 +6,119 @@ using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Transitions;
-using Majo.Runtime.Operations;
-using Majo.Runtime.Timing;
 
 namespace Majo.Runtime.Actors.Godot;
 
-public sealed class SceneObjectActor : ActorBase, IActorTransformTarget, IActorAppearanceTarget, IActorVisibilityTarget
+public sealed class SceneObjectActor : GodotActorBase, ISceneActor
 {
     private readonly Vector2I resolution;
-    private readonly ITransitionDriverRegistry transitions;
+    private readonly TextureActorDefinitionData textureDefinition;
+    private readonly TextureAppearanceSupport textures;
+    private readonly IActorAppearanceTransitionService transitions;
 
-    public SceneObjectActor(
-        ActorDefinition definition,
-        Sprite2D view,
-        IOperationRunner runner,
-        IActorTextureLoader textureLoader,
-        Vector2I resolution,
-        IEasingRegistry? easings = null, ITransitionDriverRegistry? transitions = null)
-        : base(definition, view, runner, textureLoader, definition.DefaultAppearance, easings)
+    public SceneObjectActor(ActorDefinition definition, Sprite2D view,
+        IActorTextureLoader textureLoader, Vector2I resolution,
+        IActorAppearanceTransitionService? transitions = null)
+        : this(definition, view, textureLoader, resolution,
+            definition.GetFactoryData<TextureActorDefinitionData>(), transitions)
+    { }
+
+    private SceneObjectActor(ActorDefinition definition, Sprite2D view,
+        IActorTextureLoader textureLoader, Vector2I resolution,
+        TextureActorDefinitionData textureDefinition,
+        IActorAppearanceTransitionService? transitions)
+        : base(definition, view, textureDefinition.DefaultAppearance)
     {
-
-        this.transitions = transitions ?? new TransitionDriverRegistry();
         this.resolution = resolution;
+        this.textureDefinition = textureDefinition;
+        textures = new TextureAppearanceSupport(textureLoader, view, textureDefinition, definition.DefinitionId);
+        this.transitions = transitions ?? new GodotActorAppearanceTransitionService();
         ApplyPosition(StageCoordinates.ToPixels(new Vector2(50, 0), resolution));
-        TargetPosition = Position;
-        SetAppearance(definition.DefaultAppearance);
+        SetAppearance(textureDefinition.DefaultAppearance);
     }
 
     public new Sprite2D View => (Sprite2D)base.View;
-
     public override Vector2 Position => View.Position;
-
     public Vector2 Scale => View.Scale;
     public Vector2 ScenePosition => StageCoordinates.ToPercent(Position, resolution);
     public float RotationDegrees => View.RotationDegrees;
-    public void SetRotationDegrees(float rotation)
-    {
-        PersistentWrite(() =>
-        {
-            if (!float.IsFinite(rotation)) throw new ArgumentOutOfRangeException(nameof(rotation));
-            View.RotationDegrees = rotation;
-        });
-    }
+    public IDisposable RetainVisualPreparation() => textures.RetainVisualPreparation();
 
-
-    public void SetScale(Vector2 scale)
+    public void SetRotationDegrees(float rotation) => PersistentWrite(() =>
     {
-        PersistentWrite(() =>
-        {
-            ValidateScale(scale);
-            View.Scale = scale;
-        });
-    }
+        EnsureAlive();
+        if (!float.IsFinite(rotation)) throw new ArgumentOutOfRangeException(nameof(rotation));
+        View.RotationDegrees = rotation;
+    });
+
+    public void SetScale(Vector2 scale) => PersistentWrite(() =>
+    {
+        EnsureAlive();
+        ValidateScale(scale);
+        View.Scale = scale;
+    });
 
     public void SetScenePosition(Vector2 scenePosition) =>
         SetPosition(StageCoordinates.ToPixels(scenePosition, resolution));
 
-    public IOperationHandle ChangeAppearance(
-        string appearance,
-        double durationSeconds) =>
-        ChangeAppearance(appearance, new AnimationSpec(durationSeconds));
-
-    public IOperationHandle ChangeAppearance(string appearance, AnimationSpec animation) =>
-        ChangeAppearance(appearance, animation, transitions.GetRequired(DirectionTransitionId.Dissolve));
-
-    public IOperationHandle ChangeAppearance(string appearance, AnimationSpec animation, ITransitionDriver driver)
+    public override void SetAppearance(string appearance)
     {
-        return PersistentWrite(() =>
+        ValidateAppearance(appearance);
+        PersistentWrite(() =>
         {
             EnsureAlive();
-            ArgumentException.ThrowIfNullOrWhiteSpace(appearance);
-            var easing = Easings.GetRequired(animation.Easing);
-            var texture = TextureLoader.Load(Definition.GetAppearanceResourceKey(appearance),
-                Definition.GetAppearanceOverride(appearance));
-            var epoch = AppearanceEpoch;
-            TargetAppearance = appearance;
-            var operation = GodotActorAppearanceTransition.CreateOperation(View, animation, easing,
-            token =>
-            {
-                var original = View.Texture;
-                var source = CreateAppearanceSprite(original);
-                var target = CreateAppearanceSprite(texture);
-                var bounds = source.GetRect().Merge(target.GetRect());
-                return GodotActorAppearanceTransition.PrepareAsync(View, source, target, bounds, 1,
-                    visible => { if (IsAlive && AppearanceEpoch == epoch) View.Texture = visible ? original : null; },
-                    _ => { }, driver, animation, token);
-            },
-            () =>
-            {
-                if (!IsAlive || AppearanceEpoch != epoch) return;
-                ApplyTexture(texture);
-                Appearance = appearance;
-            });
-            return StartSequencedOperation(AppearanceProperty, operation, animation.ConflictPolicy);
+            var texture = textures.Load(appearance);
+            InvalidateAppearance();
+            View.Texture = texture;
+            View.Offset = (new Vector2(.5f, .5f) - textureDefinition.Anchor) * texture.GetSize();
+            Appearance = appearance;
         });
     }
 
-    public async Task<IPreparedActorAppearance> PrepareAppearanceTransitionAsync(string appearance,
-        AnimationSpec animation, ITransitionDriver driver, CancellationToken cancellationToken = default)
+    public override async Task PrepareAppearanceAsync(string appearance,
+        CancellationToken cancellationToken = default)
     {
-        var sourceTexture = await TextureLoader.LoadAsync(Definition.GetAppearanceResourceKey(TargetAppearance),
-            Definition.GetAppearanceOverride(TargetAppearance), cancellationToken);
-        var texture = await TextureLoader.LoadAsync(Definition.GetAppearanceResourceKey(appearance),
-            Definition.GetAppearanceOverride(appearance), cancellationToken);
+        ValidateAppearance(appearance);
+        _ = await textures.Loader.LoadAsync(
+            textureDefinition.GetAppearanceResourceKey(DefinitionId, appearance),
+            textureDefinition.GetAppearanceOverride(appearance), cancellationToken);
+    }
+
+    public async Task<IPreparedActorAppearance> PrepareAppearanceTransitionAsync(
+        string sourceAppearance, string appearance, AnimationSpec animation,
+        ITransitionDriver driver, CancellationToken cancellationToken = default)
+    {
+        ValidateAppearance(sourceAppearance);
+        ValidateAppearance(appearance);
+        var sourceTexture = await textures.Loader.LoadAsync(
+            textureDefinition.GetAppearanceResourceKey(DefinitionId, sourceAppearance),
+            textureDefinition.GetAppearanceOverride(sourceAppearance), cancellationToken);
+        var texture = await textures.Loader.LoadAsync(
+            textureDefinition.GetAppearanceResourceKey(DefinitionId, appearance),
+            textureDefinition.GetAppearanceOverride(appearance), cancellationToken);
         var source = CreateAppearanceSprite(sourceTexture);
         var target = CreateAppearanceSprite(texture);
-        return await GodotActorAppearanceTransition.PrepareForCommitAsync(View, source, target,
+        return await transitions.PrepareForCommitAsync(View, source, target,
             source.GetRect().Merge(target.GetRect()),
             visible => { if (IsAlive) View.Texture = visible ? sourceTexture : null; },
-            _ => { }, () => TargetAppearance = appearance, () => SetAppearance(appearance),
+            _ => { }, () => { }, () => SetAppearance(appearance), appearance,
             driver, animation, cancellationToken);
     }
 
     private Sprite2D CreateAppearanceSprite(Texture2D? texture) => new()
     {
         Texture = texture,
-        Offset = (new Vector2(.5f, .5f) - Definition.GetFactoryData<TextureActorDefinitionData>().Anchor) * (texture?.GetSize() ?? Vector2.Zero),
+        Offset = (new Vector2(.5f, .5f) - textureDefinition.Anchor) * (texture?.GetSize() ?? Vector2.Zero),
         Centered = View.Centered,
         FlipH = View.FlipH,
         FlipV = View.FlipV,
     };
 
-    public override void SetAppearance(string appearance)
-    {
-        ValidateAppearance(appearance);
-        base.SetAppearance(appearance);
-    }
-
-    public override Task PrepareAppearanceAsync(string appearance, CancellationToken cancellationToken = default)
-    {
-        ValidateAppearance(appearance);
-        return base.PrepareAppearanceAsync(appearance, cancellationToken);
-    }
-
     private void ValidateAppearance(string appearance)
     {
-        if (!Definition.Appearances.ContainsKey(appearance)) throw new UnknownActorAppearanceException(Id, appearance);
+        if (!textureDefinition.Appearances.ContainsKey(appearance))
+            throw new UnknownActorAppearanceException(Id, appearance);
     }
 
-    protected override void ApplyTexture(Texture2D texture)
-    {
-        View.Texture = texture;
-        View.Offset = (new Vector2(0.5f, 0.5f) - Definition.GetFactoryData<TextureActorDefinitionData>().Anchor) * texture.GetSize();
-    }
-
-    protected override void ApplyPosition(Vector2 position)
-    {
-        View.Position = position;
-    }
-
-    private static void ValidateScale(Vector2 scale)
-    {
-        if (!float.IsFinite(scale.X) || !float.IsFinite(scale.Y) ||
-            scale.X <= 0 || scale.Y <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(scale), "Scale must be positive and finite.");
-        }
-    }
+    protected override void ApplyPosition(Vector2 position) => View.Position = position;
 }

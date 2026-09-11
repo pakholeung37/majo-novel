@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Actors;
@@ -19,7 +20,8 @@ public partial class HeadlessTestRunner
     {
         var configuration = CreateHeadlessConfiguration();
         configuration.Resources!.RootPath = "res://tests/headless/fixtures";
-        configuration.Actors!.LeftPosition = new Vector2(100, 200);
+        configuration.Actors!.ReferenceResolution = new Vector2I(1280, 720);
+        configuration.Actors.LeftPosition = new Vector2(100, 200);
         configuration.Actors.CenterPosition = new Vector2(200, 200);
         configuration.Actors.RightPosition = new Vector2(300, 200);
         configuration.Actors.Actors.Add(CreateActorDefinition(
@@ -42,10 +44,23 @@ public partial class HeadlessTestRunner
             ("dark", "res://tests/headless/fixtures/background_dark.svg"),
             ("light", "res://tests/headless/fixtures/background_light.svg")));
 
+        var compilations = 0;
+        var factoryContexts = new List<ActorFactoryContext>();
         var bootstrap = new MajoRuntimeBootstrap
         {
             Name = "ActorRuntime",
             Configuration = configuration,
+            ConfigureActorFactories = registry =>
+            {
+                var registration = registry.GetRequired(ActorFactoryIds.Character);
+                registry.Replace(registration.FactoryId, registration.Domains,
+                    context => { factoryContexts.Add(context); return registration.BuildFactory(context); },
+                    (definition, resources) =>
+                    {
+                        compilations++;
+                        return registration.CompileDefinition!(definition, resources);
+                    }, registration.ServiceDependencies.ToArray());
+            },
         };
         AddChild(bootstrap);
         await bootstrap.InitializationCompletion;
@@ -59,10 +74,10 @@ public partial class HeadlessTestRunner
         var manager = bootstrap.Host!.Services.Get<IActorManager>();
         var scheduler = bootstrap.Host.Services.Get<IOperationRunner>();
         var activities = bootstrap.Host.Services.Get<IRuntimeActivityObserver>();
-        var character = (CharacterActor)manager.GetActor<ICharacterActor>(
-            manager.Create("hero").Id);
+        var character = (TextureCharacterActor)manager.GetActor<ICharacterActor>(
+            (await manager.CreateAsync("hero")).Id);
         var background = manager.GetActor<IBackgroundActor>(
-            manager.Create("courtroom").Id);
+            (await manager.CreateAsync("courtroom")).Id);
 
         Assert(character.SceneNode is Sprite2D,
             "Character factory did not create a Sprite2D.");
@@ -147,40 +162,37 @@ public partial class HeadlessTestRunner
         }
         catch (ResourceNotFoundException) { }
 
-        character.SetPosition(configuration.Actors.LeftPosition);
-        var firstMove = character.ChangePosition(
-            CharacterPositionPreset.Center, 1);
-        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        var secondMove = character.ChangePosition(
-            CharacterPositionPreset.Right, 0.04);
-        await firstMove.Completion;
-        Assert(firstMove.State == OperationState.Completed,
-            "Conflicting prior position operation was not force-completed.");
-        Assert(character.Position.IsEqualApprox(configuration.Actors.CenterPosition),
-            "Prior position operation did not reach its target before the next began.");
-        await secondMove.Completion;
-        Assert(character.Position.IsEqualApprox(configuration.Actors.RightPosition),
-            "Second position operation did not reach its target.");
+        // Later instance environments must reuse the original catalog, even if project
+        // configuration is edited after the runtime has started.
+        var capturedLeft = configuration.Actors.LeftPosition;
+        var capturedCharactersPath = configuration.Resources.CharactersPath;
+        configuration.Actors.LeftPosition = new Vector2(9000, 9000);
+        configuration.Resources.CharactersPath = "changed-after-start";
+        configuration.Actors.Actors.Clear();
+        var direction = bootstrap.Host.Services.Get<IDirectionTransactionCoordinator>();
+        await direction.ExecuteAsync(new[]
+        {
+            ActorPatch.Place(StageId.Main, new ActorId("hero-left")) with { DefinitionId = "hero" },
+            ActorPatch.Place(StageId.Main, new ActorId("hero-right")) with { DefinitionId = "hero" },
+        }, DirectionCompletionBarrier.Settle);
+        Assert(compilations == 1 && factoryContexts.Count == 3,
+            "Creating Direction bindings recompiled definitions or skipped the registered factory.");
+        Assert(factoryContexts.Select(context => context.CharacterRoot).Distinct().Count() == 3,
+            "Actor environments reused a scene root.");
+        Assert(factoryContexts.All(context =>
+            ReferenceEquals(context.ActorSettings, factoryContexts[0].ActorSettings) &&
+            ReferenceEquals(context.ResourceSettings, factoryContexts[0].ResourceSettings) &&
+            context.CharacterPositions.Get(CharacterPositionPreset.Left) == capturedLeft &&
+            context.ResourceSettings.CharactersPath == capturedCharactersPath),
+            "Factory settings or position maps escaped the runtime's immutable snapshot.");
+        configuration.Actors.LeftPosition = capturedLeft;
+        configuration.Resources.CharactersPath = capturedCharactersPath;
 
-        character.SetOpacity(0);
-        var fade = character.ChangeOpacity(1, 0.08);
-        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        Assert(character.Opacity is > 0 and < 1,
-            "Character opacity Tween did not expose an intermediate value.");
-        Assert(Mathf.IsEqualApprox(character.TargetOpacity, 1),
-            "Character target opacity did not preserve the requested final state.");
-        await fade.Completion;
-        Assert(Mathf.IsEqualApprox(character.Opacity, 1),
-            "Character opacity Tween did not reach its final value.");
-
-        var resetOperation = character.ChangePosition(
-            CharacterPositionPreset.Left, 10);
+        character.SetPosition(CharacterPositionPreset.Right);
+        character.SetOpacity(1);
         await bootstrap.ResetRuntimeAsync();
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        Assert(resetOperation.State == OperationState.Cancelled,
-            "Runtime Reset did not cancel the Actor operation.");
         Assert(manager.Actors.Count == 0, "Runtime Reset did not clear ActorManager state.");
         Assert(!activities.HasActiveActivities(RuntimeActivityOwner.Other),
             "Runtime Reset left an active Actor operation.");
@@ -189,8 +201,8 @@ public partial class HeadlessTestRunner
         Assert(backgroundLayer.GetChildCount() == 0,
             "Runtime Reset left Background nodes in the scene.");
 
-        var closingCharacter = manager.Create("hero");
-        var closingBackground = manager.Create("courtroom");
+        var closingCharacter = await manager.CreateAsync("hero");
+        var closingBackground = await manager.CreateAsync("courtroom");
         var closingCharacterNode = ((IGodotActorView)closingCharacter).SceneNode;
         var closingBackgroundNode = ((IGodotActorView)closingBackground).SceneNode;
         bootstrap.QueueFree();

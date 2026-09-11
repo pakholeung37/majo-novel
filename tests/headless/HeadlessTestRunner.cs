@@ -159,12 +159,16 @@ public partial class HeadlessTestRunner : Node
         {
             Id = id,
             FactoryId = factoryId,
-            DefaultAppearance = appearances[0].Id,
-            InitialPosition = initialPosition,
+            FactoryConfiguration = new TextureActorConfiguration
+            {
+                DefaultAppearance = appearances[0].Id,
+                InitialPosition = initialPosition,
+            },
         };
+        var texture = (TextureActorConfiguration)definition.FactoryConfiguration;
         foreach (var appearance in appearances)
         {
-            definition.Appearances.Add(new ActorAppearanceConfiguration
+            texture.Appearances.Add(new ActorAppearanceConfiguration
             {
                 Id = appearance.Id,
                 TexturePath = appearance.Path,

@@ -43,13 +43,15 @@ public sealed class PluginRegistrationContext
         ITransitionDriverRegistry transitions,
         ICameraModifierRegistry cameraModifiers,
         ITransientCueHandlerRegistry? transientCueHandlers = null,
-        IEasingRegistry? easings = null)
+        IEasingRegistry? easings = null,
+        ActorFactoryRegistry? actorFactories = null)
     {
         Commands = (commands ?? throw new ArgumentNullException(nameof(commands))).Registration;
         Transitions = transitions ?? throw new ArgumentNullException(nameof(transitions));
         CameraModifiers = cameraModifiers ?? throw new ArgumentNullException(nameof(cameraModifiers));
         TransientCueHandlers = transientCueHandlers ?? new TransientCueHandlerRegistry();
         Easings = easings ?? new EasingRegistry();
+        ActorFactories = actorFactories ?? new ActorFactoryRegistry();
     }
 
     public CommandRegistrationContext Commands { get; }
@@ -57,16 +59,7 @@ public sealed class PluginRegistrationContext
     public ICameraModifierRegistry CameraModifiers { get; }
     public ITransientCueHandlerRegistry TransientCueHandlers { get; }
     public IEasingRegistry Easings { get; }
-    private readonly List<Action<ActorManager>> actorFactoryConfigurations = new();
-
-    public void ConfigureActorFactories(Action<ActorManager> configure)
-    {
-        ArgumentNullException.ThrowIfNull(configure);
-        actorFactoryConfigurations.Add(configure);
-    }
-
-    internal IReadOnlyList<Action<ActorManager>> ActorFactoryConfigurations =>
-        actorFactoryConfigurations;
+    public ActorFactoryRegistry ActorFactories { get; }
 }
 
 public interface IMajoPlugin
