@@ -200,17 +200,48 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
     public IReadOnlyCollection<StageId> StageIds => stages.Keys;
     public IReadOnlyCollection<ViewId> ViewIds => views.Keys;
 
+    // Render-only cameras never participate in public View IDs or durable state.
+    private readonly HashSet<GodotDirectionViewSurface> liveViewSources = new();
+    private IEnumerable<GodotDirectionViewSurface> RenderViews => views.Values.Concat(liveViewSources);
+
+    internal GodotDirectionViewSurface CreateLiveViewSource(ViewId viewId, ViewState state)
+    {
+        var original = RequireView(viewId);
+        var id = new ViewId("live-transition-" + Guid.NewGuid().ToString("N"));
+        var source = GetOrCreateView(id);
+        try
+        {
+            PublishView(id, state with { Id = id }, GetStageTexture(state.StageId), true);
+            source.ModifierDelta = original.ModifierDelta;
+            ApplyViewTransform(source);
+            views.Remove(id);
+            viewGenerations.Remove(id);
+            liveViewSources.Add(source);
+            return source;
+        }
+        catch
+        {
+            ReleasePreparedView(id);
+            throw;
+        }
+    }
+
+    internal void ReleaseLiveViewSource(GodotDirectionViewSurface source)
+    {
+        if (liveViewSources.Remove(source)) QueueFree(source.Viewport);
+    }
+
     internal RenderResourceMetrics GetRenderResourceMetrics()
     {
         long pixels = stages.Values.Sum(stage =>
             (long)stage.Viewport.Size.X * stage.Viewport.Size.Y);
-        pixels += views.Values.Sum(view =>
+        pixels += RenderViews.Sum(view =>
             (long)view.Viewport.Size.X * view.Viewport.Size.Y * 5);
         pixels += (long)ScreenViewport.Size.X * ScreenViewport.Size.Y;
         return new RenderResourceMetrics(
             stages.Count,
-            views.Count,
-            stages.Count + views.Count * 5 + 1,
+            views.Count + liveViewSources.Count,
+            stages.Count + (views.Count + liveViewSources.Count) * 5 + 1,
             pixels * 4);
     }
 
@@ -272,11 +303,12 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
                 QueueFree(surface.Viewport);
             }
         }
-        foreach (var view in views.Values.ToArray())
+        foreach (var view in RenderViews.ToArray())
         {
             if (view.Id == ViewId.Main) continue;
             QueueFree(view.Viewport);
             views.Remove(view.Id);
+            liveViewSources.Remove(view);
             viewGenerations.Remove(view.Id);
         }
         foreach (var slot in screenSlots.Keys.Where(slot => slot != LayoutSlotId.Main).ToArray())
@@ -323,12 +355,13 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
         foreach (var surface in stages.Values)
             QueueFree(surface.Viewport);
         stages.Clear();
-        foreach (var view in views.Values)
+        foreach (var view in RenderViews)
         {
             if (view.Id != ViewId.Main && GodotObject.IsInstanceValid(view.Viewport))
                 QueueFree(view.Viewport);
         }
         views.Clear();
+        liveViewSources.Clear();
         screenSlots.Clear();
         PublishedBackdrop = null;
         PublishedView = null;
@@ -356,7 +389,7 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
         surface.Backdrop.Visible = state is not null && texture is not null;
         if (state is not null && texture is not null)
             LayoutBackdrop(surface, surface.Backdrop, state);
-        foreach (var view in views.Values.Where(view => view.PublishedView?.StageId == stageId))
+        foreach (var view in RenderViews.Where(view => view.PublishedView?.StageId == stageId))
             ApplyViewTransform(view);
     }
 
@@ -373,7 +406,7 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
         surface.BackdropTransition.Modulate = ToGodot(state.Tint);
         surface.BackdropTransition.Visible = true;
         LayoutBackdrop(surface, surface.BackdropTransition, state);
-        foreach (var view in views.Values.Where(view => view.PublishedView?.StageId == stageId))
+        foreach (var view in RenderViews.Where(view => view.PublishedView?.StageId == stageId))
             ApplyViewTransform(view);
     }
 
@@ -767,7 +800,7 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
                 await frameClock!.NextFrameAsync(cancellationToken);
                 if (cancellationToken.IsCancellationRequested || !GodotObject.IsInstanceValid(owner)) break;
                 var delta = owner.GetTree()?.Root.GetProcessDeltaTime() ?? 0;
-                foreach (var surface in views.Values)
+                foreach (var surface in RenderViews)
                 {
                     if (!surface.CurrentIdle.IsEnabled) continue;
                     var phase = surface.CurrentIdle.PhaseRadians + delta * Math.Tau / surface.CurrentIdle.PeriodSeconds;
@@ -793,7 +826,7 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
         surface.BackdropTransition.Modulate = Colors.White;
         surface.TransitionBackdrop = null;
         if (stageId == StageId.Main) transitionBackdrop = null;
-        foreach (var view in views.Values.Where(view => view.PublishedView?.StageId == stageId))
+        foreach (var view in RenderViews.Where(view => view.PublishedView?.StageId == stageId))
         {
             view.BackgroundOutput.Visible = true;
             view.TransitionBackgroundOutput.Visible = false;
@@ -811,7 +844,7 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
         var prepared = new List<IPreparedVisualTransition>();
         try
         {
-            foreach (var view in views.Values.Where(view => view.PublishedView?.StageId == stageId))
+            foreach (var view in RenderViews.Where(view => view.PublishedView?.StageId == stageId))
             {
                 ApplyViewTransform(view);
                 CanvasItem transitionSurface;
@@ -914,7 +947,7 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
                     Math.Max(1, Mathf.RoundToInt(visibleSize.Y)))
                 : FallbackResolution;
         foreach (var surface in stages.Values) ResizeStage(surface, resolution);
-        foreach (var view in views.Values)
+        foreach (var view in RenderViews)
         {
             view.Viewport.Size = resolution;
             view.ContentViewport.Size = resolution;
@@ -975,7 +1008,7 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
             ViewViewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
         if (GodotObject.IsInstanceValid(ScreenViewport))
             ScreenViewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
-        foreach (var view in views.Values)
+        foreach (var view in RenderViews)
             if (GodotObject.IsInstanceValid(view.Viewport))
             {
                 view.Viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
@@ -996,7 +1029,7 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
             ViewViewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
         if (GodotObject.IsInstanceValid(ScreenViewport))
             ScreenViewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
-        foreach (var view in views.Values)
+        foreach (var view in RenderViews)
             if (GodotObject.IsInstanceValid(view.Viewport))
             {
                 view.Viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;

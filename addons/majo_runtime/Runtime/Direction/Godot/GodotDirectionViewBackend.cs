@@ -73,8 +73,11 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
                     path => channel == "all" ? path.StartsWith($"view/{viewId.Value}/", StringComparison.Ordinal)
                         : path == $"view/{viewId.Value}/{channel}");
                 GodotDirectionRendering.ValidateTransition(transition, TransitionDomains.View, drivers, easings);
+                var useLiveSource = before is not null && before.StageId == target.StageId &&
+                    !plan.IsStateReplacement && transition.Kind == DirectionTransitionId.Dissolve &&
+                    transition.DurationSeconds > 0;
                 ImageTexture? capture = null;
-                if (transition.DurationSeconds > 0 &&
+                if (!useLiveSource && transition.DurationSeconds > 0 &&
                     transition.Kind != DirectionTransitionId.Cut &&
                     transition.Kind != DirectionTransitionId.Move)
                 {
@@ -97,6 +100,7 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
                     target,
                     targetTexture,
                     capture,
+                    useLiveSource,
                     transition,
                     drivers,
                     easings);
@@ -178,6 +182,8 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
         private ViewState target;
         private readonly Texture2D targetTexture;
         private readonly ImageTexture? capture;
+        private readonly bool useLiveSource;
+        private GodotDirectionViewSurface? liveSource;
         public bool IsMotion => transition.Kind == DirectionTransitionId.Move;
         private readonly DirectionTransitionSpec transition;
         private readonly ITransitionDriverRegistry drivers;
@@ -203,6 +209,7 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
             ViewState target,
             Texture2D targetTexture,
             ImageTexture? capture,
+            bool useLiveSource,
             DirectionTransitionSpec transition,
             ITransitionDriverRegistry drivers,
             IEasingRegistry? easings = null)
@@ -218,6 +225,7 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
             this.target = target;
             this.targetTexture = targetTexture;
             this.capture = capture;
+            this.useLiveSource = useLiveSource;
             this.transition = transition;
             this.drivers = drivers ?? new TransitionDriverRegistry();
             this.easings = easings ?? BuiltInEasings.CreateDefaultRegistry();
@@ -260,9 +268,12 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
             if (OwnsPose) host.ClearViewTransition(viewId);
             var transitionSource = host.GetViewTransitionSource(viewId);
 
-            if (capture is not null)
+            if (useLiveSource)
+                liveSource = host.CreateLiveViewSource(viewId, before);
+            Texture2D? sourceTexture = liveSource?.CompositeViewport.GetTexture() ?? (Texture2D?)capture;
+            if (sourceTexture is not null)
             {
-                transitionSource.Texture = capture;
+                transitionSource.Texture = sourceTexture;
                 transitionSource.Modulate = Colors.White;
                 transitionSource.Visible = true;
             }
@@ -290,9 +301,9 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
             }
             else
             {
-                if (capture is null) { Complete(); return; }
+                if (sourceTexture is null) { Complete(); return; }
                 var surface = host.GetOrCreateView(viewId);
-                var context = new VisualTransitionContext(transitionSource, transition, capture,
+                var context = new VisualTransitionContext(transitionSource, transition, sourceTexture,
                     surface.CompositeViewport.GetTexture(), true, true,
                     () => IsCurrent);
                 preparedTransition = drivers.GetRequired(transition.Kind).Prepare(context);
@@ -360,6 +371,11 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
 
         private void Retire()
         {
+            if (liveSource is not null)
+            {
+                host.ReleaseLiveViewSource(liveSource);
+                liveSource = null;
+            }
             if (backend.active.TryGetValue(Key, out var current) && ReferenceEquals(current, this))
                 backend.active.Remove(Key);
         }

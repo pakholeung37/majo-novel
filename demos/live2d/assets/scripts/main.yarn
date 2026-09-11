@@ -17,6 +17,7 @@ scene: live2d_demo
 
 <<live2d motion mao motion:panic>>
 <<camera move center:50,46 zoom:1.16 duration:0.7 ease:cubic-out wait:true>>
+// <<camera center:50,46 zoom:1.16 duration:0.7 via:dissolve>>
 <<character mao appearance:serious via:cut>>
 真央: 镇定。魔女守则第七条：早餐逃跑时，先关窗，再拿勺。
 <<live2d motion mao motion:magic>>
@@ -25,7 +26,6 @@ scene: live2d_demo
 <<character mao appearance:sparkle via:cut>>
 真央: 完美！这叫全自动摆盘，不叫事故。
 
-<<camera reset via:dissolve duration:0.5 wait:true>>
 <<curtain closed duration:0.45 wait:true>>
 <<backdrop witch-rooftop scale:1.2 via:cut>>
 <<character mao appearance:neutral at:right scale:0.95 via:cut>>
