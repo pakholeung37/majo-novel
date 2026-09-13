@@ -94,7 +94,7 @@ public sealed class RuntimeCommandTests
                 ["at"] = "center",
             }));
 
-        Assert.Equal("courtroom", backdrop.Resource.Value);
+        Assert.Equal("courtroom", backdrop.Definition);
         Assert.False(backdrop.Transition.Wait.Value);
         Assert.Equal(new PositionRef.Named("center"), character.At.Value);
         Assert.False(character.Transition.Wait.Value);

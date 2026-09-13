@@ -188,6 +188,7 @@ public static class RuntimeDemoComposition
             "calm",
             CharacterPositionPreset.Right,
             configuration.Resources!.CharactersPath));
+
         return configuration;
     }
 

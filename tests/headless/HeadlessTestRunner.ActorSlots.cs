@@ -46,16 +46,16 @@ public partial class HeadlessTestRunner
                 ["blue"] = "res://tests/headless/fixtures/character_blue.svg",
             }))).ToArray();
         using var resourceConfig = new ResourceConfiguration { RootPath = "res://tests/headless/fixtures", ObjectsPath = "objects" };
-        IActorManager Create(Node2D root)
+        IActorManager Create(ActorMountRoots mounts)
         {
-            var backgroundRoot = new Control();
-            root.AddChild(backgroundRoot);
-            return new ActorManager(definitions,
+            var root = mounts.CharacterRoot;
+            var backgroundRoot = mounts.BackgroundRoot;
+            return new ActorManager(definitions.Concat(BackgroundFixtureDefinitions()),
             new IActorFactory[] { new CharacterActorFactory(root, textures, new CharacterPositionMap(config)),
                 new SceneObjectActorFactory(root, textures, ActorResourceSettings.Capture(resourceConfig), config.ReferenceResolution),
                 new BackgroundActorFactory(backgroundRoot, textures) });
         }
-        var stage = new GodotDirectionStageBackend(host, new HeadlessDirectionTextureLoader(), Create);
+        var stage = new GodotDirectionStageBackend(host, Create);
         var backend = new CompositeDirectionPreparationBackend(stage, new GodotDirectionViewBackend(host),
             new GodotDirectionScreenBackend(host), new GodotDirectionEffectBackend(host));
         var accessibility = new DirectionAccessibility(false);
@@ -182,7 +182,7 @@ public partial class HeadlessTestRunner
             });
             var extraBackdropTarget = new ActorFxTarget(extra, ActorFxSlot.Backdrop);
             BackdropPatch Background(string name, double duration = 0) => new(extra,
-                new BackdropState(new ResourceKey($"tests/headless/fixtures/{name}.svg")),
+                new BackdropState($"tests/headless/fixtures/{name}.svg", "background", "Default"),
                 duration == 0 ? DirectionTransitionSpec.Cut : new DirectionTransitionSpec(DirectionTransitionId.Dissolve, duration));
             await coordinator.ExecuteAsync(new[] { Background("background_dark") });
             var backgroundShake = await coordinator.ExecuteAsync(new[] { new ActorFxCue(extraBackdropTarget,

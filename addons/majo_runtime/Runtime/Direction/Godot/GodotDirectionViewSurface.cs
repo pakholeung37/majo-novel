@@ -8,6 +8,9 @@ namespace Majo.Runtime.Direction.Godot;
 
 internal sealed class GodotDirectionViewSurface
 {
+    public ColorRect StageBase { get; } = new() { Name = "StageBase", Color = Colors.Black, MouseFilter = Control.MouseFilterEnum.Ignore };
+    public ShaderMaterial RasterMaterial { get; } = GodotDirectionRendering.CreateOutputMaterial();
+
     public GodotDirectionViewSurface(
         ViewId id,
         SubViewport viewport,
@@ -84,6 +87,7 @@ internal sealed class GodotDirectionViewSurface
             MouseFilter = Control.MouseFilterEnum.Ignore,
             Visible = false,
         };
+        CompositeViewport.AddChild(StageBase);
         CompositeViewport.AddChild(BackgroundOutput);
         CompositeViewport.AddChild(TransitionBackgroundOutput);
         CompositeViewport.AddChild(TransitionBlendOutput);
@@ -98,6 +102,9 @@ internal sealed class GodotDirectionViewSurface
         };
         viewport.AddChild(CompositeOutput);
         viewport.AddChild(transitionSource);
+        foreach (var output in new[] { Output, BackgroundOutput, TransitionBackgroundOutput, TransitionBlendOutput, CompositeOutput })
+            output.Material = RasterMaterial;
+        viewport.TreeExiting += RasterMaterial.Dispose;
         Id = id;
         Viewport = viewport;
         Canvas = canvas;

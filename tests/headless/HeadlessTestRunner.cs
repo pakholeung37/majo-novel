@@ -59,6 +59,33 @@ public partial class HeadlessTestRunner : Node
 
     private async Task RunSuiteAsync()
     {
+        if (OS.GetCmdlineUserArgs().Contains("--majo-trial-court"))
+        {
+            await ValidateTrialCourtBackgroundAsync();
+            return;
+        }
+        if (OS.GetCmdlineUserArgs().Contains("--majo-live-visual"))
+        {
+            await ValidateLiveVisualInputsAsync();
+            await ValidateBackgroundAlphaAsync();
+            await ValidateBackgroundExtensionAsync();
+            return;
+        }
+        if (OS.GetCmdlineUserArgs().Contains("--majo-background-baseline"))
+        {
+            await CaptureBackgroundBaselineAsync();
+            return;
+        }
+        if (OS.GetCmdlineUserArgs().Contains("--majo-background-alpha"))
+        {
+            await ValidateBackgroundAlphaAsync();
+            return;
+        }
+        if (OS.GetCmdlineUserArgs().Contains("--majo-background-extension"))
+        {
+            await ValidateBackgroundExtensionAsync();
+            return;
+        }
         if (OS.GetCmdlineUserArgs().Contains("--majo-camera-cut"))
         {
             await ValidateCameraCutFrameAsync();
@@ -104,6 +131,8 @@ public partial class HeadlessTestRunner : Node
             ProjectSettings.GlobalizePath("res://"));
         Assert(dependencyStatus.IsCompatible, dependencyStatus.Message);
 
+        await ValidateLiveVisualInputsAsync();
+        await ValidateTrialCourtBackgroundAsync();
         ValidateConfigurationDiagnostics();
         await MeasureAsync(nameof(ValidateAudioRuntimeAsync), ValidateAudioRuntimeAsync);
         await MeasureAsync(nameof(ValidateInputRuntimeAsync), ValidateInputRuntimeAsync);
@@ -119,6 +148,8 @@ public partial class HeadlessTestRunner : Node
         await MeasureAsync(nameof(ValidateDirectionRenderingAsync), ValidateDirectionRenderingAsync);
         await MeasureAsync(nameof(ValidateTransitionRegressionsAsync), ValidateTransitionRegressionsAsync);
         await MeasureAsync(nameof(ValidateActorSystemAsync), ValidateActorSystemAsync);
+        await MeasureAsync(nameof(ValidateBackgroundContentAsync), ValidateBackgroundContentAsync);
+        await MeasureAsync(nameof(ValidateBackgroundExtensionAsync), ValidateBackgroundExtensionAsync);
         await MeasureAsync(nameof(ValidateLayeredCharacterAsync), ValidateLayeredCharacterAsync);
         await MeasureAsync(nameof(ValidateWindowPreloadingAsync), ValidateWindowPreloadingAsync);
         await MeasureAsync(nameof(ValidateActorSlotsAsync), ValidateActorSlotsAsync);

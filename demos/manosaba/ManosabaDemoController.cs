@@ -55,6 +55,7 @@ public partial class ManosabaDemoController : Node
             configuration.Actors.CenterPosition = new Vector2(1280, 1440);
             configuration.Actors.RightPosition = new Vector2(1792, 1440);
 
+
             var characterNames = ManosabaCharacterNameCatalog.Load(
                 "res://demos/manosaba/assets/localization/character_names.json");
             var uiService = new ManosabaUiService();

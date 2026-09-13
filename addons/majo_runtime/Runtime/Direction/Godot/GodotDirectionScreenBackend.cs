@@ -92,7 +92,7 @@ internal sealed class GodotDirectionScreenBackend : IDirectionScreenBackend
         private readonly IEasingRegistry easings;
         private readonly TaskCompletionSource settlement = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private GodotProgressTween? clock;
-        private IPreparedVisualTransition? preparedTransition;
+        private GodotVisualTransition? preparedTransition;
         private long generation;
         private bool committed;
         private bool rolledBack;
@@ -143,10 +143,11 @@ internal sealed class GodotDirectionScreenBackend : IDirectionScreenBackend
                 if (source is null) throw new DirectionException("Screen transition has no source capture.");
                 host.PublishScreen(target);
                 host.PublishScreenTransition(source);
-                var context = new VisualTransitionContext(host.ScreenTransitionSource, transition, source,
-                    host.ScreenViewport.GetTexture(), true, true,
-                    () => host.IsCurrentScreenGeneration(generation));
-                preparedTransition = drivers.GetRequired(transition.Kind).Prepare(context);
+                var context = new VisualTransitionContext(host.ScreenTransitionSource, transition,
+                    IsActive: () => host.IsCurrentScreenGeneration(generation));
+                preparedTransition = GodotVisualTransition.Prepare(drivers.GetRequired(transition.Kind), context,
+                    GodotVisualInput.Frozen(source, new Rect2(Vector2.Zero, source.GetSize())),
+                    GodotVisualInput.Live(host.ScreenViewport, new Rect2(Vector2.Zero, host.ScreenViewport.Size)));
                 if (transition.Kind != DirectionTransitionId.Fade) host.LiveOutput.Visible = false;
                 clock = host.Animate(transition, easings.GetRequired(transition.Easing), p =>
                 {

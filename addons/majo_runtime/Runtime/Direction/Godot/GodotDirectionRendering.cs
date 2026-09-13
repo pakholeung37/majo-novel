@@ -14,6 +14,9 @@ namespace Majo.Runtime.Direction.Godot;
 
 internal static class GodotDirectionRendering
 {
+    internal static ShaderMaterial CreateOutputMaterial() => new()
+    { Shader = GD.Load<Shader>("res://addons/majo_runtime/Runtime/Direction/Shaders/PremultipliedOutput.gdshader") };
+
     public static DirectionTransitionSpec ResolveTransition(
         DirectionPlan plan,
         Func<string, bool> matches)

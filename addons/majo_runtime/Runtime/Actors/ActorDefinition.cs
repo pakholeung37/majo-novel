@@ -90,6 +90,9 @@ public sealed class TextureActorDefinitionData
     public string ResourcePathPrefix { get; }
 
     public string? ResourceId { get; init; }
+
+    public ResourceKey? DefaultResourceKey { get; init; }
+
     public global::Godot.Vector2 Anchor { get; init; } = new(0.5f, 0.5f);
 
     public CharacterPositionPreset InitialPosition { get; }
@@ -106,6 +109,8 @@ public sealed class TextureActorDefinitionData
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(actorId);
         ArgumentException.ThrowIfNullOrWhiteSpace(appearance);
+        if (DefaultResourceKey is { } key)
+            return appearance == DefaultAppearance ? key : ResourceKey.Combine(key.Path, appearance);
         return ResourceKey.Combine(ResourcePathPrefix, ResourceId ?? actorId, appearance);
     }
 

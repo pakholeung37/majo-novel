@@ -1,7 +1,7 @@
 # 实时视觉过渡设计草案
 
 日期：2026-09-11  
-状态：讨论草案，暂不实施。接口名称、打断策略与迁移范围尚未定稿。
+状态：共享视觉输入、角色/背景实时转场及同 Stage 镜头接入已经实施，见 [实施说明](live-visual-transition-implementation.md)。下文保留原始讨论背景；Live2D 双外观模型、跨 Stage 实时源和无缝打断等仍是后续设计。
 
 ## 背景与目标
 
@@ -15,7 +15,7 @@ Live2D Demo 暴露了静态截图过渡的限制：在 camera dissolve 中，旧
 
 ## 与现有草案的关系
 
-- [Background Actor 扩展重构草案](background-actor-extensibility-plan.md)讨论背景的插件注册、Factory 和 Actor 生命周期。本文讨论过渡输入，两者可以衔接，但不要求绑定实施。背景接入 Actor 后，也不应自行重复实现 dissolve。
+- [Background Actor 扩展重构实施方案](background-actor-extensibility-plan.md)讨论背景的插件注册、Factory 和 Actor 生命周期。本文讨论过渡输入，两者可以衔接，但不要求绑定实施。背景接入 Actor 后，也不应自行重复实现 dissolve。
 - [历史视觉转场统一方案](archive/visual-transition-unification-plan.md)保留 Driver、完整画面混合、预乘 alpha 和事务分工等设计参考。其“源冻结在起始画面”的约定不适合动态内容；本文提出替代方向，尚未正式修改该约定。
 - 背景草案明确排除了实时双画面 dissolve，本文没有扩大其已约定范围。
 

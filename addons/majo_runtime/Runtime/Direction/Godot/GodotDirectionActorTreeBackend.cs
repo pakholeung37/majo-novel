@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
+using Majo.Runtime.Actors.Godot;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Direction.Actors;
 using Majo.Runtime.Direction.Core;
@@ -21,14 +22,14 @@ internal sealed class GodotDirectionActorTreeBackend
 {
     private readonly GodotDirectionRenderHost host;
     private readonly Node2D actorRoot;
-    private readonly Func<Node2D, IActorManager> createManager;
+    private readonly Func<ActorMountRoots, IActorManager> createManager;
     private readonly IEasingRegistry easings;
     private readonly ITransitionDriverRegistry drivers;
     private readonly Dictionary<ActorId, Binding> active = new();
     private long generation;
 
     public GodotDirectionActorTreeBackend(GodotDirectionRenderHost host, Node2D actorRoot,
-        Func<Node2D, IActorManager> createManager, IEasingRegistry? easings = null,
+        Func<ActorMountRoots, IActorManager> createManager, IEasingRegistry? easings = null,
         ITransitionDriverRegistry? drivers = null)
     {
         this.host = host;
@@ -109,7 +110,7 @@ internal sealed class GodotDirectionActorTreeBackend
         IActorManager? manager = null;
         try
         {
-            manager = createManager(root);
+            manager = createManager(ActorMountRoots.CreateUnder(root, host.StageViewport.Size));
             await manager.InitializeAsync(token);
             var actor = await manager.GetOrCreateAsync(new ActorSpawnRequest(state.Id.Value,
                 state.Kind == DirectionActorKind.SceneObject ? ActorFactoryIds.SceneObject : ActorFactoryIds.Character,

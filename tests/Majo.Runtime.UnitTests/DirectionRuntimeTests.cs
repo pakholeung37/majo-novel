@@ -91,7 +91,7 @@ public sealed class DirectionRuntimeTests
                 DirectionTransitionSpec.Cut),
             new BackdropPatch(
                 new StageId("broadcast"),
-                new BackdropState(new ResourceKey("Background_025_001")),
+                new BackdropState("Background_025_001", "background", "Default"),
                 DirectionTransitionSpec.Cut),
         }, DirectionCompletionBarrier.Settle);
         Assert.Contains(new StageId("broadcast"), coordinator.State.Stages.Keys);
@@ -116,7 +116,7 @@ public sealed class DirectionRuntimeTests
             new StageCreatePatch(illustration, illustrationView, DirectionTransitionSpec.Cut),
             new BackdropPatch(
                 illustration,
-                new BackdropState(new ResourceKey("Still_490_001")),
+                new BackdropState("Still_490_001", "background", "Default"),
                 DirectionTransitionSpec.Cut),
             View(
                 illustrationView,
@@ -136,22 +136,22 @@ public sealed class DirectionRuntimeTests
         await coordinator.ResetAsync(default);
         await contributor.CommitPreparedAsync(snapshot, default);
         Assert.Equal(
-            new ResourceKey("Still_490_001"),
-            coordinator.State.Stages[illustration].Backdrop?.Resource);
+            "Still_490_001",
+            coordinator.State.Stages[illustration].Backdrop?.DefinitionId);
         Assert.Equal(illustration, coordinator.State.Views[illustrationView].StageId);
         Assert.Equal(illustrationPose, coordinator.State.Views[illustrationView].Pose);
         Assert.Equal(illustrationView, coordinator.State.Screen.Bindings[LayoutSlotId.Main]);
     }
 
     [Fact]
-    public async Task DirectionStateV5RoundTripsCameraEnvironment()
+    public async Task DirectionStateV6RoundTripsCameraEnvironment()
     {
         var coordinator = CreateCoordinator(new FakeDirectionBackend { AutoSettle = true });
         var contributor = new DirectionStateContributor(coordinator);
         await coordinator.ExecuteAsync(new IDirectionDirective[]
         {
             new BackdropPatch(StageId.Main,
-                new BackdropState(new ResourceKey("court")) { Distance = 6 }, DirectionTransitionSpec.Cut),
+                new BackdropState("court", "background", "Default") { Distance = 6 }, DirectionTransitionSpec.Cut),
             new ViewPosePatch(ViewId.Main, default, default, default, DirectionTransitionSpec.Cut)
                 { Dolly = DirectionValue.From(-0.25f), BackgroundOffset = DirectionValue.From(new DirectionPoint(12, -4)), BackgroundScale = DirectionValue.From(1.2f) },
             new ViewParallaxPatch(ViewId.Main,
@@ -164,7 +164,12 @@ public sealed class DirectionRuntimeTests
         await coordinator.ResetAsync(default);
         await contributor.CommitPreparedAsync(snapshot, default);
 
-        Assert.Equal(5, snapshot.SchemaVersion);
+        Assert.Equal(6, snapshot.SchemaVersion);
+        var backdropPayload = snapshot.Payload.GetProperty("stages")[0].GetProperty("backdrop");
+        Assert.Equal("court", backdropPayload.GetProperty("definitionId").GetString());
+        Assert.Equal("background", backdropPayload.GetProperty("factoryId").GetString());
+        Assert.Equal("Default", backdropPayload.GetProperty("appearance").GetString());
+        Assert.False(backdropPayload.TryGetProperty("resource", out _));
         Assert.Equal(6, coordinator.State.Stages[StageId.Main].Backdrop!.Distance);
         Assert.Equal(-0.25f, coordinator.State.Views[ViewId.Main].Pose.Dolly);
         Assert.Equal(new DirectionPoint(12, -4), coordinator.State.Views[ViewId.Main].Pose.BackgroundOffset);
@@ -174,49 +179,19 @@ public sealed class DirectionRuntimeTests
         Assert.Equal(0, coordinator.State.Views[ViewId.Main].Idle.PhaseRadians);
     }
 
-    [Fact]
-    public async Task DirectionStateContributorMigratesSchemaThreeDefaults()
+    [Theory]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    public async Task DirectionStateContributorRejectsOldSchemas(int schema)
     {
         var coordinator = CreateCoordinator(new FakeDirectionBackend { AutoSettle = true });
         var contributor = new DirectionStateContributor(coordinator);
-        var record = new StateRecord(BuiltInStateKeys.Direction, StateScope.Game, 3,
-            JsonDocument.Parse("""
-                {
-                  "stages":[{"id":"main","backdrop":{"resource":"court","fit":0,"tint":{"r":1,"g":1,"b":1,"a":1}},"actors":[]}],
-                  "views":[{"id":"main","stageId":"main","centerX":50,"centerY":50,"zoom":1,"rotation":0}],
-                  "layout":"single","bindings":{"main":"main"},"revision":0
-                }
-                """).RootElement.Clone());
-
-        await contributor.CommitPreparedAsync(record, default);
-
-        Assert.Equal(1, coordinator.State.Stages[StageId.Main].Backdrop!.Distance);
-        Assert.Equal(0, coordinator.State.Views[ViewId.Main].Pose.Dolly);
-        Assert.Equal(ViewParallaxState.Off, coordinator.State.Views[ViewId.Main].Parallax);
-        Assert.Equal(ViewIdleState.Off, coordinator.State.Views[ViewId.Main].Idle);
-    }
-
-    [Fact]
-    public async Task DirectionStateContributorPreservesSchemaFourLegacyProjection()
-    {
-        var coordinator = CreateCoordinator(new FakeDirectionBackend { AutoSettle = true });
-        var contributor = new DirectionStateContributor(coordinator);
-        var record = new StateRecord(BuiltInStateKeys.Direction, StateScope.Game, 4,
-            JsonDocument.Parse("""
-                {
-                  "stages":[{"id":"main","actors":[]}],
-                  "views":[{"id":"main","stageId":"main","centerX":35,"centerY":71,"zoom":0.8,"rotation":0,
-                    "dolly":0.6,"parallax":{"strength":1,"anchor":{"x":35,"y":46},"limitPercent":{"x":2,"y":50}},
-                    "idle":{"amplitudePercent":{"x":0,"y":0},"periodSeconds":12,"phaseRadians":0}}],
-                  "layout":"single","bindings":{"main":"main"},"revision":0
-                }
-                """).RootElement.Clone());
-        await contributor.CommitPreparedAsync(record, default);
-        var view = coordinator.State.Views[ViewId.Main];
-        Assert.False(view.Parallax.UseDepthProjection);
-        Assert.Equal(1, view.Parallax.Strength);
-        Assert.Equal(default(DirectionPoint), view.Pose.BackgroundOffset);
-        Assert.Equal(1, view.Pose.BackgroundScale);
+        var record = new StateRecord(BuiltInStateKeys.Direction, StateScope.Game, schema,
+            JsonDocument.Parse("{}").RootElement.Clone());
+        var error = await Assert.ThrowsAsync<StateSnapshotException>(() => contributor.PreflightAsync(record, default).AsTask());
+        Assert.Contains("schema 6", error.Message);
+        Assert.Null(coordinator.State.Stages[StageId.Main].Backdrop);
     }
 
     [Fact]
@@ -269,7 +244,7 @@ public sealed class DirectionRuntimeTests
         {
             new BackdropPatch(
                 StageId.Main,
-                new BackdropState(new ResourceKey("Background_001_001")),
+                new BackdropState("Background_001_001", "background", "Default"),
                 DirectionTransitionSpec.Cut),
         }));
 
@@ -288,7 +263,7 @@ public sealed class DirectionRuntimeTests
         {
             new BackdropPatch(
                 StageId.Main,
-                new BackdropState(new ResourceKey("Background_001_001")),
+                new BackdropState("Background_001_001", "background", "Default"),
                 DirectionTransitionSpec.Cut),
         }, DirectionCompletionBarrier.Settle);
 
@@ -336,7 +311,7 @@ public sealed class DirectionRuntimeTests
         {
             new BackdropPatch(
                 StageId.Main,
-                new BackdropState(new ResourceKey("Background_001_001")),
+                new BackdropState("Background_001_001", "background", "Default"),
                 DirectionTransitionSpec.Cut),
         }, DirectionCompletionBarrier.Settle);
 
@@ -397,7 +372,7 @@ public sealed class DirectionRuntimeTests
 
         var first = await beats.SubmitAsync(new BackdropPatch(
             StageId.Main,
-            new BackdropState(new ResourceKey("Background_001_001")),
+            new BackdropState("Background_001_001", "background", "Default"),
             DirectionTransitionSpec.Cut));
         var second = await beats.SubmitAsync(View(ViewId.Main, zoom: 2));
 
@@ -509,7 +484,7 @@ public sealed class DirectionRuntimeTests
 
         await beats.SubmitAsync(new BackdropPatch(
             StageId.Main,
-            new BackdropState(new ResourceKey("Background_001_001")),
+            new BackdropState("Background_001_001", "background", "Default"),
             DirectionTransitionSpec.Cut), DirectionCompletionBarrier.Settle);
         await beats.SubmitAsync(
             View(ViewId.Main, zoom: 2),
@@ -572,7 +547,7 @@ public sealed class DirectionRuntimeTests
         {
             new BackdropPatch(
                 StageId.Main,
-                new BackdropState(new ResourceKey("Background_001_001")),
+                new BackdropState("Background_001_001", "background", "Default"),
                 DirectionTransitionSpec.Cut),
             View(ViewId.Main, zoom: 2),
         });
@@ -612,7 +587,7 @@ public sealed class DirectionRuntimeTests
             {
                 new BackdropPatch(
                     StageId.Main,
-                    new BackdropState(new ResourceKey("Background_001_001")),
+                    new BackdropState("Background_001_001", "background", "Default"),
                     DirectionTransitionSpec.Cut),
                 View(ViewId.Main, zoom: 2),
             });
@@ -639,7 +614,7 @@ public sealed class DirectionRuntimeTests
             {
                 new BackdropPatch(
                     StageId.Main,
-                    new BackdropState(new ResourceKey("Background_001_001")),
+                    new BackdropState("Background_001_001", "background", "Default"),
                     DirectionTransitionSpec.Cut),
                 View(ViewId.Main, zoom: 2),
             });
@@ -666,7 +641,7 @@ public sealed class DirectionRuntimeTests
             {
                 new BackdropPatch(
                     StageId.Main,
-                    new BackdropState(new ResourceKey("Background_001_001")),
+                    new BackdropState("Background_001_001", "background", "Default"),
                     DirectionTransitionSpec.Cut),
                 View(ViewId.Main, zoom: 2),
             });

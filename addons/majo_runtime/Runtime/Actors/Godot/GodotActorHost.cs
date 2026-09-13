@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
@@ -7,11 +9,12 @@ using Majo.Runtime.Core;
 
 namespace Majo.Runtime.Actors.Godot;
 
-internal sealed class GodotActorHost : IRuntimeService
+internal sealed class GodotActorHost : IRuntimeService, IActorPresentationHost
 {
     private readonly Node owner;
     private readonly Vector2I referenceResolution;
     private bool isInitialized;
+    private readonly Dictionary<IActor, RuntimeBackgroundBinding> backgrounds = new(ReferenceEqualityComparer.Instance);
 
     public GodotActorHost(Node owner, ActorConfiguration configuration)
     {
@@ -43,6 +46,7 @@ internal sealed class GodotActorHost : IRuntimeService
         BackgroundLayer = new Control
         {
             Name = "Backgrounds",
+            ClipContents = true,
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
         CharacterLayer = new Node2D { Name = "Characters" };
@@ -77,6 +81,17 @@ internal sealed class GodotActorHost : IRuntimeService
 
     public Node2D CharacterLayer { get; }
 
+    public void Attach(IActor actor)
+    {
+        if (actor is IBackgroundActor background && !backgrounds.ContainsKey(actor))
+            backgrounds.Add(actor, new RuntimeBackgroundBinding(background, BackgroundLayer));
+    }
+
+    public void Detach(IActor actor)
+    {
+        if (backgrounds.Remove(actor, out var binding)) binding.Dispose();
+    }
+
     public Task InitializeAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -109,6 +124,8 @@ internal sealed class GodotActorHost : IRuntimeService
         {
             owner.GetViewport().SizeChanged -= ResizeOutput;
         }
+
+        foreach (var actor in backgrounds.Keys.ToArray()) Detach(actor);
 
         if (isInitialized && GodotObject.IsInstanceValid(OutputLayer))
         {

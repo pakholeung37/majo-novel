@@ -9,6 +9,7 @@ using Godot;
 using Google.Protobuf;
 using Majo.Demos.Manosaba.Actors.Layered;
 using Majo.Runtime.Actors;
+using Majo.Runtime.Actors.Godot;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Yarn.Preloading;
@@ -39,6 +40,13 @@ public partial class HeadlessTestRunner
                 ManifestPath = "res://missing-unused-layered.json",
             },
         });
+        configuration.Actors!.Actors.Add(CreateActorDefinition(
+            "room", ActorFactoryIds.Background, CharacterPositionPreset.Center,
+            ("Default", "res://tests/headless/fixtures/resources/backgrounds/room.png")));
+
+        configuration.Actors.Actors.Add(CreateActorDefinition("Composite", "test.background-metadata",
+            CharacterPositionPreset.Center, ("Day", "res://tests/headless/fixtures/resources/backgrounds/room.png")));
+        var preloadedBackgrounds = new List<string>();
         var manifestReads = new Dictionary<string, int>(StringComparer.Ordinal);
         var cache = new LayeredCharacterManifestCache(path =>
         {
@@ -50,6 +58,12 @@ public partial class HeadlessTestRunner
             Name = "WindowPreloadRuntime",
             Configuration = configuration,
             ConfigureServices = registry => registry.ReplaceSingleton<LayeredCharacterManifestCache>(_ => cache),
+            ConfigureActorFactories = registry => registry.Register("test.background-metadata", ActorFactoryDomains.Direction,
+                context =>
+                {
+                    Assert(GodotObject.IsInstanceValid(context.BackgroundRoot), "Direction metadata factory requires a valid root.");
+                    return new PreloadBackgroundMetadataFactory(preloadedBackgrounds);
+                }, ActorConfigurationCompiler.CompileBackgroundTextureDefinition),
         };
         bootstrap.AddPlugin(new LayeredCharacterPlugin());
         AddChild(bootstrap);
@@ -75,7 +89,8 @@ public partial class HeadlessTestRunner
         program.Nodes.Add("Start", node);
         using var project = new YarnProject { CompiledYarnProgramBase64 = Convert.ToBase64String(program.ToByteArray()) };
         using var preloader = new YarnWindowPreloader(resources, configuration.Resources, configuration.Audio!,
-            services.Get<ILocaleManager>(), services.Get<ILocalizedResourceResolver>(), actors);
+            services.Get<ILocaleManager>(), services.Get<ILocalizedResourceResolver>(), actors,
+            directionDefinitions: services.Get<DirectionActorDefinitionEnvironment>().Resolver);
         await preloader.PrepareStartAsync(project, "Start", CancellationToken.None, "line:preload-voice");
         preloader.EnterNode(project, "Start");
         var restoredWindow = resources.CaptureCacheSnapshot();
@@ -92,7 +107,8 @@ public partial class HeadlessTestRunner
 
         var misses = snapshot.CacheMisses;
         await preloader.BeforeCommandAsync("backdrop", ["room"], CancellationToken.None);
-        await resources.LoadAsync<Texture2D>(new ResourceKey("backgrounds/room"));
+        await resources.LoadAsync<Texture2D>(new ResourceKey("backgrounds/room/Default"),
+            "res://tests/headless/fixtures/resources/backgrounds/room.png");
         await preloader.BeforeCommandAsync("character", ["Plain", "appearance:1"], CancellationToken.None);
         await resources.LoadAsync<Texture2D>(new ResourceKey("characters/Plain/1"));
         await preloader.BeforeLineAsync(new DialogueLine("line:preload-voice", "LayeredA",
@@ -171,6 +187,43 @@ public partial class HeadlessTestRunner
         }
         await coordinator.ResetAsync(CancellationToken.None);
         await WaitForConditionAsync(() => resources.CaptureCacheSnapshot().ActiveLeaseCount == 0, 2);
+        using (var metadataPreloader = new YarnWindowPreloader(resources, configuration.Resources, configuration.Audio!,
+            services.Get<ILocaleManager>(), services.Get<ILocalizedResourceResolver>(), actors,
+            directionDefinitions: services.Get<DirectionActorDefinitionEnvironment>().Resolver))
+        {
+            await metadataPreloader.BeforeCommandAsync("backdrop", ["Composite", "appearance:+Rain"], CancellationToken.None);
+            Assert(preloadedBackgrounds.Count == 0, "Preload guessed an unknown incremental appearance baseline.");
+            await metadataPreloader.BeforeCommandAsync("beat", ["begin"], CancellationToken.None);
+            foreach (var appearance in new[] { "Night", "+Rain", "Night", "+Snow" })
+                await metadataPreloader.BeforeCommandAsync("backdrop", ["Composite", "appearance:" + appearance], CancellationToken.None);
+            Assert(preloadedBackgrounds.Contains("Night+Rain") && preloadedBackgrounds.Contains("Night+Snow") &&
+                !preloadedBackgrounds.Contains("Night+Rain+Snow"), "Preload lost a repeated backdrop baseline reset.");
+            Assert(resources.CaptureCacheSnapshot().Entries.Any(entry => entry.ResolvedPath.Contains("room", StringComparison.Ordinal)) &&
+                resources.CaptureCacheSnapshot().Entries.Any(entry => entry.ResolvedPath.Contains("Plain/1", StringComparison.Ordinal)),
+                "Direction-only backdrop factory did not preload its multiple textures.");
+            Assert(!actors.TryGet("Composite", out _), "Backdrop metadata created a Runtime actor.");
+        }
         await bootstrap.RequestShutdownAsync();
     }
+    private sealed class PreloadBackgroundMetadataFactory(List<string> appearances) : IActorFactory
+    {
+        public string FactoryId => "test.background-metadata";
+        public string GetInitialAppearance(ActorDefinition definition) => "Day";
+        public bool IsIncrementalAppearance(string appearance) => appearance.StartsWith('+');
+        public string ResolveAppearance(ActorDefinition definition, string sourceAppearance, string appearance) =>
+            IsIncrementalAppearance(appearance) ? sourceAppearance + appearance : appearance;
+        public IReadOnlyList<ResourcePreloadEntry> GetPreloadResources(ActorDefinition definition, string appearance)
+        {
+            appearances.Add(appearance);
+            return [
+                ResourcePreloadEntry.Create<Texture2D>(new("backgrounds/room/Default"),
+                    "res://tests/headless/fixtures/resources/backgrounds/room.png"),
+                ResourcePreloadEntry.Create<Texture2D>(new("characters/Plain/1")),
+                ResourcePreloadEntry.Create<object>(new("unsupported-background-resource")),
+            ];
+        }
+        public Task<IActor> CreateAsync(ActorDefinition definition, ActorCreationMode mode, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Background metadata must never create an actor.");
+    }
+
 }

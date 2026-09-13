@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Direction.Core;
+using Majo.Runtime.Direction.Godot;
 using Majo.Runtime.Direction.Transitions;
 
 namespace Majo.Runtime.Actors.Godot;
@@ -17,8 +18,9 @@ internal sealed class GodotActorAppearanceTransition : IPreparedVisualTransition
     private readonly Sprite2D overlay;
     private readonly Action<bool> showOriginal;
     private readonly Action<Sprite2D?> publishOverlay;
-    private IPreparedVisualTransition? effect;
+    private GodotVisualTransition? effect;
     private bool disposed;
+    private GodotVisualInput? sourceInput, targetInput;
 
     private GodotActorAppearanceTransition(Node2D owner, CanvasItem sourceContent,
         CanvasItem targetContent, Rect2 bounds, float opacity, Action<bool> showOriginal,
@@ -46,24 +48,29 @@ internal sealed class GodotActorAppearanceTransition : IPreparedVisualTransition
     public static async Task<IPreparedVisualTransition> PrepareAsync(Node2D owner,
         CanvasItem sourceContent, CanvasItem targetContent, Rect2 bounds, float opacity,
         Action<bool> showOriginal, Action<Sprite2D?> publishOverlay,
-        ITransitionDriver driver, AnimationSpec animation, CancellationToken cancellationToken)
+        ITransitionDriver driver, AnimationSpec animation, CancellationToken cancellationToken, bool freeze = false)
     {
         var result = new GodotActorAppearanceTransition(owner, sourceContent, targetContent,
             bounds, opacity, showOriginal, publishOverlay);
         try
         {
-            var context = new VisualTransitionContext(result.overlay,
-                new DirectionTransitionSpec(driver.Id, animation.DurationSeconds, animation.Easing),
-                result.source.GetTexture(), result.target.GetTexture(), true, true);
-            result.effect = driver.Prepare(context);
-            // Keep the stable actor visible until both offscreen inputs have rendered.
-            for (var i = 0; i < 2; i++)
+            result.sourceInput = GodotVisualInput.Live(result.source, bounds);
+            result.targetInput = GodotVisualInput.Live(result.target, bounds);
+            // Observe full submissions, including upstream model/mask dependencies.
+            await result.sourceInput.ReadyAsync(owner.GetTree(), cancellationToken);
+            await result.targetInput.ReadyAsync(owner.GetTree(), cancellationToken);
+            if (freeze)
             {
-                await NextFrameAsync(owner.GetTree()).WaitAsync(cancellationToken);
+                var frozenSource = result.sourceInput.Freeze();
+                result.sourceInput.Dispose(); result.sourceInput = frozenSource;
+                var frozenTarget = result.targetInput.Freeze();
+                result.targetInput.Dispose(); result.targetInput = frozenTarget;
+                result.source.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
+                result.target.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
             }
-            cancellationToken.ThrowIfCancellationRequested();
-            result.source.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
-            result.target.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
+            var context = new VisualTransitionContext(result.overlay,
+                new DirectionTransitionSpec(driver.Id, animation.DurationSeconds, animation.Easing));
+            result.effect = GodotVisualTransition.Prepare(driver, context, result.sourceInput, result.targetInput);
             result.effect.ApplyProgress(0);
             showOriginal(false);
             result.overlay.Visible = true;
@@ -149,14 +156,6 @@ internal sealed class GodotActorAppearanceTransition : IPreparedVisualTransition
         }
     }
 
-    private static async Task NextFrameAsync(SceneTree tree)
-    {
-        if (DisplayServer.GetName() == "headless")
-            await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
-        else
-            await tree.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
-    }
-
     public void ApplyProgress(float progress) => effect?.ApplyProgress(progress);
 
     public void Dispose()
@@ -172,7 +171,8 @@ internal sealed class GodotActorAppearanceTransition : IPreparedVisualTransition
             {
                 publishOverlay(null);
                 if (GodotObject.IsInstanceValid(overlay)) overlay.Free();
-                capture.Release();
+                try { sourceInput?.Dispose(); }
+                finally { try { targetInput?.Dispose(); } finally { capture.Release(); } }
             }
         }
     }
@@ -196,5 +196,5 @@ public sealed class GodotActorAppearanceTransitionService : IActorAppearanceTran
         ITransitionDriver driver, AnimationSpec animation,
         CancellationToken cancellationToken = default) =>
         GodotActorAppearanceTransition.PrepareAsync(owner, sourceContent, targetContent, bounds,
-            opacity, showOriginal, publishOverlay, driver, animation, cancellationToken);
+            opacity, showOriginal, publishOverlay, driver, animation, cancellationToken, freeze: true);
 }

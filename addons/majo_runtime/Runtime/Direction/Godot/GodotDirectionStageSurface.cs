@@ -12,8 +12,8 @@ internal sealed class GodotDirectionStageSurface
         SubViewport viewport,
         Control canvas,
         ColorRect background,
-        TextureRect backdrop,
-        TextureRect backdropTransition,
+        GodotDirectionBackdropVisual backdrop,
+        GodotDirectionBackdropVisual backdropTransition,
         Node2D actors)
     {
         Id = id;
@@ -35,8 +35,8 @@ internal sealed class GodotDirectionStageSurface
     public SubViewport Viewport { get; }
     public Control Canvas { get; }
     public ColorRect Background { get; }
-    public TextureRect Backdrop { get; }
-    public TextureRect BackdropTransition { get; }
+    public GodotDirectionBackdropVisual Backdrop { get; }
+    public GodotDirectionBackdropVisual BackdropTransition { get; }
     public Node2D Actors { get; }
     public Node2D BackdropFxRoot { get; }
     public GodotActorModifierTarget ModifierTarget { get; }

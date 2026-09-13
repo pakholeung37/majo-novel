@@ -43,6 +43,12 @@ public sealed record ActorSpawnRequest
 
     public string? DefinitionId { get; init; }
 
+    /// <summary>Reject missing definitions instead of inferring resource conventions.</summary>
+    public bool RequireExplicitDefinition { get; init; }
+
+    /// <summary>Direction backdrop fallback uses backgrounds/id without an appearance suffix.</summary>
+    public bool UseBackdropResourceConvention { get; init; }
+
     /// <summary>
     /// Factory used only when no explicit actor definition exists.
     /// </summary>

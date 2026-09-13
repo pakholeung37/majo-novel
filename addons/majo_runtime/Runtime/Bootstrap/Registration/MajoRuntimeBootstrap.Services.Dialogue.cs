@@ -106,7 +106,8 @@ public partial class MajoRuntimeBootstrap : Node
                         new YarnWindowPreloader(resolver.Get<IResourceManager>(),
                             Configuration.Resources, Configuration.Audio!,
                             resolver.Get<ILocaleManager>(), resolver.Get<ILocalizedResourceResolver>(), resolver.Get<IActorManager>(), Logger,
-                            resolver.Get<IDirectionTransactionCoordinator>(), resolver.Get<IDirectionScopeResolver>()));
+                            resolver.Get<IDirectionTransactionCoordinator>(), resolver.Get<IDirectionScopeResolver>(),
+                            resolver.Get<Majo.Runtime.Actors.Godot.DirectionActorDefinitionEnvironment>().Resolver));
                     return yarnDialogueBackend;
                 },
                 typeof(IResourceManager),
@@ -116,6 +117,7 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(IYarnProjectVersionStore),
                 typeof(IDirectionScopeResolver),
                 typeof(IDirectionTransactionCoordinator),
+                typeof(Majo.Runtime.Actors.Godot.DirectionActorDefinitionEnvironment),
                 typeof(IActorManager))
             .AddSingleton<IDialoguePresentation>(
                 resolver =>

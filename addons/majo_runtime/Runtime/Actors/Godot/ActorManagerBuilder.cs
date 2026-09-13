@@ -11,7 +11,8 @@ public static class ActorManagerBuilder
     public static ActorManager Create(
         ActorFactoryContext context,
         ILocaleManager? locales = null,
-        ActorCreationConventions? conventions = null)
+        ActorCreationConventions? conventions = null,
+        IActorPresentationHost? presentationHost = null)
     {
         ArgumentNullException.ThrowIfNull(context);
         var registry = context.Catalog.Registry;
@@ -31,6 +32,6 @@ public static class ActorManagerBuilder
             return factory;
         }).ToArray();
         return new ActorManager(definitions, factories, locales, context.Logger, conventions,
-            unsupportedDefinitions);
+            unsupportedDefinitions, presentationHost);
     }
 }

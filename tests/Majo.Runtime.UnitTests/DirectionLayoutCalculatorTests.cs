@@ -40,33 +40,33 @@ public sealed class DirectionLayoutCalculatorTests
     }
 
     [Fact]
-    public void CalculateBackdropBounds_NullPlacement_ReturnsFullViewport()
+    public void BackgroundLayout_StretchReturnsFullViewport()
     {
         var viewport = new Vector2I(1920, 1080);
-        var bounds = DirectionLayoutCalculator.CalculateBackdropBounds(viewport, null, new Vector2(500, 500));
+        var bounds = DirectionLayoutCalculator.CalculateBackgroundLayout(viewport, new Rect2(0, 0, 500, 500), BackdropFit.Stretch).VisibleBounds;
 
         Assert.Equal(new Rect2(0, 0, 1920, 1080), bounds);
     }
 
     [Fact]
-    public void CalculateBackdropBounds_WithPlacement_ScalesAndOffsetsCorrectly()
+    public void BackgroundLayout_PlacementScalesAndOffsetsCorrectly()
     {
         var viewport = new Vector2I(1920, 1080);
         var placement = new BackdropPlacement(
             At: new DirectionPoint(50f, 50f),
             Origin: new DirectionPoint(0.5f, 0.5f),
             Scale: 1.0f);
-        var bounds = DirectionLayoutCalculator.CalculateBackdropBounds(viewport, placement, new Vector2(800, 600));
+        var bounds = DirectionLayoutCalculator.CalculateBackgroundLayout(viewport, new Rect2(0, 0, 800, 600), BackdropFit.Cover, placement).VisibleBounds;
 
         Assert.Equal(new Vector2(800, 600), bounds.Size);
         Assert.Equal(new Vector2(1920 / 2 - 400, 1080 / 2 - 300), bounds.Position);
     }
 
     [Fact]
-    public void ResolveBackdropStretchMode_MapsCorrectly()
+    public void CoverClipsOversizedNativeContentToStage()
     {
-        Assert.Equal(TextureRect.StretchModeEnum.KeepAspectCovered, DirectionLayoutCalculator.ResolveBackdropStretchMode(BackdropFit.Cover));
-        Assert.Equal(TextureRect.StretchModeEnum.KeepAspectCentered, DirectionLayoutCalculator.ResolveBackdropStretchMode(BackdropFit.Contain));
-        Assert.Equal(TextureRect.StretchModeEnum.Scale, DirectionLayoutCalculator.ResolveBackdropStretchMode(BackdropFit.Stretch));
+        var layout = DirectionLayoutCalculator.CalculateBackgroundLayout(new Vector2(200, 200), new Rect2(-20, 5, 400, 100), BackdropFit.Cover);
+        Assert.Equal(new Rect2(0, 0, 200, 200), layout.ClipRect);
+        Assert.Equal(layout.ClipRect, layout.VisibleBounds);
     }
 }

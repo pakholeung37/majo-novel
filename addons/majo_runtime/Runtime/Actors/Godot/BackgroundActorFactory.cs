@@ -24,28 +24,46 @@ public sealed class BackgroundActorFactory : IActorFactory
     public string GetInitialAppearance(ActorDefinition definition) =>
         definition.GetFactoryData<TextureActorDefinitionData>().DefaultAppearance;
 
+    public System.Collections.Generic.IReadOnlyList<Majo.Runtime.Resources.ResourcePreloadEntry> GetPreloadResources(
+        ActorDefinition definition, string appearance)
+    {
+        var data = definition.GetFactoryData<TextureActorDefinitionData>();
+        return new[]
+        {
+            Majo.Runtime.Resources.ResourcePreloadEntry.Create<Texture2D>(
+                data.GetAppearanceResourceKey(definition.DefinitionId, appearance),
+                data.GetAppearanceOverride(appearance)),
+        };
+    }
+
     public void ValidateDefinition(ActorDefinition definition) =>
         _ = definition.GetFactoryData<TextureActorDefinitionData>();
 
-    public Task<IActor> CreateAsync(
+    public async Task<IActor> CreateAsync(
         ActorDefinition definition,
         ActorCreationMode mode,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var container = new Control
+        var container = new Node2D
         {
             Name = definition.Id,
-            MouseFilter = Control.MouseFilterEnum.Ignore,
             Visible = false,
         };
         host.AddChild(container);
-        container.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         try
         {
-            var actor = new BackgroundActor(definition, container, textureLoader);
-            actor.SetVisible(mode == ActorCreationMode.Active);
-            return Task.FromResult<IActor>(actor);
+            var actor = new BackgroundActor(definition, container, textureLoader, initializeAppearance: false);
+            try
+            {
+                await using var prepared = await actor.PrepareBackgroundAppearanceAsync(GetInitialAppearance(definition), cancellationToken);
+                prepared.Commit();
+                prepared.ConfirmCommit();
+                cancellationToken.ThrowIfCancellationRequested();
+                actor.SetVisible(mode == ActorCreationMode.Active);
+                return actor;
+            }
+            catch { actor.Destroy(); throw; }
         }
         catch
         {

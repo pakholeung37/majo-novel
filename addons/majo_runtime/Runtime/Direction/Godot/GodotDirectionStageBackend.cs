@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
+using Majo.Runtime.Actors.Godot;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Core;
 using Majo.Runtime.Direction.Actors;
@@ -18,25 +19,25 @@ using Majo.Runtime.Timing;
 
 namespace Majo.Runtime.Direction.Godot;
 
-internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRuntimeService
+internal sealed partial class GodotDirectionStageBackend : IDirectionStageBackend, IRuntimeService
 {
+    internal long LocaleRevision { get; private set; }
+    internal void InvalidateLocale() => LocaleRevision++;
     private readonly Dictionary<StageId, PreparedBackdrop> activeBackdrops = new();
     private readonly GodotDirectionRenderHost host;
-    private readonly IDirectionTextureLoader textures;
-    private readonly Func<Node2D, IActorManager>? createActorManager;
+    private readonly Dictionary<StageId, GodotDirectionBackdropBinding> backgrounds = new();
+    private readonly Func<ActorMountRoots, IActorManager>? createActorManager;
     private readonly ITransitionDriverRegistry drivers;
     private readonly IEasingRegistry easings;
     private readonly Dictionary<StageId, GodotDirectionActorTreeBackend> actors = new();
 
     public GodotDirectionStageBackend(
         GodotDirectionRenderHost host,
-        IDirectionTextureLoader textures,
-        Func<Node2D, IActorManager>? createActorManager = null,
+        Func<ActorMountRoots, IActorManager>? createActorManager = null,
         ITransitionDriverRegistry? drivers = null,
         IEasingRegistry? easings = null)
     {
         this.host = host ?? throw new ArgumentNullException(nameof(host));
-        this.textures = textures ?? throw new ArgumentNullException(nameof(textures));
         this.createActorManager = createActorManager;
         this.drivers = drivers ?? new TransitionDriverRegistry();
         this.easings = easings ?? BuiltInEasings.CreateDefaultRegistry();
@@ -60,6 +61,22 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
             }
         }
         actors.Clear();
+        foreach (var transition in activeBackdrops.Values.ToArray())
+        {
+            try { await transition.FinishAsync(CancellationToken.None); }
+            catch (Exception error) { (failures ??= new()).Add(error); }
+            try { await transition.DisposeAsync(); }
+            catch (Exception error) { (failures ??= new()).Add(error); }
+        }
+        activeBackdrops.Clear();
+        foreach (var pair in backgrounds.ToArray())
+        {
+            try { if (host.HasStage(pair.Key)) host.PublishBackdrop(pair.Key, null, null); }
+            catch (Exception error) { (failures ??= new()).Add(error); }
+            try { await pair.Value.DisposeAsync(); }
+            catch (Exception error) { (failures ??= new()).Add(error); }
+        }
+        backgrounds.Clear();
         if (failures is not null)
             throw new AggregateException("One or more Direction stage actor trees failed to reset.", failures);
     }
@@ -76,6 +93,22 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
             }
         }
         actors.Clear();
+        foreach (var transition in activeBackdrops.Values.ToArray())
+        {
+            try { await transition.FinishAsync(CancellationToken.None); }
+            catch (Exception error) { (failures ??= new()).Add(error); }
+            try { await transition.DisposeAsync(); }
+            catch (Exception error) { (failures ??= new()).Add(error); }
+        }
+        activeBackdrops.Clear();
+        foreach (var pair in backgrounds.ToArray())
+        {
+            try { if (host.HasStage(pair.Key)) host.PublishBackdrop(pair.Key, null, null); }
+            catch (Exception error) { (failures ??= new()).Add(error); }
+            try { await pair.Value.DisposeAsync(); }
+            catch (Exception error) { (failures ??= new()).Add(error); }
+        }
+        backgrounds.Clear();
         if (failures is not null)
             throw new AggregateException("One or more Direction stage actor trees failed to shut down.", failures);
     }
@@ -98,7 +131,7 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
         var createdSurface = !host.HasStage(stageId);
         var surface = host.GetOrCreateStage(stageId);
 
-        var backdropChanged = !Equals(before?.Backdrop, target?.Backdrop) || plan.Transitions.Any(transition =>
+        var backdropChanged = (plan.IsStateReplacement && target.Backdrop is not null) || !Equals(before?.Backdrop, target?.Backdrop) || plan.Transitions.Any(transition =>
             transition.StablePaths.Contains($"stage/{stageId.Value}/backdrop"));
         var actorsChanged = !DirectionActorsEqual(before, target) || plan.ActorIntents.Any(patch => patch switch
         {
@@ -197,35 +230,25 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
         StageState? target,
         CancellationToken cancellationToken)
     {
-        Texture2D? targetTexture = null;
-        if (target?.Backdrop is not null)
+        if (activeBackdrops.TryGetValue(stageId, out var previous))
         {
-            targetTexture = await textures.LoadAsync(
-                target.Backdrop.Resource,
-                cancellationToken);
+            await previous.FinishAsync(cancellationToken);
+            await previous.Settlement;
+            await previous.DisposeAsync();
         }
-
         var surface = host.GetStage(stageId);
-        var transition = GodotDirectionRendering.ResolveTransition(
-            plan,
-            path => string.Equals(
-                path,
-                $"stage/{stageId.Value}/backdrop",
-                StringComparison.Ordinal));
+        var transition = GodotDirectionRendering.ResolveTransition(plan,
+            path => path == $"stage/{stageId.Value}/backdrop");
         GodotDirectionRendering.ValidateTransition(transition, TransitionDomains.Stage, drivers, easings);
-        var prepared = new PreparedBackdrop(
-            this,
-            host,
-            surface,
-            surface.PublishedBackdrop,
-            surface.Backdrop.Texture,
-            target?.Backdrop,
-            targetTexture,
-            transition,
-            drivers,
-            easings);
-        return prepared;
-
+        backgrounds.TryGetValue(stageId, out var sourceBinding);
+        var prepared = new PreparedBackdrop(this, surface, sourceBinding, target?.Backdrop, transition, plan.IsStateReplacement);
+        try { await prepared.PrepareAsync(cancellationToken); return prepared; }
+        catch (Exception failure)
+        {
+            try { await prepared.DisposeAsync(); }
+            catch (Exception cleanup) { throw new AggregateException(failure, cleanup); }
+            throw;
+        }
     }
 
     private static bool DirectionActorsEqual(StageState? before, StageState? target)
@@ -241,6 +264,18 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
     private async ValueTask ReleasePreparedStageAsync(StageId stageId)
     {
         Exception? failure = null;
+        if (activeBackdrops.TryGetValue(stageId, out var transition))
+        {
+            try { await transition.FinishAsync(CancellationToken.None); }
+            catch (Exception error) { failure = error; }
+            try { await transition.DisposeAsync(); }
+            catch (Exception error) { failure = failure is null ? error : new AggregateException(failure, error); }
+        }
+        if (backgrounds.Remove(stageId, out var background))
+        {
+            try { if (host.HasStage(stageId)) host.PublishBackdrop(stageId, null, null); await background.DisposeAsync(); }
+            catch (Exception error) { failure = failure is null ? error : new AggregateException(failure, error); }
+        }
         if (actors.Remove(stageId, out var actorBackend))
         {
             try { await actorBackend.ResetAsync(CancellationToken.None); }
@@ -268,6 +303,7 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
         private readonly TaskCompletionSource settlement = new(
             TaskCreationOptions.RunContinuationsAsynchronously);
         private bool committed;
+        private bool confirmed;
         private bool disposed;
 
         public PreparedStageDeletion(GodotDirectionStageBackend backend, StageId stageId)
@@ -286,6 +322,8 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
             settlement.TrySetResult();
         }
 
+        public void ConfirmCommit() => confirmed = true;
+
         public void Rollback(DirectionCommitToken token) => committed = false;
 
         public ValueTask FinishAsync(CancellationToken cancellationToken)
@@ -301,7 +339,7 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
             if (disposed) return;
             disposed = true;
             if (!settlement.Task.IsCompleted) settlement.TrySetCanceled();
-            if (committed) await backend.ReleasePreparedStageAsync(stageId);
+            if (committed && confirmed) await backend.ReleasePreparedStageAsync(stageId);
         }
     }
 
@@ -311,6 +349,7 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
         private readonly StageId stageId;
         private readonly IPreparedDirectionComponent component;
         private bool committed;
+        private bool confirmed;
         private bool commitStarted;
         private bool disposed;
 
@@ -335,7 +374,7 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
             committed = true;
         }
 
-        public void ConfirmCommit() => component.ConfirmCommit();
+        public void ConfirmCommit() { component.ConfirmCommit(); confirmed = true; }
 
         public void Rollback(DirectionCommitToken token)
         {
@@ -354,7 +393,7 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
             List<Exception>? failures = null;
             try { await component.DisposeAsync(); }
             catch (Exception exception) { failures = new List<Exception> { exception }; }
-            if (!committed)
+            if (!committed || !confirmed)
             {
                 try { await backend.ReleasePreparedStageAsync(stageId); }
                 catch (Exception exception) { (failures ??= new()).Add(exception); }
@@ -364,165 +403,4 @@ internal sealed class GodotDirectionStageBackend : IDirectionStageBackend, IRunt
         }
     }
 
-    private sealed class PreparedBackdrop : IPreparedDirectionComponent
-    {
-        private readonly GodotDirectionStageBackend backend;
-        private readonly TaskCompletionSource<bool> confirmation = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private readonly GodotDirectionRenderHost host;
-        private readonly GodotDirectionStageSurface surface;
-        private readonly BackdropState? source;
-        private readonly Texture2D? sourceTexture;
-        private readonly BackdropState? target;
-        private readonly Texture2D? targetTexture;
-        private readonly DirectionTransitionSpec transition;
-        private readonly ITransitionDriverRegistry drivers;
-        private readonly IEasingRegistry easings;
-        private readonly TaskCompletionSource settlement = new(
-            TaskCreationOptions.RunContinuationsAsynchronously);
-        private GodotProgressTween? clock;
-        private IPreparedVisualTransition? preparedTransition;
-        private bool committed;
-        private bool rolledBack;
-        private bool disposed;
-        private long generation;
-
-        public PreparedBackdrop(
-            GodotDirectionStageBackend backend,
-            GodotDirectionRenderHost host,
-            GodotDirectionStageSurface surface,
-            BackdropState? source,
-            Texture2D? sourceTexture,
-            BackdropState? target,
-            Texture2D? targetTexture,
-            DirectionTransitionSpec transition,
-            ITransitionDriverRegistry drivers,
-            IEasingRegistry? easings = null)
-        {
-            this.host = host;
-            this.backend = backend;
-            this.surface = surface;
-            this.source = source;
-            this.sourceTexture = sourceTexture;
-            this.target = target;
-            this.targetTexture = targetTexture;
-            this.transition = transition;
-            this.drivers = drivers ?? new TransitionDriverRegistry();
-            this.easings = easings ?? BuiltInEasings.CreateDefaultRegistry();
-        }
-
-        public Task Settlement => settlement.Task;
-
-        public void Commit(DirectionCommitToken token)
-        {
-            if (committed || rolledBack || disposed)
-                throw new InvalidOperationException("Backdrop is no longer preparable.");
-            committed = true;
-            if (backend.activeBackdrops.TryGetValue(surface.Id, out var old)) old.Complete();
-            backend.activeBackdrops[surface.Id] = this;
-            generation = host.BeginStageGeneration(surface.Id);
-            if (host.IsCurrentStageGeneration(surface.Id, generation))
-                host.ClearBackdropTransition(surface.Id);
-            var animate = transition.DurationSeconds > 0 &&
-                transition.Kind != DirectionTransitionId.Cut &&
-                (source is not null || target is not null);
-            if (animate)
-            {
-                if (source is not null && sourceTexture is not null)
-                    host.PublishBackdropTransition(surface.Id, source, sourceTexture);
-            }
-
-            host.PublishBackdrop(surface.Id, target, targetTexture);
-            if (!animate)
-            {
-                Complete();
-                return;
-            }
-
-            var driver = drivers.GetRequired(transition.Kind);
-            preparedTransition = host.PrepareBackdropVisualTransition(surface.Id, transition, driver);
-            clock = host.Animate(transition, easings.GetRequired(transition.Easing), p =>
-            {
-                if (host.IsCurrentStageGeneration(surface.Id, generation)) preparedTransition.ApplyProgress(p);
-            }, OnFinished, exception => settlement.TrySetException(exception));
-        }
-
-        public ValueTask FinishAsync(CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (!committed || rolledBack || disposed)
-                throw new InvalidOperationException("Backdrop cannot finish in its current state.");
-            Complete();
-            return ValueTask.CompletedTask;
-        }
-
-        public void ConfirmCommit() => confirmation.TrySetResult(true);
-
-        public void Rollback(DirectionCommitToken token)
-        {
-            if (rolledBack || disposed) return;
-            rolledBack = true;
-            confirmation.TrySetResult(false);
-            clock?.Dispose();
-            clock = null;
-            preparedTransition?.Dispose();
-            preparedTransition = null;
-            if (host.IsCurrentStageGeneration(surface.Id, generation))
-            {
-                host.PublishBackdrop(surface.Id, source, sourceTexture);
-                host.ClearBackdropTransition(surface.Id);
-            }
-            settlement.TrySetCanceled();
-        }
-
-        public ValueTask DisposeAsync()
-        {
-            if (disposed) return ValueTask.CompletedTask;
-            disposed = true;
-            if (!committed || rolledBack) confirmation.TrySetResult(false);
-            Retire();
-            if (!settlement.Task.IsCompleted) settlement.TrySetCanceled();
-            clock?.Dispose();
-            clock = null;
-            preparedTransition?.Dispose();
-            preparedTransition = null;
-            if (host.IsCurrentStageGeneration(surface.Id, generation))
-                host.ClearBackdropTransition(surface.Id);
-            return ValueTask.CompletedTask;
-        }
-
-        private void OnFinished() => Complete();
-
-        private void Complete()
-        {
-            if (settlement.Task.IsCompleted || rolledBack || disposed) return;
-            clock?.Dispose();
-            clock = null;
-            if (host.IsCurrentStageGeneration(surface.Id, generation))
-            {
-                preparedTransition?.ApplyProgress(1.0f);
-                host.PublishBackdrop(surface.Id, target, targetTexture);
-                host.ClearBackdropTransition(surface.Id);
-            }
-            preparedTransition?.Dispose();
-            preparedTransition = null;
-            Retire();
-            _ = SettleAsync();
-        }
-        private void Retire()
-        {
-            if (backend.activeBackdrops.GetValueOrDefault(surface.Id) == this)
-                backend.activeBackdrops.Remove(surface.Id);
-        }
-
-        private async Task SettleAsync()
-        {
-            try
-            {
-                if (target is null && await confirmation.Task && !rolledBack && host.IsCurrentStageGeneration(surface.Id, generation))
-                    await host.ReleaseActorModifierTargetAsync(new ActorFxTarget(surface.Id, ActorFxSlot.Backdrop), surface.ModifierTarget);
-                settlement.TrySetResult();
-            }
-            catch (Exception error) { settlement.TrySetException(error); }
-        }
-    }
 }

@@ -25,7 +25,8 @@ void fragment() {
 	if (any(lessThan(source_uv, vec2(0.0))) || any(greaterThan(source_uv, vec2(1.0)))) {
 		COLOR = vec4(0.0, 0.0, 0.0, 1.0);
 	} else {
-		COLOR = texture(TEXTURE, source_uv);
+		vec4 sample_color = texture(TEXTURE, source_uv);
+		COLOR = sample_color.a > 0.00001 ? vec4(sample_color.rgb / sample_color.a, sample_color.a) : vec4(0.0);
 	}
 	if (right_side) {
 		COLOR.a *= coverage;

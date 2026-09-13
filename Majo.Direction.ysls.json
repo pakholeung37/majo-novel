@@ -61,14 +61,20 @@
       "yarnName": "backdrop",
       "definitionName": "Majo.Runtime.Dialogue.Commands.BackdropCommand",
       "language": "csharp",
-      "documentation": "backdrop \u003Cresource\u003E [stage:\u003Cstring\u003E] [at:\u003Cmark|x,y\u003E] [origin:\u003Cx,y\u003E] [scale:\u003Cnumber\u003E] [distance:\u003Cstring\u003E] [via:\u003Ckind\u003E] [duration:\u003Cnumber\u003E] [ease:\u003Ceasing-id\u003E] [wait:\u003Cbool\u003E]\nresource: value\nstage: value (default main)\nat: value\norigin: x,y\nscale: value\ndistance: flat|near|far|project preset\nvia: kind\nduration: seconds\nease: curve\nwait: bool (default false)",
+      "documentation": "backdrop \u003Cdefinition\u003E [appearance:\u003Cstring\u003E] [stage:\u003Cstring\u003E] [at:\u003Cmark|x,y\u003E] [origin:\u003Cx,y\u003E] [scale:\u003Cnumber\u003E] [distance:\u003Cstring\u003E] [via:\u003Ckind\u003E] [duration:\u003Cnumber\u003E] [ease:\u003Ceasing-id\u003E] [wait:\u003Cbool\u003E]\ndefinition: value\nappearance: value\nstage: value (default main)\nat: value\norigin: x,y\nscale: value\ndistance: flat|near|far|project preset\nvia: kind\nduration: seconds\nease: curve\nwait: bool (default false)",
       "async": true,
       "containsErrors": false,
       "parameters": [
         {
-          "name": "resource",
+          "name": "definition",
           "type": "string",
           "isOptional": false,
+          "isParamsArray": false
+        },
+        {
+          "name": "appearance:value",
+          "type": "string",
+          "isOptional": true,
           "isParamsArray": false
         },
         {

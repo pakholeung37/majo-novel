@@ -45,19 +45,18 @@ public partial class MajoRuntimeBootstrap : Node
             resolver.Get<ILocaleManager>(),
             new ActorCreationConventions(
                 context.ResourceSettings.CharactersPath,
-                context.ResourceSettings.BackgroundsPath));
+                context.ResourceSettings.BackgroundsPath), host);
     }
 
     private ActorFactoryContext CreateActorFactoryContext(
         ActorFactoryDomains domain,
         Node2D characterRoot,
-        Control? backgroundRoot,
+        Control backgroundRoot,
         IServiceResolver resolver)
     {
         return new ActorFactoryContext(
             domain,
-            characterRoot,
-            backgroundRoot,
+            new ActorMountRoots(characterRoot, backgroundRoot),
             resolver.Get<IActorTextureLoader>(),
             resolver.Get<Majo.Runtime.Resources.IResourceManager>(),
             resolver.Get<IFrameClock>(),
@@ -90,7 +89,7 @@ public partial class MajoRuntimeBootstrap : Node
                 ActorConfigurationCompiler.CompileCharacterTextureDefinition)
             .Register(
                 ActorFactoryIds.Background,
-                ActorFactoryDomains.Runtime,
+                ActorFactoryDomains.Runtime | ActorFactoryDomains.Direction,
                 context => new BackgroundActorFactory(
                     context.BackgroundRoot,
                     context.TextureLoader),

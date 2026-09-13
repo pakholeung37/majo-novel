@@ -126,6 +126,7 @@ public partial class HeadlessTestRunner
             renderer.Actors.AddChild(new Sprite2D
             {
                 Name = "RestoreActor",
+                VisibilityLayer = GodotDirectionRenderHost.SubjectVisibilityLayer,
                 Texture = actorTexture,
                 Position = new Vector2(320, 180),
                 Scale = new Vector2(0.15f, 0.15f),

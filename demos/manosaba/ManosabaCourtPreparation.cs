@@ -12,9 +12,12 @@ namespace Majo.Demos.Manosaba;
 /// <summary>The thirteen-panel court is demo content, not a backdrop command feature.</summary>
 public static class ManosabaCourtPreparation
 {
+    public const string BackgroundDefinitionId = "Court_Trial00";
+    public static ResourceKey BackgroundResourceKey => ResourceKey.Combine("backgrounds", BackgroundDefinitionId);
+
     public static async Task PrepareAsync(ScenePreparationContext context, CancellationToken cancellationToken)
     {
-        var key = new ResourceKey("backgrounds/Court_Trial00");
+        var key = BackgroundResourceKey;
         if (context.Resources.Exists<Texture2D>(key)) return;
         using var lease = context.Resources.LeaseAsync<Texture2D>(new ResourceKey("backgrounds/Court_Wall"),
             cancellationToken: cancellationToken);

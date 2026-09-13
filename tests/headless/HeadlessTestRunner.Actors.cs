@@ -44,6 +44,13 @@ public partial class HeadlessTestRunner
             ("dark", "res://tests/headless/fixtures/background_dark.svg"),
             ("light", "res://tests/headless/fixtures/background_light.svg")));
 
+        configuration.Actors!.Actors.Add(CreateActorDefinition(
+            "missing-background-actor-extension", ActorFactoryIds.Background, CharacterPositionPreset.Center,
+            ("Default", "res://tests/headless/fixtures/missing-background-actor-extension.svg")));
+        configuration.Actors!.Actors.Add(CreateActorDefinition(
+            "background_dark.svg", ActorFactoryIds.Background, CharacterPositionPreset.Center,
+            ("Default", "res://tests/headless/fixtures/background_dark.svg")));
+
         var compilations = 0;
         var factoryContexts = new List<ActorFactoryContext>();
         var bootstrap = new MajoRuntimeBootstrap
@@ -72,6 +79,11 @@ public partial class HeadlessTestRunner
         var backgroundLayer = actorRoot.GetNode<Control>("Backgrounds");
         var characterLayer = actorRoot.GetNode<Node2D>("Characters");
         var manager = bootstrap.Host!.Services.Get<IActorManager>();
+        var preload = manager.GetPreloadResources(new ActorSpawnRequest("main", ActorFactoryIds.Background, "wide")
+        { DefinitionId = "courtroom", RequireExplicitDefinition = true });
+        Assert(preload.Count == 1 && preload[0].OverridePath == "res://tests/headless/fixtures/background_wide.svg",
+            "Background metadata must preload the resolved appearance override without creating an instance.");
+        Assert(!manager.TryGet("main", out _), "Background preload must not create its requested actor.");
         var scheduler = bootstrap.Host.Services.Get<IOperationRunner>();
         var activities = bootstrap.Host.Services.Get<IRuntimeActivityObserver>();
         var character = (TextureCharacterActor)manager.GetActor<ICharacterActor>(
@@ -83,17 +95,17 @@ public partial class HeadlessTestRunner
             "Character factory did not create a Sprite2D.");
         Assert(ReferenceEquals(character.SceneNode.GetParent(), characterLayer),
             "Character Sprite2D was created under the wrong layer.");
-        Assert(background.SceneNode is Control,
-            "Background factory did not create a Control host.");
+        Assert(background.SceneNode is Node2D,
+            "Background factory did not create a lifecycle root.");
         Assert(ReferenceEquals(background.SceneNode.GetParent(), backgroundLayer),
             "Background host was created under the wrong layer.");
-        Assert(ReferenceEquals(background.CurrentView.GetParent(), background.SceneNode),
-            "Background TextureRect was created under the wrong host.");
+        Assert(background.SceneNode.IsAncestorOf(background.CurrentContent!.Root),
+            "Background content was created under the wrong host.");
         Assert(character.View.Texture is not null, "Character texture was not loaded.");
-        Assert(background.CurrentView.Texture is not null, "Background texture was not loaded.");
+        Assert(background.CurrentContent!.Root is Sprite2D { Texture: not null }, "Background texture was not loaded.");
         background.SetAppearance("wide");
-        Assert(background.CurrentView.Size.X > stageViewport.Size.X &&
-                Mathf.IsEqualApprox(background.CurrentView.Size.Y, stageViewport.Size.Y),
+        Assert(background.CurrentContent!.LocalBounds.Size.X * background.CurrentContent.Root.GetParent<Node2D>().Scale.X > stageViewport.Size.X &&
+                Mathf.IsEqualApprox(background.CurrentContent.LocalBounds.Size.Y * background.CurrentContent.Root.GetParent<Node2D>().Scale.Y, stageViewport.Size.Y),
             "Wide background bleed was cropped before Camera shake could reveal it.");
         background.SetAppearance("dark");
         Assert(cameraOutput.GetNode<TextureRect>("LiveOutput").Texture is ViewportTexture,
@@ -139,25 +151,24 @@ public partial class HeadlessTestRunner
         var missingBackdrop = new ResourceKey("backgrounds/headless-missing");
         beats.Begin("missing-backdrop", "test");
         await beats.SubmitAsync(new BackdropPatch(StageId.Main,
-            new BackdropState(missingBackdrop), DirectionTransitionSpec.Cut));
+            new BackdropState("missing-background-actor-extension", "background", "Default"), DirectionTransitionSpec.Cut));
         await beats.EndAsync();
         await beats.JoinAsync("missing-backdrop");
-        Assert(!beats.HasOpenBeat && renderHost.Backdrop.Texture is PlaceholderTexture2D,
+        Assert(!beats.HasOpenBeat && ((Sprite2D)bootstrap.Host.Services.Get<GodotDirectionStageBackend>().GetBackgroundActor(StageId.Main)!.CurrentContent!.Root).Texture is PlaceholderTexture2D,
             "Missing backdrop must settle its beat with a placeholder.");
-        Assert(renderHost.PublishedBackdrop?.Resource == missingBackdrop &&
-            missingResources.Occurrences.Any(entry => entry.ResourceId == missingBackdrop.Path),
+        Assert(renderHost.PublishedBackdrop?.DefinitionId == "missing-background-actor-extension" &&
+            missingResources.Occurrences.Any(entry => entry.ResourceId.Contains("missing-background-actor-extension", StringComparison.Ordinal)),
             "Missing backdrop must preserve its logical resource and report the fallback.");
         beats.Begin("after-missing-backdrop", "test");
         await beats.SubmitAsync(new BackdropPatch(StageId.Main,
-            new BackdropState(new ResourceKey("background_dark.svg")),
+            new BackdropState("background_dark.svg", "background", "Default"),
             DirectionTransitionSpec.Cut));
         await beats.EndAsync();
-        Assert(renderHost.Backdrop.Texture is not null and not PlaceholderTexture2D,
+        Assert(renderHost.Backdrop.Raster is not null,
             "A subsequent beat must continue and load a valid backdrop.");
-        var strictDirectionLoader = new DirectionTextureLoader(strictLoader);
         try
         {
-            await strictDirectionLoader.LoadAsync(missingBackdrop);
+            await strictLoader.LoadAsync(missingBackdrop);
             throw new InvalidOperationException("Strict direction loading accepted a missing backdrop.");
         }
         catch (ResourceNotFoundException) { }
@@ -175,16 +186,28 @@ public partial class HeadlessTestRunner
             ActorPatch.Place(StageId.Main, new ActorId("hero-left")) with { DefinitionId = "hero" },
             ActorPatch.Place(StageId.Main, new ActorId("hero-right")) with { DefinitionId = "hero" },
         }, DirectionCompletionBarrier.Settle);
-        Assert(compilations == 1 && factoryContexts.Count == 3,
+        Assert(compilations == 1 && factoryContexts.Count == 6,
             "Creating Direction bindings recompiled definitions or skipped the registered factory.");
-        Assert(factoryContexts.Select(context => context.CharacterRoot).Distinct().Count() == 3,
+        Assert(factoryContexts.Select(context => context.CharacterRoot).Distinct().Count() == 6,
             "Actor environments reused a scene root.");
+        Assert(factoryContexts.All(context => GodotObject.IsInstanceValid(context.BackgroundRoot)),
+            "Every factory environment, including metadata and character bindings, must provide a background root.");
         Assert(factoryContexts.All(context =>
             ReferenceEquals(context.ActorSettings, factoryContexts[0].ActorSettings) &&
             ReferenceEquals(context.ResourceSettings, factoryContexts[0].ResourceSettings) &&
             context.CharacterPositions.Get(CharacterPositionPreset.Left) == capturedLeft &&
             context.ResourceSettings.CharactersPath == capturedCharactersPath),
             "Factory settings or position maps escaped the runtime's immutable snapshot.");
+        var directionContext = factoryContexts.First(context => context.Domain == ActorFactoryDomains.Direction);
+        using (var directionManager = ActorManagerBuilder.Create(directionContext))
+        {
+            await directionManager.InitializeAsync(default);
+            var directionBackground = (IBackgroundActor)await directionManager.CreateAsync("courtroom");
+            Assert(directionBackground.SceneNode.GetParent() == directionContext.BackgroundRoot &&
+                directionBackground.CurrentContent is not null,
+                "Direction factory environment could not create a background alongside character factories.");
+            await directionManager.ShutdownAsync(default);
+        }
         configuration.Actors.LeftPosition = capturedLeft;
         configuration.Resources.CharactersPath = capturedCharactersPath;
 

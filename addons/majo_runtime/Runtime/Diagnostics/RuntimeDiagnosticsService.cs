@@ -185,7 +185,7 @@ public sealed class RuntimeDiagnosticsService : IRuntimeDiagnostics
                     actor.Position.Y,
                     actor.Opacity,
                     actor.ZIndex,
-                    actor is IBackgroundActor background ? background.Slot : null));
+                    actor is IBackgroundActor background ? actors.GetBackgroundSlot(background) : null));
             }
             actorDiag = new ActorDiagnostics(actorList);
         }

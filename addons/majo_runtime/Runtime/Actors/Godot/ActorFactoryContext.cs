@@ -12,12 +12,10 @@ namespace Majo.Runtime.Actors.Godot;
 
 public sealed class ActorFactoryContext
 {
-    private readonly Control? backgroundRoot;
 
     public ActorFactoryContext(
         ActorFactoryDomains domain,
-        Node2D characterRoot,
-        Control? backgroundRoot,
+        ActorMountRoots mounts,
         IActorTextureLoader textureLoader,
         IResourceManager resources,
         IFrameClock frameClock,
@@ -28,8 +26,7 @@ public sealed class ActorFactoryContext
         if (domain is not ActorFactoryDomains.Runtime and not ActorFactoryDomains.Direction)
             throw new ArgumentOutOfRangeException(nameof(domain));
         Domain = domain;
-        CharacterRoot = characterRoot ?? throw new ArgumentNullException(nameof(characterRoot));
-        this.backgroundRoot = backgroundRoot;
+        Mounts = mounts ?? throw new ArgumentNullException(nameof(mounts));
         TextureLoader = textureLoader ?? throw new ArgumentNullException(nameof(textureLoader));
         Resources = resources ?? throw new ArgumentNullException(nameof(resources));
         FrameClock = frameClock ?? throw new ArgumentNullException(nameof(frameClock));
@@ -41,9 +38,9 @@ public sealed class ActorFactoryContext
     }
 
     public ActorFactoryDomains Domain { get; }
-    public Node2D CharacterRoot { get; }
-    public Control BackgroundRoot => backgroundRoot ?? throw new ActorException(
-        "The Direction actor factory environment does not provide a background root.");
+    public ActorMountRoots Mounts { get; }
+    public Node2D CharacterRoot => Mounts.CharacterRoot;
+    public Control BackgroundRoot => Mounts.BackgroundRoot;
     public IActorTextureLoader TextureLoader { get; }
     public IResourceManager Resources { get; }
     public IFrameClock FrameClock { get; }

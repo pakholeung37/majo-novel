@@ -70,19 +70,22 @@ public sealed class ShaderTransitionDriver : ITransitionDriver
             material.SetShaderParameter("target_image", context.TargetTexture);
         }
 
+        var previousMaterial = context.Surface.Material;
         context.Surface.Material = material;
-        return new ShaderPreparedTransition(context.Surface, material, context.IsActive);
+        return new ShaderPreparedTransition(context.Surface, material, context.IsActive, previousMaterial);
     }
 
     private sealed class ShaderPreparedTransition : IPreparedVisualTransition
     {
         private readonly CanvasItem surface;
         private readonly ShaderMaterial material;
+        private readonly Material? previousMaterial;
         private readonly Func<bool>? isActive;
         private bool disposed;
 
-        public ShaderPreparedTransition(CanvasItem surface, ShaderMaterial material, Func<bool>? isActive)
+        public ShaderPreparedTransition(CanvasItem surface, ShaderMaterial material, Func<bool>? isActive, Material? previousMaterial)
         {
+            this.previousMaterial = previousMaterial;
             this.surface = surface;
             this.material = material;
             this.isActive = isActive;
@@ -103,7 +106,7 @@ public sealed class ShaderTransitionDriver : ITransitionDriver
             disposed = true;
             if (GodotObject.IsInstanceValid(surface) && ReferenceEquals(surface.Material, material))
             {
-                surface.Material = null;
+                surface.Material = GodotObject.IsInstanceValid(previousMaterial) ? previousMaterial : null;
             }
             material.Dispose();
         }

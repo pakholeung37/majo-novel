@@ -62,7 +62,7 @@ public sealed class DirectionPatchTests
                 Actor(ema, cell, position: new DirectionPoint(70, 0), appearance: "Fearful1,ArmR1"),
                 new BackdropPatch(
                     cell,
-                    new BackdropState(new ResourceKey("Background_025_001")),
+                    new BackdropState("Background_025_001", "background", "Default"),
                     DirectionTransitionSpec.Cut),
                 new ScreenPatch(
                     new LayoutId("split"),
@@ -75,7 +75,7 @@ public sealed class DirectionPatchTests
             });
 
         var stage = plan.TargetState.Stages[cell];
-        Assert.Equal("Background_025_001", stage.Backdrop?.Resource.ToString());
+        Assert.Equal("Background_025_001", stage.Backdrop?.DefinitionId);
         Assert.Equal(new DirectionPoint(70, 0), stage.Actors[ema].Position);
         Assert.Equal("Fearful1,ArmR1", stage.Actors[ema].Appearance);
         Assert.Equal(cell, plan.TargetState.Views[reaction].StageId);
@@ -84,7 +84,7 @@ public sealed class DirectionPatchTests
         Assert.Equal(1, plan.TargetState.Revision);
         Assert.Contains(plan.ResourceClaims, claim =>
             claim.Kind == DirectionResourceKind.Backdrop &&
-            claim.SemanticId == "Background_025_001");
+            claim.SemanticId == "Background_025_001/Default");
         Assert.Contains(plan.ResourceClaims, claim =>
             claim.Kind == DirectionResourceKind.ActorAppearance &&
             claim.SemanticId == "Ema/Fearful1,ArmR1");
@@ -157,7 +157,7 @@ public sealed class DirectionPatchTests
                 DirectionTransitionSpec.Cut),
             new BackdropPatch(
                 illustration,
-                new BackdropState(new ResourceKey("Still_490_001")),
+                new BackdropState("Still_490_001", "background", "Default"),
                 DirectionTransitionSpec.Cut),
             View(illustrationView, zoom: 3),
             new ScreenPatch(
@@ -170,7 +170,7 @@ public sealed class DirectionPatchTests
         });
 
         Assert.Same(before.Stages[StageId.Main], plan.TargetState.Stages[StageId.Main]);
-        Assert.Equal("Still_490_001", plan.TargetState.Stages[illustration].Backdrop?.Resource.ToString());
+        Assert.Equal("Still_490_001", plan.TargetState.Stages[illustration].Backdrop?.DefinitionId);
         Assert.Equal(illustration, plan.TargetState.Views[illustrationView].StageId);
         Assert.Equal(3, plan.TargetState.Views[illustrationView].Pose.Zoom);
         Assert.Equal(illustrationView, plan.TargetState.Screen.Bindings[LayoutSlotId.Main]);

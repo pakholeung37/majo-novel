@@ -7,7 +7,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
-using Majo.Runtime.Resources;
 
 namespace Majo.Runtime.State;
 
@@ -29,7 +28,7 @@ public sealed class DirectionStateContributor : IPreparedStateContributor, IStat
 
     public string Key => BuiltInStateKeys.Direction;
     public StateScope Scope => StateScope.Game;
-    public int SchemaVersion => 5;
+    public int SchemaVersion => 6;
     public StateContributorCapability Capability => StateContributorCapability.DurableRollback;
 
     public async ValueTask<StateRecord> CaptureAsync(CancellationToken cancellationToken)
@@ -87,7 +86,7 @@ public sealed class DirectionStateContributor : IPreparedStateContributor, IStat
             stage.Backdrop is null
                 ? null
                 : new BackdropPayload(
-                    stage.Backdrop.Resource.ToString(),
+                    stage.Backdrop.DefinitionId, stage.Backdrop.FactoryId, stage.Backdrop.Appearance,
                     stage.Backdrop.Fit,
                     stage.Backdrop.Tint, stage.Backdrop.Placement, stage.Backdrop.Distance),
             new EffectPayload(stage.Effects.Tint),
@@ -121,17 +120,16 @@ public sealed class DirectionStateContributor : IPreparedStateContributor, IStat
         {
             if (record.Key != BuiltInStateKeys.Direction ||
                 record.Scope != StateScope.Game ||
-                record.SchemaVersion is not (3 or 4 or 5))
+                record.SchemaVersion != 6)
             {
                 throw new StateSnapshotException(
-                    $"State record '{BuiltInStateKeys.Direction}' has incompatible metadata.");
+                    $"State record '{BuiltInStateKeys.Direction}' requires Direction schema 6; received schema {record.SchemaVersion} or incompatible metadata.");
             }
-            if (record.SchemaVersion >= 4) ValidateV4Shape(record);
-            if (record.SchemaVersion == 5)
-                foreach (var view in record.Payload.GetProperty("views").EnumerateArray())
-                    if (!view.TryGetProperty("backgroundOffset", out _) || !view.TryGetProperty("backgroundScale", out _) ||
-                        !view.GetProperty("parallax").TryGetProperty("useDepthProjection", out _))
-                        throw new StateSnapshotException("Direction v5 view is missing background projection state.");
+            ValidateShape(record);
+            foreach (var view in record.Payload.GetProperty("views").EnumerateArray())
+                if (!view.TryGetProperty("backgroundOffset", out _) || !view.TryGetProperty("backgroundScale", out _) ||
+                    !view.GetProperty("parallax").TryGetProperty("useDepthProjection", out _))
+                    throw new StateSnapshotException("Direction v6 view is missing background projection state.");
             return FromPayload(StateJson.Deserialize<Payload>(record));
         }
         catch (StateSnapshotException)
@@ -146,18 +144,19 @@ public sealed class DirectionStateContributor : IPreparedStateContributor, IStat
         }
     }
 
-    private static void ValidateV4Shape(StateRecord record)
+    private static void ValidateShape(StateRecord record)
     {
         if (!record.Payload.TryGetProperty("stages", out var stages) || stages.ValueKind != System.Text.Json.JsonValueKind.Array ||
             !record.Payload.TryGetProperty("views", out var views) || views.ValueKind != System.Text.Json.JsonValueKind.Array)
-            throw new StateSnapshotException("Direction v4 state payload is incomplete.");
+            throw new StateSnapshotException("Direction v6 state payload is incomplete.");
         foreach (var stage in stages.EnumerateArray())
             if (stage.TryGetProperty("backdrop", out var backdrop) && backdrop.ValueKind != System.Text.Json.JsonValueKind.Null &&
-                !backdrop.TryGetProperty("distance", out _))
-                throw new StateSnapshotException("Direction v4 backdrop is missing distance.");
+                (!backdrop.TryGetProperty("distance", out _) || !backdrop.TryGetProperty("definitionId", out _) ||
+                    !backdrop.TryGetProperty("factoryId", out _) || !backdrop.TryGetProperty("appearance", out _)))
+                throw new StateSnapshotException("Direction v6 backdrop is missing identity or distance.");
         foreach (var view in views.EnumerateArray())
             if (!view.TryGetProperty("dolly", out _) || !view.TryGetProperty("parallax", out _) || !view.TryGetProperty("idle", out _))
-                throw new StateSnapshotException("Direction v4 view is missing camera environment state.");
+                throw new StateSnapshotException("Direction v6 view is missing camera environment state.");
     }
 
     private static DirectionState FromPayload(Payload payload)
@@ -196,7 +195,7 @@ public sealed class DirectionStateContributor : IPreparedStateContributor, IStat
             if (stage.Backdrop is not null)
             {
                 new BackdropState(
-                    new ResourceKey(stage.Backdrop.Resource),
+                    stage.Backdrop.DefinitionId, stage.Backdrop.FactoryId, stage.Backdrop.Appearance,
                     stage.Backdrop.Fit,
                     stage.Backdrop.Tint)
                 { Placement = stage.Backdrop.Placement, Distance = stage.Backdrop.Distance }.Validate();
@@ -207,7 +206,7 @@ public sealed class DirectionStateContributor : IPreparedStateContributor, IStat
                 stage.Backdrop is null
                     ? null
                     : new BackdropState(
-                        new ResourceKey(stage.Backdrop.Resource),
+                        stage.Backdrop.DefinitionId, stage.Backdrop.FactoryId, stage.Backdrop.Appearance,
                         stage.Backdrop.Fit,
                         stage.Backdrop.Tint)
                     { Placement = stage.Backdrop.Placement, Distance = stage.Backdrop.Distance },
@@ -291,7 +290,7 @@ public sealed class DirectionStateContributor : IPreparedStateContributor, IStat
         BackdropPayload? Backdrop,
         EffectPayload? Effects,
         ActorPayload[] Actors);
-    private sealed record BackdropPayload(string Resource, BackdropFit Fit, DirectionColor Tint,
+    private sealed record BackdropPayload(string DefinitionId, string FactoryId, string Appearance, BackdropFit Fit, DirectionColor Tint,
         BackdropPlacement? Placement = null, float Distance = 1);
     private sealed record EffectPayload(DirectionColor Tint);
     private sealed record StableEffectsPayload(CurtainPayload Curtain);

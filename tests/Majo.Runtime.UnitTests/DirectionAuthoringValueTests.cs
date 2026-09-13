@@ -97,19 +97,17 @@ public sealed class DirectionAuthoringValueTests
     }
 
     [Theory]
-    [InlineData("room", "backgrounds", "backgrounds/room")]
-    [InlineData("backgrounds/room", "backgrounds", "backgrounds/room")]
-    [InlineData(" /art\\backgrounds/room/ ", "art/backgrounds", "art/backgrounds/room")]
-    [InlineData("room", "custom/bg", "custom/bg/room")]
-    public async Task BackdropCommandUsesTheSharedResourceKeyRule(string id, string root, string expected)
+    [InlineData("room")]
+    [InlineData("custom/bg/room")]
+    public async Task BackdropCommandSubmitsDefinitionIdentityWithoutResourceInference(string id)
     {
         var beats = new FakeDirectionBeatRuntime();
         var command = new BackdropCommand(beats, new DirectionScopeResolver(),
-            new DelegateDialogueNodeAccessor(() => "Opening"), new DirectionCommandPolicy(beats), root);
+            new DelegateDialogueNodeAccessor(() => "Opening"), new DirectionCommandPolicy(beats));
         var bound = TestCatalogBuilder.CreateBound(command);
-        await bound.ExecuteAsync(new CommandInput("backdrop", [id]), new CommandExecutionContext("backdrop"));
-        var patch = Assert.IsType<BackdropPatch>(beats.LastSubmitted);
-        Assert.Equal(new ResourceKey(expected), new BackdropId(id).ToResourceKey(root));
-        Assert.Equal(new ResourceKey(expected), patch.Backdrop.Resource);
+        await bound.ExecuteAsync(new CommandInput("backdrop", [id, "appearance:Night"]), new CommandExecutionContext("backdrop"));
+        var intent = Assert.IsType<BackdropIntent>(beats.LastSubmitted);
+        Assert.Equal(id, intent.DefinitionId);
+        Assert.Equal("Night", intent.Appearance);
     }
 }

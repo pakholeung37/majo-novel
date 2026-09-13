@@ -135,9 +135,23 @@ public enum CurtainPosition
     Closed,
 }
 
+/// <summary>Authored backdrop request; resolved against the beat's working state.</summary>
+public sealed record BackdropIntent(
+    StageId StageId,
+    string DefinitionId,
+    string? Appearance,
+    DirectionValue<float> Distance,
+    BackdropPlacement? Placement,
+    DirectionTransitionSpec Transition,
+    DirectionSourceLocation? SourceLocation = null) : IDurableDirectionPatch
+{
+    public BackdropFit Fit { get; init; } = BackdropFit.Cover;
+    public DirectionColor Tint { get; init; } = DirectionColor.White;
+}
+
 public sealed record BackdropPatch(
     StageId StageId,
-    BackdropState Backdrop,
+    BackdropState? Backdrop,
     DirectionTransitionSpec Transition,
     DirectionSourceLocation? SourceLocation = null) : IDurableDirectionPatch;
 

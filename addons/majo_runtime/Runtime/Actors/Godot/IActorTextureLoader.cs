@@ -47,6 +47,10 @@ public sealed class ResourceActorTextureLoader : IActorTextureLoader, System.IDi
     private Texture2D? placeholderTexture;
     private ResourceRetentionScope? retention;
 
+    internal ResourceActorTextureLoader CreateContentScope() => resources is null
+        ? new ResourceActorTextureLoader(failOnMissingAssets, missingResources)
+        : CreateRetainedScope();
+
     public ResourceActorTextureLoader CreateRetainedScope()
     {
         if (resources is null) throw new System.InvalidOperationException("Resource-backed texture loading is required for retention.");

@@ -1,21 +1,12 @@
 #nullable enable
 
 using System;
-using Majo.Runtime.Configuration;
 using Majo.Runtime.Direction.Execution;
-using Majo.Runtime.Resources;
 
 namespace Majo.Runtime.Dialogue.Commands;
 
 public sealed class DirectionCommandModule : IRuntimeCommandModule
 {
-    private readonly string backgroundsPath;
-
-    public DirectionCommandModule(string backgroundsPath = ResourceConfiguration.DefaultBackgroundsPath)
-    {
-        this.backgroundsPath = backgroundsPath ?? throw new ArgumentNullException(nameof(backgroundsPath));
-    }
-
     public void Register(CommandRegistrationContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -32,7 +23,6 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
 
         converters.AddDefault<Direction.Actors.ActorShakeAxis>(_ => new EnumCommandValueConverter<Direction.Actors.ActorShakeAxis>(), providerId);
         converters.AddDefault<PositionRef>(_ => PositionRefConverter.Instance, providerId);
-        converters.AddDefault<BackdropId>(text => new BackdropId(text), providerId);
         converters.AddDefault<Godot.Vector2>(_ => Vector2Converter.Instance, providerId);
         converters.AddDefault<Direction.Camera.CameraShakeAxis>(_ => CameraShakeAxisConverter.Instance, providerId);
         converters.AddDefault<Direction.Core.DirectionTransitionId>(_ => DirectionTransitionIdConverter.Instance, providerId);
@@ -50,7 +40,7 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
         return registry;
     }
 
-    private void RegisterCommands(IRuntimeCommandRegistrar commands)
+    private static void RegisterCommands(IRuntimeCommandRegistrar commands)
     {
         const string providerId = "majo.direction";
         const string version = "1.0";
@@ -70,9 +60,8 @@ public sealed class DirectionCommandModule : IRuntimeCommandModule
             services.Get<IDirectionBeatRuntime>(),
             services.Get<IDirectionScopeResolver>(),
             services.Get<IDialogueNodeAccessor>(),
-            services.Get<IDirectionCommandPolicy>(), backgroundsPath,
-            GetEnvironment(services),
-            services.Get<IDirectionTransactionCoordinator>()), providerId, version);
+            services.Get<IDirectionCommandPolicy>(),
+            GetEnvironment(services)), providerId, version);
 
         commands.Add("character", services => new CharacterCommand(
             services.Get<IDirectionBeatRuntime>(),

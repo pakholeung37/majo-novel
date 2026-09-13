@@ -29,5 +29,13 @@ public interface IActorManager : IRuntimeService
 
     bool Remove(string actorId);
 
+    string GetBackgroundSlot(IBackgroundActor actor) => BackgroundSlotIds.Main;
+
+    void SetBackgroundSlot(IBackgroundActor actor, string slot)
+    {
+        if (BackgroundSlotIds.Normalize(slot) != BackgroundSlotIds.Main)
+            throw new ActorException("This manager does not support named background slots.");
+    }
+
     bool CanCreate(ActorSpawnRequest request) => true;
 }

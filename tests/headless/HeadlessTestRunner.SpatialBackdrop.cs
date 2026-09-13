@@ -25,27 +25,27 @@ public partial class HeadlessTestRunner
         using var pixels = Image.CreateEmpty(16, 12, false, Image.Format.Rgba8);
         pixels.Fill(Colors.Red);
         using var texture = ImageTexture.CreateFromImage(pixels);
-        var state = new BackdropState(new ResourceKey("generated"))
+        var state = new BackdropState("generated", "background", "Default")
         {
             Placement = new BackdropPlacement(new DirectionPoint(250, 50), new DirectionPoint(.5f, .5f), 2),
         };
-        host.PublishBackdrop(StageId.Main, state, texture);
-        Assert(host.Backdrop.Position.IsEqualApprox(new Vector2(1584, 168)), "Backdrop must preserve world placement beyond the reference frame.");
-        Assert(host.Backdrop.Size.IsEqualApprox(new Vector2(32, 24)), "Spatial backdrop must use native texture size times scale.");
+        host.PublishBackdrop(StageId.Main, state, CreateBackgroundRaster(host, texture));
+        Assert(host.Backdrop.VisibleBounds.Position.IsEqualApprox(new Vector2(1584, 168)), "Backdrop must preserve world placement beyond the reference frame.");
+        Assert(host.Backdrop.VisibleBounds.Size.IsEqualApprox(new Vector2(32, 24)), "Spatial backdrop must use native texture size times scale.");
         var far = new ViewId("far");
         host.PublishView(far, new ViewState(far, StageId.Main, new ViewPose(new DirectionPoint(250, 50), 1, 0)), texture);
         var view = host.GetOrCreateView(far);
         var metrics = host.GetRenderResourceMetrics();
-        Assert(metrics.ViewCount == 2 && metrics.RenderTargetCount == 12,
-            "Render metrics must account for five targets per layered View plus Stage and Screen targets.");
+        Assert(metrics.ViewCount == 2 && metrics.RenderTargetCount == 13,
+            "Render metrics must account for five targets per layered View plus Stage, Screen and native background content targets.");
         Assert(metrics.EstimatedRgba8ColorBytes > 0,
             "Render metrics must expose the minimum RGBA8 color-buffer cost.");
         Assert(view.ContentViewport.World2D == host.StageViewport.World2D, "Views must observe the same Stage world rather than a clipped texture.");
         Assert((view.ContentViewport.CanvasTransform * new Vector2(1600, 180)).IsEqualApprox(new Vector2(320, 180)), "Far content must map to the view center.");
         var sourceState = state with { Distance = 2 };
         var targetState = state with { Distance = 5 };
-        host.PublishBackdropTransition(StageId.Main, sourceState, texture);
-        host.PublishBackdrop(StageId.Main, targetState, texture);
+        host.PublishBackdropTransition(StageId.Main, sourceState, CreateBackgroundRaster(host, texture));
+        host.PublishBackdrop(StageId.Main, targetState, CreateBackgroundRaster(host, texture));
         var expectedSource = CameraProjectionCalculator.Calculate(
             view.CurrentPose, view.CurrentParallax, view.CurrentIdle, sourceState.Distance,
             new DirectionPoint(view.Viewport.Size.X, view.Viewport.Size.Y));
@@ -180,7 +180,7 @@ public partial class HeadlessTestRunner
 
         host.ApplyViewState(ViewId.Main, new ViewPose(new(250, 50), 2, 8),
             new ViewParallaxState(1, new(50, 50), new(1.5f, 1)), ViewIdleState.Off);
-        host.PublishBackdrop(StageId.Main, new BackdropState(new ResourceKey("generated")) { Distance = 6 }, texture);
+        host.PublishBackdrop(StageId.Main, new BackdropState("generated", "background", "Default") { Distance = 6 }, CreateBackgroundRaster(host, texture));
         var subject = surface.ContentViewport.CanvasTransform;
         var background = surface.BackgroundViewport.CanvasTransform;
         var sourceBackground = surface.TransitionBackgroundViewport.CanvasTransform;

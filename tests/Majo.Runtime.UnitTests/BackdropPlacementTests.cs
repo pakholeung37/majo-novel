@@ -18,8 +18,8 @@ public sealed class BackdropPlacementTests
             new DelegateDialogueNodeAccessor(() => "Court"), new DirectionCommandPolicy(beats)));
         await command.ExecuteAsync(new CommandInput("backdrop", ["generated", "at:-50,100", "origin:0,0", "scale:2"]),
             new CommandExecutionContext("spatial"));
-        var patch = Assert.IsType<BackdropPatch>(beats.LastSubmitted);
-        using var direction = new DirectionTransactionCoordinator(new DirectionPlanner(), new FakeDirectionBackend { AutoSettle = true });
+        var patch = Assert.IsType<BackdropIntent>(beats.LastSubmitted);
+        using var direction = new DirectionTransactionCoordinator(new DirectionPlanner(BackdropIntentTests.CreateResolver("generated", "room")), new FakeDirectionBackend { AutoSettle = true });
         await direction.ExecuteAsync([patch]);
         var contributor = new DirectionStateContributor(direction);
         var record = await contributor.CaptureAsync(default);
@@ -28,7 +28,7 @@ public sealed class BackdropPlacementTests
         Assert.Equal(new BackdropPlacement(new DirectionPoint(-50, 100), new DirectionPoint(0, 0), 2),
             direction.State.Stages[StageId.Main].Backdrop!.Placement);
         await command.ExecuteAsync(new CommandInput("backdrop", ["room"]), new CommandExecutionContext("cover"));
-        await direction.ExecuteAsync([Assert.IsType<BackdropPatch>(beats.LastSubmitted)]);
+        await direction.ExecuteAsync([Assert.IsType<BackdropIntent>(beats.LastSubmitted)]);
         Assert.Null(direction.State.Stages[StageId.Main].Backdrop!.Placement);
     }
 }

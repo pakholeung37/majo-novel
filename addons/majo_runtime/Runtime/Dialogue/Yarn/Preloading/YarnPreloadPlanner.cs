@@ -88,7 +88,8 @@ public sealed class YarnPreloadPlanner
                 break;
             }
         }
-        return result.Distinct().ToArray();
+        // Repeated backdrop intents can reset an incremental appearance baseline.
+        return result.ToArray();
     }
 
     public static IReadOnlyList<YarnPreloadReference> Resources(IReadOnlyList<string> tokens)
@@ -104,9 +105,9 @@ public sealed class YarnPreloadPlanner
             if (asset is not null)
                 return new[] { new YarnPreloadReference(kind, tokens[1], asset[6..], appearance?[11..] ?? "Default") };
         }
-        if (kind is "backdrop" or "bgm" or "sfx" or "voice")
+        if (kind is "bgm" or "sfx" or "voice")
             return new[] { new YarnPreloadReference(kind, tokens[1]) };
-        if (kind == "character")
+        if (kind is "character" or "backdrop")
         {
             var asset = tokens.Skip(2).FirstOrDefault(token => token.StartsWith("asset:", StringComparison.OrdinalIgnoreCase));
             var appearance = tokens.Skip(2).FirstOrDefault(token => token.StartsWith("appearance:", StringComparison.OrdinalIgnoreCase));

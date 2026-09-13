@@ -4,7 +4,6 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
-using Majo.Runtime.Resources;
 
 namespace Majo.Runtime.Direction.Core;
 
@@ -57,7 +56,9 @@ public sealed record BackdropPlacement(DirectionPoint At, DirectionPoint Origin,
 }
 
 public sealed record BackdropState(
-    ResourceKey Resource,
+    string DefinitionId,
+    string FactoryId,
+    string Appearance,
     BackdropFit Fit,
     DirectionColor Tint)
 {
@@ -65,13 +66,18 @@ public sealed record BackdropState(
     /// <summary>Relative distance from the subject plane. One means coplanar.</summary>
     public float Distance { get; init; } = 1;
 
-    public BackdropState(ResourceKey resource)
-        : this(resource, BackdropFit.Cover, DirectionColor.White)
+    public BackdropState(string definitionId, string factoryId, string appearance)
+        : this(definitionId, factoryId, appearance, BackdropFit.Cover, DirectionColor.White)
     {
     }
 
     public BackdropState Validate()
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(DefinitionId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(FactoryId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(Appearance);
+        if (DefinitionId.Equals("fx", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Backdrop definition 'fx' is reserved by the backdrop fx command.");
         if (!Enum.IsDefined(Fit)) throw new ArgumentOutOfRangeException(nameof(Fit));
         Tint.Validate();
         Placement?.Validate();

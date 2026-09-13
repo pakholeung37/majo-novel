@@ -47,7 +47,7 @@ internal sealed partial class GodotDirectionRenderHost
         var target = GetSlotPlacement(state, slot, size, textureSize);
         var from = before is null ? target : GetSlotPlacement(before, slot, size, textureSize);
         var material = output.Material as ShaderMaterial;
-        if (material is null)
+        if (material?.Shader?.ResourcePath != ScreenSlotShaderPath)
         {
             material = new ShaderMaterial
             {

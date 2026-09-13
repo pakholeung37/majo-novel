@@ -8,6 +8,25 @@ namespace Majo.Runtime.UnitTests;
 public sealed class YarnPreloadPlannerTests
 {
     [Fact]
+    public void BackdropReferencesPreserveAppearanceStageAndRepeatedBaselineWrites()
+    {
+        var planner = Compile("""
+            <<backdrop Court appearance:Night stage:other>>
+            <<backdrop Court appearance:+Rain stage:other>>
+            <<backdrop Court appearance:Night stage:other>>
+            <<backdrop Court appearance:+Snow stage:other>>
+            """);
+        Assert.Equal(new[]
+        {
+            new YarnPreloadReference("backdrop", "Court", null, "Night", "other"),
+            new YarnPreloadReference("backdrop", "Court", null, "+Rain", "other"),
+            new YarnPreloadReference("backdrop", "Court", null, "Night", "other"),
+            new YarnPreloadReference("backdrop", "Court", null, "+Snow", "other"),
+        }, planner.LookAhead());
+        Assert.Empty(YarnPreloadPlanner.Resources(["backdrop", "fx", "shake"]));
+    }
+
+    [Fact]
     public void UnvoicedNarrationDoesNotConsumeVoiceWindowOrHideInterveningVisuals()
     {
         var planner = Compile("""

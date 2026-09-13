@@ -287,7 +287,7 @@ public partial class MajoRuntimeBootstrap : Node
         commandRegistry
             .RegisterModule(new BuiltInCommandModule())
             .RegisterModule(new AudioCommandModule())
-            .RegisterModule(new DirectionCommandModule(Configuration!.Resources!.BackgroundsPath));
+            .RegisterModule(new DirectionCommandModule());
 
         ConfigureEasings?.Invoke(easingRegistry);
         ConfigureTransitionDrivers?.Invoke(transitionDrivers);

@@ -11,6 +11,7 @@ using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Dialogue.Yarn;
 using Majo.Runtime.Direction.Actors;
 using Majo.Runtime.Direction.Camera;
+using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
 using Majo.Runtime.Direction.Godot;
 using Majo.Runtime.Direction.Rendering;
@@ -27,6 +28,10 @@ public partial class MajoRuntimeBootstrap : Node
     private void RegisterDirectionServices(RuntimeServiceRegistry services)
     {
         services
+            .AddSingleton<DirectionActorDefinitionEnvironment>(resolver =>
+                new DirectionActorDefinitionEnvironment(this, roots => CreateDirectionActorManager(roots, resolver), Configuration!.Actors!.ReferenceResolution),
+                ActorFactoryServiceDependencies(ActorFactoryDomains.Direction,
+                    typeof(IResourceManager), typeof(IActorTextureLoader), typeof(IFrameClock), typeof(ILocaleManager)))
             .AddSingleton<CameraEnvironmentPresetCatalog>(_ =>
                 new CameraEnvironmentPresetCatalog(Configuration!.CameraEnvironment))
             .AddSingleton<IEasingRegistry>(_ =>
@@ -44,13 +49,13 @@ public partial class MajoRuntimeBootstrap : Node
             .AddSingleton<GodotDirectionStageBackend>(
                 resolver => new GodotDirectionStageBackend(
                     resolver.Get<GodotDirectionRenderHost>(),
-                    new DirectionTextureLoader(resolver.Get<IActorTextureLoader>()),
                     root => CreateDirectionActorManager(root, resolver),
                     resolver.Get<ITransitionDriverRegistry>(),
                     resolver.Get<IEasingRegistry>()),
 
                 ActorFactoryServiceDependencies(
                     ActorFactoryDomains.Direction,
+                    typeof(DirectionActorDefinitionEnvironment),
                     typeof(GodotDirectionRenderHost),
                     typeof(IResourceManager),
                     typeof(IOperationRunner),
@@ -109,13 +114,21 @@ public partial class MajoRuntimeBootstrap : Node
                         new GodotDirectionEffectBackend(host, easings),
                         plan =>
                         {
+                            foreach (var stage in plan.TargetState.Stages.Values)
+                                if (stage.Backdrop is { } backdrop)
+                                {
+                                    var resolved = resolver.Get<DirectionActorDefinitionEnvironment>().Resolver.ResolveBackdropAppearance(
+                                        backdrop.DefinitionId, backdrop.Appearance, requiredFactoryId: backdrop.FactoryId);
+                                    if (resolved.Appearance != backdrop.Appearance)
+                                        throw new DirectionException("Stored background appearance must be a complete value.");
+                                }
                             foreach (var intent in plan.Transitions)
                             {
                                 easings.GetRequired(intent.Spec.Easing);
                             }
                         });
                     return new DirectionTransactionCoordinator(
-                        new DirectionPlanner(),
+                        new DirectionPlanner(resolver.Get<DirectionActorDefinitionEnvironment>().Resolver),
                         backend,
                         activities: resolver.Get<IRuntimeActivityRegistry>(),
                         cues: resolver.Get<ITransientDirectionCueExecutor>(),
@@ -144,6 +157,7 @@ public partial class MajoRuntimeBootstrap : Node
                 },
                 typeof(GodotDirectionRenderHost),
                 typeof(GodotDirectionStageBackend),
+                typeof(DirectionActorDefinitionEnvironment),
                 typeof(ITransitionDriverRegistry),
                 typeof(IEasingRegistry),
                 typeof(IResourceManager),
@@ -151,6 +165,10 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(IActorModifierManager),
                 typeof(IRuntimeActivityRegistry),
                 typeof(ITransientDirectionCueExecutor))
+            .AddSingleton<DirectionBackgroundLocaleRefresh>(resolver => new DirectionBackgroundLocaleRefresh(
+                resolver.Get<ILocaleManager>(), resolver.Get<IDirectionTransactionCoordinator>(),
+                resolver.Get<GodotDirectionStageBackend>(), Logger!),
+                typeof(ILocaleManager), typeof(IDirectionTransactionCoordinator), typeof(GodotDirectionStageBackend))
             .AddSingleton<IDirectionBeatRuntime>(
                 resolver => new DirectionBeatRuntime(
                     resolver.Get<IDirectionTransactionCoordinator>(),
@@ -193,30 +211,31 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(IDirectionBeatRuntime));
     }
 
-    private ActorManager CreateDirectionActorManager(Node2D root, IServiceResolver resolver)
+    private ActorManager CreateDirectionActorManager(ActorMountRoots mounts, IServiceResolver resolver)
     {
         IActorTextureLoader textureLoader = resolver.Get<IActorTextureLoader>();
         if (textureLoader is ResourceActorTextureLoader resourceLoader)
         {
             var scope = resourceLoader.CreateRetainedScope();
-            root.TreeExiting += scope.Dispose;
+            mounts.CharacterRoot.TreeExiting += scope.Dispose;
             textureLoader = scope;
         }
         var context = new ActorFactoryContext(
             ActorFactoryDomains.Direction,
-            root,
-            null,
+            mounts,
             textureLoader,
             resolver.Get<IResourceManager>(),
             resolver.Get<IFrameClock>(),
             actorCatalog!,
             resolver,
             Logger!);
-        return ActorManagerBuilder.Create(
+        var manager = ActorManagerBuilder.Create(
             context,
             resolver.Get<ILocaleManager>(),
             new ActorCreationConventions(
                 context.ResourceSettings.CharactersPath,
                 context.ResourceSettings.BackgroundsPath));
+        manager.RefreshBackgroundsOnLocaleChange = false;
+        return manager;
     }
 }

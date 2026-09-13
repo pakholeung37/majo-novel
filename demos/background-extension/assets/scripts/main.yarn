@@ -1,0 +1,10 @@
+title: Start
+scene: background_extension
+---
+<<backdrop landscape appearance:Day via:cut>>
+<<backdrop fx shake duration:0.6 strength:5 wait:true>>
+<<backdrop landscape appearance:Night via:dissolve duration:1.2 wait:true>>
+<<camera move zoom:1.15 duration:0.5 wait:true>>
+<<backdrop landscape appearance:Day at:50,50 origin:0.5,0.5 scale:2 via:cut>>
+<<backdrop landscape appearance:Night via:dissolve duration:1 wait:true>>
+===

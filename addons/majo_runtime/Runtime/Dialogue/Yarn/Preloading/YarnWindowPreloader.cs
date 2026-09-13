@@ -23,6 +23,7 @@ namespace Majo.Runtime.Dialogue.Yarn.Preloading;
 public sealed class YarnWindowPreloader : IDisposable
 {
     private readonly IActorManager actors;
+    private readonly ActorDefinitionResolver? directionDefinitions;
     private readonly IRuntimeLogger logger;
     private readonly IResourceManager resources;
     private readonly ResourceConfiguration configuration;
@@ -58,9 +59,11 @@ public sealed class YarnWindowPreloader : IDisposable
         AudioConfiguration audio, ILocaleManager locales, ILocalizedResourceResolver localized,
         IActorManager actors, IRuntimeLogger? logger = null,
         IDirectionTransactionCoordinator? direction = null,
-        IDirectionScopeResolver? scopes = null)
+        IDirectionScopeResolver? scopes = null,
+        ActorDefinitionResolver? directionDefinitions = null)
     {
         this.resources = resources;
+        this.directionDefinitions = directionDefinitions;
         this.actors = actors;
         this.logger = logger ?? NullRuntimeLogger.Instance;
         this.configuration = configuration;
@@ -108,7 +111,7 @@ public sealed class YarnWindowPreloader : IDisposable
         if (inBeat)
         {
             beatResources.AddRange(required);
-            required = beatResources.Distinct().ToArray();
+            required = beatResources.ToArray();
             if (tokens.Length >= 2 && tokens[0] == "beat" && tokens[1] == "end") inBeat = false;
         }
         return MoveAsync(required, token);
@@ -138,8 +141,9 @@ public sealed class YarnWindowPreloader : IDisposable
                 }
                 return entries.Length > 0;
             });
-            var aheadEntries = ahead.SelectMany(reference => reference.Kind == "line"
-                ? voices[reference.Id] : Resolve(new[] { reference })).Distinct().ToArray();
+            // Preserve authored order and the required prefix when deriving
+            // incremental appearances. Deduplicate resources only after resolution.
+            var aheadEntries = Resolve(required.Concat(ahead));
             await window.MoveAsync(Resolve(required), aheadEntries,
                 (long)configuration.PreloadBudgetMiB * 1024 * 1024, configuration.PreloadMaxResources, waitForAhead, token);
         }
@@ -154,6 +158,7 @@ public sealed class YarnWindowPreloader : IDisposable
     {
         var result = new List<ResourcePreloadEntry>();
         var definitions = new Dictionary<(string Stage, string Instance), string>();
+        var backdrops = new Dictionary<StageId, (string Definition, string Factory, string? Appearance)>();
         foreach (var reference in references)
         {
             var kind = reference.Kind;
@@ -193,9 +198,15 @@ public sealed class YarnWindowPreloader : IDisposable
                         DefinitionId = ResolveCharacterDefinition(reference, definitions),
                         UseDefinitionDefaultAppearance = reference.Appearance is null,
                     })
-                    : new[] { ResourcePreloadEntry.Create<Texture2D>(new BackdropId(id).ToResourceKey(root)) };
+                    : ResolveBackdropResources(reference, backdrops);
                 foreach (var entry in entries)
                 {
+                    if (entry.ResourceType != typeof(Texture2D))
+                    {
+                        logger.Warning("preload", "preload.unsupported_actor_resource",
+                            $"Actor resource '{entry.Key}' has unsupported preload type '{entry.ResourceType}'.");
+                        continue;
+                    }
                     var resolved = entry;
                     if (entry.Key.Path.StartsWith($"{root}/", StringComparison.Ordinal))
                     {
@@ -228,6 +239,32 @@ public sealed class YarnWindowPreloader : IDisposable
         // Do not charge shared, already-active textures to speculative capacity.
         return result.Distinct().Where(entry => entry.ResourceType != typeof(Texture2D) ||
             !resources.IsPinned<Texture2D>(entry.Key, entry.OverridePath)).ToArray();
+    }
+
+    private IReadOnlyList<ResourcePreloadEntry> ResolveBackdropResources(YarnPreloadReference reference,
+        Dictionary<StageId, (string Definition, string Factory, string? Appearance)> known)
+    {
+        var resolver = directionDefinitions ?? throw new ActorException("Direction backdrop metadata is unavailable.");
+        var stage = scopes is not null && currentNode is not null
+            ? scopes.ResolveStage(currentNode, reference.Stage ?? StageId.Main.Value)
+            : new StageId(reference.Stage ?? StageId.Main.Value);
+        var initial = resolver.ResolveBackdropAppearance(reference.Id);
+        var hasPrevious = known.TryGetValue(stage, out var previous);
+        if (!hasPrevious && direction?.State.Stages.TryGetValue(stage, out var current) == true && current.Backdrop is { } stored)
+        {
+            previous = (stored.DefinitionId, stored.FactoryId, stored.Appearance);
+            hasPrevious = true;
+        }
+        var same = hasPrevious && previous.Definition == reference.Id && previous.Factory == initial.Factory.FactoryId;
+        var baseline = same ? previous.Appearance : hasPrevious ? initial.Appearance : null;
+        if (reference.Appearance is { } authored && initial.Factory.IsIncrementalAppearance(authored) && baseline is null)
+        {
+            known[stage] = (reference.Id, initial.Factory.FactoryId, null);
+            return Array.Empty<ResourcePreloadEntry>();
+        }
+        var resolved = resolver.ResolveBackdropAppearance(reference.Id, reference.Appearance, baseline);
+        known[stage] = (reference.Id, resolved.Factory.FactoryId, resolved.Appearance);
+        return resolved.Factory.GetPreloadResources(resolved.Definition, resolved.Appearance);
     }
 
     private string ResolveCharacterDefinition(YarnPreloadReference reference,

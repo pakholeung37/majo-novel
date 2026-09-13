@@ -32,6 +32,11 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
     private readonly ILocaleManager? locales;
     private readonly IRuntimeLogger logger;
     private readonly ActorCreationConventions conventions;
+    public ActorDefinitionResolver DefinitionResolver { get; }
+    public bool RefreshBackgroundsOnLocaleChange { get; set; } = true;
+    private readonly IActorPresentationHost? presentationHost;
+    private readonly Dictionary<IBackgroundActor, string> backgroundSlots = new(ReferenceEqualityComparer.Instance);
+    private readonly HashSet<IActor> presentedActors = new(ReferenceEqualityComparer.Instance);
     private bool isInitialized;
     private StateMutationGate? mutationGate;
 
@@ -53,8 +58,10 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
         ILocaleManager? locales = null,
         IRuntimeLogger? logger = null,
         ActorCreationConventions? conventions = null,
-        IEnumerable<ActorDefinition>? unsupportedDefinitions = null)
+        IEnumerable<ActorDefinition>? unsupportedDefinitions = null,
+        IActorPresentationHost? presentationHost = null)
     {
+        this.presentationHost = presentationHost;
         this.locales = locales;
         this.logger = logger ?? NullRuntimeLogger.Instance;
         this.conventions = conventions ?? new ActorCreationConventions();
@@ -72,6 +79,9 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
                 !this.unsupportedDefinitions.TryAdd(definition.Id, definition))
                 throw new DuplicateActorIdException(definition.Id);
         }
+
+        DefinitionResolver = new ActorDefinitionResolver(this.definitions, this.factories,
+            this.unsupportedDefinitions, this.conventions, this.logger);
 
         if (factories is null)
         {
@@ -276,30 +286,12 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
                 if (!actors.Remove(actorId, out actor)) return false;
                 actorOrder.Remove(actorId);
             }
-            ReleaseActor(actor);
-            actor.Destroy();
+            DestroyOwnedActor(actor);
             return true;
         });
     }
 
-    public bool CanCreate(ActorSpawnRequest request)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        var factoryId = request.RequiredFactoryId ?? request.FallbackFactoryId;
-        if (!factories.ContainsKey(factoryId))
-        {
-            return false;
-        }
-
-        if (definitions.TryGetValue(request.DefinitionId ?? request.ActorId, out var definition))
-        {
-            return string.Equals(definition.FactoryId, factoryId, StringComparison.Ordinal);
-        }
-
-        return TryResolveConventionDefinition(request, out var inferred)
-            ? string.Equals(inferred.FactoryId, factoryId, StringComparison.Ordinal)
-            : IsConventionFactory(factoryId);
-    }
+    public bool CanCreate(ActorSpawnRequest request) => DefinitionResolver.CanResolve(request);
 
     public IReadOnlyList<Majo.Runtime.Resources.ResourcePreloadEntry> GetPreloadResources(ActorSpawnRequest request)
     {
@@ -314,127 +306,17 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
                     !existingFactory.PreloadExistingAppearances)
                     return Array.Empty<Majo.Runtime.Resources.ResourcePreloadEntry>();
             }
-            var definition = ResolveDefinition(request);
-            if (!factories.TryGetValue(definition.FactoryId, out var factory))
-                return Array.Empty<Majo.Runtime.Resources.ResourcePreloadEntry>();
-            factory.ValidateDefinition(definition);
-            var appearance = request.UseDefinitionDefaultAppearance
-                ? factory.GetInitialAppearance(definition)
-                : request.InitialAppearance;
-            return appearance is null
-                ? Array.Empty<Majo.Runtime.Resources.ResourcePreloadEntry>()
-                : factory.GetPreloadResources(definition, appearance);
+            return DefinitionResolver.GetPreloadResources(request);
         }
     }
 
-    private ActorDefinition ResolveDefinition(ActorSpawnRequest request)
-    {
-        var definitionId = request.DefinitionId ?? request.ActorId;
-        ThrowIfUnsupported(definitionId);
-        if (definitions.TryGetValue(definitionId, out var definition))
-        {
-            ValidateRequiredFactory(request, definition.FactoryId);
-            return string.Equals(request.ActorId, definition.Id, StringComparison.Ordinal)
-                ? definition
-                : new ActorDefinition(
-                    request.ActorId,
-                    definition.FactoryId,
-                    definition.FactoryData,
-                    definition.DefinitionId);
-        }
-
-        if (TryResolveConventionDefinition(request, out var conventionalDefinition))
-        {
-            ValidateRequiredFactory(request, conventionalDefinition.FactoryId);
-            logger.Debug(
-                "actor",
-                "actor.definition_inferred",
-                $"Actor '{request.ActorId}' used conventional '{conventionalDefinition.FactoryId}' configuration.",
-                properties: new Dictionary<string, object?>
-                {
-                    ["actorId"] = request.ActorId,
-                    ["factoryId"] = conventionalDefinition.FactoryId,
-                    ["initialAppearance"] = request.InitialAppearance,
-                });
-            return conventionalDefinition;
-        }
-
-        if (!IsConventionFactory(request.FallbackFactoryId))
-        {
-            throw new ActorNotFoundException(request.ActorId);
-        }
-
-        var resourcePathPrefix = request.FallbackFactoryId == ActorFactoryIds.Character
-            ? conventions.CharactersPath
-            : conventions.BackgroundsPath;
-        var inferred = new ActorDefinition(
-            request.ActorId,
-            request.FallbackFactoryId,
-            new TextureActorDefinitionData(
-                definitionId,
-                resourcePathPrefix,
-                request.InitialAppearance,
-                [],
-                request.InitialPosition ?? CharacterPositionPreset.Center)
-            { ResourceId = definitionId },
-            definitionId);
-        logger.Debug(
-            "actor",
-            "actor.definition_inferred",
-            $"Actor '{request.ActorId}' used conventional '{request.FallbackFactoryId}' configuration.",
-            properties: new Dictionary<string, object?>
-            {
-                ["actorId"] = request.ActorId,
-                ["factoryId"] = request.FallbackFactoryId,
-                ["initialAppearance"] = request.InitialAppearance,
-                ["resourcePathPrefix"] = resourcePathPrefix,
-            });
-        return inferred;
-    }
+    private ActorDefinition ResolveDefinition(ActorSpawnRequest request) => DefinitionResolver.Resolve(request);
 
     private void ThrowIfUnsupported(string definitionId)
     {
         if (unsupportedDefinitions.TryGetValue(definitionId, out var unsupported))
             throw new ActorDefinitionException(definitionId,
                 $"Factory '{unsupported.FactoryId}' does not support this actor manager environment.");
-    }
-
-    private bool TryResolveConventionDefinition(
-        ActorSpawnRequest request,
-        out ActorDefinition definition)
-    {
-        ActorDefinition? match = null;
-        foreach (var factory in factories.Values)
-        {
-            if (request.RequiredFactoryId is not null &&
-                !string.Equals(factory.FactoryId, request.RequiredFactoryId, StringComparison.Ordinal))
-                continue;
-            if (factory is not IConventionActorFactory convention ||
-                !convention.TryResolveDefinition(request, out var candidate))
-            {
-                continue;
-            }
-
-            if (request.FallbackFactoryId != ActorFactoryIds.SceneObject && !string.Equals(
-                    candidate.FactoryId,
-                    factory.FactoryId,
-                    StringComparison.Ordinal))
-            {
-                throw new ActorDefinitionException(
-                    request.ActorId,
-                    $"Convention factory '{factory.FactoryId}' inferred definition for " +
-                    $"factory '{candidate.FactoryId}'.");
-            }
-
-            if (match is not null)
-                throw new ActorDefinitionException(
-                    request.DefinitionId ?? request.ActorId,
-                    $"Convention actor definition is ambiguous between factories '{match.FactoryId}' and '{candidate.FactoryId}'. Specify a factory explicitly.");
-            match = candidate;
-        }
-
-        definition = match!;
-        return match is not null;
     }
 
     private static void ValidateRequiredFactory(
@@ -469,8 +351,6 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
         ValidateDefinitionIdentity(request, actor.DefinitionId);
     }
 
-    private static bool IsConventionFactory(string factoryId) =>
-        factoryId is ActorFactoryIds.Character or ActorFactoryIds.Background;
 
     public async Task<IPreparedActorReplacement> PrepareReplacementAsync(
         IReadOnlyList<ActorSpawnRequest> requests, CancellationToken cancellationToken)
@@ -503,8 +383,7 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
             foreach (var candidate in candidates)
                 try
                 {
-                    ReleaseActor(candidate);
-                    candidate.Destroy();
+                    DestroyOwnedActor(candidate);
                 }
                 catch (Exception cleanup) { failures.Add(cleanup); }
             if (failures.Count > 1) throw new AggregateException("Actor preparation and cleanup failed.", failures);
@@ -547,7 +426,7 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
             disposed = true;
             List<Exception>? failures = null;
             foreach (var actor in retired ?? candidates)
-                try { owner.ReleaseActor(actor); actor.Destroy(); }
+                try { owner.DestroyOwnedActor(actor); }
                 catch (Exception error) { (failures ??= new()).Add(error); }
             if (failures is not null) throw new AggregateException("Actor replacement cleanup failed.", failures);
             return ValueTask.CompletedTask;
@@ -568,8 +447,7 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
         {
             try
             {
-                ReleaseActor(actor);
-                actor.Destroy();
+                DestroyOwnedActor(actor);
             }
             catch (Exception exception)
             {
@@ -594,6 +472,7 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
 
         foreach (var actor in snapshot)
         {
+            if (!RefreshBackgroundsOnLocaleChange && actor is IBackgroundActor) continue;
             try
             {
                 actor.SetAppearance(actor.Appearance);
@@ -673,8 +552,7 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
             {
                 if (actor is not null && claimed)
                 {
-                    ReleaseActor(actor);
-                    actor.Destroy();
+                    DestroyOwnedActor(actor);
                 }
             }
             finally
@@ -771,13 +649,59 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
             throw new StateCompatibilityException(
                 $"Actor '{actor.Id}' does not implement the persistent write gate contract.");
         if (mutationGate is not null) participant.BindStateMutationGate(mutationGate);
+        bool attach;
+        lock (gate)
+        {
+            if (actor is IBackgroundActor background) backgroundSlots.TryAdd(background, BackgroundSlotIds.Main);
+            attach = presentationHost is not null && presentedActors.Add(actor);
+        }
+        if (attach) presentationHost!.Attach(actor);
+    }
+
+    public string GetBackgroundSlot(IBackgroundActor actor)
+    {
+        ArgumentNullException.ThrowIfNull(actor);
+        lock (gate) return backgroundSlots.TryGetValue(actor, out var slot) ? slot
+            : throw new ActorException($"Background '{actor.Id}' is not owned by this manager.");
+    }
+
+    public void SetBackgroundSlot(IBackgroundActor actor, string slot) => Mutate(() =>
+    {
+        var normalized = BackgroundSlotIds.Normalize(slot);
+        lock (gate)
+        {
+            if (!backgroundSlots.ContainsKey(actor))
+                throw new ActorException($"Background '{actor.Id}' is not owned by this manager.");
+            backgroundSlots[actor] = normalized;
+        }
+    });
+
+    private void DestroyOwnedActor(IActor actor)
+    {
+        Exception? detachFailure = null;
+        try { ReleaseActor(actor); }
+        catch (Exception error) { detachFailure = error; }
+        try { actor.Destroy(); }
+        catch (Exception error) when (detachFailure is not null)
+        { throw new AggregateException("Actor presentation and content cleanup failed.", detachFailure, error); }
+        if (detachFailure is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(detachFailure).Throw();
     }
 
     private void ReleaseActor(IActor actor)
     {
-        lock (ActorOwnerGate)
-            if (ActorOwners.TryGetValue(actor, out var owner) && ReferenceEquals(owner, this))
-                ActorOwners.Remove(actor);
+        bool detach;
+        lock (gate)
+        {
+            if (actor is IBackgroundActor background) backgroundSlots.Remove(background);
+            detach = presentedActors.Remove(actor);
+        }
+        try { if (detach) presentationHost?.Detach(actor); }
+        finally
+        {
+            lock (ActorOwnerGate)
+                if (ActorOwners.TryGetValue(actor, out var owner) && ReferenceEquals(owner, this))
+                    ActorOwners.Remove(actor);
+        }
     }
 
     private void Mutate(Action mutation)

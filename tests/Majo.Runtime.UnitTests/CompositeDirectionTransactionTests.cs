@@ -23,7 +23,7 @@ public sealed class CompositeDirectionTransactionTests
         var planDirectives = new IDirectionDirective[]
         {
             new StageCreatePatch(StageId.Main, ViewId.Main, DirectionTransitionSpec.Cut),
-            new BackdropPatch(StageId.Main, new BackdropState(new ResourceKey("bg1")), new DirectionTransitionSpec(DirectionTransitionId.Fade, 1.0)),
+            new BackdropPatch(StageId.Main, new BackdropState("bg1", "background", "Default"), new DirectionTransitionSpec(DirectionTransitionId.Fade, 1.0)),
         };
 
         var transaction = await coordinator.ExecuteAsync(planDirectives, DirectionCompletionBarrier.Commit);
@@ -48,7 +48,7 @@ public sealed class CompositeDirectionTransactionTests
 
         var transaction = await coordinator.ExecuteAsync(new IDirectionDirective[]
         {
-            new BackdropPatch(StageId.Main, new BackdropState(new ResourceKey("bg1")), new DirectionTransitionSpec(
+            new BackdropPatch(StageId.Main, new BackdropState("bg1", "background", "Default"), new DirectionTransitionSpec(
                 DirectionTransitionId.Fade, 1.0, EasingId.Linear)),
         }, DirectionCompletionBarrier.Commit);
 
@@ -68,7 +68,7 @@ public sealed class CompositeDirectionTransactionTests
         var initialRevision = coordinator.State.Revision;
         var transaction = await coordinator.ExecuteAsync(new IDirectionDirective[]
         {
-            new BackdropPatch(StageId.Main, new BackdropState(new ResourceKey("bg1")), DirectionTransitionSpec.Cut),
+            new BackdropPatch(StageId.Main, new BackdropState("bg1", "background", "Default"), DirectionTransitionSpec.Cut),
         }, DirectionCompletionBarrier.Settle);
 
         Assert.True(coordinator.State.Revision > initialRevision);
@@ -88,7 +88,7 @@ public sealed class CompositeDirectionTransactionTests
 
         var skippableTx = await coordinator.ExecuteAsync(new IDirectionDirective[]
         {
-            new BackdropPatch(StageId.Main, new BackdropState(new ResourceKey("bg1")), new DirectionTransitionSpec(
+            new BackdropPatch(StageId.Main, new BackdropState("bg1", "background", "Default"), new DirectionTransitionSpec(
                 DirectionTransitionId.Fade, 1.0, EasingId.Linear, Skippable: true)),
         }, DirectionCompletionBarrier.Commit);
 

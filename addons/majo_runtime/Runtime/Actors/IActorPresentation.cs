@@ -47,7 +47,8 @@ public interface IPreparedActorAppearance : IPreparedVisualTransition
 }
 
 /// <summary>
-/// Prepares actor-local snapshot transitions. Input nodes are temporary content
+/// Prepares actor-local live transitions. Input nodes must keep their animation/simulation
+/// with the provided trees; the host renders them until the transition releases them. They are temporary content
 /// whose lifetime is transferred to the returned prepared transition.
 /// </summary>
 public interface IActorAppearanceTransitionService
@@ -66,6 +67,7 @@ public interface IActorAppearanceTransitionService
         AnimationSpec animation,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Explicitly freezes both inputs for callers that require fixed frames.</summary>
     Task<IPreparedVisualTransition> PrepareSnapshotAsync(
         Node2D owner,
         CanvasItem sourceContent,

@@ -1,94 +1,52 @@
 #nullable enable
 
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
 
 namespace Majo.Runtime.Actors.Godot;
 
-public sealed class BackgroundActor : GodotActorBase, IBackgroundActor
+public sealed class BackgroundActor : GodotBackgroundActorBase
 {
-    private readonly TextureActorDefinitionData textureDefinition;
-    private readonly TextureAppearanceSupport textures;
+    private readonly TextureActorDefinitionData data;
+    private readonly IActorTextureLoader loader;
 
-    public BackgroundActor(ActorDefinition definition, Control container,
-        IActorTextureLoader textureLoader)
-        : this(definition, container, textureLoader,
-            definition.GetFactoryData<TextureActorDefinitionData>())
-    { }
-
-    private BackgroundActor(ActorDefinition definition, Control container,
-        IActorTextureLoader textureLoader, TextureActorDefinitionData textureDefinition)
-        : base(definition, container, textureDefinition.DefaultAppearance)
+    public BackgroundActor(ActorDefinition definition, Node2D container, IActorTextureLoader textureLoader,
+        bool initializeAppearance = true)
+        : base(definition, container, definition.GetFactoryData<TextureActorDefinitionData>().DefaultAppearance)
     {
-        this.textureDefinition = textureDefinition;
-        textures = new TextureAppearanceSupport(textureLoader, container, textureDefinition, definition.DefinitionId);
-        Container.Resized += LayoutViews;
-        CurrentView = CreateView();
-        SetAppearance(textureDefinition.DefaultAppearance);
+        data = definition.GetFactoryData<TextureActorDefinitionData>();
+        loader = textureLoader ?? throw new ArgumentNullException(nameof(textureLoader));
+        if (initializeAppearance) SetAppearance(data.DefaultAppearance);
     }
 
-    private Control Container => (Control)base.View;
-    public TextureRect CurrentView { get; private set; }
-    public string Slot { get; private set; } = BackgroundSlotIds.Main;
-    public override Vector2 Position => Container.Position;
-
-    public void SetSlot(string slot) =>
-        PersistentWrite(() => Slot = BackgroundSlotIds.Normalize(slot));
-
-    public override void SetAppearance(string appearance) => PersistentWrite(() =>
+    protected override GodotBackgroundContent LoadContent(string appearance)
     {
-        EnsureAlive();
-        var texture = textures.Load(appearance);
-        InvalidateAppearance();
-        CurrentView.Texture = texture;
-        LayoutView(CurrentView);
-        Appearance = appearance;
-    });
-
-    public override async Task PrepareAppearanceAsync(string appearance,
-        CancellationToken cancellationToken = default)
-    {
-        _ = await textures.Loader.LoadAsync(
-            textureDefinition.GetAppearanceResourceKey(DefinitionId, appearance),
-            textureDefinition.GetAppearanceOverride(appearance), cancellationToken);
-    }
-
-    protected override void ApplyPosition(Vector2 position) => Container.Position = position;
-
-    private TextureRect CreateView()
-    {
-        var view = new TextureRect
+        var scope = (loader as ResourceActorTextureLoader)?.CreateContentScope();
+        try
         {
-            Name = "Appearance",
-            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
-            StretchMode = TextureRect.StretchModeEnum.Scale,
-            MouseFilter = Control.MouseFilterEnum.Ignore,
-        };
-        Container.AddChild(view);
-        return view;
+            var texture = (scope ?? loader).Load(data.GetAppearanceResourceKey(DefinitionId, appearance), data.GetAppearanceOverride(appearance));
+            return CreateContent(texture, scope);
+        }
+        catch { scope?.Dispose(); throw; }
     }
 
-    private void LayoutViews()
+    protected override async Task<GodotBackgroundContent> LoadContentAsync(string appearance, CancellationToken token)
     {
-        foreach (var child in Container.GetChildren())
-            if (child is TextureRect view) LayoutView(view);
+        var scope = (loader as ResourceActorTextureLoader)?.CreateContentScope();
+        try
+        {
+            var texture = await (scope ?? loader).LoadAsync(data.GetAppearanceResourceKey(DefinitionId, appearance),
+                data.GetAppearanceOverride(appearance), token);
+            token.ThrowIfCancellationRequested();
+            return CreateContent(texture, scope);
+        }
+        catch { scope?.Dispose(); throw; }
     }
 
-    private void LayoutView(TextureRect view)
-    {
-        var textureSize = view.Texture?.GetSize() ?? Vector2.Zero;
-        var viewportSize = Container.Size;
-        if (textureSize.X <= 0 || textureSize.Y <= 0 || viewportSize.X <= 0 || viewportSize.Y <= 0) return;
-        var scale = Mathf.Max(viewportSize.X / textureSize.X, viewportSize.Y / textureSize.Y);
-        var renderedSize = textureSize * scale;
-        view.AnchorLeft = 0.5f;
-        view.AnchorTop = 0.5f;
-        view.AnchorRight = 0.5f;
-        view.AnchorBottom = 0.5f;
-        view.OffsetLeft = -renderedSize.X / 2;
-        view.OffsetTop = -renderedSize.Y / 2;
-        view.OffsetRight = renderedSize.X / 2;
-        view.OffsetBottom = renderedSize.Y / 2;
-    }
+    private GodotBackgroundContent CreateContent(Texture2D texture, IDisposable? scope) => OwnContent(
+        new Sprite2D { Name = "Appearance", Texture = texture, Centered = false },
+        new Rect2(Vector2.Zero, texture.GetSize()),
+        texture.HasAlpha() ? BackgroundCoverage.Unknown : BackgroundCoverage.OpaqueRectangle, scope);
 }

@@ -61,6 +61,8 @@ public partial class HeadlessTestRunner
             ("dark", "res://tests/headless/fixtures/background_dark.svg"),
             ("light", "res://tests/headless/fixtures/background_light.svg")));
 
+
+
         var customCommandRan = false;
         var customCommandService = new HeadlessLifecycleService();
         var bootstrap = new MajoRuntimeBootstrap
@@ -130,9 +132,8 @@ public partial class HeadlessTestRunner
                 case "line:commands-direction-beat":
                     directionBeatCommitted =
                         state.Revision == 3 &&
-                        mainStage?.Backdrop?.Resource ==
-                            new Resources.ResourceKey(
-                                "headless/fixtures/background_dark") &&
+                        mainStage?.Backdrop?.DefinitionId ==
+                            "background_dark" &&
                         mainStage.Actors.TryGetValue(new ActorId("hero"), out var placed) &&
                         placed.Appearance == "red" && placed.Z == 5 &&
                         state.Views[illustrationView].StageId == illustrationStage &&

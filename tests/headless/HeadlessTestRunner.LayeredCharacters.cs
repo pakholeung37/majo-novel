@@ -102,6 +102,8 @@ public partial class HeadlessTestRunner
             Assert(layerComposite.Visible, "Finishing appearance must restore the stable actor.");
         }
         character.SetAppearance("Surprised1");
+        // ProcessFrame starts before QueueFree is flushed; cross a complete frame before checking cleanup.
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         Assert(actorHost.GetChildren().All(nodesBeforeTransition.Contains),
             "Layered character appearance change changed its actor host nodes.");

@@ -99,23 +99,3 @@ public interface ICharacterActor : ISceneActor
     void SetPosition(CharacterPositionPreset preset);
 
 }
-
-public interface IBackgroundActor : IActor, IGodotActorView
-{
-    string Slot => BackgroundSlotIds.Main;
-
-    void SetSlot(string slot)
-    {
-        if (!string.Equals(
-                BackgroundSlotIds.Normalize(slot),
-                BackgroundSlotIds.Main,
-                StringComparison.Ordinal))
-        {
-            throw new ActorException(
-                $"Background actor '{Id}' only supports the '{BackgroundSlotIds.Main}' slot.");
-        }
-    }
-
-    TextureRect CurrentView { get; }
-
-}

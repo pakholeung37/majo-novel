@@ -205,7 +205,7 @@ public sealed class ActorStateContributor : IPreparedStateContributor, IStateMut
                 actor.Id,
                 actor.DefinitionId,
                 actor.FactoryId,
-                actor is IBackgroundActor background ? background.Slot : null,
+                actor is IBackgroundActor background ? actors.GetBackgroundSlot(background) : null,
                 actor.Appearance,
                 actor.Visible,
                 actor.Position.X,
@@ -248,9 +248,18 @@ public sealed class ActorStateContributor : IPreparedStateContributor, IStateMut
             {
                 var entry = entries[index];
                 var actor = prepared.Actors[index];
-                await actor.PrepareAppearanceAsync(entry.Appearance, cancellationToken);
-                if (actor is IBackgroundActor background) background.SetSlot(entry.Slot ?? BackgroundSlotIds.Main);
-                actor.SetAppearance(entry.Appearance);
+                if (actor is IBackgroundActor background)
+                {
+                    await using var appearance = await background.PrepareBackgroundAppearanceAsync(entry.Appearance, cancellationToken);
+                    appearance.Commit();
+                    appearance.ConfirmCommit();
+                    actors.SetBackgroundSlot(background, entry.Slot ?? BackgroundSlotIds.Main);
+                }
+                else
+                {
+                    await actor.PrepareAppearanceAsync(entry.Appearance, cancellationToken);
+                    actor.SetAppearance(entry.Appearance);
+                }
                 actor.SetPosition(new Vector2(entry.PositionX, entry.PositionY));
                 if (actor is ICharacterActor character && entry.ScaleX is { } x && entry.ScaleY is { } y)
                     character.SetScale(new Vector2(x, y));

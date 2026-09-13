@@ -75,7 +75,7 @@ internal sealed partial class GodotDirectionRenderHost
                 throw new InvalidOperationException("Cannot retain Direction output before its first rendered image.");
             var texture = ImageTexture.CreateFromImage(image);
             textures.Add(texture);
-            var copy = CreateTextureRect(source.Name + "Frozen");
+            var copy = host.CreateTextureRect(source.Name + "Frozen");
             copy.Position = source.Position;
             copy.Size = source.Size;
             copy.Texture = texture;
@@ -93,21 +93,7 @@ internal sealed partial class GodotDirectionRenderHost
             // Observe an entire render submission after commit. Godot orders the active
             // Viewport texture dependency graph (content -> view -> screen) in that submission.
             // ProcessFrame and visual settlement do not establish this rendering fence.
-            var complete = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            var submitted = false;
-            void BeforeDraw() => submitted = true;
-            void AfterDraw()
-            {
-                if (submitted) complete.TrySetResult();
-            }
-            RenderingServer.FramePreDraw += BeforeDraw;
-            RenderingServer.FramePostDraw += AfterDraw;
-            try { await complete.Task.WaitAsync(cancellationToken); }
-            finally
-            {
-                RenderingServer.FramePreDraw -= BeforeDraw;
-                RenderingServer.FramePostDraw -= AfterDraw;
-            }
+            await GodotVisualInput.WaitForFrameAsync(cancellationToken);
             Validate();
             using var target = host.ScreenViewport.GetTexture().GetImage();
             if (target is null || target.IsEmpty() || target.GetSize() != host.ScreenViewport.Size)

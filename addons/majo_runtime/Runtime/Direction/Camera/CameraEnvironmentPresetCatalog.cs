@@ -67,7 +67,7 @@ public sealed class CameraEnvironmentPresetCatalog : IRuntimeService
 
     private static float ValidateDistance(float value)
     {
-        new BackdropState(new Resources.ResourceKey("validation")) { Distance = value }.Validate();
+        new BackdropState("validation", "background", "Default") { Distance = value }.Validate();
         return value;
     }
 

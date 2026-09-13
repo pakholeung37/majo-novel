@@ -119,7 +119,11 @@ title: Chapter01_Investigation
 <<backdrop backdrop/spotlight via:dissolve duration:0.5 wait:true>>
 ```
 
-`backdrop <资源ID>` 默认操作 `stage:main`。内建默认转场是 `cut`；需要交叉淡化时显式使用 `via:dissolve`。背景资源 ID 相对于配置的背景资源路径解析。
+`backdrop <定义ID> [appearance:完整外观]` 默认操作 `stage:main`。定义必须在 Actor 配置中显式注册，且 Factory 支持 Direction 域；不再把主参数推断成纹理路径。省略 `appearance:` 始终使用定义的默认外观。内建默认转场是 `cut`；需要交叉淡化时显式使用 `via:dissolve`。
+
+同一 beat 中背景命令按顺序解析。省略 distance 时，同一定义及 Factory 保留前值，更换定义或 Factory 重置为 1。支持增量外观的 Factory 以相同定义的前一完整外观为基线，换定义则以目标默认外观为基线。`fx` 是保留字，不能作为背景定义 ID。
+
+Direction 存档 schema 已升级为 6，保存定义 ID、Factory ID 和完整外观，不接受旧 schema 3/4/5。现有脚本需先为背景资源建立显式定义；示例项目已迁移。
 
 ```yarn
 <<backdrop Court_Trial00 at:0,100 origin:0,0 scale:1 distance:far>>
@@ -463,3 +467,13 @@ Maya: 我们开始吧。 #line:writing_guide_001 #voice:none
 - [Audio 命令](../addons/majo_runtime/Runtime/Dialogue/Commands/Audio/)、[语音 ID 解析](../addons/majo_runtime/Runtime/Audio/DialogueVoiceResolver.cs)
 - [节点元数据编译](../addons/majo_runtime/Runtime/Dialogue/Yarn/NodeDirectionCompiler.cs)、[符号作用域](../addons/majo_runtime/Runtime/Dialogue/Commands/DirectionScopeResolver.cs)
 - [存档命令](../addons/majo_runtime/Runtime/Dialogue/Commands/BuiltIn/SaveCommands.cs)、[manosaba 命令](../demos/manosaba/ManosabaCommands.cs)
+
+### 自定义背景与实时转场
+
+`backdrop <id>` 不要求预先配置 Actor 定义：存在显式定义时优先使用其 Direction Factory；不存在时，内置背景 Factory 按 `<BackgroundsPath>/<id>` 解析逻辑资源键，沿用本地化、扩展名探测及动态资源注入。已含背景目录前缀的 ID 不会重复加前缀。默认外观为 `Default`，不额外添加 `/Default`；显式指定其他 appearance 时使用背景目录下的 `<id>/<appearance>`。显式定义配置错误或不支持 Direction 域时直接报错，不回退到图片。`appearance:` 仍由实际 Factory 解析为完整外观。Direction 存档 schema 为 6，旧 3/4/5 记录明确拒绝，不自动转换。
+
+同一定义更换 appearance 复用背景 Actor；更换定义创建独立候选。布局、distance、Tint 和背景 FX 属于 Stage，插件内容保持本地坐标。locale 切换也通过背景事务重新准备内容。
+
+动态背景在稳定显示和非 Cut 转场期间均持续更新。转场混合旧、新两份实时内容，镜头继续独立投影；结束时保留实时目标。插件必须保证租约持有期间旧内容仍能更新。插件内部动画状态不属于当前存档协议。
+
+可运行的注册、定义和 Yarn 示例见 [自定义背景插件](../demos/background-extension/README.md)。

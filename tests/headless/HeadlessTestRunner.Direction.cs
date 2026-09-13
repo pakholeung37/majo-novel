@@ -87,7 +87,6 @@ public partial class HeadlessTestRunner
         }
         var host = new GodotDirectionRenderHost(owner, new Vector2I(640, 360));
         await host.InitializeAsync(CancellationToken.None);
-        var textures = new HeadlessDirectionTextureLoader();
         var actorTextureLoader = new ResourceActorTextureLoader(failOnMissingAssets: true);
         var actorConfiguration = new ActorConfiguration
         {
@@ -117,21 +116,21 @@ public partial class HeadlessTestRunner
             new DirectionAccessibility(),
             actorFrameClock);
         await cameraModifiers.InitializeAsync(CancellationToken.None);
-        IActorManager CreateActorManager(Node2D actorRoot) => new ActorManager(
-            actorDefinitions,
+        IActorManager CreateActorManager(ActorMountRoots mounts) => new ActorManager(
+            actorDefinitions.Concat(BackgroundFixtureDefinitions()),
             new IActorFactory[]
             {
                 new CharacterActorFactory(
-                    actorRoot,
+                    mounts.CharacterRoot,
                     actorTextureLoader,
                     new CharacterPositionMap(actorConfiguration)),
+                new BackgroundActorFactory(mounts.BackgroundRoot, actorTextureLoader),
             });
         var actorDrivers = new TransitionDriverRegistry();
         var customActorDriver = new RecordingTransitionDriver();
         actorDrivers.Register(customActorDriver);
         var stageBackend = new GodotDirectionStageBackend(
             host,
-            textures,
             CreateActorManager,
             drivers: actorDrivers, easings: customEasings);
         var composite = new CompositeDirectionPreparationBackend(
@@ -151,7 +150,7 @@ public partial class HeadlessTestRunner
             {
                 new BackdropPatch(
                     StageId.Main,
-                    new BackdropState(backdropKey),
+                    new BackdropState(backdropKey.Path, "background", "Default"),
                     DirectionTransitionSpec.Cut),
                 ActorPatchFor(
                     "hero",
@@ -162,11 +161,11 @@ public partial class HeadlessTestRunner
             },
             DirectionCompletionBarrier.Settle);
 
-        Assert(host.PublishedBackdrop?.Resource == backdropKey,
+        Assert(host.PublishedBackdrop?.DefinitionId == backdropKey.Path,
             "Direction Backdrop did not publish its prepared resource.");
-        Assert(host.Backdrop.Texture is not null,
+        Assert(host.Backdrop.Raster is not null,
             "Direction Backdrop committed without a Texture2D.");
-        var stageBackdropTexture = host.Backdrop.Texture;
+        var stageBackdropTexture = host.Backdrop.Raster;
         Assert(host.PublishedView?.StageId == StageId.Main,
             "Default Direction View stopped observing main Stage.");
         var firstActorRoot = GetVisibleActorRoot(host);
@@ -211,7 +210,7 @@ public partial class HeadlessTestRunner
                     DirectionTransitionSpec.Cut),
                 new BackdropPatch(
                     illustration,
-                    new BackdropState(illustrationKey),
+                    new BackdropState(illustrationKey.Path, "background", "Default"),
                     DirectionTransitionSpec.Cut),
                 ViewPoseFor(illustrationView, illustrationPose, DirectionTransitionSpec.Cut),
                 ShowView(
@@ -229,9 +228,9 @@ public partial class HeadlessTestRunner
             "Direction Screen dissolve did not retain a capture of the previous Screen frame.");
         Assert(Equals(coordinator.State.Views[illustrationView].Pose, illustrationPose),
             "Illustration View Pose was not committed atomically.");
-        Assert(ReferenceEquals(stageBackdropTexture, host.Backdrop.Texture),
+        Assert(ReferenceEquals(stageBackdropTexture, host.Backdrop.Raster),
             "Illustration Stage mutation replaced the main Stage Backdrop texture.");
-        Assert(host.PublishedBackdrop?.Resource == backdropKey,
+        Assert(host.PublishedBackdrop?.DefinitionId == backdropKey.Path,
             "Illustration Stage mutation changed the main Stage Backdrop state.");
 
         await coordinator.FinishAsync(illustrationTransaction);
@@ -274,7 +273,7 @@ public partial class HeadlessTestRunner
 
         Assert(host.PublishedScreen.Bindings[LayoutSlotId.Main] == ViewId.Main,
             "Direction Screen did not return from the illustration Stage to main.");
-        Assert(ReferenceEquals(stageBackdropTexture, host.Backdrop.Texture),
+        Assert(ReferenceEquals(stageBackdropTexture, host.Backdrop.Raster),
             "Returning from the illustration rebuilt or replaced the stable main Backdrop.");
 
         var cutPose = new ViewPose(
@@ -421,7 +420,7 @@ public partial class HeadlessTestRunner
             {
                 new BackdropPatch(
                     StageId.Main,
-                    new BackdropState(illustrationKey),
+                    new BackdropState(illustrationKey.Path, "background", "Default"),
                     DirectionTransitionSpec.Cut),
                 ActorPatchFor(
                     "hero",
@@ -473,7 +472,7 @@ public partial class HeadlessTestRunner
                     DirectionTransitionSpec.Cut),
                 new BackdropPatch(
                     broadcast,
-                    new BackdropState(illustrationKey),
+                    new BackdropState(illustrationKey.Path, "background", "Default"),
                     DirectionTransitionSpec.Cut),
                 ActorPatchFor(
                     "hero",
@@ -525,7 +524,7 @@ public partial class HeadlessTestRunner
                     DirectionTransitionSpec.Cut),
                 new BackdropPatch(
                     failedStage,
-                    new BackdropState(backdropKey),
+                    new BackdropState(backdropKey.Path, "background", "Default"),
                     DirectionTransitionSpec.Cut),
                 ActorPatchFor(
                     "hero",
@@ -610,7 +609,7 @@ public partial class HeadlessTestRunner
             "Loading a zoomed snapshot lost its saved camera pose.");
         await stageBackend.ResetAsync(CancellationToken.None);
         await host.ResetAsync(CancellationToken.None);
-        Assert(host.PublishedBackdrop is null && host.Backdrop.Texture is null,
+        Assert(host.PublishedBackdrop is null && host.Backdrop.Raster is null,
             "Direction render host Reset retained its Backdrop.");
         Assert(host.PublishedView?.StageId == StageId.Main,
             "Direction render host Reset did not restore main Stage source.");
@@ -679,20 +678,6 @@ public partial class HeadlessTestRunner
         host.Actors.GetChildren()
             .OfType<Node2D>()
             .Last(root => root.Visible);
-
-    private sealed class HeadlessDirectionTextureLoader : IDirectionTextureLoader
-    {
-        public Task<Texture2D> LoadAsync(
-            ResourceKey key,
-            CancellationToken cancellationToken = default)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var path = $"res://{key.Path}";
-            return Task.FromResult(
-                ResourceLoader.Load<Texture2D>(path) ?? throw new InvalidOperationException(
-                    $"Direction fixture texture was not loaded: '{path}'."));
-        }
-    }
 
     private sealed class HeadlessDirectionRuntimeLifetime : IRuntimeLifetime, IDisposable
     {

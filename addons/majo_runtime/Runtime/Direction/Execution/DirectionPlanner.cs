@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Majo.Runtime.Direction.Actors;
+using Majo.Runtime.Actors;
 using Majo.Runtime.Direction.Core;
 
 namespace Majo.Runtime.Direction.Execution;
@@ -22,6 +23,10 @@ public interface IDirectionPlanner
 
 public sealed class DirectionPlanner : IDirectionPlanner
 {
+    private readonly ActorDefinitionResolver? definitions;
+
+    public DirectionPlanner(ActorDefinitionResolver? definitions = null) => this.definitions = definitions;
+
     public DirectionPlan PlanDomain(
         DirectionState beforeState,
         IEnumerable<IDirectionDirective> directives)
@@ -68,6 +73,9 @@ public sealed class DirectionPlanner : IDirectionPlanner
                     break;
                 case StageReleasePatch patch:
                     ApplyStageRelease(patch, stages, views, screen, writes);
+                    break;
+                case BackdropIntent intent:
+                    ApplyBackdrop(ResolveBackdrop(intent, stages), stages, writes, transitions, claims, sequential: true);
                     break;
                 case BackdropPatch patch:
                     ApplyBackdrop(patch, stages, writes, transitions, claims);
@@ -262,23 +270,45 @@ public sealed class DirectionPlanner : IDirectionPlanner
         stages.Remove(patch.StageId);
     }
 
+    private BackdropPatch ResolveBackdrop(BackdropIntent intent, Dictionary<StageId, StageState> stages)
+    {
+        if (!stages.TryGetValue(intent.StageId, out var stage))
+            throw new DirectionReferenceException($"Stage '{intent.StageId}' is not defined.");
+        var resolver = definitions ?? throw new DirectionException("Backdrop intents require an actor definition resolver.");
+        var definition = resolver.Resolve(new ActorSpawnRequest("main", ActorFactoryIds.Background, "Default")
+        { DefinitionId = intent.DefinitionId, UseBackdropResourceConvention = true });
+        var previous = stage.Backdrop;
+        var same = previous?.DefinitionId == intent.DefinitionId && previous.FactoryId == definition.FactoryId;
+        var resolved = resolver.ResolveBackdropAppearance(intent.DefinitionId, intent.Appearance,
+            same ? previous!.Appearance : null);
+        var target = new BackdropState(intent.DefinitionId, resolved.Factory.FactoryId, resolved.Appearance,
+            intent.Fit, intent.Tint)
+        {
+            Distance = intent.Distance.HasValue ? intent.Distance.Value : same ? previous!.Distance : 1,
+            Placement = intent.Placement,
+        }.Validate();
+        return new(intent.StageId, target, intent.Transition, intent.SourceLocation);
+    }
+
     private static void ApplyBackdrop(
         BackdropPatch patch,
         Dictionary<StageId, StageState> stages,
         Dictionary<string, DirectionSourceLocation?> writes,
         List<DirectionTransition> transitions,
-        HashSet<DirectionResourceClaim> claims)
+        HashSet<DirectionResourceClaim> claims,
+        bool sequential = false)
     {
-        ArgumentNullException.ThrowIfNull(patch.Backdrop);
-        patch.Backdrop.Validate();
+        patch.Backdrop?.Validate();
         if (!stages.TryGetValue(patch.StageId, out var stage))
             throw new DirectionReferenceException($"Stage '{patch.StageId}' is not defined.");
         var paths = new List<string>();
-        RegisterWrite(StagePath(patch.StageId, "backdrop"), patch.SourceLocation, writes, paths);
+        var path = StagePath(patch.StageId, "backdrop");
+        if (sequential && writes.ContainsKey(path)) paths.Add(path);
+        else RegisterWrite(path, patch.SourceLocation, writes, paths);
         stages[patch.StageId] = stage with { Backdrop = patch.Backdrop };
-        claims.Add(new DirectionResourceClaim(
-            DirectionResourceKind.Backdrop,
-            patch.Backdrop.Resource.ToString()));
+        if (patch.Backdrop is { } backdrop)
+            claims.Add(new DirectionResourceClaim(DirectionResourceKind.Backdrop,
+                $"{backdrop.DefinitionId}/{backdrop.Appearance}"));
         AddTransition(patch.Transition, paths, transitions, patch.SourceLocation);
     }
 

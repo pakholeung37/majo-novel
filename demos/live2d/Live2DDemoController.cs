@@ -95,6 +95,7 @@ public partial class Live2DDemoController : Node
         configuration.Actors.CenterPosition = new Vector2(960, 1040);
         configuration.Actors.RightPosition = new Vector2(1310, 1040);
 
+
         var actor = new ActorDefinitionConfiguration
         {
             Id = "mao",

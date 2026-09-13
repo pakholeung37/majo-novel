@@ -1,0 +1,11 @@
+[gd_resource type="Resource" format=3 uid="uid://oop6r4hw7cle"]
+
+[ext_resource type="Script" uid="uid://orqi0qstlslj" path="res://addons/majo_runtime/Runtime/Dialogue/Yarn/MajoDirectionData.cs" id="1_71l3w"]
+
+[resource]
+script = ExtResource("1_71l3w")
+SchemaVersion = 2
+ManifestPath = "res://demos/background-extension/assets/scripts/main.yarnproject"
+SourceFingerprint = "fb35068228dce3d6c970e1ccc82afcfa16895c316f1e7e0b862f3ebb79926a00"
+ProgramFingerprint = "1284328ce41a654576beec0d90968ac0aa8be6ef0e0a14f2e934f5bfe972d302"
+ModulesJson = "[{\"NodeId\":\"Start\",\"SceneEntry\":{\"SceneId\":\"background_extension\",\"File\":\"res://demos/background-extension/assets/scripts/main.yarn\",\"Line\":2,\"Column\":1},\"CameraPresets\":[],\"Version\":1,\"Symbols\":{\"Stages\":[],\"Views\":[],\"ShotAliases\":[],\"Marks\":[]},\"Resources\":[{\"Kind\":0,\"SemanticId\":\"landscape\",\"File\":\"res://demos/background-extension/assets/scripts/main.yarn\",\"Line\":4,\"Column\":1},{\"Kind\":0,\"SemanticId\":\"landscape\",\"File\":\"res://demos/background-extension/assets/scripts/main.yarn\",\"Line\":6,\"Column\":1},{\"Kind\":0,\"SemanticId\":\"landscape\",\"File\":\"res://demos/background-extension/assets/scripts/main.yarn\",\"Line\":8,\"Column\":1},{\"Kind\":0,\"SemanticId\":\"landscape\",\"File\":\"res://demos/background-extension/assets/scripts/main.yarn\",\"Line\":9,\"Column\":1}],\"SourceMaps\":[{\"Command\":\"backdrop landscape\",\"File\":\"res://demos/background-extension/assets/scripts/main.yarn\",\"Line\":4,\"Column\":1},{\"Command\":\"backdrop fx\",\"File\":\"res://demos/background-extension/assets/scripts/main.yarn\",\"Line\":5,\"Column\":1},{\"Command\":\"backdrop landscape\",\"File\":\"res://demos/background-extension/assets/scripts/main.yarn\",\"Line\":6,\"Column\":1},{\"Command\":\"camera move\",\"File\":\"res://demos/background-extension/assets/scripts/main.yarn\",\"Line\":7,\"Column\":1},{\"Command\":\"backdrop landscape\",\"File\":\"res://demos/background-extension/assets/scripts/main.yarn\",\"Line\":8,\"Column\":1},{\"Command\":\"backdrop landscape\",\"File\":\"res://demos/background-extension/assets/scripts/main.yarn\",\"Line\":9,\"Column\":1}],\"Imports\":[],\"Marks\":[],\"Diagnostics\":[]}]"

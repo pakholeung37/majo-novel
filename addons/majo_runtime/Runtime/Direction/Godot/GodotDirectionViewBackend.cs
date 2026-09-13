@@ -74,7 +74,7 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
                         : path == $"view/{viewId.Value}/{channel}");
                 GodotDirectionRendering.ValidateTransition(transition, TransitionDomains.View, drivers, easings);
                 var useLiveSource = before is not null && before.StageId == target.StageId &&
-                    !plan.IsStateReplacement && transition.Kind == DirectionTransitionId.Dissolve &&
+                    !plan.IsStateReplacement && transition.Kind != DirectionTransitionId.Cut && transition.Kind != DirectionTransitionId.Move &&
                     transition.DurationSeconds > 0;
                 ImageTexture? capture = null;
                 if (!useLiveSource && transition.DurationSeconds > 0 &&
@@ -105,6 +105,7 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
                     drivers,
                     easings);
                 components.Add(prepared);
+                await prepared.PrepareSourceAsync(cancellationToken);
             }
             var group = new GodotPreparedDirectionComponentGroup(components.ToArray());
             return createdView ? new PreparedViewLifecycle(host, viewId, group) : group;
@@ -184,6 +185,7 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
         private readonly ImageTexture? capture;
         private readonly bool useLiveSource;
         private GodotDirectionViewSurface? liveSource;
+        private GodotVisualInput? sourceInput;
         public bool IsMotion => transition.Kind == DirectionTransitionId.Move;
         private readonly DirectionTransitionSpec transition;
         private readonly ITransitionDriverRegistry drivers;
@@ -191,7 +193,7 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
         private readonly TaskCompletionSource settlement = new(
             TaskCreationOptions.RunContinuationsAsynchronously);
         private GodotProgressTween? clock;
-        private IPreparedVisualTransition? preparedTransition;
+        private GodotVisualTransition? preparedTransition;
         private bool committed;
         private bool rolledBack;
         private bool disposed;
@@ -231,6 +233,15 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
             this.easings = easings ?? BuiltInEasings.CreateDefaultRegistry();
         }
 
+        public async Task PrepareSourceAsync(CancellationToken token)
+        {
+            if (!useLiveSource) return;
+            liveSource = host.CreateLiveViewSource(viewId, before);
+            sourceInput = GodotVisualInput.Live(liveSource.CompositeViewport,
+                new Rect2(Vector2.Zero, liveSource.CompositeViewport.Size), ReleaseLiveSource);
+            await sourceInput.ReadyAsync(token);
+        }
+
         public Task Settlement => settlement.Task;
 
         public void Commit(DirectionCommitToken token)
@@ -268,8 +279,7 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
             if (OwnsPose) host.ClearViewTransition(viewId);
             var transitionSource = host.GetViewTransitionSource(viewId);
 
-            if (useLiveSource)
-                liveSource = host.CreateLiveViewSource(viewId, before);
+            if (liveSource is not null) host.UpdateLiveViewSource(liveSource, viewId, before);
             Texture2D? sourceTexture = liveSource?.CompositeViewport.GetTexture() ?? (Texture2D?)capture;
             if (sourceTexture is not null)
             {
@@ -303,10 +313,10 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
             {
                 if (sourceTexture is null) { Complete(); return; }
                 var surface = host.GetOrCreateView(viewId);
-                var context = new VisualTransitionContext(transitionSource, transition, sourceTexture,
-                    surface.CompositeViewport.GetTexture(), true, true,
-                    () => IsCurrent);
-                preparedTransition = drivers.GetRequired(transition.Kind).Prepare(context);
+                sourceInput ??= GodotVisualInput.Frozen(sourceTexture, new Rect2(Vector2.Zero, sourceTexture.GetSize()));
+                var context = new VisualTransitionContext(transitionSource, transition, IsActive: () => IsCurrent);
+                preparedTransition = GodotVisualTransition.Prepare(drivers.GetRequired(transition.Kind), context,
+                    sourceInput, GodotVisualInput.Live(surface.CompositeViewport, new Rect2(Vector2.Zero, surface.CompositeViewport.Size)));
                 if (transition.Kind != DirectionTransitionId.Fade) surface.CompositeOutput.Visible = false;
                 clock = host.Animate(transition, easings.GetRequired(transition.Easing), p =>
                 {
@@ -369,13 +379,19 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
             settlement.TrySetResult();
         }
 
-        private void Retire()
+        private void ReleaseLiveSource()
         {
             if (liveSource is not null)
             {
                 host.ReleaseLiveViewSource(liveSource);
                 liveSource = null;
             }
+        }
+
+        private void Retire()
+        {
+            sourceInput?.Dispose(); sourceInput = null;
+            ReleaseLiveSource();
             if (backend.active.TryGetValue(Key, out var current) && ReferenceEquals(current, this))
                 backend.active.Remove(Key);
         }

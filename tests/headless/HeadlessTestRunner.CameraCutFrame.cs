@@ -21,7 +21,7 @@ public partial class HeadlessTestRunner
         pixels.Fill(Colors.Red);
         pixels.FillRect(new Rect2I(320, 0, 320, 360), Colors.Blue);
         using var texture = ImageTexture.CreateFromImage(pixels);
-        host.PublishBackdrop(StageId.Main, new BackdropState(new ResourceKey("cut-probe")), texture);
+        host.PublishBackdrop(StageId.Main, new BackdropState("cut-probe", "background", "Default"), CreateBackgroundRaster(host, texture));
         var second = new ViewId("trial_b");
         var oldPose = new ViewPose(new DirectionPoint(25, 50), 2, 0);
         var newPose = new ViewPose(new DirectionPoint(75, 50), 2, 0);
