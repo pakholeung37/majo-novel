@@ -327,8 +327,8 @@ public partial class HeadlessTestRunner
                 script.Phase == ScriptPlaybackPhase.AwaitingAdvance,
             2);
 
-        // Fast mode retains both the UI load and a repeated API load.
-        var loadRounds = OS.GetCmdlineUserArgs().Contains("--majo-fast", StringComparer.Ordinal) ? 2 : 3;
+        // One UI load and one API load exercise both entry points without a third identical cycle.
+        const int loadRounds = 2;
         for (var round = 1; round <= loadRounds; round++)
         {
             await dialogue.StopAsync();

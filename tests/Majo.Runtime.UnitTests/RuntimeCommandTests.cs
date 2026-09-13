@@ -214,19 +214,6 @@ public sealed class RuntimeCommandTests
     }
 
     [Fact]
-    public void BuiltInCommandModuleRegistersExpectedCommandsThroughModuleInterface()
-    {
-        var commands = new RuntimeCommandRegistry();
-        commands.RegisterModule(new BuiltInCommandModule());
-        commands.SealRegistrations();
-        var catalog = commands.BuildCatalog();
-
-        Assert.Equal(
-            ["save", "autoSave"],
-            catalog.Commands.Select(command => command.Name));
-    }
-
-    [Fact]
     public void BuiltInAudioAndDirectionModulesRegisterThroughModuleInterface()
     {
         var commands = new RuntimeCommandRegistry();

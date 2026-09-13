@@ -5,7 +5,6 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
-using Majo.Demos.BackgroundExtension;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Actors.Godot;
 using Majo.Runtime.Direction.Core;
@@ -47,7 +46,7 @@ public partial class HeadlessTestRunner
             var scope = new ResourceRetentionScope(resources);
             try
             {
-                var texture = await scope.AcquireAsync<Texture2D>(new ResourceKey("sample/far"), CompositeBackgroundPlugin.FarPath, token);
+                var texture = await scope.AcquireAsync<Texture2D>(new ResourceKey("sample/far"), TestBackgroundFarPath, token);
                 if (appearance == "Broken") throw new InvalidOperationException("Injected failure after texture loading.");
                 if (appearance == "Slow") { faults.Loading = true; await faults.Release.Task; }
                 if (appearance == "Escape")

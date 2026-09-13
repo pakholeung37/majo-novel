@@ -145,14 +145,9 @@ fi
 printf 'Checking Godot headless import and C# compilation for main game project...\n'
 run_with_timeout 180 "$GODOT_EXECUTABLE" --headless --path "$GAME_PROJECT" --editor --quit
 
-# Keep the separator in full mode: macOS Bash treats an empty array as unset with -u.
-HEADLESS_ARGUMENTS=(--)
-if [[ "$TEST_MODE" == "fast" ]]; then
-    HEADLESS_ARGUMENTS=(-- --majo-fast)
-fi
 printf 'Running Godot headless integration tests...\n'
 run_with_timeout 60 "$GODOT_EXECUTABLE" --headless --path "$GAME_PROJECT" \
-    res://tests/headless/HeadlessTestRunner.tscn "${HEADLESS_ARGUMENTS[@]}"
+    res://tests/headless/HeadlessTestRunner.tscn --
 
 printf 'Verifying that a failing headless assertion returns a non-zero exit code...\n'
 set +e

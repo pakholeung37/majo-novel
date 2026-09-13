@@ -130,13 +130,6 @@ public sealed class CommandDefinitionAndBindingTests
                 ValueHint: "num")
         };
 
-        var groupDecl = new CommandGroupDeclaration(
-            Name: "metrics",
-            MemberName: "Metrics",
-            Order: 1,
-            GroupType: typeof(MetricsGroup),
-            Parameters: groupParams);
-
         var definition = CommandDefinition<GroupHoldingArguments>.Create("track")
             .Group("metrics", "Metrics", typeof(MetricsGroup), groupParameters: groupParams)
             .Build(context =>
@@ -164,36 +157,23 @@ public sealed class CommandDefinitionAndBindingTests
         Assert.Equal(1, spyConverter.ParseCallCount);
     }
 
-    [Fact]
-    public void InvalidContractDefaultFailsAtCatalogBuildTime()
+    [Theory]
+    [InlineData("invalid_default", "not_a_number", null, "not_a_number")]
+    [InlineData("minimum_default", "-5", 0, "must be at least 0")]
+    public void InvalidContractDefaultFailsAtCatalogBuildTime(
+        string name, string defaultText, int? minimum, string expectedMessage)
     {
-        var definition = CommandDefinition<TestSampleArguments>.Create("invalid_default")
+        var definition = CommandDefinition<TestSampleArguments>.Create(name)
             .Primary<string>("target")
-            .Optional<int>("count", defaultText: "not_a_number")
+            .Optional<int>("count", defaultText: defaultText, minimum: minimum)
             .Build(context => reader => new TestSampleArguments("t", CommandValue<int>.Unspecified(), CommandValue<double>.Unspecified()));
 
         var builder = new TestCatalogBuilder()
-            .Add("invalid_default", _ => new TestSampleCommand(definition));
+            .Add(name, _ => new TestSampleCommand(definition));
 
         var ex = Assert.Throws<RuntimeCommandException>(() => builder.Build());
         Assert.Equal(CommandFailurePhase.Schema, ex.FailurePhase);
-        Assert.Contains("not_a_number", ex.Message);
-    }
-
-    [Fact]
-    public void ContractDefaultViolatingMinimumFailsAtCatalogBuildTime()
-    {
-        var definition = CommandDefinition<TestSampleArguments>.Create("minimum_default")
-            .Primary<string>("target")
-            .Optional<int>("count", defaultText: "-5", minimum: 0)
-            .Build(context => reader => new TestSampleArguments("t", CommandValue<int>.Unspecified(), CommandValue<double>.Unspecified()));
-
-        var builder = new TestCatalogBuilder()
-            .Add("minimum_default", _ => new TestSampleCommand(definition));
-
-        var ex = Assert.Throws<RuntimeCommandException>(() => builder.Build());
-        Assert.Equal(CommandFailurePhase.Schema, ex.FailurePhase);
-        Assert.Contains("must be at least 0", ex.Message);
+        Assert.Contains(expectedMessage, ex.Message);
     }
 
     private sealed class MultiplyingIntConverter : ICommandValueConverter<int>

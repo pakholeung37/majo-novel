@@ -8,6 +8,17 @@ namespace Majo.Demos.Manosaba.Actors.Layered;
 
 public sealed class LayeredCharacterPlugin : IMajoPlugin
 {
+    private readonly string multiplyShaderPath;
+    private readonly string compositeShaderPath;
+
+    public LayeredCharacterPlugin(
+        string multiplyShaderPath = LayeredCharacterActor.AlphaAwareMultiplyShaderPath,
+        string compositeShaderPath = LayeredCharacterActor.LayeredCompositeShaderPath)
+    {
+        this.multiplyShaderPath = multiplyShaderPath;
+        this.compositeShaderPath = compositeShaderPath;
+    }
+
     public string Id => LayeredActorIds.Factory;
 
     public void ConfigureServices(RuntimeServiceRegistry services) =>
@@ -18,7 +29,7 @@ public sealed class LayeredCharacterPlugin : IMajoPlugin
         context.ActorFactories.Register(
             LayeredActorIds.Factory,
             ActorFactoryDomains.Runtime | ActorFactoryDomains.Direction,
-            factoryContext => new LayeredCharacterActorFactory(factoryContext),
+            factoryContext => new LayeredCharacterActorFactory(factoryContext, multiplyShaderPath, compositeShaderPath),
             (configuration, _) =>
             {
                 var layered = configuration.FactoryConfiguration as LayeredCharacterConfiguration ??

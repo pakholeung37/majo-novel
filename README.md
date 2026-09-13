@@ -14,4 +14,4 @@
 - **快速本地回归**：`./tools/test.sh --fast`（增量构建、单元测试、Godot 资源导入、单轮无头集成及失败退出码检查；适合引擎集成修改）
 - **完整验收门禁**：`./tools/test.sh --full`（非增量构建、单元测试、Godot 资源导入、单轮无头集成、失败退出码检查及宿主平台导出冒烟；用于 PR 及发布，也是省略参数时的默认模式）
 
-叠层角色遮罩的像素回归需要真实渲染器。构建后运行 `Godot --path . res://tests/headless/HeadlessTestRunner.tscn -- --majo-layered-masks`（不要加 `--headless`；将 `Godot` 替换为本机 Mono 版可执行文件路径）。测试覆盖遮罩阈值、编号覆盖、变换、表情切换、Multiply 和 Miria/Coco 的渐变端点；截图输出到 `build/layered-mask-evidence/`。遮罩裁剪已支持导入的 `Mask/Masked` 材质标记，Softlight/Overlay 的混合计算仍沿用既有实现。
+叠层角色遮罩的像素回归需要真实渲染器。构建后运行 `Godot --path . res://tests/headless/HeadlessTestRunner.tscn -- --majo-layered-masks`（不要加 `--headless`；将 `Godot` 替换为本机 Mono 版可执行文件路径）。测试使用自建纹理覆盖遮罩阈值、编号覆盖、变换、表情切换、Multiply 和渲染目标复用，不读取演示角色素材。遮罩裁剪已支持导入的 `Mask/Masked` 材质标记，Softlight/Overlay 的混合计算仍沿用既有实现。

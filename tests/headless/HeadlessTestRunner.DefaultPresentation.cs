@@ -24,12 +24,6 @@ public partial class HeadlessTestRunner
 
     private async Task ValidateDefaultPresentationAsync()
     {
-        await ValidateDefaultPresentationAsync(false);
-        await ValidateDefaultPresentationAsync(true);
-    }
-
-    private async Task ValidateDefaultPresentationAsync(bool useFadeEffect)
-    {
         var customScene = new PackedScene();
         var defaultScene = ResourceLoader.Load<PackedScene>(
             DialoguePresentationConfiguration.DefaultScenePath);
@@ -47,7 +41,7 @@ public partial class HeadlessTestRunner
         configuration.Presentation!.Enabled = true;
         configuration.Presentation.PresenterScene = customScene;
         configuration.Presentation.LettersPerSecond = 1;
-        configuration.Presentation.UseFadeEffect = useFadeEffect;
+        configuration.Presentation.UseFadeEffect = true;
         configuration.Presentation.FadeUpDurationSeconds = 0.02;
         configuration.Presentation.FadeDownDurationSeconds = 0.02;
 

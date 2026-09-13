@@ -106,6 +106,9 @@ public sealed class Live2DCharacterActor : GodotCharacterActorBase
         _ = sourceAppearance;
         _ = animation;
         _ = driver;
+        if (!live2D.Expressions.ContainsKey(appearance))
+            throw new ActorException(
+                $"Live2D actor '{Id}' does not define expression '{appearance}'.");
         return Task.FromResult<IPreparedActorAppearance>(
             new PreparedLive2DAppearance(this, appearance));
     }

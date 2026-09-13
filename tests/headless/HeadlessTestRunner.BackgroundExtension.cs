@@ -22,6 +22,9 @@ namespace Majo.Runtime.HeadlessTests;
 
 public partial class HeadlessTestRunner
 {
+    private const string TestBackgroundFarPath = "res://tests/headless/fixtures/background_dark.svg";
+    private const string TestBackgroundNearPath = "res://tests/headless/fixtures/background_light.svg";
+
     private async Task ValidateBackgroundExtensionAsync()
     {
         var initialRasters = GodotBackgroundRaster.LiveCount;
@@ -43,7 +46,7 @@ public partial class HeadlessTestRunner
                 (configured, _) => new ActorDefinition(configured.Id, "test.fault-background")),
             ConfigureTransitionDrivers = registry => registry.Register(new FailingBackgroundDriver()),
         };
-        bootstrap.AddPlugin(new CompositeBackgroundPlugin());
+        bootstrap.AddPlugin(new CompositeBackgroundPlugin(TestBackgroundFarPath, TestBackgroundNearPath));
         AddChild(bootstrap);
         await bootstrap.InitializationCompletion;
         var services = bootstrap.Host!.Services;

@@ -59,11 +59,6 @@ public partial class HeadlessTestRunner : Node
 
     private async Task RunSuiteAsync()
     {
-        if (OS.GetCmdlineUserArgs().Contains("--majo-trial-court"))
-        {
-            await ValidateTrialCourtBackgroundAsync();
-            return;
-        }
         if (OS.GetCmdlineUserArgs().Contains("--majo-live-visual"))
         {
             await ValidateLiveVisualInputsAsync();
@@ -132,7 +127,6 @@ public partial class HeadlessTestRunner : Node
         Assert(dependencyStatus.IsCompatible, dependencyStatus.Message);
 
         await ValidateLiveVisualInputsAsync();
-        await ValidateTrialCourtBackgroundAsync();
         ValidateConfigurationDiagnostics();
         await MeasureAsync(nameof(ValidateAudioRuntimeAsync), ValidateAudioRuntimeAsync);
         await MeasureAsync(nameof(ValidateInputRuntimeAsync), ValidateInputRuntimeAsync);

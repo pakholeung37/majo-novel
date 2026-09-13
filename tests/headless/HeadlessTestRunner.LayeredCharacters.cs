@@ -13,6 +13,9 @@ namespace Majo.Runtime.HeadlessTests;
 
 public partial class HeadlessTestRunner
 {
+    private const string TestMultiplyShaderPath = "res://tests/headless/fixtures/shaders/AlphaAwareMultiply.gdshader";
+    private const string TestCompositeShaderPath = "res://tests/headless/fixtures/shaders/LayeredComposite.gdshader";
+
     private async Task ValidateLayeredCharacterAsync()
     {
         var configuration = CreateHeadlessConfiguration();
@@ -24,7 +27,7 @@ public partial class HeadlessTestRunner
             Name = "LayeredCharacterRuntime",
             Configuration = configuration,
         };
-        bootstrap.AddPlugin(new LayeredCharacterPlugin());
+        bootstrap.AddPlugin(new LayeredCharacterPlugin(TestMultiplyShaderPath, TestCompositeShaderPath));
         AddChild(bootstrap);
         await bootstrap.InitializationCompletion;
 

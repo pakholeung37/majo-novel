@@ -27,8 +27,16 @@ public sealed class LayeredCharacterActorFactory : IConventionActorFactory
     private readonly IActorAppearanceTransitionService transitions;
     private readonly string charactersPath;
     private readonly LayeredCharacterManifestCache manifests;
+    private readonly string multiplyShaderPath = LayeredCharacterActor.AlphaAwareMultiplyShaderPath;
+    private readonly string compositeShaderPath = LayeredCharacterActor.LayeredCompositeShaderPath;
 
     public LayeredCharacterActorFactory(ActorFactoryContext context)
+        : this(context, LayeredCharacterActor.AlphaAwareMultiplyShaderPath,
+            LayeredCharacterActor.LayeredCompositeShaderPath)
+    {
+    }
+
+    public LayeredCharacterActorFactory(ActorFactoryContext context, string multiplyShaderPath, string compositeShaderPath)
         : this(
             context.CharacterRoot,
             context.TextureLoader,
@@ -39,6 +47,8 @@ public sealed class LayeredCharacterActorFactory : IConventionActorFactory
             context.AppearanceTransitions,
             context.Services.Resolve<LayeredCharacterManifestCache>())
     {
+        this.multiplyShaderPath = multiplyShaderPath;
+        this.compositeShaderPath = compositeShaderPath;
     }
 
     public LayeredCharacterActorFactory(
@@ -189,9 +199,10 @@ public sealed class LayeredCharacterActorFactory : IConventionActorFactory
                 manifest,
                 configuration.ManifestPath,
                 configuration.InitialPosition,
-                LayeredCharacterActor.CreateAlphaAwareMultiplyMaterial(),
+                LayeredCharacterActor.CreateAlphaAwareMultiplyMaterial(multiplyShaderPath),
                 buildLayerViews: false,
-                transitions: transitions);
+                transitions: transitions,
+                compositeShaderPath: compositeShaderPath);
 
             await actor.BuildLayerViewsAsync(
                 manifest,

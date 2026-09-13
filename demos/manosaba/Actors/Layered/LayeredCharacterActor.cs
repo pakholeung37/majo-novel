@@ -18,9 +18,9 @@ public sealed class LayeredCharacterActor : GodotCharacterActorBase, IDisposable
 {
     private const string GroupOpacityParameter = "group_opacity";
     private const ulong LayerBuildBudgetMicroseconds = 2_000;
-    private const string AlphaAwareMultiplyShaderPath =
+    internal const string AlphaAwareMultiplyShaderPath =
         "res://demos/manosaba/Actors/Layered/Shaders/AlphaAwareMultiply.gdshader";
-    private const string LayeredCompositeShaderPath =
+    internal const string LayeredCompositeShaderPath =
         "res://demos/manosaba/Actors/Layered/Shaders/LayeredComposite.gdshader";
     private readonly TextureAppearanceSupport textureSupport;
     private readonly IActorAppearanceTransitionService transitions;
@@ -46,7 +46,8 @@ public sealed class LayeredCharacterActor : GodotCharacterActorBase, IDisposable
         CharacterPositionPreset initialPosition,
         ShaderMaterial? multiplyMaterial = null,
         bool buildLayerViews = true,
-        IActorAppearanceTransitionService? transitions = null)
+        IActorAppearanceTransitionService? transitions = null,
+        string compositeShaderPath = LayeredCompositeShaderPath)
         : base(definition, view, positions, initialPosition, manifest.DefaultAppearance)
     {
         ArgumentNullException.ThrowIfNull(manifest);
@@ -57,7 +58,7 @@ public sealed class LayeredCharacterActor : GodotCharacterActorBase, IDisposable
         layerComposite = new CanvasGroup
         {
             Name = "LayerComposite",
-            Material = CreateLayeredCompositeMaterial(),
+            Material = CreateLayeredCompositeMaterial(compositeShaderPath),
         };
         View.AddChild(layerComposite);
         SetCompositeOpacity(1);
@@ -370,18 +371,18 @@ public sealed class LayeredCharacterActor : GodotCharacterActorBase, IDisposable
 
     private static string SanitizeNodeName(string path) => path.Replace('/', '_');
 
-    internal static ShaderMaterial CreateAlphaAwareMultiplyMaterial() => new()
+    internal static ShaderMaterial CreateAlphaAwareMultiplyMaterial(string path = AlphaAwareMultiplyShaderPath) => new()
     {
-        Shader = ResourceLoader.Load<Shader>(AlphaAwareMultiplyShaderPath) ??
+        Shader = ResourceLoader.Load<Shader>(path) ??
             throw new ActorException(
-                $"Layered character shader could not be loaded: '{AlphaAwareMultiplyShaderPath}'."),
+                $"Layered character shader could not be loaded: '{path}'."),
     };
 
-    private static ShaderMaterial CreateLayeredCompositeMaterial() => new()
+    private static ShaderMaterial CreateLayeredCompositeMaterial(string path) => new()
     {
-        Shader = ResourceLoader.Load<Shader>(LayeredCompositeShaderPath) ??
+        Shader = ResourceLoader.Load<Shader>(path) ??
             throw new ActorException(
-                $"Layered composite shader could not be loaded: '{LayeredCompositeShaderPath}'."),
+                $"Layered composite shader could not be loaded: '{path}'."),
     };
 
     public void Dispose()

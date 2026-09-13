@@ -1,10 +1,14 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene format=3 uid="uid://bg0tafsqrewnr"]
 
-[ext_resource type="Script" path="res://addons/YarnSpinner-Godot/Runtime/Async/LinePresenter.cs" id="1_line"]
-[ext_resource type="Script" path="res://addons/YarnSpinner-Godot/Runtime/Async/OptionsPresenter.cs" id="2_options"]
-[ext_resource type="PackedScene" path="res://addons/YarnSpinner-Godot/Scenes/OptionItem.tscn" id="3_option_item"]
+[ext_resource type="Script" uid="uid://b8nsxur6opm4k" path="res://addons/YarnSpinner-Godot/Runtime/Async/LinePresenter.cs" id="1_line"]
+[ext_resource type="Script" uid="uid://ba6k2ox6e4qg" path="res://addons/YarnSpinner-Godot/Runtime/Async/OptionsPresenter.cs" id="2_options"]
+[ext_resource type="PackedScene" uid="uid://b56ngcrq31nc5" path="res://addons/YarnSpinner-Godot/Scenes/OptionItem.tscn" id="3_option_item"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBox_dialogue"]
+content_margin_left = 28.0
+content_margin_top = 22.0
+content_margin_right = 28.0
+content_margin_bottom = 22.0
 bg_color = Color(0.035, 0.045, 0.075, 0.94)
 border_width_left = 2
 border_width_top = 2
@@ -15,23 +19,19 @@ corner_radius_top_left = 12
 corner_radius_top_right = 12
 corner_radius_bottom_right = 12
 corner_radius_bottom_left = 12
-content_margin_left = 28.0
-content_margin_top = 22.0
-content_margin_right = 28.0
-content_margin_bottom = 22.0
 
 [sub_resource type="StyleBoxFlat" id="StyleBox_name"]
+content_margin_left = 18.0
+content_margin_top = 8.0
+content_margin_right = 18.0
+content_margin_bottom = 8.0
 bg_color = Color(0.12, 0.16, 0.3, 0.98)
 corner_radius_top_left = 8
 corner_radius_top_right = 8
 corner_radius_bottom_right = 8
 corner_radius_bottom_left = 8
-content_margin_left = 18.0
-content_margin_top = 8.0
-content_margin_right = 18.0
-content_margin_bottom = 8.0
 
-[node name="DefaultVnPresentation" type="Control"]
+[node name="DefaultVnPresentation" type="Control" unique_id=1951371179]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -40,7 +40,7 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 1
 
-[node name="LinePresenter" type="Control" parent="." node_paths=PackedStringArray("presenterControl", "lineText", "characterNameText", "characterNameContainer")]
+[node name="LinePresenter" type="Control" parent="." unique_id=1791137925 node_paths=PackedStringArray("presenterControl", "lineText", "characterNameText", "characterNameContainer")]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -56,11 +56,11 @@ characterNameContainer = NodePath("CharacterNamePanel")
 useFadeEffect = false
 lettersPerSecond = 32
 typewriterStyle = 1
-ConvertHTMLToBBCode = false
 
-[node name="PresenterControl" type="PanelContainer" parent="LinePresenter"]
+[node name="PresenterControl" type="PanelContainer" parent="LinePresenter" unique_id=1323945215]
 layout_mode = 1
 anchors_preset = 12
+anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_left = 48.0
@@ -72,40 +72,39 @@ grow_vertical = 0
 mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleBox_dialogue")
 
-[node name="Margin" type="MarginContainer" parent="LinePresenter/PresenterControl"]
-layout_mode = 2
+[node name="Margin" type="MarginContainer" parent="LinePresenter/PresenterControl" unique_id=830623269]
 z_index = 1
+layout_mode = 2
 
-[node name="VBox" type="VBoxContainer" parent="LinePresenter/PresenterControl/Margin"]
+[node name="VBox" type="VBoxContainer" parent="LinePresenter/PresenterControl/Margin" unique_id=132788325]
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="LineText" type="RichTextLabel" parent="LinePresenter/PresenterControl/Margin/VBox"]
+[node name="LineText" type="RichTextLabel" parent="LinePresenter/PresenterControl/Margin/VBox" unique_id=478382410]
 custom_minimum_size = Vector2(0, 112)
 layout_mode = 2
 mouse_filter = 2
 theme_override_font_sizes/normal_font_size = 32
 theme_override_font_sizes/bold_font_size = 32
-theme_override_font_sizes/italics_font_size = 32
 theme_override_font_sizes/bold_italics_font_size = 32
+theme_override_font_sizes/italics_font_size = 32
 theme_override_font_sizes/mono_font_size = 32
 bbcode_enabled = true
-fit_content = false
 scroll_active = false
 autowrap_mode = 2
 
-[node name="ContinueHint" type="Label" parent="LinePresenter/PresenterControl/Margin/VBox"]
+[node name="ContinueHint" type="Label" parent="LinePresenter/PresenterControl/Margin/VBox" unique_id=978311751]
 layout_mode = 2
 size_flags_horizontal = 8
-mouse_filter = 2
 text = "Click or press Space to continue"
 
-[node name="CharacterNamePanel" type="PanelContainer" parent="LinePresenter"]
+[node name="CharacterNamePanel" type="PanelContainer" parent="LinePresenter" unique_id=559113185]
+visible = false
+z_index = 2
 layout_mode = 1
 anchors_preset = 2
 anchor_top = 1.0
 anchor_bottom = 1.0
-z_index = 2
 offset_left = 66.0
 offset_top = -308.0
 offset_right = 468.0
@@ -114,20 +113,20 @@ grow_vertical = 0
 mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleBox_name")
 
-[node name="CharacterNameText" type="RichTextLabel" parent="LinePresenter/CharacterNamePanel"]
+[node name="CharacterNameText" type="RichTextLabel" parent="LinePresenter/CharacterNamePanel" unique_id=1168942121]
 custom_minimum_size = Vector2(360, 34)
 layout_mode = 2
 mouse_filter = 2
 theme_override_font_sizes/normal_font_size = 28
 theme_override_font_sizes/bold_font_size = 28
-theme_override_font_sizes/italics_font_size = 28
 theme_override_font_sizes/bold_italics_font_size = 28
+theme_override_font_sizes/italics_font_size = 28
 theme_override_font_sizes/mono_font_size = 28
 bbcode_enabled = true
 fit_content = true
 scroll_active = false
 
-[node name="OptionsPresenter" type="Control" parent="." node_paths=PackedStringArray("presenterControl", "optionParent")]
+[node name="OptionsPresenter" type="Control" parent="." unique_id=539639882 node_paths=PackedStringArray("presenterControl", "optionParent")]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -141,7 +140,7 @@ optionItemPrefab = ExtResource("3_option_item")
 optionParent = NodePath("PresenterControl/OptionContainer")
 useFadeEffect = false
 
-[node name="PresenterControl" type="PanelContainer" parent="OptionsPresenter"]
+[node name="PresenterControl" type="PanelContainer" parent="OptionsPresenter" unique_id=1592940342]
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
@@ -157,7 +156,7 @@ grow_vertical = 2
 mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleBox_dialogue")
 
-[node name="OptionContainer" type="VBoxContainer" parent="OptionsPresenter/PresenterControl"]
-layout_mode = 2
+[node name="OptionContainer" type="VBoxContainer" parent="OptionsPresenter/PresenterControl" unique_id=1598742148]
 z_index = 1
+layout_mode = 2
 theme_override_constants/separation = 12

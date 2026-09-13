@@ -64,9 +64,9 @@ public partial class ResolutionProbe : Node
             GD.Print($"RESOLUTION_SAMPLE: window={window.Size} stage={host.StageViewport.Size} view={content.Size}");
         }
         host.ReleaseLiveViewSource(source);
-        var texture = GD.Load<Texture2D>("res://demos/live2d/assets/characters/mao/runtime/mao_pro.4096/texture_00.png");
+        var texture = GD.Load<Texture2D>("res://tests/headless/fixtures/resources/backgrounds/room.png");
         using var textureImage = texture.GetImage();
-        Require(textureImage.HasMipmaps(), "Live2D texture was imported without mipmaps.");
+        Require(textureImage.HasMipmaps(), "Test texture was imported without mipmaps.");
         await host.ShutdownAsync(CancellationToken.None);
     }
 

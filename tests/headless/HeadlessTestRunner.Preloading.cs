@@ -65,7 +65,7 @@ public partial class HeadlessTestRunner
                     return new PreloadBackgroundMetadataFactory(preloadedBackgrounds);
                 }, ActorConfigurationCompiler.CompileBackgroundTextureDefinition),
         };
-        bootstrap.AddPlugin(new LayeredCharacterPlugin());
+        bootstrap.AddPlugin(new LayeredCharacterPlugin(TestMultiplyShaderPath, TestCompositeShaderPath));
         AddChild(bootstrap);
         await bootstrap.InitializationCompletion;
         var services = bootstrap.Host!.Services;

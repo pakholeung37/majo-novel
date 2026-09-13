@@ -14,8 +14,11 @@ public sealed class Live2DCharacterPlugin : IMajoPlugin
 {
     public string Id => Live2DActorIds.Factory;
 
-    public void ConfigureServices(RuntimeServiceRegistry services) =>
+    public void ConfigureServices(RuntimeServiceRegistry services)
+    {
         services.AddSingleton<Live2DActorRegistry>(_ => new Live2DActorRegistry());
+        services.AddSingleton<Live2DModelMetadataCache>(_ => new Live2DModelMetadataCache());
+    }
 
     public void Configure(PluginRegistrationContext context)
     {
@@ -24,7 +27,8 @@ public sealed class Live2DCharacterPlugin : IMajoPlugin
             ActorFactoryDomains.Runtime | ActorFactoryDomains.Direction,
             factoryContext => new Live2DCharacterActorFactory(factoryContext),
             (configured, _) => Compile(configured),
-            typeof(Live2DActorRegistry));
+            typeof(Live2DActorRegistry),
+            typeof(Live2DModelMetadataCache));
         context.Commands.Add(
             "live2d motion",
             services => new Live2DMotionCommand(services.Get<Live2DActorRegistry>()),

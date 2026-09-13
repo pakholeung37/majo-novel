@@ -7,6 +7,14 @@ This demo integrates the Nijiiro Mao Cubism sample as a first-class Majo actor.
 - Durable appearance state: semantic expression aliases such as `smile` and `shocked`
 - Transient action command: `<<live2d motion mao motion:wave>>`
 
+Without an explicit actor definition, a model is discovered when
+`characters/<id>/runtime/` contains exactly one `*.model3.json` file. The
+conventional appearance `Default` clears expressions; model expression names
+and `group:index` motion names are also available. Use an explicit definition
+for semantic aliases and custom display placement. The preload window loads
+the model's referenced textures ahead of actor creation; the Cubism model and
+motion files are still loaded by `gd_cubism` when the actor is created.
+
 Run it on macOS arm64 with Godot 4.7.2 Mono:
 
 ```bash

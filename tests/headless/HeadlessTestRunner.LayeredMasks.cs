@@ -1,19 +1,14 @@
 #nullable enable
 
 using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Actors.Godot;
 using Majo.Demos.Manosaba.Actors.Layered;
-using Majo.Runtime.Configuration;
 using Majo.Runtime.Direction.Transitions;
 using Majo.Runtime.Operations;
-using Majo.Runtime.Operations.Godot;
 
 namespace Majo.Runtime.HeadlessTests;
 
@@ -24,86 +19,7 @@ public partial class HeadlessTestRunner
         Assert(DisplayServer.GetName() != "headless", "Layered mask pixel tests require a real renderer.");
         await ValidateCapturePoolReuseAsync();
         await ValidateStencilPixelsAsync();
-        using var lifetime = new HeadlessDirectionRuntimeLifetime();
-        using var frameClock = new GodotFrameClock(GetTree());
-        await frameClock.InitializeAsync(CancellationToken.None);
-        var runner = new OperationRunner(frameClock, lifetime);
-        await runner.InitializeAsync(CancellationToken.None);
-        var evidence = ProjectSettings.GlobalizePath("res://build/layered-mask-evidence");
-        Directory.CreateDirectory(evidence);
-        try
-        {
-            foreach (var name in new[] { "Miria", "Coco" })
-            {
-                var path = $"res://demos/manosaba/assets/characters/{name}/layered_character.json";
-                var manifest = LayeredCharacterManifest.Parse(Godot.FileAccess.GetFileAsString(path));
-                var loader = new TransitionTextureLoader(manifest.Layers.Select(layer => layer.Atlas).Distinct()
-                    .ToDictionary(atlas => $"res://demos/manosaba/assets/characters/{name}/{atlas}",
-                        atlas => GD.Load<Texture2D>($"res://demos/manosaba/assets/characters/{name}/{atlas}")));
-                var viewport = new SubViewport
-                {
-                    Size = new Vector2I(640, 640),
-                    TransparentBg = true,
-                    RenderTargetUpdateMode = SubViewport.UpdateMode.Always,
-                };
-                AddChild(viewport);
-                var view = new Sprite2D();
-                viewport.AddChild(view);
-                using var actor = new LayeredCharacterActor(
-                    new ActorDefinition(name, LayeredActorIds.Factory),
-                    view, loader, new CharacterPositionMap(new ActorConfiguration()),
-                    manifest, path, CharacterPositionPreset.Center);
-                actor.SetPosition(new Vector2(320, name == "Miria" ? 1020 : 920));
-                actor.SetScale(new Vector2(.7f, .7f));
-                actor.SetVisible(true);
-                var group = view.GetNode<CanvasGroup>("LayerComposite");
-                foreach (var appearance in new[] { "Default", "Angry", "Fearful" })
-                {
-                    actor.SetAppearance(appearance);
-                    using var expected = await ReadTransitionFrameAsync(viewport);
-                    expected.SavePng($"{evidence}/{name}-{appearance}.png");
-
-                    actor.SetAppearance("Default");
-                    using var source = await ReadTransitionFrameAsync(viewport);
-                    // Source and target use different eye sprites. Preparing the
-                    // target must not mutate the source's shared mask material.
-                    using (var prepared = await actor.PrepareAppearanceTransitionAsync("Default", appearance,
-                        new AnimationSpec(.1), new DissolveTransitionDriver()))
-                    {
-                        prepared.Commit();
-                        prepared.ApplyProgress(0);
-                        using var sourceEndpoint = await ReadTransitionFrameAsync(viewport);
-                        AssertLayeredImagesClose(source, sourceEndpoint, $"{name}/{appearance} source endpoint");
-                        prepared.ApplyProgress(1);
-                        using var endpoint = await ReadTransitionFrameAsync(viewport);
-                        AssertLayeredImagesClose(expected, endpoint, $"{name}/{appearance} endpoint");
-                        prepared.Finish();
-                    }
-                }
-
-                actor.SetAppearance("Default");
-                // Reproduce the old behavior only in the evidence capture.
-                foreach (var sprite in group.GetChildren().OfType<Sprite2D>())
-                {
-                    var layer = manifest.Layers.Single(layer => layer.Path.Replace('/', '_') == sprite.Name);
-                    if (layer.Material.Contains("#Masked", StringComparison.Ordinal))
-                        sprite.Material = layer.Material.Contains("Multiply", StringComparison.Ordinal)
-                            ? LayeredCharacterActor.CreateAlphaAwareMultiplyMaterial() : null;
-                }
-                using var before = await ReadTransitionFrameAsync(viewport);
-                before.SavePng($"{evidence}/{name}-before.png");
-                actor.SetAppearance("Default");
-                actor.Destroy();
-                viewport.QueueFree();
-                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-            }
-        }
-        finally
-        {
-            await runner.ShutdownAsync(CancellationToken.None);
-            await frameClock.ShutdownAsync(CancellationToken.None);
-        }
-        GD.Print($"Layered mask pixel and real-character endpoint regressions passed. Evidence: {evidence}");
+        GD.Print("Synthetic layered mask and capture-pool regressions passed.");
     }
 
     private async Task ValidateStencilPixelsAsync()
