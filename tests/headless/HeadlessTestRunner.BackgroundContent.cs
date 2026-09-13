@@ -8,6 +8,7 @@ using Godot;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Actors.Godot;
 using Majo.Runtime.Resources;
+using Majo.Runtime.Direction.Godot;
 using Majo.Runtime.State;
 
 namespace Majo.Runtime.HeadlessTests;
@@ -19,6 +20,23 @@ public partial class HeadlessTestRunner
         using var image = Image.CreateEmpty(100, 50, false, Image.Format.Rgba8);
         image.Fill(Colors.Red);
         using var texture = ImageTexture.CreateFromImage(image);
+        // Direct texture presentation must avoid a logical-size render target and keep
+        // its resource lease through snapshots, even after the content owner is closed.
+        var releases = 0;
+        var directContent = GodotBackgroundContent.FromTexture(texture, released: () => releases++);
+        var direct = new GodotBackgroundRaster(this, directContent);
+        Assert(!direct.HasViewport && direct.EstimatedBytes == 0 && !direct.IsPremultiplied &&
+            ReferenceEquals(direct.Texture, texture), "Texture content allocated an intermediate render surface.");
+        directContent.Dispose();
+        using (var snapshot = direct.Freeze())
+        {
+            direct.Dispose();
+            Assert(releases == 0, "Direct snapshot lost its content lease.");
+            using var secondSnapshot = snapshot.Freeze();
+            Assert(ReferenceEquals(secondSnapshot.Texture, texture), "Static snapshot performed an image readback.");
+        }
+        Assert(releases == 1, "Direct texture content was not released exactly once.");
+
         var loader = new BackgroundProbeLoader(texture);
         var root = new Node2D();
         var host = new Control { Size = new Vector2(200, 200) };

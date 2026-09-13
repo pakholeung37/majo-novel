@@ -40,6 +40,18 @@ public sealed class GodotBackgroundContent : IBackgroundContent, IDisposable
         });
     }
 
+    /// <summary>Opt-in immutable texture presentation. The root is only used by Runtime bindings;
+    /// Direction draws the texture directly. Node-based animated content uses the normal constructor.</summary>
+    public static GodotBackgroundContent FromTexture(Texture2D texture, IDisposable? resources = null, Action? released = null)
+    {
+        ArgumentNullException.ThrowIfNull(texture);
+        return new GodotBackgroundContent(new Sprite2D { Name = "Appearance", Texture = texture, Centered = false },
+            new Rect2(Vector2.Zero, texture.GetSize()),
+            texture.HasAlpha() ? BackgroundCoverage.Unknown : BackgroundCoverage.OpaqueRectangle, resources, released)
+        { DirectTexture = texture };
+    }
+
+    internal Texture2D? DirectTexture { get; private init; }
     public CanvasItem Root { get; }
     public Rect2 LocalBounds { get; }
     public BackgroundCoverage Coverage { get; }

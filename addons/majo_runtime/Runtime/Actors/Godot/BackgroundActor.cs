@@ -45,8 +45,5 @@ public sealed class BackgroundActor : GodotBackgroundActorBase
         catch { scope?.Dispose(); throw; }
     }
 
-    private GodotBackgroundContent CreateContent(Texture2D texture, IDisposable? scope) => OwnContent(
-        new Sprite2D { Name = "Appearance", Texture = texture, Centered = false },
-        new Rect2(Vector2.Zero, texture.GetSize()),
-        texture.HasAlpha() ? BackgroundCoverage.Unknown : BackgroundCoverage.OpaqueRectangle, scope);
+    private GodotBackgroundContent CreateContent(Texture2D texture, IDisposable? scope) => OwnTextureContent(texture, scope);
 }

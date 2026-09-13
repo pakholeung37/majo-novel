@@ -36,8 +36,8 @@ public partial class HeadlessTestRunner
         host.PublishView(far, new ViewState(far, StageId.Main, new ViewPose(new DirectionPoint(250, 50), 1, 0)), texture);
         var view = host.GetOrCreateView(far);
         var metrics = host.GetRenderResourceMetrics();
-        Assert(metrics.ViewCount == 2 && metrics.RenderTargetCount == 13,
-            "Render metrics must account for five targets per layered View plus Stage, Screen and native background content targets.");
+        Assert(metrics.ViewCount == 2 && metrics.RenderTargetCount == 12,
+            "Render metrics must count five targets per View plus Stage and Screen, without a target for direct texture backgrounds.");
         Assert(metrics.EstimatedRgba8ColorBytes > 0,
             "Render metrics must expose the minimum RGBA8 color-buffer cost.");
         Assert(view.ContentViewport.World2D == host.StageViewport.World2D, "Views must observe the same Stage world rather than a clipped texture.");

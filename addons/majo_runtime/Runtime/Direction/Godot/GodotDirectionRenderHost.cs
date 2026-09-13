@@ -258,12 +258,12 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
         pixels += (long)ScreenViewport.Size.X * ScreenViewport.Size.Y;
         var rasters = GodotBackgroundRaster.Instances.Where(raster => GodotObject.IsInstanceValid(raster.Owner) &&
             stages.Values.Any(stage => ReferenceEquals(stage.Viewport, raster.Owner) || stage.Viewport.IsAncestorOf(raster.Owner))).ToArray();
-        var liveRasters = rasters.Count(raster => !raster.IsSnapshot);
+        var liveRasters = rasters.Count(raster => raster.HasViewport);
         return new RenderResourceMetrics(
             stages.Count,
             views.Count + liveViewSources.Count,
             stages.Count + (views.Count + liveViewSources.Count) * 5 + 1 + liveRasters,
-            pixels * 4 + rasters.Sum(raster => raster.EstimatedBytes), liveRasters, rasters.Length - liveRasters);
+            pixels * 4 + rasters.Sum(raster => raster.EstimatedBytes), liveRasters, rasters.Count(raster => raster.IsSnapshot));
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken)

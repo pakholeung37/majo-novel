@@ -12,19 +12,22 @@ using Majo.Runtime.Direction.Core;
 namespace Majo.Runtime.Direction.Godot;
 
 /// <summary>An output surface, never a restriction on the actor's content type.
-/// Live surfaces simulate once per Stage. Frozen surfaces own a GPU readback.</summary>
+/// Node surfaces simulate once per Stage. Immutable textures are retained directly.</summary>
 internal sealed class GodotBackgroundRaster : IDisposable
 {
     private static readonly HashSet<GodotBackgroundRaster> instances = new();
     internal static IReadOnlyCollection<GodotBackgroundRaster> Instances => instances;
     internal Node Owner { get; }
-    internal bool IsSnapshot => ownsTexture;
-    internal long EstimatedBytes => (long)Math.Ceiling(Bounds.Size.X) * (long)Math.Ceiling(Bounds.Size.Y) * 4;
+    internal bool IsSnapshot => isSnapshot;
+    internal bool HasViewport => viewport is not null;
+    public bool IsPremultiplied => input.IsPremultiplied;
+    internal long EstimatedBytes => input.Update == VisualInputUpdate.Static ? 0 : (long)Math.Ceiling(Bounds.Size.X) * (long)Math.Ceiling(Bounds.Size.Y) * 4;
     private readonly IBackgroundContent? content;
     private IDisposable? lease;
+    private readonly BackgroundContentLifetime? textureLifetime;
     private readonly SubViewport? viewport;
     private readonly Node2D? origin;
-    private readonly bool ownsTexture;
+    private readonly bool isSnapshot;
     private bool disposed;
     private readonly GodotVisualInput input;
     public Texture2D Texture { get; }
@@ -33,14 +36,15 @@ internal sealed class GodotBackgroundRaster : IDisposable
     public static int LiveCount { get; private set; }
     public static int SnapshotCount { get; private set; }
 
-    private GodotBackgroundRaster(Node owner, GodotVisualInput frozen, Rect2 bounds, BackgroundCoverage coverage)
+    private GodotBackgroundRaster(Node owner, GodotVisualInput frozen, Rect2 bounds, BackgroundCoverage coverage, IDisposable? retainedTexture = null)
     {
+        if (retainedTexture is not null) textureLifetime = new BackgroundContentLifetime(retainedTexture.Dispose);
         Owner = owner;
         input = frozen;
         Texture = frozen.Texture;
         Bounds = bounds;
         Coverage = coverage;
-        ownsTexture = true;
+        isSnapshot = true;
         SnapshotCount++;
         instances.Add(this);
     }
@@ -49,13 +53,23 @@ internal sealed class GodotBackgroundRaster : IDisposable
     {
         ValidateTree(content.Root);
         GodotBackgroundContent.ValidateBounds(content.LocalBounds);
-        if (content.LocalBounds.Size.X > 16384 || content.LocalBounds.Size.Y > 16384)
+        if (content is not GodotBackgroundContent { DirectTexture: not null } &&
+            (content.LocalBounds.Size.X > 16384 || content.LocalBounds.Size.Y > 16384))
             throw new DirectionException("Background content exceeds the 16384 pixel render surface limit.");
         Owner = parent;
         this.content = content;
         Bounds = content.LocalBounds;
         Coverage = content.Coverage;
         lease = content.Retain();
+        if (content is GodotBackgroundContent { DirectTexture: { } texture })
+        {
+            textureLifetime = new BackgroundContentLifetime(lease.Dispose);
+            lease = null;
+            input = GodotVisualInput.Static(texture, Bounds);
+            Texture = texture;
+            instances.Add(this);
+            return;
+        }
         viewport = new SubViewport
         {
             Name = "BackgroundContentSurface",
@@ -84,7 +98,7 @@ internal sealed class GodotBackgroundRaster : IDisposable
         }
         catch
         {
-            if (content.Root.GetParent() == origin) origin.RemoveChild(content.Root);
+            if (origin is not null && content.Root.GetParent() == origin) origin.RemoveChild(content.Root);
             viewport.QueueFree();
             lease.Dispose();
             lease = null;
@@ -128,6 +142,14 @@ internal sealed class GodotBackgroundRaster : IDisposable
     public GodotBackgroundRaster Freeze()
     {
         ObjectDisposedException.ThrowIf(disposed, this);
+        // Immutable texture content can be retained without GetImage: virtual textures may not
+        // have a full-size image, and retaining them must preserve their custom drawing behavior.
+        if (textureLifetime is not null)
+        {
+            var retained = textureLifetime.Retain();
+            return new GodotBackgroundRaster(Owner,
+                GodotVisualInput.Static(Texture, Bounds, IsPremultiplied), Bounds, Coverage, retained);
+        }
         return new GodotBackgroundRaster(Owner, input.Freeze(), Bounds, Coverage);
     }
 
@@ -137,8 +159,9 @@ internal sealed class GodotBackgroundRaster : IDisposable
         disposed = true;
         instances.Remove(this);
         input.Dispose();
-        if (ownsTexture) { SnapshotCount--; return; }
-        LiveCount--;
+        textureLifetime?.Dispose();
+        if (isSnapshot) { SnapshotCount--; return; }
+        if (viewport is not null) LiveCount--;
         try
         {
             if (viewport is not null && GodotObject.IsInstanceValid(viewport))
@@ -146,7 +169,7 @@ internal sealed class GodotBackgroundRaster : IDisposable
                 viewport.TreeExiting -= Dispose;
                 if (viewport.IsInsideTree()) viewport.GetTree().NodeAdded -= OnNodeAdded;
             }
-            if (content is not null && GodotObject.IsInstanceValid(content.Root) && content.Root.GetParent() == origin)
+            if (content is not null && GodotObject.IsInstanceValid(content.Root) && origin is not null && content.Root.GetParent() == origin)
                 origin!.RemoveChild(content.Root);
         }
         finally

@@ -39,6 +39,7 @@ internal sealed partial class GodotDirectionBackdropVisual : Control
     {
         Raster = raster;
         output.Texture = raster?.Texture;
+        output.Material = raster?.IsPremultiplied == true ? material : null;
         Visible = raster is not null && state is not null;
         Modulate = state is null ? Colors.White : DirectionLayoutCalculator.ToGodotColor(state.Tint);
         Size = size;

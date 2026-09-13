@@ -19,11 +19,10 @@ public partial class HeadlessTestRunner
         }
     }
 
-    // Low-level render probes use the same native-content surface as Actor bindings.
+    // Low-level texture probes use the same direct presentation path as BackgroundActor.
     private static GodotBackgroundRaster CreateBackgroundRaster(GodotDirectionRenderHost host, Texture2D texture)
     {
-        using var content = new GodotBackgroundContent(new Sprite2D { Texture = texture, Centered = false },
-            new Rect2(Vector2.Zero, texture.GetSize()), BackgroundCoverage.OpaqueRectangle);
+        using var content = GodotBackgroundContent.FromTexture(texture);
         var raster = new GodotBackgroundRaster(host.StageViewport, content);
         host.StageViewport.TreeExiting += raster.Dispose;
         return raster;

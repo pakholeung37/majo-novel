@@ -84,6 +84,25 @@ public abstract class GodotBackgroundActorBase : GodotActorBase, IBackgroundActo
         if (unconfirmed is not null) throw new ActorException("Confirm or roll back the current background commit before preparing another.");
     }
 
+    protected GodotBackgroundContent OwnTextureContent(Texture2D texture, IDisposable? resources = null)
+    {
+        GodotBackgroundContent? content = null;
+        try
+        {
+            content = GodotBackgroundContent.FromTexture(texture, resources, () => contents.Remove(content!));
+            content.Root.Visible = false;
+            Container.AddChild(content.Root);
+            contents.Add(content);
+            return content;
+        }
+        catch
+        {
+            if (content is not null) content.Dispose();
+            else resources?.Dispose();
+            throw;
+        }
+    }
+
     protected GodotBackgroundContent OwnContent(CanvasItem root, Rect2 bounds, BackgroundCoverage coverage, IDisposable? resources = null)
     {
         GodotBackgroundContent? content = null;

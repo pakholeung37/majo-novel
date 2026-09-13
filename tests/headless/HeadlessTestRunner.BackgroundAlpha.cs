@@ -46,6 +46,26 @@ public partial class HeadlessTestRunner
                 AssertBackgroundPixel(frame, new Color(.25f, 0, 0), "Stable content alpha and Stage tint must apply once.");
                 frame.SavePng(Path.Combine(directory, "stable.png"));
             }
+            using (var directContent = GodotBackgroundContent.FromTexture(redTexture))
+            using (var direct = new GodotBackgroundRaster(owner, directContent))
+            using (var retained = direct.Freeze())
+            {
+                host.PublishBackdrop(StageId.Main, state, retained);
+                using var frame = await ReadTransitionFrameAsync(host.ScreenViewport);
+                AssertBackgroundPixel(frame, new Color(.25f, 0, 0), "Direct texture alpha and tint must apply once.");
+                host.PublishBackdrop(StageId.Main, state, blue);
+                host.PublishBackdropTransition(StageId.Main, state, retained);
+                var directDrivers = new TransitionDriverRegistry();
+                using (var mix = host.PrepareBackdropVisualTransition(StageId.Main,
+                    new DirectionTransitionSpec(DirectionTransitionId.Dissolve, 1), directDrivers.GetRequired(DirectionTransitionId.Dissolve)))
+                {
+                    mix.ApplyProgress(.5f);
+                    using var mixed = await ReadTransitionFrameAsync(host.ScreenViewport);
+                    AssertBackgroundPixel(mixed, new Color(.125f, 0, .125f), "Direct-to-live dissolve applied alpha incorrectly.");
+                }
+                host.ClearBackdropTransition(StageId.Main);
+                host.PublishBackdrop(StageId.Main, state, red);
+            }
             var drivers = new TransitionDriverRegistry();
             var wipe = new DirectionTransitionId("wipe");
             drivers.RegisterShader(wipe, GD.Load<Shader>("res://tests/headless/fixtures/background_wipe.gdshader"));

@@ -4,6 +4,9 @@ using System.IO;
 using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Resources.Godot;
+using Majo.Runtime.Actors.Godot;
+using Majo.Runtime.Direction.Godot;
+using Majo.Runtime.Direction.Core;
 
 namespace Majo.Runtime.HeadlessTests;
 
@@ -79,6 +82,40 @@ public partial class HeadlessTestRunner
                     }
                 }
             }
+            // Exercise the actual BackgroundActor presentation path, including moving/rotated
+            // views and a retained virtual texture, rather than only TextureRect drawing.
+            var owner = new Node();
+            AddChild(owner);
+            using var host = new GodotDirectionRenderHost(owner, new Vector2I(128, 96));
+            await host.InitializeAsync(default);
+            // Baked atlas filtering blends neighboring tiles; independent repeated draws clamp
+            // at each tile boundary. Nearest gives an exact geometric/sampling reference.
+            host.Backdrop.TextureFilter = CanvasItem.TextureFilterEnum.Nearest;
+            using var repeatedContent = GodotBackgroundContent.FromTexture(repeated);
+            using var referenceContent = GodotBackgroundContent.FromTexture(reference);
+            using var repeatedRaster = new GodotBackgroundRaster(owner, repeatedContent);
+            using var referenceRaster = new GodotBackgroundRaster(owner, referenceContent);
+            using var retainedRaster = repeatedRaster.Freeze();
+            Assert(!repeatedRaster.HasViewport && repeatedRaster.EstimatedBytes == 0,
+                "Repeated background allocated a panorama render target.");
+            try
+            {
+                foreach (var x in new[] { 35f, 50f, 65f })
+                {
+                    host.PublishView(ViewId.Main, new ViewState(ViewId.Main, StageId.Main,
+                        new ViewPose(new(x, 50), 1.2f, 7)), repeated);
+                    var state = new BackdropState("repeat", "background", "Default");
+                    host.PublishBackdrop(StageId.Main, state, referenceRaster);
+                    using var expectedFrame = await ReadTransitionFrameAsync(host.ScreenViewport);
+                    host.PublishBackdrop(StageId.Main, state, retainedRaster);
+                    using var actualFrame = await ReadTransitionFrameAsync(host.ScreenViewport);
+                    expectedFrame.SavePng(Path.Combine(evidence, $"stage-reference-{x}.png"));
+                    actualFrame.SavePng(Path.Combine(evidence, $"stage-repeated-{x}.png"));
+                    AssertLayeredImagesClose(expectedFrame, actualFrame, $"Direct background repeated wall camera {x}");
+                }
+            }
+            finally { await host.ShutdownAsync(default); owner.QueueFree(); }
+
             // A logical tile can be smaller than its resident source without
             // allocating a resized image (the court uses 2048 -> 1024).
             using var scaled = new HorizontalRepeatTexture2D(tile, new Vector2I(4, 4), 15);
