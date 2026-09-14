@@ -1,0 +1,14 @@
+[remap]
+
+importer="yarnscript"
+type="Resource"
+uid="uid://db55q5vnaaffj"
+path="res://.godot/imported/main.yarn-b4c9e29e9f76aed57058edf971e08547.tres"
+
+[deps]
+
+source_file="res://demos/ace-attorney/assets/scripts/main.yarn"
+dest_files=["res://.godot/imported/main.yarn-b4c9e29e9f76aed57058edf971e08547.tres"]
+
+[params]
+

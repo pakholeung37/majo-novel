@@ -19,6 +19,7 @@ BASE_URL = "https://objection.lol"
 ROOT = Path(__file__).resolve().parents[1]
 DEMO = ROOT / "demos" / "ace-attorney"
 ASSETS = DEMO / "assets"
+SOURCE = DEMO / "source"
 MANIFEST = DEMO / "asset_manifest.json"
 
 # Each character covers idle/speech; selected action poses also cover one-shot
@@ -27,11 +28,11 @@ SELECTION = {
     1: [1, 2, 3],       # Phoenix: stand, desk slam, point
     2: [5, 6, 9],       # Edgeworth: stand, desk slam, confident shrug
     10: [30, 31, 44],   # Judge: stand, negative, positive
-    14: [77, 78, 79],   # Maya (witness): stand, think, happy
+    16: [102, 103, 105],  # Maya (counsel): stand, angry, thinking
     21: [130, 131, 137],  # Dick: stand, confident, headscratch
 }
-CHARACTER_NAMES = {1: "Phoenix", 2: "Miles", 10: "Judge", 14: "Maya", 21: "Dick"}
-BACKGROUND_NAMES = {189: "Defense", 194: "Prosecution", 192: "Judge", 197: "Witness"}
+CHARACTER_NAMES = {1: "Phoenix", 2: "Miles", 10: "Judge", 16: "Maya", 21: "Dick"}
+BACKGROUND_NAMES = {189: "Defense", 194: "Prosecution", 192: "Judge", 187: "Counsel", 197: "Witness"}
 MUSIC_IDS = [2, 1, 14, 4, 15, 701]  # Courtroom cues plus Maya/Dick themes
 MUSIC_FILE_NAMES = {15: "Maya", 701: "Dick"}
 GENERIC_OBJECTION_URL = "/Audio/Vocal/sfx-objection.wav"
@@ -164,7 +165,9 @@ def main() -> None:
         background_id = character["backgroundId"]
         background = json.loads(fetch(BASE_URL + f"/api/assets/background/{background_id}"))
         background_data[background_id] = background
-        paths.update((background["url"], background["deskUrl"]))
+        paths.add(background["url"])
+        if background.get("deskUrl"):
+            paths.add(background["deskUrl"])
         if character_id != 10:
             bubble = next((bubble for bubble in character["speechBubbles"] if bubble["name"] == "Objection!"), None)
             if not bubble:
@@ -184,7 +187,8 @@ def main() -> None:
     for background_id, background in background_data.items():
         name = BACKGROUND_NAMES[background_id]
         background_paths[background["url"]] = ASSETS / "backgrounds" / f"{name}{Path(background['url']).suffix}"
-        background_paths[background["deskUrl"]] = ASSETS / "backgrounds" / f"{name}_Desk{Path(background['deskUrl']).suffix}"
+        if background.get("deskUrl"):
+            background_paths[background["deskUrl"]] = ASSETS / "backgrounds" / f"{name}_Desk{Path(background['deskUrl']).suffix}"
     music_paths = {
         track["url"]: ASSETS / "audio" / "bgm" / f"{MUSIC_FILE_NAMES.get(track['id'], track['name'])}{Path(track['url']).suffix}"
         for track in tracks
@@ -199,7 +203,7 @@ def main() -> None:
     for path, data in downloaded.items():
         if path.lower().endswith(".gif"):
             character_id = int(Path(path).parts[3])
-            destination = ASSETS / "characters" / CHARACTER_NAMES[character_id] / "animations" / Path(path).stem
+            destination = SOURCE / "characters" / CHARACTER_NAMES[character_id] / "animations" / Path(path).stem
             resources[path] = save_animation(path, data, destination)
         elif path in background_paths:
             resources[path] = save_resource(path, data, background_paths[path])
@@ -271,7 +275,7 @@ def main() -> None:
             "id": background_id,
             "name": background["name"],
             "image": resources[background["url"]],
-            "desk": resources[background["deskUrl"]],
+            "desk": resources[background["deskUrl"]] if background.get("deskUrl") else None,
         })
     for character_id, bubble in objection_bubbles.items():
         manifest["callouts"].append({
@@ -293,6 +297,17 @@ def main() -> None:
     MANIFEST.parent.mkdir(parents=True, exist_ok=True)
     MANIFEST.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
     save_preview(manifest)
+    # Keep the local source cache aligned with the selected preset animations.
+    for character_id in SELECTION:
+        animations = SOURCE / "characters" / CHARACTER_NAMES[character_id] / "animations"
+        expected = {
+            Path(path).stem for path in paths
+            if path.lower().endswith(".gif") and int(Path(path).parts[3]) == character_id
+        }
+        if animations.is_dir():
+            for directory in animations.iterdir():
+                if directory.is_dir() and directory.name not in expected:
+                    shutil.rmtree(directory)
     # Remove only directories produced by earlier versions of this fixture.
     for old_directory in (
         ASSETS / "original", ASSETS / "frames",

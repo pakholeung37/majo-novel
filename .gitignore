@@ -19,6 +19,8 @@ TestResults/
 **/obj/generated/**
 artifacts
 /demos/**/assets/*
+/demos/ace-attorney/source/*
+!/demos/ace-attorney/source/.gdignore
 !/demos/**/assets/scripts/
 !/demos/**/assets/scripts/**
 !/demos/**/assets/localization/

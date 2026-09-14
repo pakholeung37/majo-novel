@@ -26,7 +26,7 @@
           "name": "Stand",
           "idle": {
             "source": {
-              "file": "assets/characters/Phoenix/animations/Stand/source.gif",
+              "file": "source/characters/Phoenix/animations/Stand/source.gif",
               "source_url": "https://objection.lol/Images/Characters/1/Stand.gif",
               "sha256": "b209bf5b90315385a34f09d72c62d03faf8bd8113d0819164c7484568e8a3b2b",
               "bytes": 55901
@@ -38,46 +38,46 @@
             "loop": 0,
             "frames": [
               {
-                "file": "assets/characters/Phoenix/animations/Stand/frames/000.png",
+                "file": "source/characters/Phoenix/animations/Stand/frames/000.png",
                 "duration_ms": 1000
               },
               {
-                "file": "assets/characters/Phoenix/animations/Stand/frames/001.png",
+                "file": "source/characters/Phoenix/animations/Stand/frames/001.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Phoenix/animations/Stand/frames/002.png",
+                "file": "source/characters/Phoenix/animations/Stand/frames/002.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Phoenix/animations/Stand/frames/003.png",
+                "file": "source/characters/Phoenix/animations/Stand/frames/003.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Phoenix/animations/Stand/frames/004.png",
+                "file": "source/characters/Phoenix/animations/Stand/frames/004.png",
                 "duration_ms": 1000
               },
               {
-                "file": "assets/characters/Phoenix/animations/Stand/frames/005.png",
+                "file": "source/characters/Phoenix/animations/Stand/frames/005.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Phoenix/animations/Stand/frames/006.png",
+                "file": "source/characters/Phoenix/animations/Stand/frames/006.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Phoenix/animations/Stand/frames/007.png",
+                "file": "source/characters/Phoenix/animations/Stand/frames/007.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Phoenix/animations/Stand/frames/008.png",
+                "file": "source/characters/Phoenix/animations/Stand/frames/008.png",
                 "duration_ms": 1000
               }
             ]
           },
           "speak": {
             "source": {
-              "file": "assets/characters/Phoenix/animations/Stand_Talk/source.gif",
+              "file": "source/characters/Phoenix/animations/Stand_Talk/source.gif",
               "source_url": "https://objection.lol/Images/Characters/1/Stand_Talk.gif",
               "sha256": "50cedd6646fe6ce912c89c14ae73467512aa83620a10c28d57d08cff0307ec1b",
               "bytes": 91002
@@ -89,91 +89,91 @@
             "loop": 0,
             "frames": [
               {
-                "file": "assets/characters/Phoenix/animations/Stand_Talk/frames/000.png",
+                "file": "source/characters/Phoenix/animations/Stand_Talk/frames/000.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Stand_Talk/frames/001.png",
+                "file": "source/characters/Phoenix/animations/Stand_Talk/frames/001.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Stand_Talk/frames/002.png",
+                "file": "source/characters/Phoenix/animations/Stand_Talk/frames/002.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Stand_Talk/frames/003.png",
+                "file": "source/characters/Phoenix/animations/Stand_Talk/frames/003.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Stand_Talk/frames/004.png",
+                "file": "source/characters/Phoenix/animations/Stand_Talk/frames/004.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Stand_Talk/frames/005.png",
+                "file": "source/characters/Phoenix/animations/Stand_Talk/frames/005.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Stand_Talk/frames/006.png",
+                "file": "source/characters/Phoenix/animations/Stand_Talk/frames/006.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Stand_Talk/frames/007.png",
+                "file": "source/characters/Phoenix/animations/Stand_Talk/frames/007.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Stand_Talk/frames/008.png",
+                "file": "source/characters/Phoenix/animations/Stand_Talk/frames/008.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Phoenix/animations/Stand_Talk/frames/009.png",
+                "file": "source/characters/Phoenix/animations/Stand_Talk/frames/009.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Phoenix/animations/Stand_Talk/frames/010.png",
+                "file": "source/characters/Phoenix/animations/Stand_Talk/frames/010.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Phoenix/animations/Stand_Talk/frames/011.png",
+                "file": "source/characters/Phoenix/animations/Stand_Talk/frames/011.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Stand_Talk/frames/012.png",
+                "file": "source/characters/Phoenix/animations/Stand_Talk/frames/012.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Stand_Talk/frames/013.png",
+                "file": "source/characters/Phoenix/animations/Stand_Talk/frames/013.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Stand_Talk/frames/014.png",
+                "file": "source/characters/Phoenix/animations/Stand_Talk/frames/014.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Stand_Talk/frames/015.png",
+                "file": "source/characters/Phoenix/animations/Stand_Talk/frames/015.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Stand_Talk/frames/016.png",
+                "file": "source/characters/Phoenix/animations/Stand_Talk/frames/016.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Stand_Talk/frames/017.png",
+                "file": "source/characters/Phoenix/animations/Stand_Talk/frames/017.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Stand_Talk/frames/018.png",
+                "file": "source/characters/Phoenix/animations/Stand_Talk/frames/018.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Stand_Talk/frames/019.png",
+                "file": "source/characters/Phoenix/animations/Stand_Talk/frames/019.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Stand_Talk/frames/020.png",
+                "file": "source/characters/Phoenix/animations/Stand_Talk/frames/020.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Stand_Talk/frames/021.png",
+                "file": "source/characters/Phoenix/animations/Stand_Talk/frames/021.png",
                 "duration_ms": 80
               }
             ]
@@ -186,7 +186,7 @@
           "name": "Desk Slam",
           "idle": {
             "source": {
-              "file": "assets/characters/Phoenix/animations/Slam_Stand/source.gif",
+              "file": "source/characters/Phoenix/animations/Slam_Stand/source.gif",
               "source_url": "https://objection.lol/Images/Characters/1/Slam_Stand.gif",
               "sha256": "bdf3bb1941dedc87ba6d45315fee7193a4123bb918316008e7282062824fbbec",
               "bytes": 91344
@@ -198,46 +198,46 @@
             "loop": 0,
             "frames": [
               {
-                "file": "assets/characters/Phoenix/animations/Slam_Stand/frames/000.png",
+                "file": "source/characters/Phoenix/animations/Slam_Stand/frames/000.png",
                 "duration_ms": 1000
               },
               {
-                "file": "assets/characters/Phoenix/animations/Slam_Stand/frames/001.png",
+                "file": "source/characters/Phoenix/animations/Slam_Stand/frames/001.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Slam_Stand/frames/002.png",
+                "file": "source/characters/Phoenix/animations/Slam_Stand/frames/002.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Slam_Stand/frames/003.png",
+                "file": "source/characters/Phoenix/animations/Slam_Stand/frames/003.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Slam_Stand/frames/004.png",
+                "file": "source/characters/Phoenix/animations/Slam_Stand/frames/004.png",
                 "duration_ms": 1000
               },
               {
-                "file": "assets/characters/Phoenix/animations/Slam_Stand/frames/005.png",
+                "file": "source/characters/Phoenix/animations/Slam_Stand/frames/005.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Phoenix/animations/Slam_Stand/frames/006.png",
+                "file": "source/characters/Phoenix/animations/Slam_Stand/frames/006.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Phoenix/animations/Slam_Stand/frames/007.png",
+                "file": "source/characters/Phoenix/animations/Slam_Stand/frames/007.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Phoenix/animations/Slam_Stand/frames/008.png",
+                "file": "source/characters/Phoenix/animations/Slam_Stand/frames/008.png",
                 "duration_ms": 1200
               }
             ]
           },
           "speak": {
             "source": {
-              "file": "assets/characters/Phoenix/animations/Slam_Talk/source.gif",
+              "file": "source/characters/Phoenix/animations/Slam_Talk/source.gif",
               "source_url": "https://objection.lol/Images/Characters/1/Slam_Talk.gif",
               "sha256": "c67b062696ea584b062ee1ffad6871fc56a86ccf0e2f2996a2dde994d5be6691",
               "bytes": 125934
@@ -249,91 +249,91 @@
             "loop": 0,
             "frames": [
               {
-                "file": "assets/characters/Phoenix/animations/Slam_Talk/frames/000.png",
+                "file": "source/characters/Phoenix/animations/Slam_Talk/frames/000.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Slam_Talk/frames/001.png",
+                "file": "source/characters/Phoenix/animations/Slam_Talk/frames/001.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Slam_Talk/frames/002.png",
+                "file": "source/characters/Phoenix/animations/Slam_Talk/frames/002.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Slam_Talk/frames/003.png",
+                "file": "source/characters/Phoenix/animations/Slam_Talk/frames/003.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Slam_Talk/frames/004.png",
+                "file": "source/characters/Phoenix/animations/Slam_Talk/frames/004.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Slam_Talk/frames/005.png",
+                "file": "source/characters/Phoenix/animations/Slam_Talk/frames/005.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Slam_Talk/frames/006.png",
+                "file": "source/characters/Phoenix/animations/Slam_Talk/frames/006.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Slam_Talk/frames/007.png",
+                "file": "source/characters/Phoenix/animations/Slam_Talk/frames/007.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Slam_Talk/frames/008.png",
+                "file": "source/characters/Phoenix/animations/Slam_Talk/frames/008.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Phoenix/animations/Slam_Talk/frames/009.png",
+                "file": "source/characters/Phoenix/animations/Slam_Talk/frames/009.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Phoenix/animations/Slam_Talk/frames/010.png",
+                "file": "source/characters/Phoenix/animations/Slam_Talk/frames/010.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Phoenix/animations/Slam_Talk/frames/011.png",
+                "file": "source/characters/Phoenix/animations/Slam_Talk/frames/011.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Slam_Talk/frames/012.png",
+                "file": "source/characters/Phoenix/animations/Slam_Talk/frames/012.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Slam_Talk/frames/013.png",
+                "file": "source/characters/Phoenix/animations/Slam_Talk/frames/013.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Slam_Talk/frames/014.png",
+                "file": "source/characters/Phoenix/animations/Slam_Talk/frames/014.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Slam_Talk/frames/015.png",
+                "file": "source/characters/Phoenix/animations/Slam_Talk/frames/015.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Slam_Talk/frames/016.png",
+                "file": "source/characters/Phoenix/animations/Slam_Talk/frames/016.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Slam_Talk/frames/017.png",
+                "file": "source/characters/Phoenix/animations/Slam_Talk/frames/017.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Slam_Talk/frames/018.png",
+                "file": "source/characters/Phoenix/animations/Slam_Talk/frames/018.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Slam_Talk/frames/019.png",
+                "file": "source/characters/Phoenix/animations/Slam_Talk/frames/019.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Slam_Talk/frames/020.png",
+                "file": "source/characters/Phoenix/animations/Slam_Talk/frames/020.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Slam_Talk/frames/021.png",
+                "file": "source/characters/Phoenix/animations/Slam_Talk/frames/021.png",
                 "duration_ms": 80
               }
             ]
@@ -342,7 +342,7 @@
             {
               "animation": {
                 "source": {
-                  "file": "assets/characters/Phoenix/animations/Slam/source.gif",
+                  "file": "source/characters/Phoenix/animations/Slam/source.gif",
                   "source_url": "https://objection.lol/Images/Characters/1/Slam.gif",
                   "sha256": "904c11d928ab4ecad6c00739f3c6fe6eecb7fdd1accf739f0c7b2463489f5eb7",
                   "bytes": 279093
@@ -354,27 +354,27 @@
                 "loop": 0,
                 "frames": [
                   {
-                    "file": "assets/characters/Phoenix/animations/Slam/frames/000.png",
+                    "file": "source/characters/Phoenix/animations/Slam/frames/000.png",
                     "duration_ms": 130
                   },
                   {
-                    "file": "assets/characters/Phoenix/animations/Slam/frames/001.png",
+                    "file": "source/characters/Phoenix/animations/Slam/frames/001.png",
                     "duration_ms": 60
                   },
                   {
-                    "file": "assets/characters/Phoenix/animations/Slam/frames/002.png",
+                    "file": "source/characters/Phoenix/animations/Slam/frames/002.png",
                     "duration_ms": 60
                   },
                   {
-                    "file": "assets/characters/Phoenix/animations/Slam/frames/003.png",
+                    "file": "source/characters/Phoenix/animations/Slam/frames/003.png",
                     "duration_ms": 340
                   },
                   {
-                    "file": "assets/characters/Phoenix/animations/Slam/frames/004.png",
+                    "file": "source/characters/Phoenix/animations/Slam/frames/004.png",
                     "duration_ms": 60
                   },
                   {
-                    "file": "assets/characters/Phoenix/animations/Slam/frames/005.png",
+                    "file": "source/characters/Phoenix/animations/Slam/frames/005.png",
                     "duration_ms": 700
                   }
                 ]
@@ -401,7 +401,7 @@
           "name": "Point",
           "idle": {
             "source": {
-              "file": "assets/characters/Phoenix/animations/Point_Stand/source.gif",
+              "file": "source/characters/Phoenix/animations/Point_Stand/source.gif",
               "source_url": "https://objection.lol/Images/Characters/1/Point_Stand.gif",
               "sha256": "c143191563893bfac5cc1416eee515ff771837e54a0f9588ecade8882074537e",
               "bytes": 61992
@@ -413,14 +413,14 @@
             "loop": 0,
             "frames": [
               {
-                "file": "assets/characters/Phoenix/animations/Point_Stand/frames/000.png",
+                "file": "source/characters/Phoenix/animations/Point_Stand/frames/000.png",
                 "duration_ms": 3440
               }
             ]
           },
           "speak": {
             "source": {
-              "file": "assets/characters/Phoenix/animations/Point_Talk/source.gif",
+              "file": "source/characters/Phoenix/animations/Point_Talk/source.gif",
               "source_url": "https://objection.lol/Images/Characters/1/Point_Talk.gif",
               "sha256": "a808397841ae2edc19614e1ad763abfc8c0fc4a1c358fb613f417099b53d06a3",
               "bytes": 440309
@@ -432,75 +432,75 @@
             "loop": 0,
             "frames": [
               {
-                "file": "assets/characters/Phoenix/animations/Point_Talk/frames/000.png",
+                "file": "source/characters/Phoenix/animations/Point_Talk/frames/000.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Point_Talk/frames/001.png",
+                "file": "source/characters/Phoenix/animations/Point_Talk/frames/001.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Point_Talk/frames/002.png",
+                "file": "source/characters/Phoenix/animations/Point_Talk/frames/002.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Point_Talk/frames/003.png",
+                "file": "source/characters/Phoenix/animations/Point_Talk/frames/003.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Point_Talk/frames/004.png",
+                "file": "source/characters/Phoenix/animations/Point_Talk/frames/004.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Phoenix/animations/Point_Talk/frames/005.png",
+                "file": "source/characters/Phoenix/animations/Point_Talk/frames/005.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Phoenix/animations/Point_Talk/frames/006.png",
+                "file": "source/characters/Phoenix/animations/Point_Talk/frames/006.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Phoenix/animations/Point_Talk/frames/007.png",
+                "file": "source/characters/Phoenix/animations/Point_Talk/frames/007.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Phoenix/animations/Point_Talk/frames/008.png",
+                "file": "source/characters/Phoenix/animations/Point_Talk/frames/008.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Point_Talk/frames/009.png",
+                "file": "source/characters/Phoenix/animations/Point_Talk/frames/009.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Point_Talk/frames/010.png",
+                "file": "source/characters/Phoenix/animations/Point_Talk/frames/010.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Point_Talk/frames/011.png",
+                "file": "source/characters/Phoenix/animations/Point_Talk/frames/011.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Point_Talk/frames/012.png",
+                "file": "source/characters/Phoenix/animations/Point_Talk/frames/012.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Point_Talk/frames/013.png",
+                "file": "source/characters/Phoenix/animations/Point_Talk/frames/013.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Point_Talk/frames/014.png",
+                "file": "source/characters/Phoenix/animations/Point_Talk/frames/014.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Point_Talk/frames/015.png",
+                "file": "source/characters/Phoenix/animations/Point_Talk/frames/015.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Point_Talk/frames/016.png",
+                "file": "source/characters/Phoenix/animations/Point_Talk/frames/016.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Phoenix/animations/Point_Talk/frames/017.png",
+                "file": "source/characters/Phoenix/animations/Point_Talk/frames/017.png",
                 "duration_ms": 80
               }
             ]
@@ -509,7 +509,7 @@
             {
               "animation": {
                 "source": {
-                  "file": "assets/characters/Phoenix/animations/Point_Start/source.gif",
+                  "file": "source/characters/Phoenix/animations/Point_Start/source.gif",
                   "source_url": "https://objection.lol/Images/Characters/1/Point_Start.gif",
                   "sha256": "4599019009a8e2adf64ef437e3d309323bfe86377ca331e9a9be99a5cbe475ab",
                   "bytes": 130139
@@ -521,31 +521,31 @@
                 "loop": 0,
                 "frames": [
                   {
-                    "file": "assets/characters/Phoenix/animations/Point_Start/frames/000.png",
+                    "file": "source/characters/Phoenix/animations/Point_Start/frames/000.png",
                     "duration_ms": 160
                   },
                   {
-                    "file": "assets/characters/Phoenix/animations/Point_Start/frames/001.png",
+                    "file": "source/characters/Phoenix/animations/Point_Start/frames/001.png",
                     "duration_ms": 120
                   },
                   {
-                    "file": "assets/characters/Phoenix/animations/Point_Start/frames/002.png",
+                    "file": "source/characters/Phoenix/animations/Point_Start/frames/002.png",
                     "duration_ms": 40
                   },
                   {
-                    "file": "assets/characters/Phoenix/animations/Point_Start/frames/003.png",
+                    "file": "source/characters/Phoenix/animations/Point_Start/frames/003.png",
                     "duration_ms": 40
                   },
                   {
-                    "file": "assets/characters/Phoenix/animations/Point_Start/frames/004.png",
+                    "file": "source/characters/Phoenix/animations/Point_Start/frames/004.png",
                     "duration_ms": 200
                   },
                   {
-                    "file": "assets/characters/Phoenix/animations/Point_Start/frames/005.png",
+                    "file": "source/characters/Phoenix/animations/Point_Start/frames/005.png",
                     "duration_ms": 40
                   },
                   {
-                    "file": "assets/characters/Phoenix/animations/Point_Start/frames/006.png",
+                    "file": "source/characters/Phoenix/animations/Point_Start/frames/006.png",
                     "duration_ms": 320
                   }
                 ]
@@ -580,7 +580,7 @@
           "name": "Stand",
           "idle": {
             "source": {
-              "file": "assets/characters/Miles/animations/Stand/source.gif",
+              "file": "source/characters/Miles/animations/Stand/source.gif",
               "source_url": "https://objection.lol/Images/Characters/2/Stand.gif",
               "sha256": "64de72d0e3b23f252053d144ebdb93d81dc694f3db31654f8b155cd4566e3ffa",
               "bytes": 55530
@@ -592,14 +592,14 @@
             "loop": 0,
             "frames": [
               {
-                "file": "assets/characters/Miles/animations/Stand/frames/000.png",
+                "file": "source/characters/Miles/animations/Stand/frames/000.png",
                 "duration_ms": 680
               }
             ]
           },
           "speak": {
             "source": {
-              "file": "assets/characters/Miles/animations/Stand_Talk/source.gif",
+              "file": "source/characters/Miles/animations/Stand_Talk/source.gif",
               "source_url": "https://objection.lol/Images/Characters/2/Stand_Talk.gif",
               "sha256": "681cdcb2fe2f69d5561e369083b7f33382d30f8b438f3578f68922adf130e675",
               "bytes": 222749
@@ -611,19 +611,19 @@
             "loop": 0,
             "frames": [
               {
-                "file": "assets/characters/Miles/animations/Stand_Talk/frames/000.png",
+                "file": "source/characters/Miles/animations/Stand_Talk/frames/000.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Miles/animations/Stand_Talk/frames/001.png",
+                "file": "source/characters/Miles/animations/Stand_Talk/frames/001.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Miles/animations/Stand_Talk/frames/002.png",
+                "file": "source/characters/Miles/animations/Stand_Talk/frames/002.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Miles/animations/Stand_Talk/frames/003.png",
+                "file": "source/characters/Miles/animations/Stand_Talk/frames/003.png",
                 "duration_ms": 120
               }
             ]
@@ -636,7 +636,7 @@
           "name": "Desk Slam",
           "idle": {
             "source": {
-              "file": "assets/characters/Miles/animations/Desk_Stand/source.gif",
+              "file": "source/characters/Miles/animations/Desk_Stand/source.gif",
               "source_url": "https://objection.lol/Images/Characters/2/Desk_Stand.gif",
               "sha256": "8cad47e8876e3aa9e672c635affbcab8761958a467fd67f5f1e0b316d89a3dd5",
               "bytes": 64047
@@ -648,14 +648,14 @@
             "loop": 0,
             "frames": [
               {
-                "file": "assets/characters/Miles/animations/Desk_Stand/frames/000.png",
+                "file": "source/characters/Miles/animations/Desk_Stand/frames/000.png",
                 "duration_ms": 1680
               }
             ]
           },
           "speak": {
             "source": {
-              "file": "assets/characters/Miles/animations/Desk_Talk/source.gif",
+              "file": "source/characters/Miles/animations/Desk_Talk/source.gif",
               "source_url": "https://objection.lol/Images/Characters/2/Desk_Talk.gif",
               "sha256": "94e1b898f254c690acb346d8b9f6ce6f63d8bfd88bec0d27682ec5e6bd2d83b6",
               "bytes": 254944
@@ -667,19 +667,19 @@
             "loop": 0,
             "frames": [
               {
-                "file": "assets/characters/Miles/animations/Desk_Talk/frames/000.png",
+                "file": "source/characters/Miles/animations/Desk_Talk/frames/000.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Miles/animations/Desk_Talk/frames/001.png",
+                "file": "source/characters/Miles/animations/Desk_Talk/frames/001.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Miles/animations/Desk_Talk/frames/002.png",
+                "file": "source/characters/Miles/animations/Desk_Talk/frames/002.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Miles/animations/Desk_Talk/frames/003.png",
+                "file": "source/characters/Miles/animations/Desk_Talk/frames/003.png",
                 "duration_ms": 120
               }
             ]
@@ -688,7 +688,7 @@
             {
               "animation": {
                 "source": {
-                  "file": "assets/characters/Miles/animations/Desk_Slam/source.gif",
+                  "file": "source/characters/Miles/animations/Desk_Slam/source.gif",
                   "source_url": "https://objection.lol/Images/Characters/2/Desk_Slam.gif",
                   "sha256": "6511835145e67e9fe5b578702f02768a4dfa36de3346c3355ae63173b3e8a596",
                   "bytes": 194417
@@ -700,15 +700,15 @@
                 "loop": 0,
                 "frames": [
                   {
-                    "file": "assets/characters/Miles/animations/Desk_Slam/frames/000.png",
+                    "file": "source/characters/Miles/animations/Desk_Slam/frames/000.png",
                     "duration_ms": 120
                   },
                   {
-                    "file": "assets/characters/Miles/animations/Desk_Slam/frames/001.png",
+                    "file": "source/characters/Miles/animations/Desk_Slam/frames/001.png",
                     "duration_ms": 120
                   },
                   {
-                    "file": "assets/characters/Miles/animations/Desk_Slam/frames/002.png",
+                    "file": "source/characters/Miles/animations/Desk_Slam/frames/002.png",
                     "duration_ms": 360
                   }
                 ]
@@ -735,7 +735,7 @@
           "name": "Confident Shrug",
           "idle": {
             "source": {
-              "file": "assets/characters/Miles/animations/Confident/source.gif",
+              "file": "source/characters/Miles/animations/Confident/source.gif",
               "source_url": "https://objection.lol/Images/Characters/2/Confident.gif",
               "sha256": "d79c24d2b9667e6bf1dd88a56bde31565627a53d10c978b7f3158075da2724fd",
               "bytes": 72167
@@ -747,14 +747,14 @@
             "loop": 0,
             "frames": [
               {
-                "file": "assets/characters/Miles/animations/Confident/frames/000.png",
+                "file": "source/characters/Miles/animations/Confident/frames/000.png",
                 "duration_ms": 680
               }
             ]
           },
           "speak": {
             "source": {
-              "file": "assets/characters/Miles/animations/Confident_Talk/source.gif",
+              "file": "source/characters/Miles/animations/Confident_Talk/source.gif",
               "source_url": "https://objection.lol/Images/Characters/2/Confident_Talk.gif",
               "sha256": "cdd43110f1dc547abec8a5848e4b8f4371a0ef0dc82767bcf589c0b48f794e2c",
               "bytes": 143908
@@ -766,11 +766,11 @@
             "loop": 0,
             "frames": [
               {
-                "file": "assets/characters/Miles/animations/Confident_Talk/frames/000.png",
+                "file": "source/characters/Miles/animations/Confident_Talk/frames/000.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Miles/animations/Confident_Talk/frames/001.png",
+                "file": "source/characters/Miles/animations/Confident_Talk/frames/001.png",
                 "duration_ms": 120
               }
             ]
@@ -779,7 +779,7 @@
             {
               "animation": {
                 "source": {
-                  "file": "assets/characters/Miles/animations/Special_2/source.gif",
+                  "file": "source/characters/Miles/animations/Special_2/source.gif",
                   "source_url": "https://objection.lol/Images/Characters/2/Special_2.gif",
                   "sha256": "693c63329b06bb6d150f408e52a76c6fef4854307e9b90c5a03b82cf15195a4d",
                   "bytes": 647880
@@ -791,39 +791,39 @@
                 "loop": 0,
                 "frames": [
                   {
-                    "file": "assets/characters/Miles/animations/Special_2/frames/000.png",
+                    "file": "source/characters/Miles/animations/Special_2/frames/000.png",
                     "duration_ms": 200
                   },
                   {
-                    "file": "assets/characters/Miles/animations/Special_2/frames/001.png",
+                    "file": "source/characters/Miles/animations/Special_2/frames/001.png",
                     "duration_ms": 200
                   },
                   {
-                    "file": "assets/characters/Miles/animations/Special_2/frames/002.png",
+                    "file": "source/characters/Miles/animations/Special_2/frames/002.png",
                     "duration_ms": 160
                   },
                   {
-                    "file": "assets/characters/Miles/animations/Special_2/frames/003.png",
+                    "file": "source/characters/Miles/animations/Special_2/frames/003.png",
                     "duration_ms": 120
                   },
                   {
-                    "file": "assets/characters/Miles/animations/Special_2/frames/004.png",
+                    "file": "source/characters/Miles/animations/Special_2/frames/004.png",
                     "duration_ms": 80
                   },
                   {
-                    "file": "assets/characters/Miles/animations/Special_2/frames/005.png",
+                    "file": "source/characters/Miles/animations/Special_2/frames/005.png",
                     "duration_ms": 120
                   },
                   {
-                    "file": "assets/characters/Miles/animations/Special_2/frames/006.png",
+                    "file": "source/characters/Miles/animations/Special_2/frames/006.png",
                     "duration_ms": 80
                   },
                   {
-                    "file": "assets/characters/Miles/animations/Special_2/frames/007.png",
+                    "file": "source/characters/Miles/animations/Special_2/frames/007.png",
                     "duration_ms": 160
                   },
                   {
-                    "file": "assets/characters/Miles/animations/Special_2/frames/008.png",
+                    "file": "source/characters/Miles/animations/Special_2/frames/008.png",
                     "duration_ms": 320
                   }
                 ]
@@ -858,7 +858,7 @@
           "name": "Stand",
           "idle": {
             "source": {
-              "file": "assets/characters/Judge/animations/Stand/source.gif",
+              "file": "source/characters/Judge/animations/Stand/source.gif",
               "source_url": "https://objection.lol/Images/Characters/10/Stand.gif",
               "sha256": "25e34826380b827ac564fb235c5e0b2b944bb6cace852bded36cf28ddeddc3b0",
               "bytes": 68693
@@ -870,62 +870,62 @@
             "loop": 0,
             "frames": [
               {
-                "file": "assets/characters/Judge/animations/Stand/frames/000.png",
+                "file": "source/characters/Judge/animations/Stand/frames/000.png",
                 "duration_ms": 320
               },
               {
-                "file": "assets/characters/Judge/animations/Stand/frames/001.png",
+                "file": "source/characters/Judge/animations/Stand/frames/001.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Stand/frames/002.png",
+                "file": "source/characters/Judge/animations/Stand/frames/002.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Stand/frames/003.png",
+                "file": "source/characters/Judge/animations/Stand/frames/003.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Stand/frames/004.png",
+                "file": "source/characters/Judge/animations/Stand/frames/004.png",
                 "duration_ms": 600
               },
               {
-                "file": "assets/characters/Judge/animations/Stand/frames/005.png",
+                "file": "source/characters/Judge/animations/Stand/frames/005.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Stand/frames/006.png",
+                "file": "source/characters/Judge/animations/Stand/frames/006.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Stand/frames/007.png",
+                "file": "source/characters/Judge/animations/Stand/frames/007.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Stand/frames/008.png",
+                "file": "source/characters/Judge/animations/Stand/frames/008.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Stand/frames/009.png",
+                "file": "source/characters/Judge/animations/Stand/frames/009.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Stand/frames/010.png",
+                "file": "source/characters/Judge/animations/Stand/frames/010.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Stand/frames/011.png",
+                "file": "source/characters/Judge/animations/Stand/frames/011.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Stand/frames/012.png",
+                "file": "source/characters/Judge/animations/Stand/frames/012.png",
                 "duration_ms": 1000
               }
             ]
           },
           "speak": {
             "source": {
-              "file": "assets/characters/Judge/animations/Stand_Talk/source.gif",
+              "file": "source/characters/Judge/animations/Stand_Talk/source.gif",
               "source_url": "https://objection.lol/Images/Characters/10/Stand_Talk.gif",
               "sha256": "be58f3026b715dded253a6fb6fd6c4a8374022dd43fedd8176a81511e72f4d7d",
               "bytes": 86463
@@ -937,75 +937,75 @@
             "loop": 0,
             "frames": [
               {
-                "file": "assets/characters/Judge/animations/Stand_Talk/frames/000.png",
+                "file": "source/characters/Judge/animations/Stand_Talk/frames/000.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Stand_Talk/frames/001.png",
+                "file": "source/characters/Judge/animations/Stand_Talk/frames/001.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Stand_Talk/frames/002.png",
+                "file": "source/characters/Judge/animations/Stand_Talk/frames/002.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Stand_Talk/frames/003.png",
+                "file": "source/characters/Judge/animations/Stand_Talk/frames/003.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Stand_Talk/frames/004.png",
+                "file": "source/characters/Judge/animations/Stand_Talk/frames/004.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Stand_Talk/frames/005.png",
+                "file": "source/characters/Judge/animations/Stand_Talk/frames/005.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Stand_Talk/frames/006.png",
+                "file": "source/characters/Judge/animations/Stand_Talk/frames/006.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Stand_Talk/frames/007.png",
+                "file": "source/characters/Judge/animations/Stand_Talk/frames/007.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Stand_Talk/frames/008.png",
+                "file": "source/characters/Judge/animations/Stand_Talk/frames/008.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Stand_Talk/frames/009.png",
+                "file": "source/characters/Judge/animations/Stand_Talk/frames/009.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Stand_Talk/frames/010.png",
+                "file": "source/characters/Judge/animations/Stand_Talk/frames/010.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Stand_Talk/frames/011.png",
+                "file": "source/characters/Judge/animations/Stand_Talk/frames/011.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Stand_Talk/frames/012.png",
+                "file": "source/characters/Judge/animations/Stand_Talk/frames/012.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Stand_Talk/frames/013.png",
+                "file": "source/characters/Judge/animations/Stand_Talk/frames/013.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Stand_Talk/frames/014.png",
+                "file": "source/characters/Judge/animations/Stand_Talk/frames/014.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Stand_Talk/frames/015.png",
+                "file": "source/characters/Judge/animations/Stand_Talk/frames/015.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Stand_Talk/frames/016.png",
+                "file": "source/characters/Judge/animations/Stand_Talk/frames/016.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Stand_Talk/frames/017.png",
+                "file": "source/characters/Judge/animations/Stand_Talk/frames/017.png",
                 "duration_ms": 120
               }
             ]
@@ -1018,7 +1018,7 @@
           "name": "Negative",
           "idle": {
             "source": {
-              "file": "assets/characters/Judge/animations/Negative_Stand/source.gif",
+              "file": "source/characters/Judge/animations/Negative_Stand/source.gif",
               "source_url": "https://objection.lol/Images/Characters/10/Negative_Stand.gif",
               "sha256": "b72dff044dee6e5e8d2b3e7653e1b39d136569ffef5f8c7b2610d7bec302f99d",
               "bytes": 81067
@@ -1030,62 +1030,62 @@
             "loop": 0,
             "frames": [
               {
-                "file": "assets/characters/Judge/animations/Negative_Stand/frames/000.png",
+                "file": "source/characters/Judge/animations/Negative_Stand/frames/000.png",
                 "duration_ms": 320
               },
               {
-                "file": "assets/characters/Judge/animations/Negative_Stand/frames/001.png",
+                "file": "source/characters/Judge/animations/Negative_Stand/frames/001.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Negative_Stand/frames/002.png",
+                "file": "source/characters/Judge/animations/Negative_Stand/frames/002.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Negative_Stand/frames/003.png",
+                "file": "source/characters/Judge/animations/Negative_Stand/frames/003.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Negative_Stand/frames/004.png",
+                "file": "source/characters/Judge/animations/Negative_Stand/frames/004.png",
                 "duration_ms": 600
               },
               {
-                "file": "assets/characters/Judge/animations/Negative_Stand/frames/005.png",
+                "file": "source/characters/Judge/animations/Negative_Stand/frames/005.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Negative_Stand/frames/006.png",
+                "file": "source/characters/Judge/animations/Negative_Stand/frames/006.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Negative_Stand/frames/007.png",
+                "file": "source/characters/Judge/animations/Negative_Stand/frames/007.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Negative_Stand/frames/008.png",
+                "file": "source/characters/Judge/animations/Negative_Stand/frames/008.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Negative_Stand/frames/009.png",
+                "file": "source/characters/Judge/animations/Negative_Stand/frames/009.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Negative_Stand/frames/010.png",
+                "file": "source/characters/Judge/animations/Negative_Stand/frames/010.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Negative_Stand/frames/011.png",
+                "file": "source/characters/Judge/animations/Negative_Stand/frames/011.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Negative_Stand/frames/012.png",
+                "file": "source/characters/Judge/animations/Negative_Stand/frames/012.png",
                 "duration_ms": 1000
               }
             ]
           },
           "speak": {
             "source": {
-              "file": "assets/characters/Judge/animations/Negative_Talk/source.gif",
+              "file": "source/characters/Judge/animations/Negative_Talk/source.gif",
               "source_url": "https://objection.lol/Images/Characters/10/Negative_Talk.gif",
               "sha256": "e328c71550f03ecf55620bd72d23dd7845c292ebc9f132b93f9a08c959968a3d",
               "bytes": 89038
@@ -1097,75 +1097,75 @@
             "loop": 0,
             "frames": [
               {
-                "file": "assets/characters/Judge/animations/Negative_Talk/frames/000.png",
+                "file": "source/characters/Judge/animations/Negative_Talk/frames/000.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Negative_Talk/frames/001.png",
+                "file": "source/characters/Judge/animations/Negative_Talk/frames/001.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Negative_Talk/frames/002.png",
+                "file": "source/characters/Judge/animations/Negative_Talk/frames/002.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Negative_Talk/frames/003.png",
+                "file": "source/characters/Judge/animations/Negative_Talk/frames/003.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Negative_Talk/frames/004.png",
+                "file": "source/characters/Judge/animations/Negative_Talk/frames/004.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Negative_Talk/frames/005.png",
+                "file": "source/characters/Judge/animations/Negative_Talk/frames/005.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Negative_Talk/frames/006.png",
+                "file": "source/characters/Judge/animations/Negative_Talk/frames/006.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Negative_Talk/frames/007.png",
+                "file": "source/characters/Judge/animations/Negative_Talk/frames/007.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Negative_Talk/frames/008.png",
+                "file": "source/characters/Judge/animations/Negative_Talk/frames/008.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Negative_Talk/frames/009.png",
+                "file": "source/characters/Judge/animations/Negative_Talk/frames/009.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Negative_Talk/frames/010.png",
+                "file": "source/characters/Judge/animations/Negative_Talk/frames/010.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Negative_Talk/frames/011.png",
+                "file": "source/characters/Judge/animations/Negative_Talk/frames/011.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Negative_Talk/frames/012.png",
+                "file": "source/characters/Judge/animations/Negative_Talk/frames/012.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Negative_Talk/frames/013.png",
+                "file": "source/characters/Judge/animations/Negative_Talk/frames/013.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Negative_Talk/frames/014.png",
+                "file": "source/characters/Judge/animations/Negative_Talk/frames/014.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Negative_Talk/frames/015.png",
+                "file": "source/characters/Judge/animations/Negative_Talk/frames/015.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Negative_Talk/frames/016.png",
+                "file": "source/characters/Judge/animations/Negative_Talk/frames/016.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Negative_Talk/frames/017.png",
+                "file": "source/characters/Judge/animations/Negative_Talk/frames/017.png",
                 "duration_ms": 120
               }
             ]
@@ -1174,7 +1174,7 @@
             {
               "animation": {
                 "source": {
-                  "file": "assets/characters/Judge/animations/Special_1/source.gif",
+                  "file": "source/characters/Judge/animations/Special_1/source.gif",
                   "source_url": "https://objection.lol/Images/Characters/10/Special_1.gif",
                   "sha256": "afd50ba7d701971062d48b402b35c12f98de64d5b63d83ade2f69c693b351956",
                   "bytes": 229744
@@ -1186,47 +1186,47 @@
                 "loop": 0,
                 "frames": [
                   {
-                    "file": "assets/characters/Judge/animations/Special_1/frames/000.png",
+                    "file": "source/characters/Judge/animations/Special_1/frames/000.png",
                     "duration_ms": 40
                   },
                   {
-                    "file": "assets/characters/Judge/animations/Special_1/frames/001.png",
+                    "file": "source/characters/Judge/animations/Special_1/frames/001.png",
                     "duration_ms": 40
                   },
                   {
-                    "file": "assets/characters/Judge/animations/Special_1/frames/002.png",
+                    "file": "source/characters/Judge/animations/Special_1/frames/002.png",
                     "duration_ms": 80
                   },
                   {
-                    "file": "assets/characters/Judge/animations/Special_1/frames/003.png",
+                    "file": "source/characters/Judge/animations/Special_1/frames/003.png",
                     "duration_ms": 80
                   },
                   {
-                    "file": "assets/characters/Judge/animations/Special_1/frames/004.png",
+                    "file": "source/characters/Judge/animations/Special_1/frames/004.png",
                     "duration_ms": 80
                   },
                   {
-                    "file": "assets/characters/Judge/animations/Special_1/frames/005.png",
+                    "file": "source/characters/Judge/animations/Special_1/frames/005.png",
                     "duration_ms": 80
                   },
                   {
-                    "file": "assets/characters/Judge/animations/Special_1/frames/006.png",
+                    "file": "source/characters/Judge/animations/Special_1/frames/006.png",
                     "duration_ms": 80
                   },
                   {
-                    "file": "assets/characters/Judge/animations/Special_1/frames/007.png",
+                    "file": "source/characters/Judge/animations/Special_1/frames/007.png",
                     "duration_ms": 80
                   },
                   {
-                    "file": "assets/characters/Judge/animations/Special_1/frames/008.png",
+                    "file": "source/characters/Judge/animations/Special_1/frames/008.png",
                     "duration_ms": 80
                   },
                   {
-                    "file": "assets/characters/Judge/animations/Special_1/frames/009.png",
+                    "file": "source/characters/Judge/animations/Special_1/frames/009.png",
                     "duration_ms": 40
                   },
                   {
-                    "file": "assets/characters/Judge/animations/Special_1/frames/010.png",
+                    "file": "source/characters/Judge/animations/Special_1/frames/010.png",
                     "duration_ms": 40
                   }
                 ]
@@ -1242,7 +1242,7 @@
           "name": "Positive",
           "idle": {
             "source": {
-              "file": "assets/characters/Judge/animations/Stand/source.gif",
+              "file": "source/characters/Judge/animations/Stand/source.gif",
               "source_url": "https://objection.lol/Images/Characters/10/Stand.gif",
               "sha256": "25e34826380b827ac564fb235c5e0b2b944bb6cace852bded36cf28ddeddc3b0",
               "bytes": 68693
@@ -1254,62 +1254,62 @@
             "loop": 0,
             "frames": [
               {
-                "file": "assets/characters/Judge/animations/Stand/frames/000.png",
+                "file": "source/characters/Judge/animations/Stand/frames/000.png",
                 "duration_ms": 320
               },
               {
-                "file": "assets/characters/Judge/animations/Stand/frames/001.png",
+                "file": "source/characters/Judge/animations/Stand/frames/001.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Stand/frames/002.png",
+                "file": "source/characters/Judge/animations/Stand/frames/002.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Stand/frames/003.png",
+                "file": "source/characters/Judge/animations/Stand/frames/003.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Stand/frames/004.png",
+                "file": "source/characters/Judge/animations/Stand/frames/004.png",
                 "duration_ms": 600
               },
               {
-                "file": "assets/characters/Judge/animations/Stand/frames/005.png",
+                "file": "source/characters/Judge/animations/Stand/frames/005.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Stand/frames/006.png",
+                "file": "source/characters/Judge/animations/Stand/frames/006.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Stand/frames/007.png",
+                "file": "source/characters/Judge/animations/Stand/frames/007.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Stand/frames/008.png",
+                "file": "source/characters/Judge/animations/Stand/frames/008.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Stand/frames/009.png",
+                "file": "source/characters/Judge/animations/Stand/frames/009.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Stand/frames/010.png",
+                "file": "source/characters/Judge/animations/Stand/frames/010.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Stand/frames/011.png",
+                "file": "source/characters/Judge/animations/Stand/frames/011.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Stand/frames/012.png",
+                "file": "source/characters/Judge/animations/Stand/frames/012.png",
                 "duration_ms": 1000
               }
             ]
           },
           "speak": {
             "source": {
-              "file": "assets/characters/Judge/animations/Stand_Talk/source.gif",
+              "file": "source/characters/Judge/animations/Stand_Talk/source.gif",
               "source_url": "https://objection.lol/Images/Characters/10/Stand_Talk.gif",
               "sha256": "be58f3026b715dded253a6fb6fd6c4a8374022dd43fedd8176a81511e72f4d7d",
               "bytes": 86463
@@ -1321,75 +1321,75 @@
             "loop": 0,
             "frames": [
               {
-                "file": "assets/characters/Judge/animations/Stand_Talk/frames/000.png",
+                "file": "source/characters/Judge/animations/Stand_Talk/frames/000.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Stand_Talk/frames/001.png",
+                "file": "source/characters/Judge/animations/Stand_Talk/frames/001.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Stand_Talk/frames/002.png",
+                "file": "source/characters/Judge/animations/Stand_Talk/frames/002.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Stand_Talk/frames/003.png",
+                "file": "source/characters/Judge/animations/Stand_Talk/frames/003.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Stand_Talk/frames/004.png",
+                "file": "source/characters/Judge/animations/Stand_Talk/frames/004.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Stand_Talk/frames/005.png",
+                "file": "source/characters/Judge/animations/Stand_Talk/frames/005.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Stand_Talk/frames/006.png",
+                "file": "source/characters/Judge/animations/Stand_Talk/frames/006.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Stand_Talk/frames/007.png",
+                "file": "source/characters/Judge/animations/Stand_Talk/frames/007.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Stand_Talk/frames/008.png",
+                "file": "source/characters/Judge/animations/Stand_Talk/frames/008.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Stand_Talk/frames/009.png",
+                "file": "source/characters/Judge/animations/Stand_Talk/frames/009.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Stand_Talk/frames/010.png",
+                "file": "source/characters/Judge/animations/Stand_Talk/frames/010.png",
                 "duration_ms": 40
               },
               {
-                "file": "assets/characters/Judge/animations/Stand_Talk/frames/011.png",
+                "file": "source/characters/Judge/animations/Stand_Talk/frames/011.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Stand_Talk/frames/012.png",
+                "file": "source/characters/Judge/animations/Stand_Talk/frames/012.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Stand_Talk/frames/013.png",
+                "file": "source/characters/Judge/animations/Stand_Talk/frames/013.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Stand_Talk/frames/014.png",
+                "file": "source/characters/Judge/animations/Stand_Talk/frames/014.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Stand_Talk/frames/015.png",
+                "file": "source/characters/Judge/animations/Stand_Talk/frames/015.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Stand_Talk/frames/016.png",
+                "file": "source/characters/Judge/animations/Stand_Talk/frames/016.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Judge/animations/Stand_Talk/frames/017.png",
+                "file": "source/characters/Judge/animations/Stand_Talk/frames/017.png",
                 "duration_ms": 120
               }
             ]
@@ -1398,7 +1398,7 @@
             {
               "animation": {
                 "source": {
-                  "file": "assets/characters/Judge/animations/Special_2/source.gif",
+                  "file": "source/characters/Judge/animations/Special_2/source.gif",
                   "source_url": "https://objection.lol/Images/Characters/10/Special_2.gif",
                   "sha256": "a6629e4a31743eeee7d269e8850586424c9d2d407d49d87346bd257aa960670c",
                   "bytes": 170139
@@ -1410,39 +1410,39 @@
                 "loop": 0,
                 "frames": [
                   {
-                    "file": "assets/characters/Judge/animations/Special_2/frames/000.png",
+                    "file": "source/characters/Judge/animations/Special_2/frames/000.png",
                     "duration_ms": 40
                   },
                   {
-                    "file": "assets/characters/Judge/animations/Special_2/frames/001.png",
+                    "file": "source/characters/Judge/animations/Special_2/frames/001.png",
                     "duration_ms": 40
                   },
                   {
-                    "file": "assets/characters/Judge/animations/Special_2/frames/002.png",
+                    "file": "source/characters/Judge/animations/Special_2/frames/002.png",
                     "duration_ms": 80
                   },
                   {
-                    "file": "assets/characters/Judge/animations/Special_2/frames/003.png",
+                    "file": "source/characters/Judge/animations/Special_2/frames/003.png",
                     "duration_ms": 80
                   },
                   {
-                    "file": "assets/characters/Judge/animations/Special_2/frames/004.png",
+                    "file": "source/characters/Judge/animations/Special_2/frames/004.png",
                     "duration_ms": 80
                   },
                   {
-                    "file": "assets/characters/Judge/animations/Special_2/frames/005.png",
+                    "file": "source/characters/Judge/animations/Special_2/frames/005.png",
                     "duration_ms": 200
                   },
                   {
-                    "file": "assets/characters/Judge/animations/Special_2/frames/006.png",
+                    "file": "source/characters/Judge/animations/Special_2/frames/006.png",
                     "duration_ms": 80
                   },
                   {
-                    "file": "assets/characters/Judge/animations/Special_2/frames/007.png",
+                    "file": "source/characters/Judge/animations/Special_2/frames/007.png",
                     "duration_ms": 80
                   },
                   {
-                    "file": "assets/characters/Judge/animations/Special_2/frames/008.png",
+                    "file": "source/characters/Judge/animations/Special_2/frames/008.png",
                     "duration_ms": 40
                   }
                 ]
@@ -1456,11 +1456,11 @@
       ]
     },
     {
-      "id": 14,
+      "id": 16,
       "name": "Maya Fey",
       "asset_dir": "assets/characters/Maya",
-      "side": "witness",
-      "background_id": 197,
+      "side": "counsel",
+      "background_id": 187,
       "offset": [
         0,
         0
@@ -1473,14 +1473,14 @@
       },
       "poses": [
         {
-          "id": 77,
+          "id": 102,
           "name": "Stand",
           "idle": {
             "source": {
-              "file": "assets/characters/Maya/animations/Stand/source.gif",
-              "source_url": "https://objection.lol/Images/Characters/14/Stand.gif",
-              "sha256": "efb4e4c25f49e02c934bb6883f55fbd1f96215e694f9d5e8f087e123954f16a1",
-              "bytes": 47816
+              "file": "source/characters/Maya/animations/Stand/source.gif",
+              "source_url": "https://objection.lol/Images/Characters/16/Stand.gif",
+              "sha256": "3992e223af0a4ed6b68642c6c150fc02c9a73eb4c294857c6dc19772a20d5d94",
+              "bytes": 43945
             },
             "canvas": [
               960,
@@ -1489,121 +1489,17 @@
             "loop": 0,
             "frames": [
               {
-                "file": "assets/characters/Maya/animations/Stand/frames/000.png",
-                "duration_ms": 320
-              }
-            ]
-          },
-          "speak": {
-            "source": {
-              "file": "assets/characters/Maya/animations/Stand_Talk/source.gif",
-              "source_url": "https://objection.lol/Images/Characters/14/Stand_Talk.gif",
-              "sha256": "d21a1d60902a8713185851d406312ce0977593f85d107e37f3cdffc800ffec18",
-              "bytes": 190818
-            },
-            "canvas": [
-              960,
-              640
-            ],
-            "loop": 0,
-            "frames": [
-              {
-                "file": "assets/characters/Maya/animations/Stand_Talk/frames/000.png",
-                "duration_ms": 80
-              },
-              {
-                "file": "assets/characters/Maya/animations/Stand_Talk/frames/001.png",
-                "duration_ms": 80
-              },
-              {
-                "file": "assets/characters/Maya/animations/Stand_Talk/frames/002.png",
-                "duration_ms": 80
-              },
-              {
-                "file": "assets/characters/Maya/animations/Stand_Talk/frames/003.png",
-                "duration_ms": 80
-              }
-            ]
-          },
-          "intro": [],
-          "audio_ticks": []
-        },
-        {
-          "id": 78,
-          "name": "Think",
-          "idle": {
-            "source": {
-              "file": "assets/characters/Maya/animations/Think_Stand/source.gif",
-              "source_url": "https://objection.lol/Images/Characters/14/Think_Stand.gif",
-              "sha256": "25e47a23b13230caa9b79d1659e7bf6ca31155339d511d1458d6220848a67572",
-              "bytes": 52904
-            },
-            "canvas": [
-              960,
-              640
-            ],
-            "loop": 0,
-            "frames": [
-              {
-                "file": "assets/characters/Maya/animations/Think_Stand/frames/000.png",
-                "duration_ms": 320
-              }
-            ]
-          },
-          "speak": {
-            "source": {
-              "file": "assets/characters/Maya/animations/Think_Talk/source.gif",
-              "source_url": "https://objection.lol/Images/Characters/14/Think_Talk.gif",
-              "sha256": "30ef985b6b4212fb194e41b12c998a69dd60b81f0d212fe837cfae079d3623bb",
-              "bytes": 106040
-            },
-            "canvas": [
-              960,
-              640
-            ],
-            "loop": 0,
-            "frames": [
-              {
-                "file": "assets/characters/Maya/animations/Think_Talk/frames/000.png",
-                "duration_ms": 120
-              },
-              {
-                "file": "assets/characters/Maya/animations/Think_Talk/frames/001.png",
-                "duration_ms": 120
-              }
-            ]
-          },
-          "intro": [],
-          "audio_ticks": []
-        },
-        {
-          "id": 79,
-          "name": "Happy",
-          "idle": {
-            "source": {
-              "file": "assets/characters/Maya/animations/Happy_Stand/source.gif",
-              "source_url": "https://objection.lol/Images/Characters/14/Happy_Stand.gif",
-              "sha256": "c35d6883b321171099d345bade857ae7669e738268a6562c8c84e5fcf428860a",
-              "bytes": 58516
-            },
-            "canvas": [
-              960,
-              640
-            ],
-            "loop": 0,
-            "frames": [
-              {
-                "file": "assets/characters/Maya/animations/Happy_Stand/frames/000.png",
+                "file": "source/characters/Maya/animations/Stand/frames/000.png",
                 "duration_ms": 640
               }
             ]
           },
           "speak": {
             "source": {
-              "file": "assets/characters/Maya/animations/Happy_Talk/source.gif",
-              "source_url": "https://objection.lol/Images/Characters/14/Happy_Talk.gif",
-              "sha256": "9a941eb846906e9807909ed2c061cc25a128b532ea631023430f59122962d41c",
-              "bytes": 117651
+              "file": "source/characters/Maya/animations/Stand_Talk/source.gif",
+              "source_url": "https://objection.lol/Images/Characters/16/Stand_Talk.gif",
+              "sha256": "0e80bccbf307bd5f13e87722893eedf8a473789750c5c6fa5da6faa7917b5f88",
+              "bytes": 173971
             },
             "canvas": [
               960,
@@ -1612,52 +1508,156 @@
             "loop": 0,
             "frames": [
               {
-                "file": "assets/characters/Maya/animations/Happy_Talk/frames/000.png",
+                "file": "source/characters/Maya/animations/Stand_Talk/frames/000.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Maya/animations/Happy_Talk/frames/001.png",
+                "file": "source/characters/Maya/animations/Stand_Talk/frames/001.png",
+                "duration_ms": 80
+              },
+              {
+                "file": "source/characters/Maya/animations/Stand_Talk/frames/002.png",
+                "duration_ms": 80
+              },
+              {
+                "file": "source/characters/Maya/animations/Stand_Talk/frames/003.png",
                 "duration_ms": 80
               }
             ]
           },
-          "intro": [
-            {
-              "animation": {
-                "source": {
-                  "file": "assets/characters/Maya/animations/Happy/source.gif",
-                  "source_url": "https://objection.lol/Images/Characters/14/Happy.gif",
-                  "sha256": "9d56fc37783e02d2f4b0f1b71ec7056ad5b62461c22c26cff93cd23c582b54fd",
-                  "bytes": 230004
-                },
-                "canvas": [
-                  960,
-                  640
-                ],
-                "loop": 0,
-                "frames": [
-                  {
-                    "file": "assets/characters/Maya/animations/Happy/frames/000.png",
-                    "duration_ms": 200
-                  },
-                  {
-                    "file": "assets/characters/Maya/animations/Happy/frames/001.png",
-                    "duration_ms": 320
-                  },
-                  {
-                    "file": "assets/characters/Maya/animations/Happy/frames/002.png",
-                    "duration_ms": 120
-                  },
-                  {
-                    "file": "assets/characters/Maya/animations/Happy/frames/003.png",
-                    "duration_ms": 440
-                  }
-                ]
+          "intro": [],
+          "audio_ticks": []
+        },
+        {
+          "id": 103,
+          "name": "Angry",
+          "idle": {
+            "source": {
+              "file": "source/characters/Maya/animations/Angry/source.gif",
+              "source_url": "https://objection.lol/Images/Characters/16/Angry.gif",
+              "sha256": "5a8b2d75eeb116e418222af3e1b0f7b9ba9f9aa6a6f41b59cf4100dd6d884b33",
+              "bytes": 41013
+            },
+            "canvas": [
+              960,
+              640
+            ],
+            "loop": 0,
+            "frames": [
+              {
+                "file": "source/characters/Maya/animations/Angry/frames/000.png",
+                "duration_ms": 600
+              }
+            ]
+          },
+          "speak": {
+            "source": {
+              "file": "source/characters/Maya/animations/Angry_Talk/source.gif",
+              "source_url": "https://objection.lol/Images/Characters/16/Angry_Talk.gif",
+              "sha256": "43dc21d3b6c5e7a7dfc483fb42833f535c9d70572cf8f750a19e51cadec43255",
+              "bytes": 82210
+            },
+            "canvas": [
+              960,
+              640
+            ],
+            "loop": 0,
+            "frames": [
+              {
+                "file": "source/characters/Maya/animations/Angry_Talk/frames/000.png",
+                "duration_ms": 80
               },
-              "next_pose_delay_ms": 875,
-              "no_speak_delay": false
-            }
-          ],
+              {
+                "file": "source/characters/Maya/animations/Angry_Talk/frames/001.png",
+                "duration_ms": 80
+              }
+            ]
+          },
+          "intro": [],
+          "audio_ticks": []
+        },
+        {
+          "id": 105,
+          "name": "Thinking",
+          "idle": {
+            "source": {
+              "file": "source/characters/Maya/animations/Think/source.gif",
+              "source_url": "https://objection.lol/Images/Characters/16/Think.gif",
+              "sha256": "79fcdf5b5eb50e92022ac7810776c4977bf2e4f6f0afdd891e3d9bb5aa1e4fe6",
+              "bytes": 363906
+            },
+            "canvas": [
+              960,
+              640
+            ],
+            "loop": 0,
+            "frames": [
+              {
+                "file": "source/characters/Maya/animations/Think/frames/000.png",
+                "duration_ms": 840
+              },
+              {
+                "file": "source/characters/Maya/animations/Think/frames/001.png",
+                "duration_ms": 120
+              },
+              {
+                "file": "source/characters/Maya/animations/Think/frames/002.png",
+                "duration_ms": 120
+              },
+              {
+                "file": "source/characters/Maya/animations/Think/frames/003.png",
+                "duration_ms": 120
+              },
+              {
+                "file": "source/characters/Maya/animations/Think/frames/004.png",
+                "duration_ms": 120
+              },
+              {
+                "file": "source/characters/Maya/animations/Think/frames/005.png",
+                "duration_ms": 120
+              },
+              {
+                "file": "source/characters/Maya/animations/Think/frames/006.png",
+                "duration_ms": 1960
+              },
+              {
+                "file": "source/characters/Maya/animations/Think/frames/007.png",
+                "duration_ms": 1200
+              }
+            ]
+          },
+          "speak": {
+            "source": {
+              "file": "source/characters/Maya/animations/Think_Talk/source.gif",
+              "source_url": "https://objection.lol/Images/Characters/16/Think_Talk.gif",
+              "sha256": "733b014e7f1257b3022a772fc7deebe757c72b8f1b9be99b0d18e5e89ce0f548",
+              "bytes": 182877
+            },
+            "canvas": [
+              960,
+              640
+            ],
+            "loop": 0,
+            "frames": [
+              {
+                "file": "source/characters/Maya/animations/Think_Talk/frames/000.png",
+                "duration_ms": 80
+              },
+              {
+                "file": "source/characters/Maya/animations/Think_Talk/frames/001.png",
+                "duration_ms": 80
+              },
+              {
+                "file": "source/characters/Maya/animations/Think_Talk/frames/002.png",
+                "duration_ms": 80
+              },
+              {
+                "file": "source/characters/Maya/animations/Think_Talk/frames/003.png",
+                "duration_ms": 80
+              }
+            ]
+          },
+          "intro": [],
           "audio_ticks": []
         }
       ]
@@ -1684,7 +1684,7 @@
           "name": "Stand",
           "idle": {
             "source": {
-              "file": "assets/characters/Dick/animations/Stand/source.gif",
+              "file": "source/characters/Dick/animations/Stand/source.gif",
               "source_url": "https://objection.lol/Images/Characters/21/Stand.gif",
               "sha256": "dfd2a45e4d7d93871b895a87ff6f35e6d861d6a0aa6e629dc6030c6435596760",
               "bytes": 69916
@@ -1696,14 +1696,14 @@
             "loop": 0,
             "frames": [
               {
-                "file": "assets/characters/Dick/animations/Stand/frames/000.png",
+                "file": "source/characters/Dick/animations/Stand/frames/000.png",
                 "duration_ms": 200
               }
             ]
           },
           "speak": {
             "source": {
-              "file": "assets/characters/Dick/animations/Stand_Talk/source.gif",
+              "file": "source/characters/Dick/animations/Stand_Talk/source.gif",
               "source_url": "https://objection.lol/Images/Characters/21/Stand_Talk.gif",
               "sha256": "d589c62991087edf28f5c351dcbd1668f3fba8c974fa19671eb094e90c7ce4c1",
               "bytes": 91626
@@ -1715,19 +1715,19 @@
             "loop": 0,
             "frames": [
               {
-                "file": "assets/characters/Dick/animations/Stand_Talk/frames/000.png",
+                "file": "source/characters/Dick/animations/Stand_Talk/frames/000.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Stand_Talk/frames/001.png",
+                "file": "source/characters/Dick/animations/Stand_Talk/frames/001.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Stand_Talk/frames/002.png",
+                "file": "source/characters/Dick/animations/Stand_Talk/frames/002.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Stand_Talk/frames/003.png",
+                "file": "source/characters/Dick/animations/Stand_Talk/frames/003.png",
                 "duration_ms": 120
               }
             ]
@@ -1740,7 +1740,7 @@
           "name": "Confident",
           "idle": {
             "source": {
-              "file": "assets/characters/Dick/animations/Confident/source.gif",
+              "file": "source/characters/Dick/animations/Confident/source.gif",
               "source_url": "https://objection.lol/Images/Characters/21/Confident.gif",
               "sha256": "6ab67e1c8ba2df52e8a17b9aa575db2371b832675351eb8356e2890675d87a1a",
               "bytes": 78911
@@ -1752,14 +1752,14 @@
             "loop": 0,
             "frames": [
               {
-                "file": "assets/characters/Dick/animations/Confident/frames/000.png",
+                "file": "source/characters/Dick/animations/Confident/frames/000.png",
                 "duration_ms": 5480
               }
             ]
           },
           "speak": {
             "source": {
-              "file": "assets/characters/Dick/animations/Confident_Talk/source.gif",
+              "file": "source/characters/Dick/animations/Confident_Talk/source.gif",
               "source_url": "https://objection.lol/Images/Characters/21/Confident_Talk.gif",
               "sha256": "fe4be19c86710a361c29159a8318f79dbdf6d8b2526bd6365ef59cd2409023d0",
               "bytes": 160123
@@ -1771,83 +1771,83 @@
             "loop": 0,
             "frames": [
               {
-                "file": "assets/characters/Dick/animations/Confident_Talk/frames/000.png",
+                "file": "source/characters/Dick/animations/Confident_Talk/frames/000.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Confident_Talk/frames/001.png",
+                "file": "source/characters/Dick/animations/Confident_Talk/frames/001.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Confident_Talk/frames/002.png",
+                "file": "source/characters/Dick/animations/Confident_Talk/frames/002.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Confident_Talk/frames/003.png",
+                "file": "source/characters/Dick/animations/Confident_Talk/frames/003.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Confident_Talk/frames/004.png",
+                "file": "source/characters/Dick/animations/Confident_Talk/frames/004.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Confident_Talk/frames/005.png",
+                "file": "source/characters/Dick/animations/Confident_Talk/frames/005.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Confident_Talk/frames/006.png",
+                "file": "source/characters/Dick/animations/Confident_Talk/frames/006.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Confident_Talk/frames/007.png",
+                "file": "source/characters/Dick/animations/Confident_Talk/frames/007.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Confident_Talk/frames/008.png",
+                "file": "source/characters/Dick/animations/Confident_Talk/frames/008.png",
                 "duration_ms": 80
               },
               {
-                "file": "assets/characters/Dick/animations/Confident_Talk/frames/009.png",
+                "file": "source/characters/Dick/animations/Confident_Talk/frames/009.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Confident_Talk/frames/010.png",
+                "file": "source/characters/Dick/animations/Confident_Talk/frames/010.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Confident_Talk/frames/011.png",
+                "file": "source/characters/Dick/animations/Confident_Talk/frames/011.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Confident_Talk/frames/012.png",
+                "file": "source/characters/Dick/animations/Confident_Talk/frames/012.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Confident_Talk/frames/013.png",
+                "file": "source/characters/Dick/animations/Confident_Talk/frames/013.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Confident_Talk/frames/014.png",
+                "file": "source/characters/Dick/animations/Confident_Talk/frames/014.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Confident_Talk/frames/015.png",
+                "file": "source/characters/Dick/animations/Confident_Talk/frames/015.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Confident_Talk/frames/016.png",
+                "file": "source/characters/Dick/animations/Confident_Talk/frames/016.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Confident_Talk/frames/017.png",
+                "file": "source/characters/Dick/animations/Confident_Talk/frames/017.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Confident_Talk/frames/018.png",
+                "file": "source/characters/Dick/animations/Confident_Talk/frames/018.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Confident_Talk/frames/019.png",
+                "file": "source/characters/Dick/animations/Confident_Talk/frames/019.png",
                 "duration_ms": 120
               }
             ]
@@ -1860,7 +1860,7 @@
           "name": "Headscratch",
           "idle": {
             "source": {
-              "file": "assets/characters/Dick/animations/Wonder/source.gif",
+              "file": "source/characters/Dick/animations/Wonder/source.gif",
               "source_url": "https://objection.lol/Images/Characters/21/Wonder.gif",
               "sha256": "02185de303d1d6824924c9601855808144fe4b9dd468aa3e7754ac28876080a1",
               "bytes": 94267
@@ -1872,34 +1872,34 @@
             "loop": 0,
             "frames": [
               {
-                "file": "assets/characters/Dick/animations/Wonder/frames/000.png",
+                "file": "source/characters/Dick/animations/Wonder/frames/000.png",
                 "duration_ms": 1060
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder/frames/001.png",
+                "file": "source/characters/Dick/animations/Wonder/frames/001.png",
                 "duration_ms": 1860
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder/frames/002.png",
+                "file": "source/characters/Dick/animations/Wonder/frames/002.png",
                 "duration_ms": 1600
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder/frames/003.png",
+                "file": "source/characters/Dick/animations/Wonder/frames/003.png",
                 "duration_ms": 1200
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder/frames/004.png",
+                "file": "source/characters/Dick/animations/Wonder/frames/004.png",
                 "duration_ms": 1860
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder/frames/005.png",
+                "file": "source/characters/Dick/animations/Wonder/frames/005.png",
                 "duration_ms": 1730
               }
             ]
           },
           "speak": {
             "source": {
-              "file": "assets/characters/Dick/animations/Wonder_Talk/source.gif",
+              "file": "source/characters/Dick/animations/Wonder_Talk/source.gif",
               "source_url": "https://objection.lol/Images/Characters/21/Wonder_Talk.gif",
               "sha256": "590acbe11d546451a9c54d000107d94a33a159a2a8b89e6c76f4aad1abe25959",
               "bytes": 263156
@@ -1911,163 +1911,163 @@
             "loop": 0,
             "frames": [
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/000.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/000.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/001.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/001.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/002.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/002.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/003.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/003.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/004.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/004.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/005.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/005.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/006.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/006.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/007.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/007.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/008.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/008.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/009.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/009.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/010.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/010.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/011.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/011.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/012.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/012.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/013.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/013.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/014.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/014.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/015.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/015.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/016.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/016.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/017.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/017.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/018.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/018.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/019.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/019.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/020.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/020.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/021.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/021.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/022.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/022.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/023.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/023.png",
                 "duration_ms": 240
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/024.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/024.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/025.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/025.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/026.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/026.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/027.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/027.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/028.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/028.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/029.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/029.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/030.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/030.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/031.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/031.png",
                 "duration_ms": 240
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/032.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/032.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/033.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/033.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/034.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/034.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/035.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/035.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/036.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/036.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/037.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/037.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/038.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/038.png",
                 "duration_ms": 120
               },
               {
-                "file": "assets/characters/Dick/animations/Wonder_Talk/frames/039.png",
+                "file": "source/characters/Dick/animations/Wonder_Talk/frames/039.png",
                 "duration_ms": 360
               }
             ]
@@ -2076,7 +2076,7 @@
             {
               "animation": {
                 "source": {
-                  "file": "assets/characters/Dick/animations/Headscratch/source.gif",
+                  "file": "source/characters/Dick/animations/Headscratch/source.gif",
                   "source_url": "https://objection.lol/Images/Characters/21/Headscratch.gif",
                   "sha256": "fccbb173517c4bae57be9296bbb0deaecd969fbf6610b50557affae1829304ec",
                   "bytes": 651160
@@ -2088,31 +2088,31 @@
                 "loop": 0,
                 "frames": [
                   {
-                    "file": "assets/characters/Dick/animations/Headscratch/frames/000.png",
+                    "file": "source/characters/Dick/animations/Headscratch/frames/000.png",
                     "duration_ms": 200
                   },
                   {
-                    "file": "assets/characters/Dick/animations/Headscratch/frames/001.png",
+                    "file": "source/characters/Dick/animations/Headscratch/frames/001.png",
                     "duration_ms": 120
                   },
                   {
-                    "file": "assets/characters/Dick/animations/Headscratch/frames/002.png",
+                    "file": "source/characters/Dick/animations/Headscratch/frames/002.png",
                     "duration_ms": 120
                   },
                   {
-                    "file": "assets/characters/Dick/animations/Headscratch/frames/003.png",
+                    "file": "source/characters/Dick/animations/Headscratch/frames/003.png",
                     "duration_ms": 80
                   },
                   {
-                    "file": "assets/characters/Dick/animations/Headscratch/frames/004.png",
+                    "file": "source/characters/Dick/animations/Headscratch/frames/004.png",
                     "duration_ms": 120
                   },
                   {
-                    "file": "assets/characters/Dick/animations/Headscratch/frames/005.png",
+                    "file": "source/characters/Dick/animations/Headscratch/frames/005.png",
                     "duration_ms": 120
                   },
                   {
-                    "file": "assets/characters/Dick/animations/Headscratch/frames/006.png",
+                    "file": "source/characters/Dick/animations/Headscratch/frames/006.png",
                     "duration_ms": 120
                   }
                 ]
@@ -2127,6 +2127,17 @@
     }
   ],
   "backgrounds": [
+    {
+      "id": 187,
+      "name": "[PW] Defense counsel",
+      "image": {
+        "file": "assets/backgrounds/Counsel.jpg",
+        "source_url": "https://objection.lol/Images/Backgrounds/Preset/[PW]%20Defense%20counsel.jpg",
+        "sha256": "aa6b22bbf1cfa0f25f9ecec2d4cc70e5523927a216102998ca8a3b70b711bdf6",
+        "bytes": 140723
+      },
+      "desk": null
+    },
     {
       "id": 189,
       "name": "[PW] Defense",
@@ -2228,7 +2239,7 @@
       }
     },
     {
-      "character_id": 14,
+      "character_id": 16,
       "name": "Objection!",
       "duration_ms": 950,
       "image": {

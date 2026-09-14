@@ -1,18 +1,27 @@
-# Sprite animation demo assets
+# Ace Attorney sprite sheet demo
 
-This fixture uses publicly served preset assets from [objection.lol](https://objection.lol/). It is scoped to testing a future Sprite animation Actor, rather than mirroring the entire site.
+This fixture uses publicly served preset assets from [objection.lol](https://objection.lol/). It tests the sprite sheet character actor rather than mirroring the entire site.
 
 Run from the repository root:
 
 ```sh
 python3 -m pip install Pillow
 python3 tools/fetch_objection_sprite_assets.py
+python3 tools/build_ace_attorney_sheets.py
 ```
 
-The downloader selects five characters and fifteen poses: Phoenix Wright (stand, desk slam, point), Miles Edgeworth (stand, desk slam, confident shrug), the Judge (stand, negative, positive), Maya Fey's witness variant (stand, think, happy), and Dick Gumshoe (stand, confident, headscratch). It also fetches their courtroom backgrounds, foreground desks, speech blips, timed action sounds, Phoenix and Miles's "Objection!" voices, the shared "Objection!" effect and image, four 2001-era courtroom BGM tracks, and Maya and Dick's themes.
+Open `res://demos/ace-attorney/AceAttorneyDemo.tscn` in Godot to play the short courtroom test. Its logical viewport and character positions use the 960×640 defense background's native size. A short `audio/sfx/Blip.wav` plays as each dialogue glyph is revealed. The headless smoke mode runs all 16 dialogue lines and checks completion and blip playback:
 
-`asset_manifest.json` maps each pose to idle, speaking, and optional intro animations. Every animation retains its original GIF and exports composited transparent PNG frames with GIF timing in milliseconds. Frames use the original canvas and top-left origin; do not trim them independently or the actor will jump during playback. Loop idle and speaking animations; play intro states in order before switching to idle or speaking. `next_pose_delay_ms` and `audio_ticks.time_ms` come from the site's preset metadata.
+```sh
+godot --headless --path . res://demos/ace-attorney/AceAttorneyDemo.tscn -- --ace-attorney-auto
+```
 
-The layout follows the other demos: `assets/characters/{Phoenix,Miles,Judge,Maya,Dick}/` holds each character's animations, `assets/backgrounds/` holds the courtroom images and desks, `assets/audio/{bgm,sfx,voice}/` holds music and sounds, and `assets/ui/` holds the Objection image. Each animation has `source.gif` and a `frames/` PNG sequence. The manifest points to these paths.
+`source/characters/{Phoenix,Miles,Judge,Maya,Dick}/animations/` contains the downloaded GIFs and composited PNG frames. This ignored source directory has a `.gdignore` marker so Godot imports only runtime atlases. The build script writes `assets/characters/{name}/sprite_character.json` and `poses/{pose}/atlas_XX.png`. Each character manifest maps idle, speak, and optional intro clips to atlas pages, cropped frame rectangles, original canvas offsets, and GIF frame durations. The runtime loads a pose's pages when it is shown; dialogue drives its temporary speaking state.
+
+The downloader selects five characters and fifteen poses: Phoenix Wright (stand, desk slam, point), Miles Edgeworth (stand, desk slam, confident shrug), the Judge (stand, negative, positive), Maya Fey's counsel variant (stand, angry, thinking), and Dick Gumshoe (stand, confident, headscratch). It also fetches their courtroom backgrounds, available foreground desks, speech blips, timed action sounds, Phoenix and Miles's "Objection!" voices, the shared "Objection!" effect and image, four 2001-era courtroom BGM tracks, and Maya and Dick's themes.
+
+`asset_manifest.json` maps each pose to idle, speaking, and optional intro animations. Every animation retains its original GIF and exports composited transparent PNG frames with GIF timing in milliseconds. The packer trims transparent borders while recording each frame's offset within the original canvas. Idle and speaking animations loop; intro animations play once before switching to idle or speaking. `next_pose_delay_ms` and `audio_ticks.time_ms` come from the site's preset metadata. Audio ticks and animated appearance transitions are not yet played by this demo actor.
+
+The runtime asset layout follows the other demos: `assets/characters/{Phoenix,Miles,Judge,Maya,Dick}/` holds each character's manifest and pose atlases, `assets/backgrounds/` holds the courtroom images and desks, `assets/audio/{bgm,sfx,voice}/` holds music and sounds, and `assets/ui/` holds the Objection image. The top-level asset manifest points to the downloaded source files.
 
 Downloaded images and audio are ignored by Git. The manifest and downloader are tracked so the fixture can be regenerated. These third-party assets are for local prototyping; check the rights for any redistribution or published demo.
