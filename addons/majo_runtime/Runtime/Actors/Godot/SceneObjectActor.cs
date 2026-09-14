@@ -116,7 +116,7 @@ public sealed class SceneObjectActor : GodotActorBase, ISceneActor
 
     private void ValidateAppearance(string appearance)
     {
-        if (!textureDefinition.Appearances.ContainsKey(appearance))
+        if (textureDefinition.Appearances.Count > 0 && !textureDefinition.Appearances.ContainsKey(appearance))
             throw new UnknownActorAppearanceException(Id, appearance);
     }
 

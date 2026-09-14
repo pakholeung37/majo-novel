@@ -20,6 +20,7 @@ using Majo.Runtime.Direction.Rendering;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Operations.Godot;
 using Majo.Runtime.Resources;
+using Majo.Runtime.Resources.Godot;
 
 namespace Majo.Runtime.HeadlessTests;
 
@@ -37,7 +38,11 @@ public partial class HeadlessTestRunner
         await clock.InitializeAsync(CancellationToken.None);
         var runner = new OperationRunner(clock, new HeadlessDirectionRuntimeLifetime());
         await runner.InitializeAsync(CancellationToken.None);
-        using var textures = new ResourceActorTextureLoader(failOnMissingAssets: true);
+        using var resourceConfig = new ResourceConfiguration { RootPath = "res://tests/headless/fixtures", ObjectsPath = "objects" };
+        using var lifetime = new HeadlessDirectionRuntimeLifetime();
+        var resources = new ResourceManager([new GodotProjectResourceProvider(resourceConfig.RootPath, clock)], lifetime);
+        await resources.InitializeAsync(CancellationToken.None);
+        using var textures = new ResourceActorTextureLoader(resources, failOnMissingAssets: true);
         using var config = new ActorConfiguration { ReferenceResolution = new Vector2I(640, 360) };
         var definitions = SlotActorIds.Select(id => new ActorDefinition(id, ActorFactoryIds.Character,
             new TextureActorDefinitionData(id, "characters", "Default", new Dictionary<string, string>
@@ -45,14 +50,13 @@ public partial class HeadlessTestRunner
                 ["Default"] = "res://tests/headless/fixtures/character_red.svg",
                 ["blue"] = "res://tests/headless/fixtures/character_blue.svg",
             }))).ToArray();
-        using var resourceConfig = new ResourceConfiguration { RootPath = "res://tests/headless/fixtures", ObjectsPath = "objects" };
         IActorManager Create(ActorMountRoots mounts)
         {
             var root = mounts.CharacterRoot;
             var backgroundRoot = mounts.BackgroundRoot;
             return new ActorManager(definitions.Concat(BackgroundFixtureDefinitions()),
             new IActorFactory[] { new CharacterActorFactory(root, textures, new CharacterPositionMap(config)),
-                new SceneObjectActorFactory(root, textures, ActorResourceSettings.Capture(resourceConfig), config.ReferenceResolution),
+                new SceneObjectActorFactory(root, textures, config.ReferenceResolution),
                 new BackgroundActorFactory(backgroundRoot, textures) });
         }
         var stage = new GodotDirectionStageBackend(host, Create);
@@ -132,14 +136,16 @@ public partial class HeadlessTestRunner
             await coordinator.ExecuteAsync(new[] { Object(first, -20), Object(second, 120) });
             Assert(View("knife1").Position.IsEqualApprox(new Vector2(-128, 252)) &&
                 View("knife2").Position.IsEqualApprox(new Vector2(768, 252)), "Objects use Stage percentages including offscreen positions.");
-            Assert(View("knife1").Offset.IsEqualApprox(View("knife1").Texture.GetSize() * new Vector2(.5f, -.5f)),
-                "The definition anchor must determine the object sprite offset.");
+            Assert(View("knife1").Offset.IsEqualApprox(View("knife1").Texture.GetSize() * new Vector2(0, .5f)),
+                "Convention objects retain a top-center anchor.");
+            await coordinator.ExecuteAsync(new[] { Object(first, -20) with
+            { Appearance = DirectionValue.From<string?>("blue") } });
+            Assert(View("knife1").Texture.ResourcePath.EndsWith("/objects/evidence/blue.svg", StringComparison.Ordinal),
+                "Object appearances resolve under their asset directory without JSON mappings.");
             var beforeObjectFailure = coordinator.State;
-            await AssertThrowsAsync<ActorException>(() => coordinator.ExecuteAsync(new[]
+            await AssertThrowsAsync<MajoResourceException>(() => coordinator.ExecuteAsync(new[]
             { Object(new ActorId("missing"), 20) with { DefinitionId = "not-found" } }));
-            await AssertThrowsAsync<DirectionException>(() => coordinator.ExecuteAsync(new[]
-            { Object(new ActorId("unsupported"), 20) with { DefinitionId = "unsupported" } }));
-            Assert(ReferenceEquals(beforeObjectFailure, coordinator.State), "Missing Object assets or capabilities must fail without committing state.");
+            Assert(ReferenceEquals(beforeObjectFailure, coordinator.State), "Missing Object assets must fail without committing state.");
             var objectRoot = View("knife1");
             var fxTarget = new ActorFxTarget(StageId.Main, ActorFxSlot.Instance, first);
             var shake = await coordinator.ExecuteAsync(new[] { new ActorFxCue(fxTarget, DirectionActorKind.SceneObject, "shake", 2) });
@@ -224,6 +230,7 @@ public partial class HeadlessTestRunner
             await stage.ResetAsync(CancellationToken.None);
             await host.ShutdownAsync(CancellationToken.None);
             await runner.ShutdownAsync(CancellationToken.None);
+            await resources.ShutdownAsync(CancellationToken.None);
             await clock.ShutdownAsync(CancellationToken.None);
             owner.QueueFree();
         }

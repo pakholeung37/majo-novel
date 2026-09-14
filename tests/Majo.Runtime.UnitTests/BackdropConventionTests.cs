@@ -44,6 +44,38 @@ public sealed class BackdropConventionTests
         Assert.Throws<ActorDefinitionException>(() => excluded.ResolveBackdropAppearance("court"));
     }
 
+    [Theory]
+    [InlineData("objects", "Court_Stand", "objects/Court_Stand")]
+    [InlineData("objects", "objects/Court_Stand", "objects/Court_Stand")]
+    [InlineData("props", "court/stand", "props/court/stand")]
+    public void ObjectAssetsResolveAsLogicalTextureKeys(string root, string id, string key)
+    {
+        var resolver = new ActorDefinitionResolver([], [new ObjectTextureMetadata()],
+            new(ObjectsPath: root));
+        var request = new ActorSpawnRequest("stand_0", ActorFactoryIds.SceneObject, "Default")
+        { DefinitionId = id };
+        var definition = resolver.Resolve(request);
+        var data = definition.GetFactoryData<TextureActorDefinitionData>();
+        Assert.Equal(key, data.GetAppearanceResourceKey(definition.DefinitionId, "Default").Path);
+        Assert.Equal(key + "/blue", data.GetAppearanceResourceKey(definition.DefinitionId, "blue").Path);
+        Assert.Null(data.GetAppearanceOverride("Default"));
+        Assert.Equal(new Godot.Vector2(0.5f, 0), data.Anchor);
+        Assert.Equal(key, Assert.Single(resolver.GetPreloadResources(request)).Key.Path);
+    }
+
+    [Fact]
+    public void ExplicitObjectDefinitionOverridesConvention()
+    {
+        var data = new TextureActorDefinitionData("stand", "custom", "Main",
+            [new("Main", "res://custom/stand.png")]);
+        var resolver = new ActorDefinitionResolver([new("stand", ActorFactoryIds.SceneObject, data)],
+            [new ObjectTextureMetadata()]);
+        var definition = resolver.Resolve(new ActorSpawnRequest("stand_0", ActorFactoryIds.SceneObject, "Default")
+        { DefinitionId = "stand" });
+        Assert.Same(data, definition.FactoryData);
+        Assert.Equal("res://custom/stand.png", data.GetAppearanceOverride("Main"));
+    }
+
     private sealed class TextureMetadata : IActorFactory
     {
         public string FactoryId => "background";
@@ -54,5 +86,20 @@ public sealed class BackdropConventionTests
             return [ResourcePreloadEntry.Create<object>(data.GetAppearanceResourceKey(definition.DefinitionId, appearance), data.GetAppearanceOverride(appearance))];
         }
         public Task<IActor> CreateAsync(ActorDefinition definition, ActorCreationMode mode, CancellationToken token) => throw new NotSupportedException();
+    }
+
+    private sealed class ObjectTextureMetadata : IActorFactory
+    {
+        public string FactoryId => ActorFactoryIds.SceneObject;
+        public string GetInitialAppearance(ActorDefinition definition) =>
+            definition.GetFactoryData<TextureActorDefinitionData>().DefaultAppearance;
+        public IReadOnlyList<ResourcePreloadEntry> GetPreloadResources(ActorDefinition definition, string appearance)
+        {
+            var data = definition.GetFactoryData<TextureActorDefinitionData>();
+            return [ResourcePreloadEntry.Create<object>(data.GetAppearanceResourceKey(definition.DefinitionId, appearance),
+                data.GetAppearanceOverride(appearance))];
+        }
+        public Task<IActor> CreateAsync(ActorDefinition definition, ActorCreationMode mode, CancellationToken token) =>
+            throw new NotSupportedException();
     }
 }

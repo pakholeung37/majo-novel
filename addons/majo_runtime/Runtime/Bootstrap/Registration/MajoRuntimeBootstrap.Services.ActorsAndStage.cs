@@ -45,7 +45,8 @@ public partial class MajoRuntimeBootstrap : Node
             resolver.Get<ILocaleManager>(),
             new ActorCreationConventions(
                 context.ResourceSettings.CharactersPath,
-                context.ResourceSettings.BackgroundsPath), host);
+                context.ResourceSettings.BackgroundsPath,
+                context.ResourceSettings.ObjectsPath), host);
     }
 
     private ActorFactoryContext CreateActorFactoryContext(
@@ -74,7 +75,6 @@ public partial class MajoRuntimeBootstrap : Node
                 context => new SceneObjectActorFactory(
                     context.CharacterRoot,
                     context.TextureLoader,
-                    context.ResourceSettings,
                     context.ActorSettings.ReferenceResolution,
                     context.AppearanceTransitions),
                 ActorConfigurationCompiler.CompileSceneObjectTextureDefinition)

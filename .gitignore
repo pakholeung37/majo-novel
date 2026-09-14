@@ -16,11 +16,10 @@ TestResults/
 /export/
 /build/
 .DS_Store
-/demos/manosaba/assets/audio
-/demos/manosaba/assets/characters
-/demos/manosaba/assets/fonts
-/demos/manosaba/assets/backgrounds
-/demos/manosaba/assets/ui
-/demos/manosaba/reference
 **/obj/generated/**
 artifacts
+/demos/**/assets/*
+!/demos/**/assets/scripts/
+!/demos/**/assets/scripts/**
+!/demos/**/assets/localization/
+!/demos/**/assets/localization/**

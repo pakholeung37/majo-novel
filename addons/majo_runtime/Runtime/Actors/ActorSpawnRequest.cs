@@ -80,4 +80,5 @@ public sealed record ActorSpawnRequest
 /// </summary>
 public sealed record ActorCreationConventions(
     string CharactersPath = "characters",
-    string BackgroundsPath = "backgrounds");
+    string BackgroundsPath = "backgrounds",
+    string ObjectsPath = "objects");

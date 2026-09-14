@@ -234,7 +234,8 @@ public partial class MajoRuntimeBootstrap : Node
             resolver.Get<ILocaleManager>(),
             new ActorCreationConventions(
                 context.ResourceSettings.CharactersPath,
-                context.ResourceSettings.BackgroundsPath));
+                context.ResourceSettings.BackgroundsPath,
+                context.ResourceSettings.ObjectsPath));
         manager.RefreshBackgroundsOnLocaleChange = false;
         return manager;
     }

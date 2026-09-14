@@ -151,6 +151,21 @@ public sealed class ActorDefinitionResolver
                 { ResourceId = definitionId, DefaultResourceKey = key }, definitionId);
         }
 
+        if (request.FallbackFactoryId == ActorFactoryIds.SceneObject)
+        {
+            if (string.IsNullOrWhiteSpace(request.DefinitionId))
+                throw new ActorDefinitionException(request.ActorId, "Object creation requires asset.");
+            ValidateRequiredFactory(request, ActorFactoryIds.SceneObject);
+            var id = new ResourceKey(definitionId);
+            var root = conventions.ObjectsPath;
+            var key = string.IsNullOrWhiteSpace(root) || id.Path.StartsWith(new ResourceKey(root).Path + "/", StringComparison.OrdinalIgnoreCase)
+                ? id : ResourceKey.Combine(root, id.Path);
+            return new ActorDefinition(request.ActorId, ActorFactoryIds.SceneObject,
+                new TextureActorDefinitionData(definitionId, string.IsNullOrWhiteSpace(root) ? "objects" : root,
+                    "Default", [])
+                { ResourceId = definitionId, DefaultResourceKey = key, Anchor = new(0.5f, 0f) }, definitionId);
+        }
+
         if (TryResolveConventionDefinition(request, out var conventionalDefinition))
         {
             ValidateRequiredFactory(request, conventionalDefinition.FactoryId);
@@ -224,7 +239,7 @@ public sealed class ActorDefinitionResolver
                 continue;
             }
 
-            if (request.FallbackFactoryId != ActorFactoryIds.SceneObject && !string.Equals(
+            if (!string.Equals(
                     candidate.FactoryId,
                     factory.FactoryId,
                     StringComparison.Ordinal))
