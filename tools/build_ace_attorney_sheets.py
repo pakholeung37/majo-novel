@@ -91,7 +91,20 @@ def build_pose(character_dir: Path, pose: dict) -> dict:
     }
 
 
+def build_objection_overlay() -> None:
+    """Convert the preset's green chroma key into runtime transparency."""
+    source = ROOT / "assets" / "ui" / "Objection.png"
+    with Image.open(source) as original:
+        overlay = original.convert("RGBA")
+    overlay.putdata([
+        (r, g, b, 0) if g > 180 and r < 80 and b < 80 else (r, g, b, a)
+        for r, g, b, a in overlay.getdata()
+    ])
+    overlay.save(source.with_name("ObjectionOverlay.png"), optimize=True)
+
+
 def main() -> None:
+    build_objection_overlay()
     source = json.loads(SOURCE_MANIFEST.read_text())
     for character in source["characters"]:
         character_dir = ROOT / "assets" / "characters" / character["asset_dir"].split("/")[-1]

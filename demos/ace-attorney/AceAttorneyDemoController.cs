@@ -30,7 +30,7 @@ public partial class AceAttorneyDemoController : Node
             window.ContentScaleAspect = Window.ContentScaleAspectEnum.Keep;
             window.Size = resolution;
             settings.Resources!.RootPath = "res://demos/ace-attorney/assets";
-            settings.Resources.ObjectsPath = "backgrounds";
+            settings.Resources.ObjectsPath = "";
             settings.Localization!.DefaultLocale = "zh-Hans";
             settings.Localization.SupportedLocales = ["zh-Hans"];
             settings.Settings!.DialogueLocale = "zh-Hans";
@@ -87,6 +87,7 @@ public partial class AceAttorneyDemoController : Node
                     throw new InvalidOperationException("Dialogue blip audio is missing."),
             };
             linePresenter.AddChild(blip);
+            blip.VolumeDb = -12;
             var blipHandler = new DialogueBlipHandler(blip);
             linePresenter.ActionMarkupHandlers.Add(blipHandler);
             var dialogue = runtime.Host!.Services.Get<IDialoguePlayer>();
@@ -94,7 +95,7 @@ public partial class AceAttorneyDemoController : Node
             if (automatic)
             {
                 var completion = await dialogue.Completion;
-                if (completion.Kind != DialogueCompletionKind.Completed || probe!.LineCount < 15 ||
+                if (completion.Kind != DialogueCompletionKind.Completed || probe!.LineCount < 85 ||
                     displayedLines < probe.LineCount ||
                     blipHandler.PlayCount == 0 ||
                     runtime.Host.Services.Get<IDirectionTransactionCoordinator>().State.Stages.Count < 5)

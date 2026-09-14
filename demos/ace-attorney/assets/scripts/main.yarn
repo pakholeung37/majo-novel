@@ -1,5 +1,5 @@
 title: Start
-tags: ace attorney sprite sheet demo
+tags: ace attorney short trial
 ---
 <<curtain closed duration:0>>
 <<stage define prosecution>>
@@ -8,53 +8,118 @@ tags: ace attorney sprite sheet demo
 <<stage define witness>>
 <<backdrop Defense stage:main scale:1>>
 <<character Phoenix stage:main appearance:stand at:center scale:1>>
-<<object defense_desk asset:Defense_Desk stage:main at:50,100 scale:1 z:100>>
-<<curtain open duration:0.5 wait:true>>
-
-Sprite sheet actor 测试：待机、说话与动作切换。
-
-Phoenix: 法庭记录已经准备好了。先看看普通说话动画。
-<<character Phoenix appearance:desk_slam>>
-Phoenix: 异议！这段先播放拍桌动作，然后进入说话循环。
-<<character Phoenix appearance:point>>
-Phoenix: 接着切换到指认姿势，验证每帧的位置不会跳动。
-
+<<object defense_desk asset:backgrounds/Defense_Desk stage:main at:50,100 scale:1 z:100>>
 <<backdrop Prosecution stage:prosecution scale:1>>
 <<character Miles stage:prosecution appearance:stand at:center scale:1>>
-<<object prosecution_desk asset:Prosecution_Desk stage:prosecution at:50,100 scale:1 z:100>>
-<<screen show prosecution>>
-Miles: 检方的待机动作，也应该保持原始帧时长。
-<<character Miles stage:prosecution appearance:desk_slam>>
-Miles: 现在检查拍桌动作和后续说话循环。
-<<character Miles stage:prosecution appearance:confident_shrug>>
-Miles: 最后是耸肩。
-
+<<object prosecution_desk asset:backgrounds/Prosecution_Desk stage:prosecution at:50,100 scale:1 z:100>>
 <<backdrop Judge stage:judge scale:1>>
 <<character Judge stage:judge appearance:stand at:center scale:1>>
-<<object judge_desk asset:Judge_Desk stage:judge at:50,100 scale:1 z:100>>
-<<screen show judge>>
-Judge: 本庭将检查正反两种动作。
-<<character Judge stage:judge appearance:negative>>
-Judge: 先是否定。
-<<character Judge stage:judge appearance:positive>>
-Judge: 然后是肯定。
-
+<<object judge_desk asset:backgrounds/Judge_Desk stage:judge at:50,100 scale:1 z:100>>
 <<backdrop Counsel stage:counsel scale:1>>
-<<character Maya stage:counsel appearance:stand at:center scale:1>>
-<<screen show counsel>>
-Maya: 辩护席的动画也要正常播放。
-<<character Maya stage:counsel appearance:thinking>>
-Maya: 我想想……
-<<character Maya stage:counsel appearance:angry>>
-Maya: 等等，这里有问题！
-
+<<character Maya stage:counsel appearance:angry at:center scale:1>>
 <<backdrop Witness stage:witness scale:1>>
 <<character Dick stage:witness appearance:stand at:center scale:1>>
-<<object witness_desk asset:Witness_Desk stage:witness at:50,100 scale:1 z:100>>
+<<object witness_desk asset:backgrounds/Witness_Desk stage:witness at:50,100 scale:1 z:100>>
+<<screen show counsel>>
+// <<bgm Trial2001 volume:0.55>>
+<<curtain open duration:0.5 wait:true>>
+
+<<bgm Allegro2001 duration:0>>
+Maya: 怎么能这样！明明是我们找出的矛盾！
+<<screen show prosecution>>
+<<character Miles stage:prosecution appearance:stand>>
+Miles: 矛盾不属于任何一方。它只说明原先的解释不完整。
+Miles: 被告八点四十分已经进入后台，有时间提前行凶。
+<<screen show judge>>
+<<character Judge stage:judge appearance:negative>>
+Judge: 仅仅改变死亡时间，确实不足以排除被告。
+Judge: 辩护人，你有证据证明，枪响之前他没有杀人吗？
+<<screen show main>>
+<<character Phoenix stage:main appearance:stand>>
+Phoenix: 我……
+Phoenix: （拆掉了九点，反而替他打开了整整半小时的犯罪时间。）
+<<stopBgm duration:0.4 wait:true>>
+<<screen show counsel>>
+<<character Maya stage:counsel appearance:thinking>>
+Maya: 我们一直盯着声音。
+Maya: 可是……那张照片里，经理还站着呢。
+<<screen show main>>
+<<character Phoenix stage:main appearance:stand>>
+Phoenix: 八点五十五分。照片里的经理，还活着。
+<<screen show counsel>>
+<<character Maya stage:counsel appearance:stand>>
+Maya: 那就别问枪是什么时候响的了。
+Maya: 问问那时候，被告在哪里！
+<<screen show main>>
+<<character Phoenix stage:main appearance:stand>>
+Phoenix: 裁判长，请允许我确认执勤摘要中省略的十分钟。
+<<screen show judge>>
+<<character Judge stage:judge appearance:stand>>
+Judge: 只有一次机会。请直接问。
+<<screen show main>>
+<<character Phoenix stage:main appearance:stand>>
+Phoenix: 糸锯刑警，八点五十分，你处理纠纷之后做了什么？
 <<screen show witness>>
-Dick: 最后轮到我了！
-<<character Dick stage:witness appearance:confident>>
-Dick: 我会认真检查说话循环。
 <<character Dick stage:witness appearance:headscratch>>
-Dick: 呃……这段动作比较长，正好测一下多页图集。
+Dick: 我把被告带到剧场外问话。他气得不轻，我怕他再回去吵起来。
+<<screen show main>>
+<<character Phoenix stage:main appearance:stand>>
+Phoenix: 问话持续到什么时候？
+<<screen show witness>>
+<<character Dick stage:witness appearance:stand>>
+Dick: 广播响起来。然后我们一起跑回去的说。
+<<screen show prosecution>>
+<<character Miles stage:prosecution appearance:stand>>
+Miles: 证人。在此期间，被告是否离开过你的视线？
+<<screen show witness>>
+<<character Dick stage:witness appearance:confident>>
+Dick: 没有！他想回去拿外套，我都没答应！
+<<wait 0.45>>
+<<screen show main>>
+<<character Phoenix stage:main appearance:stand>>
+Phoenix: 为什么执勤摘要没有写这一点？
+<<screen show witness>>
+<<character Dick stage:witness appearance:headscratch>>
+Dick: 我以为九点就是案发时间……重点应该写发现尸体的经过。
+Dick: 原始记录还在！八点五十分到九点，谈话一直没有中断的说！
+<<screen show main>>
+<<character Phoenix stage:main appearance:desk_slam>>
+<<wait 0.175>>
+<<sfx deskslam>>
+<<character fx Phoenix effect:shake stage:main axis:y duration:0.35 strength:18 frequency:24 wait:true>>
+<<screen show main>>
+<<character Phoenix stage:main appearance:desk_slam>>
+Phoenix: 请将原始记录与八点五十五分的照片，一起看。
+<<screen show main>>
+<<character Phoenix stage:main appearance:point>>
+Phoenix: 经理活着的时候，被告已经在刑警的看守之下。直到发现尸体，他都没有机会独自回到后台！
+<<screen show prosecution>>
+<<character Miles stage:prosecution appearance:stand>>
+Miles: 但他拿起了现场的枪——
+<<stopBgm duration:0 wait:true>>
+<<screen show main>>
+<<object objection asset:ui/ObjectionOverlay stage:main at:50,100 scale:1 z:200 via:cut>>
+<<sfx Objection>>
+<<object fx objection effect:shake stage:main axis:x duration:0.3 strength:12>>
+<<wait 0.95>>
+<<object hide objection stage:main via:cut>>
+<<bgm Pursuit2001>>
+<<screen show main>>
+<<character Phoenix stage:main appearance:point>>
+Phoenix: 握住枪的那一刻，不等于扣下扳机的那一刻！
+Phoenix: 刑警亲眼看见他从地上拾枪。那只能证明他碰过凶器，不能证明他开过枪！
+<<screen show judge>>
+<<character Judge stage:judge appearance:stand>>
+Judge: 照片之后，被告始终与刑警在一起……
+<<screen show main>>
+<<character Phoenix stage:main appearance:point>>
+Phoenix: 而检方主张的是近距离枪击，并没有任何定时开枪装置。
+Phoenix: 这段录音没有为被告制造不在场证明。它把一个有不在场证明的人，引回了尸体旁！
+<<screen show prosecution>>
+<<character Miles stage:prosecution appearance:stand>>
+Miles: ……
+<<wait 0.6>>
+<<stopBgm>>
+<<screen show prosecution>>
+<<curtain closed duration:0.8 wait:true>>
 ===
