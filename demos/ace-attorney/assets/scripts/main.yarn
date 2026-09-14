@@ -2,46 +2,59 @@ title: Start
 tags: ace attorney sprite sheet demo
 ---
 <<curtain closed duration:0>>
-<<backdrop Defense scale:1 via:cut>>
-<<character Phoenix appearance:stand at:center scale:1 via:cut>>
+<<stage define prosecution>>
+<<stage define judge>>
+<<stage define counsel>>
+<<stage define witness>>
+<<backdrop Defense stage:main scale:1>>
+<<character Phoenix stage:main appearance:stand at:center scale:1>>
+<<object defense_desk asset:Defense_Desk stage:main at:50,100 scale:1 z:100>>
 <<curtain open duration:0.5 wait:true>>
 
-旁白: Sprite sheet actor 测试：待机、说话与动作切换。
+Sprite sheet actor 测试：待机、说话与动作切换。
+
 Phoenix: 法庭记录已经准备好了。先看看普通说话动画。
-<<character Phoenix appearance:desk_slam via:cut>>
+<<character Phoenix appearance:desk_slam>>
 Phoenix: 异议！这段先播放拍桌动作，然后进入说话循环。
-<<character Phoenix appearance:point via:cut>>
+<<character Phoenix appearance:point>>
 Phoenix: 接着切换到指认姿势，验证每帧的位置不会跳动。
-<<character hide Phoenix via:cut>>
 
-<<character Miles appearance:stand at:center scale:1 via:cut>>
+<<backdrop Prosecution stage:prosecution scale:1>>
+<<character Miles stage:prosecution appearance:stand at:center scale:1>>
+<<object prosecution_desk asset:Prosecution_Desk stage:prosecution at:50,100 scale:1 z:100>>
+<<screen show prosecution>>
 Miles: 检方的待机动作，也应该保持原始帧时长。
-<<character Miles appearance:desk_slam via:cut>>
+<<character Miles stage:prosecution appearance:desk_slam>>
 Miles: 现在检查拍桌动作和后续说话循环。
-<<character Miles appearance:confident_shrug via:cut>>
+<<character Miles stage:prosecution appearance:confident_shrug>>
 Miles: 最后是耸肩。
-<<character hide Miles via:cut>>
 
-<<character Judge appearance:stand at:center scale:1 via:cut>>
+<<backdrop Judge stage:judge scale:1>>
+<<character Judge stage:judge appearance:stand at:center scale:1>>
+<<object judge_desk asset:Judge_Desk stage:judge at:50,100 scale:1 z:100>>
+<<screen show judge>>
 Judge: 本庭将检查正反两种动作。
-<<character Judge appearance:negative via:cut>>
+<<character Judge stage:judge appearance:negative>>
 Judge: 先是否定。
-<<character Judge appearance:positive via:cut>>
+<<character Judge stage:judge appearance:positive>>
 Judge: 然后是肯定。
-<<character hide Judge via:cut>>
 
-<<character Maya appearance:stand at:center scale:1 via:cut>>
-Maya: 证人席的动画也要正常播放。
-<<character Maya appearance:thinking via:cut>>
+<<backdrop Counsel stage:counsel scale:1>>
+<<character Maya stage:counsel appearance:stand at:center scale:1>>
+<<screen show counsel>>
+Maya: 辩护席的动画也要正常播放。
+<<character Maya stage:counsel appearance:thinking>>
 Maya: 我想想……
-<<character Maya appearance:angry via:cut>>
+<<character Maya stage:counsel appearance:angry>>
 Maya: 等等，这里有问题！
-<<character hide Maya via:cut>>
 
-<<character Dick appearance:stand at:center scale:1 via:cut>>
+<<backdrop Witness stage:witness scale:1>>
+<<character Dick stage:witness appearance:stand at:center scale:1>>
+<<object witness_desk asset:Witness_Desk stage:witness at:50,100 scale:1 z:100>>
+<<screen show witness>>
 Dick: 最后轮到我了！
-<<character Dick appearance:confident via:cut>>
+<<character Dick stage:witness appearance:confident>>
 Dick: 我会认真检查说话循环。
-<<character Dick appearance:headscratch via:cut>>
+<<character Dick stage:witness appearance:headscratch>>
 Dick: 呃……这段动作比较长，正好测一下多页图集。
 ===

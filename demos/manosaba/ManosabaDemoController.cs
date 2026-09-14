@@ -42,6 +42,8 @@ public partial class ManosabaDemoController : Node
             configuration.Save!.Enabled = true;
             configuration.Diagnostics!.EnableOverlay = true;
             configuration.Diagnostics!.defaultOverlayVisible = false;
+            configuration.Animation!.DefaultCharacterAppearanceAnimationId = "dissolve";
+            configuration.Animation!.DefaultCharacterAnimationId = "fade";
             configuration.Diagnostics!.MinimumLevel = RuntimeLogLevel.Debug;
             configuration.Presentation!.PresenterScene =
                 ResourceLoader.Load<PackedScene>(

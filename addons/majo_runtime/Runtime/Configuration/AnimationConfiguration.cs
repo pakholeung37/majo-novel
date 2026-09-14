@@ -15,8 +15,8 @@ public partial class AnimationConfiguration : Resource, IValidatableConfiguratio
     [Export] public double DefaultAudioFadeDurationSeconds { get; set; } = RuntimeDefaults.AnimationDurationSeconds;
     [Export] public double DefaultVoiceFadeDurationSeconds { get; set; } = RuntimeDefaults.ImmediateDurationSeconds;
 
-    [Export] public string DefaultCharacterAnimationId { get; set; } = "fade";
-    [Export] public string DefaultCharacterAppearanceAnimationId { get; set; } = "dissolve";
+    [Export] public string DefaultCharacterAnimationId { get; set; } = "cut";
+    [Export] public string DefaultCharacterAppearanceAnimationId { get; set; } = "cut";
     [Export] public string DefaultActorHideAnimationId { get; set; } = "fade";
     [Export] public string DefaultStageClearAnimationId { get; set; } = "cut";
     [Export] public string DefaultBackdropAnimationId { get; set; } = "cut";

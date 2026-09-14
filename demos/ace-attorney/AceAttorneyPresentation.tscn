@@ -1,0 +1,175 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://addons/YarnSpinner-Godot/Runtime/Async/LinePresenter.cs" id="1_line"]
+[ext_resource type="Script" path="res://addons/YarnSpinner-Godot/Runtime/Async/OptionsPresenter.cs" id="2_options"]
+[ext_resource type="PackedScene" path="res://addons/YarnSpinner-Godot/Scenes/OptionItem.tscn" id="3_option"]
+[ext_resource type="Texture2D" path="res://demos/ace-attorney/assets/ui/dialogue_panel.svg" id="4_panel"]
+[ext_resource type="Texture2D" path="res://demos/ace-attorney/assets/ui/name_plate.svg" id="5_name"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_option"]
+bg_color = Color(0.055, 0.11, 0.2, 0.96)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.64, 0.82, 0.93, 0.88)
+
+[node name="AceAttorneyPresentation" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 1
+
+[node name="LinePresenter" type="Control" parent="." node_paths=PackedStringArray("presenterControl", "lineText", "characterNameText", "characterNameContainer")]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 1
+script = ExtResource("1_line")
+presenterControl = NodePath("PresenterControl")
+lineText = NodePath("PresenterControl/LineText")
+characterNameText = NodePath("CharacterNamePanel/CharacterNameText")
+characterNameContainer = NodePath("CharacterNamePanel")
+useFadeEffect = false
+lettersPerSecond = 32
+typewriterStyle = 1
+
+[node name="PresenterControl" type="Control" parent="LinePresenter"]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -194.0
+offset_bottom = -34.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+
+[node name="PanelArt" type="TextureRect" parent="LinePresenter/PresenterControl"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("4_panel")
+expand_mode = 1
+
+[node name="LineText" type="RichTextLabel" parent="LinePresenter/PresenterControl"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 194.0
+offset_top = 27.0
+offset_right = -54.0
+offset_bottom = -18.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_colors/default_color = Color(0.96, 0.97, 1, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.7)
+theme_override_constants/shadow_offset_x = 1
+theme_override_constants/shadow_offset_y = 1
+theme_override_constants/line_separation = 4
+theme_override_font_sizes/normal_font_size = 29
+theme_override_font_sizes/bold_font_size = 29
+theme_override_font_sizes/bold_italics_font_size = 29
+theme_override_font_sizes/italics_font_size = 29
+theme_override_font_sizes/mono_font_size = 29
+bbcode_enabled = true
+scroll_active = false
+autowrap_mode = 2
+
+[node name="CharacterNamePanel" type="Control" parent="LinePresenter"]
+visible = false
+z_index = 2
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 82.0
+offset_top = -211.0
+offset_right = 256.0
+offset_bottom = -173.0
+grow_vertical = 0
+mouse_filter = 2
+
+[node name="PlateArt" type="TextureRect" parent="LinePresenter/CharacterNamePanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("5_name")
+expand_mode = 1
+
+[node name="CharacterNameText" type="RichTextLabel" parent="LinePresenter/CharacterNamePanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 4.0
+offset_right = -16.0
+offset_bottom = -3.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_colors/default_color = Color(0.98, 0.99, 1, 1)
+theme_override_colors/font_shadow_color = Color(0.03, 0.13, 0.25, 0.8)
+theme_override_constants/shadow_offset_x = 1
+theme_override_constants/shadow_offset_y = 1
+theme_override_font_sizes/normal_font_size = 19
+theme_override_font_sizes/bold_font_size = 19
+theme_override_font_sizes/bold_italics_font_size = 19
+theme_override_font_sizes/italics_font_size = 19
+theme_override_font_sizes/mono_font_size = 19
+bbcode_enabled = true
+fit_content = true
+scroll_active = false
+horizontal_alignment = 1
+
+[node name="OptionsPresenter" type="Control" parent="." node_paths=PackedStringArray("presenterControl", "optionParent")]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 1
+script = ExtResource("2_options")
+presenterControl = NodePath("PresenterControl")
+optionItemPrefab = ExtResource("3_option")
+optionParent = NodePath("PresenterControl/OptionContainer")
+useFadeEffect = false
+
+[node name="PresenterControl" type="PanelContainer" parent="OptionsPresenter"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -300.0
+offset_top = -130.0
+offset_right = 300.0
+offset_bottom = 150.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBox_option")
+
+[node name="OptionContainer" type="VBoxContainer" parent="OptionsPresenter/PresenterControl"]
+layout_mode = 2
+theme_override_constants/separation = 12

@@ -11,11 +11,15 @@ namespace Majo.Demos.AceAttorney;
 
 public sealed class SpriteSheetSpeechPresenter(SpriteSheetActorRegistry registry) : IDialoguePresenter
 {
+    private string? activeSpeaker;
+    private long lineVersion;
+
     public async Task PresentLineAsync(DialogueLine line, DialoguePresentationContext context)
     {
-        if (string.IsNullOrWhiteSpace(line.Speaker)) return;
-        var speaker = line.Speaker;
-        registry.SetSpeaking(speaker, true);
+        StopSpeaking();
+        var version = ++lineVersion;
+        activeSpeaker = string.IsNullOrWhiteSpace(line.Speaker) ? null : line.Speaker;
+        if (activeSpeaker is not null) registry.SetSpeaking(activeSpeaker, true);
         try
         {
             await Task.Delay(Timeout.InfiniteTimeSpan, context.NextLineToken);
@@ -25,9 +29,11 @@ public sealed class SpriteSheetSpeechPresenter(SpriteSheetActorRegistry registry
         }
         finally
         {
-            registry.SetSpeaking(speaker, false);
+            if (version == lineVersion) StopSpeaking();
         }
     }
+
+    public void OnLineDisplayCompleted() => StopSpeaking();
 
     public Task<DialogueOption?> PresentOptionsAsync(
         IReadOnlyList<DialogueOption> options, CancellationToken cancellationToken) =>
@@ -35,7 +41,15 @@ public sealed class SpriteSheetSpeechPresenter(SpriteSheetActorRegistry registry
 
     public Task OnDialogueCompletedAsync(CancellationToken cancellationToken)
     {
+        StopSpeaking();
         registry.StopAll();
         return Task.CompletedTask;
+    }
+
+    private void StopSpeaking()
+    {
+        if (activeSpeaker is not { } speaker) return;
+        activeSpeaker = null;
+        registry.SetSpeaking(speaker, false);
     }
 }
