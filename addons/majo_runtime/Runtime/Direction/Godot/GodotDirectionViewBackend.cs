@@ -186,6 +186,8 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
         private readonly bool useLiveSource;
         private GodotDirectionViewSurface? liveSource;
         private GodotVisualInput? sourceInput;
+        private GodotViewRenderDemand.Request? sourcePreparation;
+        private IDisposable? sourceDependency;
         public bool IsMotion => transition.Kind == DirectionTransitionId.Move;
         private readonly DirectionTransitionSpec transition;
         private readonly ITransitionDriverRegistry drivers;
@@ -237,9 +239,10 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
         {
             if (!useLiveSource) return;
             liveSource = host.CreateLiveViewSource(viewId, before);
+            sourcePreparation = host.AcquireViewDemand(liveSource, "camera preparation");
             sourceInput = GodotVisualInput.Live(liveSource.CompositeViewport,
                 new Rect2(Vector2.Zero, liveSource.CompositeViewport.Size), ReleaseLiveSource);
-            await sourceInput.ReadyAsync(token);
+            await host.WaitForRenderedViewAsync(liveSource, sourcePreparation, token);
         }
 
         public Task Settlement => settlement.Task;
@@ -279,7 +282,13 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
             if (OwnsPose) host.ClearViewTransition(viewId);
             var transitionSource = host.GetViewTransitionSource(viewId);
 
-            if (liveSource is not null) host.UpdateLiveViewSource(liveSource, viewId, before);
+            if (liveSource is not null)
+            {
+                host.UpdateLiveViewSource(liveSource, viewId, before);
+                sourceDependency = host.AcquireViewDependency(host.RequireView(viewId), liveSource);
+                sourcePreparation?.Dispose();
+                sourcePreparation = null;
+            }
             Texture2D? sourceTexture = liveSource?.CompositeViewport.GetTexture() ?? (Texture2D?)capture;
             if (sourceTexture is not null)
             {
@@ -381,6 +390,10 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
 
         private void ReleaseLiveSource()
         {
+            sourceDependency?.Dispose();
+            sourceDependency = null;
+            sourcePreparation?.Dispose();
+            sourcePreparation = null;
             if (liveSource is not null)
             {
                 host.ReleaseLiveViewSource(liveSource);

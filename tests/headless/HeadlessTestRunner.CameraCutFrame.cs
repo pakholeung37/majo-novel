@@ -36,6 +36,8 @@ public partial class HeadlessTestRunner
             host.PublishView(id, new ViewState(id, StageId.Main, pose), texture);
             host.PublishScreen(new ScreenState(ScreenState.Default.Layout,
                 new Dictionary<LayoutSlotId, ViewId> { [LayoutSlotId.Main] = id }));
+            AssertViewRendering(host.RequireView(id), true, "Cut target");
+            AssertViewRendering(host.RequireView(id == second ? ViewId.Main : second), false, "Hidden cut source");
             for (var frame = 0; frame < 3; frame++)
             {
                 await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);

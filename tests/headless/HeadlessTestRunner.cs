@@ -81,6 +81,11 @@ public partial class HeadlessTestRunner : Node
             await ValidateBackgroundExtensionAsync();
             return;
         }
+        if (OS.GetCmdlineUserArgs().Contains("--majo-view-demand"))
+        {
+            await ValidateViewRenderDemandAsync();
+            return;
+        }
         if (OS.GetCmdlineUserArgs().Contains("--majo-camera-cut"))
         {
             await ValidateCameraCutFrameAsync();
@@ -127,6 +132,7 @@ public partial class HeadlessTestRunner : Node
         Assert(dependencyStatus.IsCompatible, dependencyStatus.Message);
 
         await ValidateLiveVisualInputsAsync();
+        await ValidateViewRenderDemandAsync();
         ValidateConfigurationDiagnostics();
         await MeasureAsync(nameof(ValidateAudioRuntimeAsync), ValidateAudioRuntimeAsync);
         await MeasureAsync(nameof(ValidateInputRuntimeAsync), ValidateInputRuntimeAsync);

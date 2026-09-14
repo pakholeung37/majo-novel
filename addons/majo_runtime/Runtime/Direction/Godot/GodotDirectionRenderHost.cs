@@ -147,6 +147,9 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
             ViewContent,
             viewTransition));
 
+        viewDemand.Register(views[ViewId.Main]);
+        screenViews.Add(views[ViewId.Main]);
+
         ScreenViewport = CreateViewport("MajoDirectionScreenViewport");
         ScreenCanvas = new Control
         {
@@ -246,7 +249,11 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
     internal void ReleaseLiveViewSource(GodotDirectionViewSurface source)
     {
         foreach (var mix in backdropMixes.Values) mix.Remove(source);
-        if (liveViewSources.Remove(source)) QueueFree(source.Viewport);
+        if (liveViewSources.Remove(source))
+        {
+            viewDemand.Remove(source);
+            QueueFree(source.Viewport);
+        }
     }
 
     internal RenderResourceMetrics GetRenderResourceMetrics()
@@ -305,6 +312,7 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
     {
         cancellationToken.ThrowIfCancellationRequested();
         EnsureInitialized();
+        ResetRenderDemand();
         InvalidateGenerations(preserveGlobal);
         coverageWarnings.Clear();
         actorModifiers.Clear();
@@ -360,6 +368,10 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (!isInitialized) return;
+        shutdownRequested = true;
+        renderCancellation.Cancel();
+        viewDemand.Clear();
+        screenViews.Clear();
         idleCancellation.Cancel();
         if (idleLoop is not null) await idleLoop;
         retainedOutput?.Dispose();
@@ -509,6 +521,7 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
         PublishedScreen = state ?? throw new ArgumentNullException(nameof(state));
         screenLayoutBefore = null;
         screenLayoutTarget = null;
+        screenViews.Clear();
         foreach (var slot in screenSlots.Values) slot.Visible = false;
         foreach (var pair in state.Bindings)
         {
@@ -516,8 +529,10 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
             var view = RequireView(pair.Value);
             output.Texture = view.Viewport.GetTexture();
             output.Visible = true;
+            screenViews.Add(view);
             ApplyScreenSlot(output, state, pair.Key, ScreenViewport.Size);
         }
+        RefreshScreenDemand();
     }
 
     internal void PublishScreenLayout(ScreenState state, ScreenState before, float progress)
@@ -527,6 +542,7 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
         screenLayoutBefore = before;
         screenLayoutTarget = state;
         screenLayoutProgress = Mathf.Clamp(progress, 0, 1);
+        screenViews.Clear();
         foreach (var slot in screenSlots.Values) slot.Visible = false;
         foreach (var slot in before.Bindings.Keys.Union(state.Bindings.Keys))
         {
@@ -538,8 +554,10 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
             output.Texture = view.Viewport.GetTexture();
             var hasTarget = state.Bindings.ContainsKey(slot);
             output.Visible = hasTarget || progress < 1;
+            if (output.Visible) screenViews.Add(view);
             ApplyScreenSlot(output, state, slot, ScreenViewport.Size, before, progress);
         }
+        RefreshScreenDemand();
     }
 
     public void PublishEffects(StableEffectState state)
@@ -575,6 +593,7 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
         Activate();
     }
 
+    /// <summary>Reads the last completed frame. Use CaptureViewAsync to render current hidden content.</summary>
     public ImageTexture CaptureView(ViewId viewId, bool canonical = false)
     {
         EnsureInitialized();
@@ -610,55 +629,37 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
         EnsureInitialized();
         cancellationToken.ThrowIfCancellationRequested();
         var view = GetOrCreateView(viewId);
-        var previousMode = view.Viewport.RenderTargetUpdateMode;
-        view.Viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
-        try
-        {
-            await WaitForRenderFenceAsync(cancellationToken);
-            return CaptureView(viewId, canonical);
-        }
-        finally
-        {
-            if (GodotObject.IsInstanceValid(view.Viewport))
-                view.Viewport.RenderTargetUpdateMode = previousMode;
-        }
+        using var demand = viewDemand.Acquire(view, "capture");
+        await WaitForRenderedViewAsync(view, demand, cancellationToken);
+        return CaptureView(viewId, canonical);
     }
 
     internal async Task<ImageTexture> CaptureScreenAsync(CancellationToken cancellationToken)
     {
         EnsureInitialized();
         cancellationToken.ThrowIfCancellationRequested();
-        var previousMode = ScreenViewport.RenderTargetUpdateMode;
-        ScreenViewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
-        try
+        using var demand = AcquireScreenDemand();
+        await WaitForRenderedScreenAsync(cancellationToken);
+        Image image;
+        if (!string.Equals(
+            DisplayServer.GetName(),
+            "headless",
+            StringComparison.OrdinalIgnoreCase))
         {
-            await WaitForRenderFenceAsync(cancellationToken);
-            Image image;
-            if (!string.Equals(
-                DisplayServer.GetName(),
-                "headless",
-                StringComparison.OrdinalIgnoreCase))
-            {
-                image = ScreenViewport.GetTexture().GetImage();
-                if (image is null || image.IsEmpty())
-                    throw new DirectionException("Direction Screen capture returned an empty image.");
-            }
-            else
-            {
-                image = Image.CreateEmpty(
-                    Math.Max(ScreenViewport.Size.X, 1),
-                    Math.Max(ScreenViewport.Size.Y, 1),
-                    false,
-                    Image.Format.Rgba8);
-                image.Fill(Colors.Black);
-            }
-            return ImageTexture.CreateFromImage(image);
+            image = ScreenViewport.GetTexture().GetImage();
+            if (image is null || image.IsEmpty())
+                throw new DirectionException("Direction Screen capture returned an empty image.");
         }
-        finally
+        else
         {
-            if (GodotObject.IsInstanceValid(ScreenViewport))
-                ScreenViewport.RenderTargetUpdateMode = previousMode;
+            image = Image.CreateEmpty(
+                Math.Max(ScreenViewport.Size.X, 1),
+                Math.Max(ScreenViewport.Size.Y, 1),
+                false,
+                Image.Format.Rgba8);
+            image.Fill(Colors.Black);
         }
+        return ImageTexture.CreateFromImage(image);
     }
 
     public void ApplyViewPose(ViewId viewId, ViewPose pose)
@@ -822,7 +823,7 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
         }
     }
 
-    public void Dispose() { idleCancellation.Dispose(); outputMaterial.Dispose(); }
+    public void Dispose() { renderCancellation.Dispose(); idleCancellation.Dispose(); outputMaterial.Dispose(); }
 
     public void ClearBackdropTransition(StageId stageId)
     {
@@ -1005,6 +1006,7 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
 
     private void Resize()
     {
+        renderSizeRevision++;
         var visibleSize = owner.GetViewport().GetVisibleRect().Size;
         var resolution = configuredResolution.X > 0 && configuredResolution.Y > 0
             ? configuredResolution
@@ -1071,43 +1073,22 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
 
     private void ActivateViewports()
     {
+        if (outputActive) return;
+        outputActive = true;
         foreach (var surface in stages.Values)
             if (GodotObject.IsInstanceValid(surface.Viewport))
                 surface.Viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
-        if (GodotObject.IsInstanceValid(ViewViewport))
-            ViewViewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
-        if (GodotObject.IsInstanceValid(ScreenViewport))
-            ScreenViewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
-        foreach (var view in RenderViews)
-            if (GodotObject.IsInstanceValid(view.Viewport))
-            {
-                view.Viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
-                view.ContentViewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
-                view.BackgroundViewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
-                view.TransitionBackgroundViewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
-                view.CompositeViewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
-            }
+        RefreshScreenDemand();
     }
 
     private void Deactivate()
     {
         OutputLayer.Visible = false;
+        outputActive = false;
         foreach (var surface in stages.Values)
             if (GodotObject.IsInstanceValid(surface.Viewport))
                 surface.Viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
-        if (GodotObject.IsInstanceValid(ViewViewport))
-            ViewViewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
-        if (GodotObject.IsInstanceValid(ScreenViewport))
-            ScreenViewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
-        foreach (var view in RenderViews)
-            if (GodotObject.IsInstanceValid(view.Viewport))
-            {
-                view.Viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
-                view.ContentViewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
-                view.BackgroundViewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
-                view.TransitionBackgroundViewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
-                view.CompositeViewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
-            }
+        RefreshScreenDemand();
     }
 
     private static SubViewport CreateViewport(string name) => new()
@@ -1268,14 +1249,7 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
         SetFullRect(content, viewport.Size);
         SetFullRect(viewTransition, viewport.Size);
         viewGenerations[viewId] = ++targetGeneration;
-        if (isInitialized)
-        {
-            viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
-            surface.ContentViewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
-            surface.BackgroundViewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
-            surface.TransitionBackgroundViewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
-            surface.CompositeViewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
-        }
+        viewDemand.Register(surface);
         return surface;
     }
 
@@ -1284,6 +1258,8 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
     internal void ReleasePreparedView(ViewId viewId)
     {
         if (viewId == ViewId.Main || !views.Remove(viewId, out var surface)) return;
+        viewDemand.Remove(surface);
+        screenViews.Remove(surface);
         viewGenerations.Remove(viewId);
         foreach (var key in environmentGenerations.Keys.Where(key => key.View == viewId).ToArray())
             environmentGenerations.Remove(key);

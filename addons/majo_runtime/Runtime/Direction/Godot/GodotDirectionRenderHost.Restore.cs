@@ -89,11 +89,11 @@ internal sealed partial class GodotDirectionRenderHost
             Validate();
             cancellationToken.ThrowIfCancellationRequested();
             if (DisplayServer.GetName() == "headless") return;
-            host.ActivateViewports();
+            using var demand = host.AcquireScreenDemand();
             // Observe an entire render submission after commit. Godot orders the active
             // Viewport texture dependency graph (content -> view -> screen) in that submission.
             // ProcessFrame and visual settlement do not establish this rendering fence.
-            await GodotVisualInput.WaitForFrameAsync(cancellationToken);
+            await host.WaitForRenderedScreenAsync(cancellationToken);
             Validate();
             using var target = host.ScreenViewport.GetTexture().GetImage();
             if (target is null || target.IsEmpty() || target.GetSize() != host.ScreenViewport.Size)

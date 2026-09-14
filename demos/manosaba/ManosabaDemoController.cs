@@ -27,10 +27,11 @@ public partial class ManosabaDemoController : Node
         try
         {
             var configuration = MajoProjectConfiguration.CreateDefault();
-            if (System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--trial00-profile") >= 0)
+            var stress = System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--trial00-stress") >= 0;
+            if (stress || System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--trial00-profile") >= 0)
             {
                 configuration.Dialogue!.DefaultStartNode = "Act01_Chapter01_Trial00";
-                AddChild(new Trial00PerformanceProbe());
+                if (!stress) AddChild(new Trial00PerformanceProbe());
             }
             configuration.Resources!.RootPath = "res://demos/manosaba/assets";
             configuration.Localization!.DefaultLocale = "zh-Hans";
@@ -105,7 +106,14 @@ public partial class ManosabaDemoController : Node
                 audio);
 
             var dialogue = services.Get<IDialoguePlayer>();
+            Trial00StressProbe? stressProbe = null;
+            if (stress)
+            {
+                stressProbe = new Trial00StressProbe();
+                AddChild(stressProbe);
+            }
             await dialogue.StartAsync();
+            if (stressProbe is not null) await stressProbe.RunAsync(runtime);
         }
         catch (Exception exception)
         {

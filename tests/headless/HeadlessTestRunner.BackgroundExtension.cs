@@ -107,11 +107,16 @@ public partial class HeadlessTestRunner
                 Assert(host.GetRenderResourceMetrics().ViewCount == 2, "Overlapping camera dissolve did not retain a live old view.");
                 // A newly created camera source must see the current background blend too.
                 var liveCamera = host.LiveViewSources.Single();
+                AssertViewRendering(liveCamera, true, "Committed live camera source");
+                Assert(host.InspectViewDemand().All(view => view.Requests.Length == 0),
+                    "Committed camera must transfer preparation demand to a dependency.");
                 Assert(liveCamera.BackgroundOutput.Visible == false && liveCamera.TransitionBlendOutput.Visible,
                     "A camera created during background dissolve missed its blend inputs.");
                 using (var frame = await ReadTransitionFrameAsync(host.ScreenViewport)) { }
                 await direction.FinishAsync(camera);
                 Assert(host.GetRenderResourceMetrics().ViewCount == 1, "Overlapping camera retained its temporary view.");
+                Assert(host.InspectViewDemand().All(view => view.Sources.Length == 0 && view.Requests.Length == 0),
+                    "Finished camera transition retained render demand.");
             }
             await direction.FinishAsync(mix);
             Assert(GodotBackgroundRaster.SnapshotCount == 0 && resources.CaptureCacheSnapshot().ActiveLeaseCount == baselineLeases + 2,
