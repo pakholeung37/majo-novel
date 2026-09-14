@@ -84,6 +84,8 @@ public sealed class GodotProjectResourceProvider : IResourceProvider
     public object Load(ResourceLocation location, Type resourceType)
     {
         EnsureInitialized();
+        using var timing = Diagnostics.RuntimePerformanceTrace.Source.StartActivity("resource.load.sync");
+        timing?.SetTag("path", location.Path);
         var resource = ResourceLoader.Load(
             location.Path,
             resourceType.Name,
@@ -99,6 +101,8 @@ public sealed class GodotProjectResourceProvider : IResourceProvider
     {
         EnsureInitialized();
         cancellationToken.ThrowIfCancellationRequested();
+        using var timing = Diagnostics.RuntimePerformanceTrace.Source.StartActivity("resource.load.async");
+        timing?.SetTag("path", location.Path);
         var error = ResourceLoader.LoadThreadedRequest(
             location.Path,
             resourceType.Name,
@@ -125,6 +129,8 @@ public sealed class GodotProjectResourceProvider : IResourceProvider
                 $"Godot failed to load resource '{location.Path}': {status}.");
         }
 
+        using var retrieve = Diagnostics.RuntimePerformanceTrace.Source.StartActivity("resource.retrieve.sync");
+        retrieve?.SetTag("path", location.Path);
         var resource = ResourceLoader.LoadThreadedGet(location.Path) ??
             throw new MajoResourceException(
                 $"Godot returned null for resource '{location.Path}'.");

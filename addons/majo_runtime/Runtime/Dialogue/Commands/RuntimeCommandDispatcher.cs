@@ -100,6 +100,9 @@ public sealed class RuntimeCommandDispatcher : IDisposable
             (dialogue as DialoguePlayer)?.CurrentDialogueSessionId,
             executionId);
 
+        using var timing = Diagnostics.RuntimePerformanceTrace.Source.StartActivity("command");
+        timing?.SetTag("name", command.Name);
+        timing?.SetTag("arguments", string.Join(" ", input.RawArguments));
         using var correlationScope = logger.BeginCorrelationScope(correlation);
 
         var properties = new Dictionary<string, object?>

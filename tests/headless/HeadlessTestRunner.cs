@@ -96,6 +96,16 @@ public partial class HeadlessTestRunner : Node
             await ValidateRepeatedWallAsync();
             return;
         }
+        if (OS.GetCmdlineUserArgs().Contains("--majo-layered-appearance-real"))
+        {
+            await ValidateRealLayeredInputsAsync();
+            return;
+        }
+        if (OS.GetCmdlineUserArgs().Contains("--majo-layered-appearance"))
+        {
+            await ValidateLayeredCharacterAsync();
+            return;
+        }
         if (OS.GetCmdlineUserArgs().Contains("--majo-layered-masks"))
         {
             await ValidateLayeredMasksAsync();

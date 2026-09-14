@@ -719,7 +719,8 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
         IDisposable? activityLease = null;
         try
         {
-            prepared = await backend.PrepareAsync(plan, cancellationToken);
+            using (Diagnostics.RuntimePerformanceTrace.Source.StartActivity("direction.prepare"))
+                prepared = await backend.PrepareAsync(plan, cancellationToken);
             if (prepared is null)
                 throw new DirectionException("Direction backend returned no prepared transaction.");
 
@@ -745,7 +746,8 @@ public sealed class DirectionTransactionCoordinator : IDirectionTransactionCoord
             // Commit is deliberately outside stateGate. The commit gate still
             // serializes writers, while readers never block on Godot/backend work.
             commitStarted = true;
-            prepared.Commit(token);
+            using (Diagnostics.RuntimePerformanceTrace.Source.StartActivity("direction.commit"))
+                prepared.Commit(token);
             var committedState = plan.DomainPlan.ResolveCommitState();
             plan = plan with { DomainPlan = plan.DomainPlan with { TargetState = committedState } };
 

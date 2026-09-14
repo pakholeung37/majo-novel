@@ -26,12 +26,16 @@ public partial class ManosabaDemoController : Node
     {
         try
         {
+            var progress = System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--trial00-progress") >= 0;
+            Trial00ProgressProbe? progressProbe = null;
+            if (progress) { progressProbe = new Trial00ProgressProbe(); AddChild(progressProbe); }
             var configuration = MajoProjectConfiguration.CreateDefault();
+            if (progress) configuration.Diagnostics!.RingBufferCapacity = 50000;
             var stress = System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--trial00-stress") >= 0;
-            if (stress || System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--trial00-profile") >= 0)
+            if (progress || stress || System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--trial00-profile") >= 0)
             {
                 configuration.Dialogue!.DefaultStartNode = "Act01_Chapter01_Trial00";
-                if (!stress) AddChild(new Trial00PerformanceProbe());
+                if (!stress && !progress) AddChild(new Trial00PerformanceProbe());
             }
             configuration.Resources!.RootPath = "res://demos/manosaba/assets";
             configuration.Localization!.DefaultLocale = "zh-Hans";
@@ -112,7 +116,9 @@ public partial class ManosabaDemoController : Node
                 stressProbe = new Trial00StressProbe();
                 AddChild(stressProbe);
             }
+            progressProbe?.Attach(runtime);
             await dialogue.StartAsync();
+            if (progressProbe is not null) await progressProbe.RunAsync(runtime);
             if (stressProbe is not null) await stressProbe.RunAsync(runtime);
         }
         catch (Exception exception)

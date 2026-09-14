@@ -101,11 +101,26 @@ public sealed class LayeredCharacterActor : GodotCharacterActorBase, IDisposable
         string appearance,
         AnimationSpec animation, ITransitionDriver driver, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var sourceLayers = resolver.CreateDefaultState();
         resolver.Apply(sourceLayers, sourceAppearance);
         var nextLayers = resolver.CreateDefaultState();
         var canonical = ResolveAppearance(sourceAppearance, appearance);
         resolver.Apply(nextLayers, canonical);
+        using var timing = Majo.Runtime.Diagnostics.RuntimePerformanceTrace.Source.StartActivity("layered.appearance.setup.sync");
+        timing?.SetTag("sameLayers", sourceLayers.SetEquals(nextLayers));
+        timing?.SetTag("sourceAppearance", sourceAppearance);
+        timing?.SetTag("targetAppearance", canonical);
+        // The backend still owns the normal appearance slot and duration. Only
+        // stable, equal built-in dissolves can dispense with visual inputs.
+        // Custom preparation services keep their full lifecycle and side effects.
+        if (transitions is GodotActorAppearanceTransitionService &&
+            driver is DissolveTransitionDriver { PreservesIdenticalInputs: true } &&
+            activeOverlay is null && activeLayers.SetEquals(sourceLayers) && sourceLayers.SetEquals(nextLayers))
+        {
+            timing?.SetTag("reusedStableAppearance", true);
+            return Task.FromResult<IPreparedActorAppearance>(new UnchangedAppearance(this, canonical));
+        }
         return transitions.PrepareForCommitAsync(View,
             CreateComposite(sourceLayers), CreateComposite(nextLayers), canvasBounds,
             visible => { if (IsAlive) layerComposite.Visible = visible; },
@@ -120,15 +135,59 @@ public sealed class LayeredCharacterActor : GodotCharacterActorBase, IDisposable
 
     private CanvasGroup CreateComposite(HashSet<string> layers)
     {
-        var composite = (CanvasGroup)layerComposite.Duplicate();
-        composite.Visible = true;
-        composite.SetInstanceShaderParameter(GroupOpacityParameter, 1f);
-        foreach (var sprite in composite.GetChildren().OfType<Sprite2D>())
+        using var timing = Majo.Runtime.Diagnostics.RuntimePerformanceTrace.Source.StartActivity("layered.clone.sync");
+        timing?.SetTag("totalLayers", layerComposite.GetChildCount());
+        timing?.SetTag("selectedLayers", layers.Count);
+        // This actor owns a flat group of sprites. Preserve child order and copy
+        // only selected layers, including their visible stencil writers. Masking
+        // resolves writers from this endpoint, never from the other appearance.
+        var composite = new CanvasGroup
         {
-            sprite.Visible = nodeNameToLayerPath.TryGetValue(sprite.Name, out var path) && layers.Contains(path);
+            Name = layerComposite.Name,
+            Material = layerComposite.Material,
+            Transform = layerComposite.Transform,
+            Modulate = layerComposite.Modulate,
+            SelfModulate = layerComposite.SelfModulate,
+            VisibilityLayer = layerComposite.VisibilityLayer,
+            FitMargin = layerComposite.FitMargin,
+            ClearMargin = layerComposite.ClearMargin,
+            UseMipmaps = layerComposite.UseMipmaps,
+        };
+        try
+        {
+            composite.SetInstanceShaderParameter(GroupOpacityParameter, 1f);
+            foreach (var sprite in layerComposite.GetChildren().OfType<Sprite2D>())
+            {
+                if (!nodeNameToLayerPath.TryGetValue(sprite.Name, out var path) || !layers.Contains(path)) continue;
+                var copy = (Sprite2D)sprite.Duplicate();
+                copy.Visible = true;
+                composite.AddChild(copy);
+            }
+            masking.Apply(composite);
+            timing?.SetTag("copiedLayers", composite.GetChildCount());
+            return composite;
         }
-        masking.Apply(composite);
-        return composite;
+        catch { composite.Free(); throw; }
+    }
+
+    private sealed class UnchangedAppearance(LayeredCharacterActor actor, string appearance) : IPreparedActorAppearance
+    {
+        private bool committed;
+        private bool disposed;
+        public string ResolvedAppearance { get; } = appearance;
+        public void Commit()
+        {
+            if (disposed || committed) throw new InvalidOperationException("Appearance is no longer preparable.");
+            committed = true;
+        }
+        public void ApplyProgress(float progress) { }
+        public void Finish()
+        {
+            if (disposed) return;
+            disposed = true;
+            if (committed) actor.SetAppearance(ResolvedAppearance);
+        }
+        public void Dispose() => disposed = true;
     }
 
     public override void SetAppearance(string appearance)

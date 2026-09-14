@@ -2,7 +2,13 @@
 
 using System;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
+using Majo.Runtime.Actors.Godot;
+using Majo.Runtime.Direction.Transitions;
+using Majo.Runtime.Direction.Core;
+using Majo.Runtime.Direction.Execution;
+using Majo.Runtime.Direction.Godot;
 using Godot;
 using Majo.Demos.Manosaba.Actors.Layered;
 using Majo.Runtime.Actors;
@@ -90,10 +96,49 @@ public partial class HeadlessTestRunner
         var actorHost = character.View.GetParent();
         var nodesBeforeTransition = actorHost.GetChildren().ToHashSet();
         var actorChildrenBeforeTransition = character.View.GetChildren().ToHashSet();
+        var sourceAppearance = character.Appearance;
+        using (var unchanged = await ((IActorAppearanceTarget)character).PrepareAppearanceTransitionAsync(
+            sourceAppearance, "Normal1", new AnimationSpec(.2), new DissolveTransitionDriver()))
+        {
+            Assert(character.View.GetChildren().ToHashSet().SetEquals(actorChildrenBeforeTransition),
+                "Equivalent alias preparation created visual nodes.");
+            unchanged.Commit();
+            unchanged.ApplyProgress(.5f);
+            Assert(layerComposite.Visible && character.Appearance == sourceAppearance &&
+                character.View.GetChildren().ToHashSet().SetEquals(actorChildrenBeforeTransition),
+                "Equivalent dissolve must keep the stable actor visible without an overlay.");
+            unchanged.Finish();
+            unchanged.Finish();
+        }
+        using (var abandoned = await ((IActorAppearanceTarget)character).PrepareAppearanceTransitionAsync(
+            sourceAppearance, "Default", new AnimationSpec(.2), new DissolveTransitionDriver()))
+        {
+            abandoned.Dispose();
+            Assert(character.Appearance == sourceAppearance, "Abandoning equivalent preparation changed appearance.");
+            await AssertThrowsAsync<InvalidOperationException>(() => { abandoned.Commit(); return Task.CompletedTask; });
+        }
+        using (var cancelled = new CancellationTokenSource())
+        {
+            cancelled.Cancel();
+            await AssertThrowsAsync<OperationCanceledException>(() => ((IActorAppearanceTarget)character)
+                .PrepareAppearanceTransitionAsync(sourceAppearance, "Default", new AnimationSpec(.2),
+                    new DissolveTransitionDriver(), cancelled.Token));
+        }
+        // Fade intentionally hides even identical input; a custom dissolve may do so too.
+        using var customShader = GD.Load<Shader>("res://addons/majo_runtime/Runtime/Direction/Shaders/DissolveTransition.gdshader");
+        foreach (var driver in new ITransitionDriver[] { new FadeTransitionDriver(), new DissolveTransitionDriver(customShader) })
+        using (var effect = await ((IActorAppearanceTarget)character).PrepareAppearanceTransitionAsync(
+            character.Appearance, "Default", new AnimationSpec(.2), driver))
+        {
+            effect.Commit();
+            Assert(character.View.GetChildren().OfType<Sprite2D>().Any(), "Non-identity driver was incorrectly elided.");
+            effect.Finish();
+        }
         using (var prepared = await ((IActorAppearanceTarget)character).PrepareAppearanceTransitionAsync(
-            character.Appearance, "Default", new AnimationSpec(.2),
+            character.Appearance, "Surprised1", new AnimationSpec(.2),
             new Majo.Runtime.Direction.Transitions.DissolveTransitionDriver()))
         {
+            await VerifySparseLayeredInputsAsync(character, layerComposite, "Surprised1");
             prepared.Commit();
             var preparedOverlay = character.View.GetChildren().OfType<Sprite2D>().Single();
             Assert(preparedOverlay.VisibilityLayer == character.View.VisibilityLayer && preparedOverlay.Visible,
@@ -146,12 +191,126 @@ public partial class HeadlessTestRunner
         Assert(((Sprite2D)warden.View).Texture?.GetSize() == new Vector2(16, 24),
             "Plain appearance 1 was not loaded from the synthetic PNG.");
 
+        await VerifyUnchangedAppearanceTimingAsync(bootstrap);
+        await bootstrap.RequestShutdownAsync();
         bootstrap.QueueFree();
         await bootstrap.ShutdownCompletion;
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         Assert(!IsInstanceValid(character.SceneNode),
             "Layered character node leaked after runtime shutdown.");
+    }
+
+    private async Task VerifyUnchangedAppearanceTimingAsync(MajoRuntimeBootstrap runtime)
+    {
+        var coordinator = runtime.Host!.Services.Get<IDirectionTransactionCoordinator>();
+        var id = new ActorId("LayeredA");
+        ActorPatch Appearance(string value, double duration) => ActorPatch.Place(StageId.Main, id) with
+        {
+            Appearance = DirectionValue.From<string?>(value),
+            Transition = duration == 0 ? DirectionTransitionSpec.Cut : new(DirectionTransitionId.Dissolve, duration),
+        };
+        await coordinator.ExecuteAsync(new[] { Appearance("Default", 0) }, DirectionCompletionBarrier.Settle);
+        var unchanged = await coordinator.ExecuteAsync(new[] { Appearance("Normal1", .2) });
+        Assert(!unchanged.Settlement.IsCompleted, "Equivalent appearance discarded the authored duration.");
+        await ToSignal(GetTree().CreateTimer(.04), SceneTreeTimer.SignalName.Timeout);
+        Assert(!unchanged.Settlement.IsCompleted, "Equivalent appearance settled before its duration.");
+        await unchanged.Settlement;
+        var old = await coordinator.ExecuteAsync(new[] { Appearance("Surprised1", .5) });
+        var replacement = await coordinator.ExecuteAsync(new[] { Appearance("Surprised1", .2) });
+        await old.Settlement;
+        Assert(!replacement.Settlement.IsCompleted, "Replacing an active appearance lost its new clock.");
+        await coordinator.FinishAsync(replacement);
+        Assert(replacement.Settlement.IsCompletedSuccessfully, "Finish failed to settle equivalent appearance.");
+
+        // Roll back a committed no-input appearance using the same component protocol
+        // as a failed composite transaction, then check a following real change.
+        var before = coordinator.State;
+        var plan = new DirectionPlanner().Plan(before, new[] { Appearance("Surprised1", .2) }).DomainPlan;
+        var backend = runtime.Host.Services.Get<GodotDirectionStageBackend>();
+        await using (var prepared = await backend.PrepareAsync(plan, StageId.Main,
+            before.Stages[StageId.Main], plan.TargetState.Stages[StageId.Main], default))
+        {
+            var token = new DirectionCommitToken(plan.Id, plan.TargetState.Revision);
+            prepared.Commit(token);
+            prepared.Rollback(token);
+        }
+        await coordinator.ExecuteAsync(new[] { Appearance("Default", .05) }, DirectionCompletionBarrier.Settle);
+    }
+
+    private async Task ValidateRealLayeredInputsAsync()
+    {
+        Assert(DisplayServer.GetName() != "headless", "Real layered pixel comparison requires a renderer.");
+        var configuration = CreateHeadlessConfiguration();
+        configuration.Resources!.RootPath = "res://demos/manosaba/assets";
+        var runtime = new MajoRuntimeBootstrap { Configuration = configuration };
+        runtime.AddPlugin(new LayeredCharacterPlugin());
+        AddChild(runtime);
+        await runtime.InitializationCompletion;
+        try
+        {
+            var actors = runtime.Host!.Services.Get<IActorManager>();
+            foreach (var (id, appearance) in new[]
+            {
+                ("Meruru", "Normal1,ArmR8_1,ArmL8,Eyes1_Normal_Open2,Mouth1_Normal_Open2"),
+                ("Meruru", "Normal2,ArmR9_2,ArmL9,Eyes2_Smile_Closed1,Mouth2_Smile_Closed1"),
+                ("Ema", "Surprised1,Angle01/Head01/Facial01/Mouth01~Mouth01_Pensive_Open"),
+            })
+            {
+                var actor = (ICharacterActor)await actors.GetOrCreateAsync(new ActorSpawnRequest(id,
+                    ActorFactoryIds.Character, "Default", CharacterPositionPreset.Center));
+                actor.SetVisible(true);
+                actor.SetOpacity(.4f);
+                using var prepared = await ((IActorAppearanceTarget)actor).PrepareAppearanceTransitionAsync(
+                    actor.Appearance, appearance, new AnimationSpec(.2), new DissolveTransitionDriver());
+                await VerifySparseLayeredInputsAsync(actor, actor.View.GetNode<CanvasGroup>("LayerComposite"), appearance);
+                prepared.Commit();
+                prepared.ApplyProgress(.5f);
+                prepared.Finish();
+                GD.Print($"Full/sparse real layered pixel comparison passed: {id} {appearance}");
+            }
+        }
+        finally
+        {
+            await runtime.RequestShutdownAsync();
+            runtime.QueueFree();
+        }
+    }
+
+    private async Task VerifySparseLayeredInputsAsync(ICharacterActor character, CanvasGroup stable, string target)
+    {
+        var pool = GodotActorCapturePool.For(this);
+        var inputs = pool.GetChildren().OfType<SubViewport>()
+            .Where(v => v.RenderTargetUpdateMode == SubViewport.UpdateMode.Always && v.GetChildCount() > 0).ToArray();
+        Assert(inputs.Length == 2, "Expected exactly two live appearance inputs.");
+        var original = character.Appearance;
+        foreach (var input in inputs)
+        {
+            var offset = input.GetChild<Node2D>(0);
+            var sparse = offset.GetChild<CanvasGroup>(0);
+            if (input.Name == "AppearanceTarget") character.SetAppearance(target);
+            else character.SetAppearance(original);
+            var selected = stable.GetChildren().OfType<Sprite2D>().Where(v => v.Visible).Select(v => v.Name.ToString()).ToArray();
+            Assert(sparse.GetChildCount() < stable.GetChildCount() &&
+                sparse.GetChildren().Select(v => v.Name.ToString()).SequenceEqual(selected),
+                "Sparse input must contain precisely the selected sprites in render order.");
+            if (DisplayServer.GetName() == "headless") continue;
+            // Oracle: the former full-tree clone, including hidden sprites and the
+            // stable appearance's mask materials. Compare actual rendered pixels.
+            var full = (CanvasGroup)stable.Duplicate();
+            full.SetInstanceShaderParameter("group_opacity", 1f);
+            var comparison = pool.Acquire(full, (CanvasGroup)sparse.Duplicate(),
+                new Rect2(-offset.Position, input.Size2DOverride));
+            try
+            {
+                using var expected = await ReadTransitionFrameAsync(comparison.Source);
+                using var actual = await ReadTransitionFrameAsync(comparison.Target);
+                Assert(expected.GetData().SequenceEqual(actual.GetData()),
+                    "Sparse layered input changed pixels compared with the full-tree renderer.");
+            }
+            finally { comparison.Release(); }
+        }
+        character.SetAppearance(original);
     }
 
     private static bool LayerVisible(Sprite2D[] layers, string name) =>

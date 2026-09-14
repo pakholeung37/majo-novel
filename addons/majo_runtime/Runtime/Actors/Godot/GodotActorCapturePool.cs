@@ -29,6 +29,8 @@ internal sealed partial class GodotActorCapturePool : Node
 
     public Capture Acquire(CanvasItem source, CanvasItem target, Rect2 bounds)
     {
+        using var timing = Diagnostics.RuntimePerformanceTrace.Source.StartActivity("actor.capture.acquire.sync");
+        timing?.SetTag("bounds", bounds.ToString());
         var needed = (Vector2I)bounds.Size.Ceil();
         capacity = new Vector2I(Math.Max(capacity.X, needed.X), Math.Max(capacity.Y, needed.Y));
         var capture = captures.Find(value => !value.Leased);
@@ -44,6 +46,7 @@ internal sealed partial class GodotActorCapturePool : Node
 
     private void Release(Capture capture)
     {
+        using var timing = Diagnostics.RuntimePerformanceTrace.Source.StartActivity("actor.capture.release.sync");
         capture.Clear();
         capture.Leased = false;
         if (captures.Count <= RetainedPairs) return;
