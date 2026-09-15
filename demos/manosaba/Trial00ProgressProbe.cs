@@ -36,9 +36,11 @@ public partial class Trial00ProgressProbe : Node
     private int lineNumber;
     private bool finished;
     private bool recording = true;
+    private bool rapid;
 
     public override void _Ready()
     {
+        rapid = Array.IndexOf(OS.GetCmdlineUserArgs(), "--trial00-progress-rapid") >= 0;
         GetWindow().Title = "Trial00 Progress Trace — automatic dialogue, keep focused";
         listener = new ActivityListener
         {
@@ -108,12 +110,12 @@ public partial class Trial00ProgressProbe : Node
         previous = now;
         if (playback is null || dialogue is null) return;
         if (playback.Phase == ScriptPlaybackPhase.PresentingOptions) { finished = true; return; }
-        if (now - lastAction < 500) return;
+        if (now - lastAction < (rapid ? 100 : 500)) return;
         var age = now - lineStarted;
-        // Let the initial 25-second drift finish. Subsequent lines have two seconds
-        // of dwell, with ordinary hurry-up followed by ordinary advance.
-        var dwell = lineNumber == 1 ? 28000 : 2000;
-        if (playback.Phase == ScriptPlaybackPhase.PresentingLine && age > 750)
+        // Let the initial 25-second drift finish in both modes. Rapid progression
+        // only reduces dialogue dwell; script waits and transition rules remain intact.
+        var dwell = lineNumber == 1 ? 28000 : rapid ? 100 : 2000;
+        if (playback.Phase == ScriptPlaybackPhase.PresentingLine && age > (rapid ? 100 : 750))
         {
             lastAction = now;
             dialogue.RequestHurryUp();
@@ -150,6 +152,8 @@ public partial class Trial00ProgressProbe : Node
         var configuration = new
         {
             completed = finished, lineCount = lineNumber, seconds = clock.Elapsed.TotalSeconds,
+            progressionMode = rapid ? "rapid" : "normal", actionIntervalMs = rapid ? 100 : 500,
+            lineDwellMs = rapid ? 100 : 2000, openingDwellMs = 28000,
             maxFps = Engine.MaxFps, vsync = DisplayServer.WindowGetVsyncMode().ToString(),
             refreshHz = DisplayServer.ScreenGetRefreshRate(), windowSize = GetWindow().Size.ToString(),
             renderer = RenderingServer.GetCurrentRenderingMethod().ToString(), epoch,

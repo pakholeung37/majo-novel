@@ -6,6 +6,13 @@ def stats(rows):
     if not a:return {}
     def percentile(values,q):return sorted(values)[min(len(values)-1,int(len(values)*q))]
     result={'frames':len(a),'fps':1000/(sum(a)/len(a)),'p50Ms':percentile(a,.5),'p95Ms':percentile(a,.95),'p99Ms':percentile(a,.99),'maxMs':max(a),'over16_67':sum(x>1000/60 for x in a),'over25':sum(x>25 for x in a),'over50':sum(x>50 for x in a),'focusedPercent':100*sum(r['focused']=='True' for r in rows)/len(rows)}
+    result['seconds']=sum(a)/1000
+    result['longFramePercent']=100*result['over16_67']/len(a)
+    result['longFramesPerSecond']=result['over16_67']/result['seconds']
+    elapsed=(float(rows[-1]['time_ms'])-float(rows[0]['time_ms']))/1000
+    allocated=int(rows[-1]['allocated_bytes'])-int(rows[0]['allocated_bytes'])
+    result['allocatedMiB']=allocated/1048576
+    result['allocatedMiBPerSecond']=allocated/1048576/elapsed if elapsed>0 else None
     for key in ['gpu_ms','render_cpu_ms']:
         values=[float(r[key]) for r in rows if key in r and math.isfinite(float(r[key])) and float(r[key])>0]
         if values:result[key]={'p50':percentile(values,.5),'p95':percentile(values,.95),'p99':percentile(values,.99),'max':max(values)}
