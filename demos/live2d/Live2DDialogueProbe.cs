@@ -2,6 +2,8 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,6 +16,7 @@ namespace Majo.Demos.Live2D;
 public partial class Live2DDialogueProbe : Node, IDialoguePresenter
 {
     public int LineCount { get; private set; }
+    public string? CaptureDirectory { get; init; }
 
     public Task OnDialogueStartedAsync(CancellationToken cancellationToken)
     {
@@ -21,12 +24,19 @@ public partial class Live2DDialogueProbe : Node, IDialoguePresenter
         return Task.CompletedTask;
     }
 
-    public Task PresentLineAsync(DialogueLine line, DialoguePresentationContext context)
+    public async Task PresentLineAsync(DialogueLine line, DialoguePresentationContext context)
     {
         ArgumentNullException.ThrowIfNull(line);
         context.NextLineToken.ThrowIfCancellationRequested();
         LineCount++;
-        return Task.CompletedTask;
+        if (CaptureDirectory is null) return;
+
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Directory.CreateDirectory(CaptureDirectory);
+        using var image = GetViewport().GetTexture().GetImage();
+        var path = Path.Combine(CaptureDirectory,
+            LineCount.ToString("D2", CultureInfo.InvariantCulture) + ".png");
+        image.SavePng(path);
     }
 
     public Task<DialogueOption?> PresentOptionsAsync(

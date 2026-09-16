@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.Globalization;
 using Godot;
 using Majo.Demos.Live2D.Actors;
 using Majo.Runtime;
@@ -23,12 +24,21 @@ public partial class Live2DDemoController : Node
         {
             var configuration = CreateConfiguration();
             var automatic = Array.IndexOf(OS.GetCmdlineUserArgs(), "--live2d-auto") >= 0;
-            configuration.Presentation!.Enabled = !automatic;
-            configuration.Diagnostics!.EnableOverlay = !automatic;
+            var stress = Array.IndexOf(OS.GetCmdlineUserArgs(), "--live2d-stress") >= 0;
+            configuration.Presentation!.Enabled = !automatic && !stress;
+            configuration.Diagnostics!.EnableOverlay = !automatic && !stress;
             Live2DDialogueProbe? probe = null;
             if (automatic)
             {
-                probe = new Live2DDialogueProbe { Name = "Live2DDialogueProbe" };
+                var capture = Array.IndexOf(OS.GetCmdlineUserArgs(), "--live2d-auto-capture") >= 0;
+                probe = new Live2DDialogueProbe
+                {
+                    Name = "Live2DDialogueProbe",
+                    CaptureDirectory = capture
+                        ? ProjectSettings.GlobalizePath("res://artifacts/live2d-yarn/" +
+                            DateTime.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture))
+                        : null,
+                };
                 AddChild(probe);
             }
             var runtime = new MajoRuntimeBootstrap
@@ -43,6 +53,13 @@ public partial class Live2DDemoController : Node
             runtime.AddPlugin(new Live2DCharacterPlugin());
             AddChild(runtime);
             await runtime.InitializationCompletion;
+            if (stress)
+            {
+                var stressProbe = new Live2DStressProbe { Name = "Live2DStressProbe" };
+                AddChild(stressProbe);
+                await stressProbe.RunAsync(runtime, ParseStressActorCount());
+                return;
+            }
             var dialogue = runtime.Host!.Services.Get<IDialoguePlayer>();
             await dialogue.StartAsync();
             if (automatic)
@@ -58,6 +75,8 @@ public partial class Live2DDemoController : Node
                 }
 
                 GD.Print($"LIVE2D_DEMO_OK: {probe.LineCount} lines completed.");
+                if (probe.CaptureDirectory is not null)
+                    GD.Print($"LIVE2D_CAPTURE_COMPLETE {probe.CaptureDirectory}");
                 await runtime.RequestShutdownAsync();
                 probe.QueueFree();
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -67,11 +86,27 @@ public partial class Live2DDemoController : Node
         catch (Exception exception)
         {
             GD.PushError($"Live2D demo failed: {exception}");
-            if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--live2d-auto") >= 0)
+            if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--live2d-auto") >= 0 ||
+                Array.IndexOf(OS.GetCmdlineUserArgs(), "--live2d-stress") >= 0)
             {
                 GetTree().Quit(1);
             }
         }
+    }
+
+    private static int ParseStressActorCount()
+    {
+        const string prefix = "--live2d-stress-count=";
+        foreach (var argument in OS.GetCmdlineUserArgs())
+        {
+            if (!argument.StartsWith(prefix, StringComparison.Ordinal)) continue;
+            if (int.TryParse(argument[prefix.Length..], out var count) &&
+                count >= Live2DStressProbe.MinimumActorCount)
+                return count;
+            throw new ArgumentException(
+                $"{prefix}<count> must be at least {Live2DStressProbe.MinimumActorCount}.");
+        }
+        return Live2DStressProbe.MinimumActorCount;
     }
 
     private static MajoProjectConfiguration CreateConfiguration()

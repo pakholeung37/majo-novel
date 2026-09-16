@@ -33,6 +33,26 @@ Run the complete non-interactive script smoke check with:
   -- --live2d-auto
 ```
 
+Add `--live2d-auto-capture` to save one rendered screenshot per Yarn line under
+`artifacts/live2d-yarn/<timestamp>/`. This verifies the real Direction
+SubViewport pipeline in addition to command completion.
+
+Run the rendered performance test with at least 20 simultaneous Cubism actors:
+
+```bash
+/Applications/Godot_mono.app/Contents/MacOS/Godot \
+  --path /Users/pakholeung/web/majo-rebuild \
+  res://demos/live2d/Live2DDemo.tscn \
+  -- --live2d-stress --live2d-stress-count=20
+```
+
+The test warms up for three seconds, then records five seconds with VSync and
+five seconds uncapped. It writes `results.json` and a rendered screenshot under
+`artifacts/live2d-stress/<timestamp>/`. The count argument cannot be below 20.
+For bottleneck isolation, `--live2d-stress-mask-size=<pixels>` caps each mask
+viewport and `--live2d-stress-static` freezes model evaluation after warmup.
+Reports include mesh, mask-viewport, and aggregate mask-pixel counts.
+
 The bundled `gd_cubism` binary is the debug macOS arm64 build from the working
 `manosaba-live2d` checkout. Redistribution remains subject to the gd_cubism,
 Live2D Cubism SDK, and Nijiiro Mao sample-model licenses. See the model's
