@@ -203,7 +203,7 @@ public partial class DefaultDebugOverlay : CanvasLayer, IDisposable
                 toggleHandle = null;
             }
 
-            if (logLevelFilter is not null)
+            if (logLevelFilter is not null && GodotObject.IsInstanceValid(logLevelFilter))
             {
                 logLevelFilter.ItemSelected -= HandleLogLevelSelected;
             }

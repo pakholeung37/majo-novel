@@ -1,6 +1,8 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://dkx63asd3bm5f"]
 
-[ext_resource type="Script" path="res://demos/live2d/Live2DDemoController.cs" id="1_controller"]
+[ext_resource type="Script" uid="uid://bo1nmrvifklg6" path="res://demos/live2d/Live2DDemoController.cs" id="1_controller"]
 
-[node name="Live2DDemo" type="Node"]
+[node name="Live2DDemo" type="Node" unique_id=369008141]
 script = ExtResource("1_controller")
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="." unique_id=63919831]

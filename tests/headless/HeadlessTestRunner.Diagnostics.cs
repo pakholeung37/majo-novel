@@ -147,6 +147,10 @@ public partial class HeadlessTestRunner
             Assert(overlay.IsOpen, "Debug overlay should reopen through the real F3 input path.");
             Assert(input.ActiveHandleCount == openHandleCount, "Reopening overlay should reacquire one modal scope.");
 
+            // Godot can free child controls before disposing their parent overlay.
+            overlay.Close();
+            levelFilter.Free();
+
             // Clean shutdown
             await bootstrap.RequestShutdownAsync();
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
