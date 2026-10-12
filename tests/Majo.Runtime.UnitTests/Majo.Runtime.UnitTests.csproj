@@ -20,7 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../../Majo Rebuild.csproj" />
+    <ProjectReference Include="../../Majo Novel.csproj" />
     <ProjectReference Include="../../addons/majo_runtime/SourceGenerators/Majo.CommandGenerator/Majo.CommandGenerator.csproj"
                       ReferenceOutputAssembly="false"
                       OutputItemType="Analyzer" />

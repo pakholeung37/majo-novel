@@ -366,7 +366,7 @@ Phase 4: 音频生命周期自治 ──> Phase 5: 对话层解耦与 Operation 
 
 在宣布重构完成前，必须逐项核对以下硬性门槛：
 
-1. [ ] **编译检查**：执行 `dotnet build "Majo Rebuild.sln" --no-restore` 必须 0 警告、0 错误。
+1. [ ] **编译检查**：执行 `dotnet build "Majo Novel.sln" --no-restore` 必须 0 警告、0 错误。
 2. [ ] **单元测试**：执行 `dotnet test "tests/Majo.Runtime.UnitTests/Majo.Runtime.UnitTests.csproj"`，全部 284+ 测试用例必须 100% Passed。
 3. [ ] **Headless 自动化测试**：运行 `tests/headless/HeadlessTestRunner.tscn`，确保：
    - `HeadlessTestRunner.Operations.cs` 覆盖的基础驱动测试正常；

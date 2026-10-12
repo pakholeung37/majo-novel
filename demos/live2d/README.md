@@ -19,7 +19,7 @@ Run it on macOS arm64 with Godot 4.7.2 Mono:
 
 ```bash
 /Applications/Godot_mono.app/Contents/MacOS/Godot \
-  --path /Users/pakholeung/web/majo-rebuild \
+  --path . \
   res://demos/live2d/Live2DDemo.tscn
 ```
 
@@ -28,7 +28,7 @@ Run the complete non-interactive script smoke check with:
 ```bash
 /Applications/Godot_mono.app/Contents/MacOS/Godot \
   --headless \
-  --path /Users/pakholeung/web/majo-rebuild \
+  --path . \
   res://demos/live2d/Live2DDemo.tscn \
   -- --live2d-auto
 ```
@@ -41,7 +41,7 @@ Run the rendered performance test with at least 20 simultaneous Cubism actors:
 
 ```bash
 /Applications/Godot_mono.app/Contents/MacOS/Godot \
-  --path /Users/pakholeung/web/majo-rebuild \
+  --path . \
   res://demos/live2d/Live2DDemo.tscn \
   -- --live2d-stress --live2d-stress-count=20
 ```

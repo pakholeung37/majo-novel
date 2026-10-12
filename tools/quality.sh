@@ -4,7 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIRECTORY="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 REPOSITORY_ROOT="$(CDPATH= cd -- "$SCRIPT_DIRECTORY/.." && pwd)"
-GAME_PROJECT="$REPOSITORY_ROOT/Majo Rebuild.csproj"
+GAME_PROJECT="$REPOSITORY_ROOT/Majo Novel.csproj"
 UNIT_TEST_PROJECT="$REPOSITORY_ROOT/tests/Majo.Runtime.UnitTests/Majo.Runtime.UnitTests.csproj"
 FORMAT_MODE="check"
 

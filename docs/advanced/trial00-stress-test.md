@@ -58,7 +58,7 @@
 ## 复现当前版本
 
 ```sh
-dotnet build 'Majo Rebuild.csproj'
+dotnet build 'Majo Novel.csproj'
 /Applications/Godot_mono.app/Contents/MacOS/Godot --path . res://demos/manosaba/ManosabaDemo.tscn -- --trial00-stress
 ```
 

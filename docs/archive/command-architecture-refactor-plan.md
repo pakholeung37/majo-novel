@@ -545,7 +545,7 @@ plugin schema 的验证边界：
 
 同一个 `CommandSchema` 提供 runtime binding、Yarn adapter、usage 和 editor metadata。
 
-不要让 command 或 plugin 直接覆盖主 `Majo Rebuild.json`。采用 manifest 合并：
+不要让 command 或 plugin 直接覆盖主 `Majo Novel.json`。采用 manifest 合并：
 
 ```text
 内置 assembly → manifest
@@ -558,7 +558,7 @@ Bootstrap/editor tool 明确合并
 
 manifest 至少记录 command path、provider/plugin id、schema version、usage、展开后的参数、类型、顺序、value hint 和 contract default。
 
-每个 assembly/provider 生成独立的 `<provider>.majo.commands.json` manifest，由明确的 `RuntimeCommandManifestMerger` 按 provider id、command name 和参数顺序 deterministic 合并；command 不直接写主 `Majo Rebuild.json`。完整 command name 在全局 catalog 中不得重复，provider id 仅用于来源追踪。plugin disable 后必须重新构建 catalog，不能残留旧 manifest。
+每个 assembly/provider 生成独立的 `<provider>.majo.commands.json` manifest，由明确的 `RuntimeCommandManifestMerger` 按 provider id、command name 和参数顺序 deterministic 合并；command 不直接写主 `Majo Novel.json`。完整 command name 在全局 catalog 中不得重复，provider id 仅用于来源追踪。plugin disable 后必须重新构建 catalog，不能残留旧 manifest。
 
 ## 11. 迁移计划
 
@@ -654,7 +654,7 @@ rg -n "CommandBindingContext|CommandDefaultSource|context\\.Binding|IRuntimeComm
 - Yarn/editor catalog 一致性。
 
 ```sh
-dotnet build 'Majo Rebuild.csproj' --no-restore
+dotnet build 'Majo Novel.csproj' --no-restore
 dotnet test tests/Majo.Runtime.UnitTests/Majo.Runtime.UnitTests.csproj --no-restore
 ./tools/test.sh --fast
 ./tools/test.sh --full

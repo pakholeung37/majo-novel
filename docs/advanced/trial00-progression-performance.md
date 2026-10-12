@@ -106,7 +106,7 @@
 ## 复现
 
 ```sh
-dotnet build 'Majo Rebuild.csproj'
+dotnet build 'Majo Novel.csproj'
 /Applications/Godot_mono.app/Contents/MacOS/Godot --path . res://demos/manosaba/ManosabaDemo.tscn -- --trial00-progress
 python3 tools/analyze_trial00_progress.py artifacts/trial00-progress/<运行目录>
 ```

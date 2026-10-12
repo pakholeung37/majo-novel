@@ -298,7 +298,7 @@ NaN 等“未设值”不进入 JSON；Minimum 等改为可空字段。同一 ca
 建议验证命令（新增项目路径按本方案）：
 
 ```sh
-dotnet build 'Majo Rebuild.csproj'
+dotnet build 'Majo Novel.csproj'
 dotnet test tests/Majo.Runtime.UnitTests/Majo.Runtime.UnitTests.csproj
 dotnet test tests/Majo.CommandGenerator.Tests/Majo.CommandGenerator.Tests.csproj
 rg -n 'BindEasingRegistry|CommandArgumentValues|AttachEnvironment|CommandBindingEnvironment.Default|MakeGenericType|Activator.CreateInstance' addons/majo_runtime/Runtime/Dialogue/Commands

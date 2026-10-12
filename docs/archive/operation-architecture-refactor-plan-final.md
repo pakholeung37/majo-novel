@@ -72,7 +72,7 @@ StateManager 遍历 operations.ActiveOperations 取消活动；StateEligibility 
 - 失败探针正确返回非零退出码；
 - Release build 和目标平台 export smoke 通过。
 
-dotnet build "Majo Rebuild.sln" --no-restore 当前不是有效门禁：solution 包含 Editor 代码，但仓库缺少相应 Editor API 类型。实施期间继续使用 tools/test.sh 的项目级构建；修复 Editor 依赖后，再把 solution build 加为附加门禁。
+dotnet build "Majo Novel.sln" --no-restore 当前不是有效门禁：solution 包含 Editor 代码，但仓库缺少相应 Editor API 类型。实施期间继续使用 tools/test.sh 的项目级构建；修复 Editor 依赖后，再把 solution build 加为附加门禁。
 
 ## 3. 不可破坏的行为契约
 

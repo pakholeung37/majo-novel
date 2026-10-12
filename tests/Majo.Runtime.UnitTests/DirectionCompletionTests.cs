@@ -61,7 +61,7 @@ public sealed class DirectionCompletionTests
         };
         var generated = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true }) + "\n";
         var root = new DirectoryInfo(AppContext.BaseDirectory);
-        while (root is not null && !File.Exists(Path.Combine(root.FullName, "Majo Rebuild.csproj"))) root = root.Parent;
+        while (root is not null && !File.Exists(Path.Combine(root.FullName, "Majo Novel.csproj"))) root = root.Parent;
         Assert.NotNull(root);
         var output = Path.Combine(root.FullName, "Majo.Direction.ysls.json");
         if (Environment.GetEnvironmentVariable("MAJO_UPDATE_COMPLETIONS") == "1") File.WriteAllText(output, generated);

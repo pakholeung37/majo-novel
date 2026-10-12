@@ -75,7 +75,7 @@ Camera modifier 是有限 transient effect，不写入 Game State，不修改 ba
 ## 验证
 
 ```sh
-dotnet build 'Majo Rebuild.csproj' --no-restore
+dotnet build 'Majo Novel.csproj' --no-restore
 dotnet test tests/Majo.Runtime.UnitTests/Majo.Runtime.UnitTests.csproj --no-restore
 ./tools/test.sh --fast
 ```

@@ -302,7 +302,7 @@ public sealed record DirectionExecutionPlan(
 
 验收：
 
-- `dotnet build 'Majo Rebuild.csproj' --no-restore` 通过；
+- `dotnet build 'Majo Novel.csproj' --no-restore` 通过；
 - `dotnet test tests/Majo.Runtime.UnitTests/Majo.Runtime.UnitTests.csproj --no-restore` 通过；
 - 生成一份可追踪的类型迁移清单。
 

@@ -312,7 +312,7 @@ AudioManager
 
 每一阶段完成前必须满足：
 
-1. `dotnet build 'Majo Rebuild.sln' --no-restore` 通过。
+1. `dotnet build 'Majo Novel.sln' --no-restore` 通过。
 2. Runtime 单元测试全部通过。
 3. Headless Audio 测试覆盖完成、Cancel、Finish、Reset。
 4. Headless Direction 测试覆盖 settle、Finish、Rollback、Reset。
