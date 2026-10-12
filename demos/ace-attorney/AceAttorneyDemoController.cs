@@ -3,6 +3,7 @@
 using System;
 using Godot;
 using Majo.Demos.AceAttorney.Actors;
+using Majo.Demos.Recording;
 using Majo.Runtime;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
@@ -25,10 +26,13 @@ public partial class AceAttorneyDemoController : Node
             var automatic = Array.IndexOf(OS.GetCmdlineUserArgs(), "--ace-attorney-auto") >= 0;
             var resolution = ReadBackgroundResolution();
             var window = GetWindow();
-            window.ContentScaleSize = resolution;
-            window.ContentScaleMode = Window.ContentScaleModeEnum.CanvasItems;
-            window.ContentScaleAspect = Window.ContentScaleAspectEnum.Keep;
-            window.Size = resolution;
+            if (ShowcaseRecording.Current is null)
+            {
+                window.ContentScaleSize = resolution;
+                window.ContentScaleMode = Window.ContentScaleModeEnum.CanvasItems;
+                window.ContentScaleAspect = Window.ContentScaleAspectEnum.Keep;
+                window.Size = resolution;
+            }
             settings.Resources!.RootPath = "res://demos/ace-attorney/assets";
             settings.Resources.ObjectsPath = "";
             settings.Localization!.DefaultLocale = "zh-Hans";
@@ -51,6 +55,7 @@ public partial class AceAttorneyDemoController : Node
             settings.Actors.LeftPosition = new Vector2(resolution.X * 0.35f, resolution.Y);
             settings.Actors.CenterPosition = new Vector2(resolution.X * 0.5f, resolution.Y);
             settings.Actors.RightPosition = new Vector2(resolution.X * 0.65f, resolution.Y);
+            ShowcaseRecording.Current?.Configure(settings);
 
             var registry = new SpriteSheetActorRegistry();
             var speechPresenter = new SpriteSheetSpeechPresenter(registry);
@@ -67,6 +72,8 @@ public partial class AceAttorneyDemoController : Node
                 },
             };
             runtime.AddPlugin(new SpriteSheetCharacterPlugin(registry));
+            if (ShowcaseRecording.Current is { } recording)
+                runtime.ConfigureDialoguePresenters += presenters => presenters.Register(recording);
             AddChild(runtime);
             await runtime.InitializationCompletion;
             var dialoguePresentation = runtime.Host!.Services.Get<IDialoguePresentation>();
@@ -91,6 +98,7 @@ public partial class AceAttorneyDemoController : Node
             var blipHandler = new DialogueBlipHandler(blip);
             linePresenter.ActionMarkupHandlers.Add(blipHandler);
             var dialogue = runtime.Host!.Services.Get<IDialoguePlayer>();
+            ShowcaseRecording.Current?.Attach(runtime);
             await dialogue.StartAsync();
             if (automatic)
             {
@@ -118,6 +126,7 @@ public partial class AceAttorneyDemoController : Node
         catch (Exception exception)
         {
             GD.PushError($"Ace Attorney demo failed: {exception}");
+            ShowcaseRecording.Current?.Fail(exception);
             if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--ace-attorney-auto") >= 0)
                 GetTree().Quit(1);
         }

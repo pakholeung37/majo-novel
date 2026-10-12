@@ -6,6 +6,15 @@ namespace Majo.YarnBridge;
 
 public sealed class YarnVmStateBridge
 {
+    /// <summary>Read-only instruction cursor, intended for observers inside VM delivery callbacks.</summary>
+    public static (string NodeName, int InstructionIndex) GetExecutionPosition(Dialogue dialogue)
+    {
+        ArgumentNullException.ThrowIfNull(dialogue);
+        ref var vm = ref YarnPrivateAccess.GetVirtualMachine(dialogue);
+        return (vm.state.currentNodeName ?? string.Empty,
+            vm.state.programCounter - (YarnPrivateAccess.GetIsContinuing(vm) ? 0 : 1));
+    }
+
     public static void ValidateRuntimeLayout()
     {
         ValidateField(typeof(Dialogue), "vm", typeof(VirtualMachine));

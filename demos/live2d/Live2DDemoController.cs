@@ -4,6 +4,7 @@ using System;
 using System.Globalization;
 using Godot;
 using Majo.Demos.Live2D.Actors;
+using Majo.Demos.Recording;
 using Majo.Runtime;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Configuration;
@@ -27,6 +28,7 @@ public partial class Live2DDemoController : Node
             var stress = Array.IndexOf(OS.GetCmdlineUserArgs(), "--live2d-stress") >= 0;
             configuration.Presentation!.Enabled = !automatic && !stress;
             configuration.Diagnostics!.EnableOverlay = !automatic && !stress;
+            ShowcaseRecording.Current?.Configure(configuration);
             Live2DDialogueProbe? probe = null;
             if (automatic)
             {
@@ -51,6 +53,8 @@ public partial class Live2DDemoController : Node
                 runtime.ConfigureDialoguePresenters += presenters => presenters.Register(probe);
             }
             runtime.AddPlugin(new Live2DCharacterPlugin());
+            if (ShowcaseRecording.Current is { } recording)
+                runtime.ConfigureDialoguePresenters += presenters => presenters.Register(recording);
             AddChild(runtime);
             await runtime.InitializationCompletion;
             if (stress)
@@ -61,6 +65,7 @@ public partial class Live2DDemoController : Node
                 return;
             }
             var dialogue = runtime.Host!.Services.Get<IDialoguePlayer>();
+            ShowcaseRecording.Current?.Attach(runtime);
             await dialogue.StartAsync();
             if (automatic)
             {
@@ -86,6 +91,7 @@ public partial class Live2DDemoController : Node
         catch (Exception exception)
         {
             GD.PushError($"Live2D demo failed: {exception}");
+            ShowcaseRecording.Current?.Fail(exception);
             if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--live2d-auto") >= 0 ||
                 Array.IndexOf(OS.GetCmdlineUserArgs(), "--live2d-stress") >= 0)
             {

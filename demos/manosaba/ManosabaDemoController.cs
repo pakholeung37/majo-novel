@@ -12,6 +12,7 @@ using Majo.Runtime.History;
 using Majo.Runtime.UI.SaveLoad;
 using Majo.Runtime.UI.Settings;
 using Majo.Demos.Manosaba.Actors.Layered;
+using Majo.Demos.Recording;
 
 namespace Majo.Demos.Manosaba;
 
@@ -61,6 +62,7 @@ public partial class ManosabaDemoController : Node
             configuration.Actors.LeftPosition = new Vector2(768, 1440);
             configuration.Actors.CenterPosition = new Vector2(1280, 1440);
             configuration.Actors.RightPosition = new Vector2(1792, 1440);
+            ShowcaseRecording.Current?.Configure(configuration);
 
 
             var characterNames = ManosabaCharacterNameCatalog.Load(
@@ -87,6 +89,8 @@ public partial class ManosabaDemoController : Node
             };
 
             runtime.AddPlugin(new LayeredCharacterPlugin());
+            if (ShowcaseRecording.Current is { } recording)
+                runtime.ConfigureDialoguePresenters += presenters => presenters.Register(recording);
 
             AddChild(runtime);
             await runtime.InitializationCompletion;
@@ -110,6 +114,7 @@ public partial class ManosabaDemoController : Node
                 audio);
 
             var dialogue = services.Get<IDialoguePlayer>();
+            ShowcaseRecording.Current?.Attach(runtime);
             Trial00StressProbe? stressProbe = null;
             if (stress)
             {
@@ -124,6 +129,7 @@ public partial class ManosabaDemoController : Node
         catch (Exception exception)
         {
             GD.PushError($"Manosaba Demo failed: {exception}");
+            ShowcaseRecording.Current?.Fail(exception);
         }
     }
 }
