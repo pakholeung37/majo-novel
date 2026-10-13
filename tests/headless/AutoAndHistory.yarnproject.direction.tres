@@ -7,5 +7,5 @@ script = ExtResource("1_frh12")
 SchemaVersion = 2
 ManifestPath = "res://tests/headless/AutoAndHistory.yarnproject"
 SourceFingerprint = "2a6e1d5664e0e981284da1512c71f3ade5ebfc38cc6961486796410b12baea54"
-ProgramFingerprint = "9bf9564f075b39ed2e34c6f6612fa7abf27ad066c2a8592183989047c1b2ab1c"
-ModulesJson = "[{\"NodeId\":\"Start\",\"SceneEntry\":null,\"Version\":1,\"Symbols\":{\"Stages\":[],\"Views\":[],\"ShotAliases\":[],\"Marks\":[]},\"Resources\":[],\"SourceMaps\":[],\"Imports\":[],\"Marks\":[],\"Diagnostics\":[]}]"
+ProgramFingerprint = "4761efabf16678b9adbbf298debc345cf11e4a8bd796c8ef2f86a0b8a0521e55"
+ModulesJson = "[{\"NodeId\":\"Start\",\"SceneEntry\":null,\"CameraPresets\":[],\"Version\":1,\"Symbols\":{\"Stages\":[],\"Views\":[],\"ShotAliases\":[],\"Marks\":[]},\"Resources\":[],\"SourceMaps\":[],\"Imports\":[],\"Marks\":[],\"Diagnostics\":[]}]"

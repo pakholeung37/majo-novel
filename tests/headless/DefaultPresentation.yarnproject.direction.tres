@@ -7,5 +7,5 @@ script = ExtResource("1_21wte")
 SchemaVersion = 2
 ManifestPath = "res://tests/headless/DefaultPresentation.yarnproject"
 SourceFingerprint = "e0a5a43edddd4bbafa8325336840d41f966ecb287855b9fd266f2c7ee614bd8c"
-ProgramFingerprint = "8874421ed1994a0b5ebc0441cb52b8d5fbeef3d86585c68fbe3f82a29502c678"
+ProgramFingerprint = "97394d1c9c402ffb8a0a33fef883930dee6fa07767cd80124c731a647c1e1759"
 ModulesJson = "[{\"NodeId\":\"Start\",\"SceneEntry\":null,\"CameraPresets\":[],\"Version\":1,\"Symbols\":{\"Stages\":[],\"Views\":[],\"ShotAliases\":[],\"Marks\":[]},\"Resources\":[],\"SourceMaps\":[],\"Imports\":[],\"Marks\":[],\"Diagnostics\":[]}]"
