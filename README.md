@@ -6,6 +6,7 @@ A script-driven visual novel runtime for **Godot .NET**, built with **C#** and *
 
 Majo Novel brings dialogue, character performances, cameras, transitions, audio, and saved state together in a modular runtime. Write the story and direction in Yarn; use C# to configure the host, add commands, or implement new actor types.
 
+> ▶ **[Watch the project demo on Bilibili](https://www.bilibili.com/video/BV19DpR6KE4p/)**
 
 ## What it can do
 
