@@ -56,9 +56,10 @@ Yarn controls the story flow. Majo's direction commands control the presentation
 | Manosaba | Layered character expressions, scripted scenes, and courtroom direction with multiple stages and views | [`ManosabaDemo.tscn`](demos/manosaba/ManosabaDemo.tscn) |
 | Ace Attorney | Animated sprite sheet characters, courtroom staging, sound cues, and objection effects | [`AceAttorneyDemo.tscn`](demos/ace-attorney/AceAttorneyDemo.tscn) |
 | Live2D | Cubism expressions and motions integrated with Majo's character and camera commands | [`Live2DDemo.tscn`](demos/live2d/Live2DDemo.tscn) |
+| SGRE | An encounter using original dialogue, voices, and live E-mote character animation | [`SGREDemo.tscn`](demos/sgre/SGREDemo.tscn) |
 | Background extension | A custom actor plugin with animated backgrounds and live transitions | [`BackgroundExtensionDemo.tscn`](demos/background-extension/BackgroundExtensionDemo.tscn) |
 
-The runtime validation demo is the runnable reference included in this repository. Manosaba, Ace Attorney, and Live2D are showcases; their external asset packs are not included as complete runnable demos. Their scripts and integration code are available to inspect. They are not affiliated with or endorsed by the original games or model creators.
+The runtime validation demo is the runnable reference included in this repository. Manosaba, Ace Attorney, Live2D, and SGRE are showcases; their external asset packs are not included as complete runnable demos. The [SGRE setup notes](demos/sgre/README.md) describe how to prepare its local assets. These showcases are not affiliated with or endorsed by the original games or model creators.
 
 ## Run the runtime validation demo
 

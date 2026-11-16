@@ -1,0 +1,42 @@
+title: Start
+tags: sgre encounter
+---
+<<curtain closed duration:0>>
+<<backdrop lab scale:0.95 via:cut>>
+<<character 红莉栖 appearance:neutral at:56,-79 scale:2.35 via:cut>>
+<<camera center:50,50 backgroundOffset:0,0>>
+<<emote motion 红莉栖 motion:左向き会話>>
+<<bgm bgm09 volume:0.48>>
+<<curtain open duration:0.7 wait:true>>
+牧濑……红莉栖……！ #voice:none
+红莉栖: “……？” #voice:resg01_04_krs0000
+<<emote motion 红莉栖 motion:stop>>
+她注意到我了。我们四目相对。 #voice:none
+<<camera center:42.3,26.7 zoom:0.510638 backgroundScale:1.95833 backgroundOffset:-15.6,-23.3 via:dissolve duration:0.6 wait:true>>
+红莉栖: “请问，有什么事吗？” #voice:resg01_04_krs0001
+<<emote motion 红莉栖 motion:疑問>>
+冈部: “你、你……” #voice:resg01_04_oka0013
+我猛地冲到牧濑红莉栖面前。 #voice:none
+<<camera center:50,50 zoom:1 backgroundScale:1 backgroundOffset:0,0 via:dissolve duration:0.6 wait:true>>
+<<character 红莉栖 appearance:surprised>>
+<<emote motion 红莉栖 motion:びっくり>>
+冈部: “你应该死了才对！为什么会在这里……！？” #voice:resg01_04_oka0014
+冈部: “而且——” #voice:resg01_04_oka0015
+衣服一点污渍都没有。还是当时那身服装。 #voice:none
+<<camera move center:50,35 duration:0.8 wait:true>>
+隔着这薄薄的布料观察起来，似乎没有受过多大的伤。 #voice:none
+那么大的出血量，理应是重伤才对。 #voice:none
+冈部: “毫发无伤……！” #voice:resg01_04_oka0016
+怎么看都不像是个伤者。 #voice:none
+<<camera move center:50,50 duration:0.6 wait:true>>
+<<character 红莉栖 appearance:uneasy>>
+<<emote motion 红莉栖 motion:ひく>>
+红莉栖: “……你干什么？” #voice:resg01_04_krs0002
+冈部: “你没事吗？伤势还好吗？” #voice:resg01_04_oka0017
+冈部: “不，不可能的。牧濑红莉栖明明被捅了一刀，全身是血——” #voice:resg01_04_oka0018
+<<character 红莉栖 appearance:angry>>
+红莉栖: “等一下，能不要随便咒死我吗？我还活得好好的” #voice:resg01_04_krs0003
+这是幻觉吗！？不，是恶灵！？恶灵找上门了！？ #voice:none
+<<stopBgm duration:1>>
+<<curtain closed duration:0.8 wait:true>>
+===

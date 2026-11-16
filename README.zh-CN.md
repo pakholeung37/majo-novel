@@ -56,9 +56,10 @@ Yarn 负责剧情流程，Majo 演出命令负责画面呈现。`beat` 组织需
 | Manosaba | 分层角色表情、剧情演出与多舞台、多视图的法庭场景 | [`ManosabaDemo.tscn`](demos/manosaba/ManosabaDemo.tscn) |
 | Ace Attorney | 精灵动画角色、法庭调度、音效与异议效果 | [`AceAttorneyDemo.tscn`](demos/ace-attorney/AceAttorneyDemo.tscn) |
 | Live2D | 将 Cubism 表情与动作接入角色演出和镜头命令 | [`Live2DDemo.tscn`](demos/live2d/Live2DDemo.tscn) |
+| SGRE | 使用原作剧情、语音和实时 E-mote 角色动画重现一段相遇 | [`SGREDemo.tscn`](demos/sgre/SGREDemo.tscn) |
 | 背景扩展示例 | 通过自定义 Actor 插件实现持续动画背景与实时转场 | [`BackgroundExtensionDemo.tscn`](demos/background-extension/BackgroundExtensionDemo.tscn) |
 
-内部验收 demo 是仓库提供的可运行参考。Manosaba、Ace Attorney 和 Live2D 用于能力展示，仓库不提供让它们完整运行的外部素材包；可以阅读对应脚本和集成代码。这些演示与原作游戏或模型作者没有官方关联，也不代表其认可。
+内部验收 demo 是仓库提供的可运行参考。Manosaba、Ace Attorney、Live2D 和 SGRE 用于能力展示，仓库不提供让它们完整运行的外部素材包；SGRE 的本地素材准备方法见[演示说明](demos/sgre/README.md)。这些演示与原作游戏或模型作者没有官方关联，也不代表其认可。
 
 ## 运行内部验收 demo
 
