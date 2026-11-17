@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Bind resource release to the acquired cache entry so late releases cannot evict a replacement entry after reset.
+
 - Compile Core lifecycle and service contracts into an independent net8.0 assembly without Godot or Yarn references; run their tests directly against that assembly.
 - Include the Core project and assembly in managed addon builds and exports; binary extensions must rebuild against the new assembly layout.
 

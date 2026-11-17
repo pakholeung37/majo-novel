@@ -10,6 +10,35 @@ namespace Majo.Runtime.UnitTests;
 
 public sealed class ResourceManagerTests
 {
+    [Fact(Timeout = 5_000)]
+    public async Task LateReleaseFromOldScopeCannotDecrementANewEntryForTheSamePath()
+    {
+        using var lifetime = new TestRuntimeLifetime();
+        var provider = new MemoryProvider("memory").Add("memory://sample", new TestAsset("sample"));
+        await provider.InitializeAsync(default);
+        var cache = new ResourceCache(lifetime, NullRuntimeLogger.Instance, 0, releaseOnLastLease: true);
+        cache.RenewLoadLifetime();
+        var resolver = new ResourceResolver([provider], NullRuntimeLogger.Instance);
+        var key = new ResourceKey("sample");
+        var resolved = resolver.Resolve(key, typeof(TestAsset), null);
+        var old = await cache.AcquireForLeaseAsync<TestAsset>(key, resolved, 10, pinned: true, default);
+        await cache.DrainAsync(default);
+        cache.RenewLoadLifetime();
+        var current = await cache.AcquireForLeaseAsync<TestAsset>(key, resolved, 10, pinned: true, default);
+
+        // A cancelled lease may finish handing off its acquisition after reset.
+        old.Release();
+
+        var entry = Assert.Single(cache.CaptureCacheSnapshot().Entries);
+        Assert.Equal(1, entry.LeaseCount);
+        Assert.Equal(1, entry.PinnedLeaseCount);
+        current.Release();
+        Assert.Equal(0, cache.LoadedResourceCount);
+        await cache.DrainAsync(default);
+        cache.CloseLoadScope();
+        await provider.ShutdownAsync(default);
+    }
+
     [Theory(Timeout = 5_000)]
     [InlineData(false)]
     [InlineData(true)]

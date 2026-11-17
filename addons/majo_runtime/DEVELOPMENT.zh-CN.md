@@ -100,6 +100,8 @@ Bootstrap 会将完成注册的命令目录接入默认预加载器，包括插�
 
 `ResourceLease` 只持有获取结果与释放动作，不访问缓存键或 provider；终态会释放关联的取消令牌源。预加载组创建失败时会释放此前已创建的租约。重置和关闭会先取消共享加载、释放租约，再等待加载 worker 的完整退出，之后才清空缓存、重置或关闭 provider；即使 provider 暂时忽略取消，也会等待它结束。
 
+缓存保留计数的发布与取消检查位于同一临界区；释放动作绑定取得资源时的缓存条目身份。重置前的迟到释放不会扣减同一路径新条目的引用计数，也不会触发新资源的最后租约淘汰。
+
 ## 第一条程序集边界
 
 `Assemblies/Majo.Runtime.Core/Majo.Runtime.Core.csproj` 独立编译 `Runtime/Core`，只依赖 .NET 8，不引用 Godot、Yarn 或游戏工程。主工程通过 `MajoRuntime.props` 引用此项目并排除这批源文件的重复编译。生命周期、服务图和激活阶段测试位于 `tests/Majo.Runtime.Core.UnitTests`，可直接运行 `dotnet test tests/Majo.Runtime.Core.UnitTests/Majo.Runtime.Core.UnitTests.csproj`；这条命令不会构建游戏或加载引擎依赖。完整测试门禁仍会检查游戏、发行包和实际 PCK。

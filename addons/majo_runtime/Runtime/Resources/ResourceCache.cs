@@ -161,9 +161,12 @@ internal sealed class ResourceCache
         var cacheKey = RequireCacheKey(key, typeof(TResource), resolved);
         var loading = GetOrStartLoad(key, typeof(TResource), resolved, cacheKey, estimatedBytes);
         var resource = Cast<TResource>(await loading.WaitAsync(cancellationToken), resolved.Location!.Path);
-        cancellationToken.ThrowIfCancellationRequested();
+        CacheEntry acquiredEntry;
         lock (gate)
         {
+            // Reset releases loading leases before clearing this cache. Check
+            // cancellation in the same critical section that publishes retention.
+            cancellationToken.ThrowIfCancellationRequested();
             if (!loaded.TryGetValue(cacheKey, out var entry))
             {
                 entry = new CacheEntry(resource, estimatedBytes);
@@ -174,15 +177,17 @@ internal sealed class ResourceCache
             if (pinned) entry.PinnedLeaseCount++;
             entry.LastAccessedAt = DateTimeOffset.UtcNow;
             EvictToBudgetLocked(cacheKey, "budget_after_lease");
+            acquiredEntry = entry;
         }
-        return new ResourceLeaseAcquisition<TResource>(resource, resolved.Location.Path, () => ReleaseLease(cacheKey, pinned));
+        return new ResourceLeaseAcquisition<TResource>(resource, resolved.Location.Path,
+            () => ReleaseLease(cacheKey, acquiredEntry, pinned));
     }
 
-    private void ReleaseLease(CacheKey cacheKey, bool pinned)
+    private void ReleaseLease(CacheKey cacheKey, CacheEntry acquiredEntry, bool pinned)
     {
         lock (gate)
         {
-            if (loaded.TryGetValue(cacheKey, out var entry))
+            if (loaded.TryGetValue(cacheKey, out var entry) && ReferenceEquals(entry, acquiredEntry))
             {
                 entry.LeaseCount = Math.Max(0, entry.LeaseCount - 1);
                 if (pinned) entry.PinnedLeaseCount = Math.Max(0, entry.PinnedLeaseCount - 1);
