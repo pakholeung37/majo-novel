@@ -148,7 +148,7 @@ def main():
                 base = [godot, "--headless", "--path", ROOT]
                 gate.run("Import game", base + ["--editor", "--quit"])
                 runner = base + ["res://tests/headless/HeadlessTestRunner.tscn", "--"]
-                gate.run("Headless integration", runner, timeout=60,
+                gate.run("Headless integration", runner, timeout=90,
                          required_output=("Majo Runtime headless tests passed.",))
                 gate.run("Headless failure probe", runner + ["--majo-force-failure"], timeout=60,
                          expect_failure=True, required_output=("Intentional headless failure probe.",))

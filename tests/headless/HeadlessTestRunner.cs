@@ -10,7 +10,8 @@ namespace Majo.Runtime.HeadlessTests;
 
 public partial class HeadlessTestRunner : Node
 {
-    private const double SuiteTimeoutSeconds = 25;
+    // Includes filesystem/restore scenarios on hosted Windows and Linux runners.
+    private const double SuiteTimeoutSeconds = 60;
     private const string ForcedFailureArgument = "--majo-force-failure";
     private bool consumeNextLeftClick;
     private int consumedLeftClickCount;

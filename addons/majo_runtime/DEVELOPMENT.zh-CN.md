@@ -232,7 +232,7 @@ Engine/Yarn/Bootstrap 进一步拆分后，本机完整门禁再次通过 686 �
 
 ## CI 与发布
 
-跨桌面平台的门禁入口为 `python tools/runtime_test_gate.py --full`；原 `./tools/test.sh` 转发给同一实现，保留 `--independent`、`--domain`、`--unit`、`--fast` 与 `--full`。用 `--godot` 或 `GODOT_BIN` 指定 .NET 引擎，`--output` 指定逐步日志和 `results.json` 的保存目录。进程退出码、必需成功标记和超时分别检查；强制失败探针必须同时返回非零状态并包含预期异常，超时不能算作通过。
+跨桌面平台的门禁入口为 `python tools/runtime_test_gate.py --full`；原 `./tools/test.sh` 转发给同一实现，保留 `--independent`、`--domain`、`--unit`、`--fast` 与 `--full`。用 `--godot` 或 `GODOT_BIN` 指定 .NET 引擎，`--output` 指定逐步日志和 `results.json` 的保存目录。整套引擎用例使用 60 秒总时限，外层进程限时 90 秒，以容纳 Windows runner 的文件 I/O；各用例原有断言和局部等待时限保持有效。进程退出码、必需成功标记和超时分别检查；强制失败探针必须同时返回非零状态并包含预期异常，超时不能算作通过。
 
 CI 的桌面矩阵在 Linux x64 和 Windows x64 上运行同一完整门禁，保留每步日志；创建 draft release 依赖两个平台通过。Windows 使用校验 SHA-256 后的官方 console 引擎、原生 Windows 导出预设及 `win-x64` 发布目录。Windows/ARM64、其他 GPU 和架构没有因增加矩阵而自动获得验收，仍需对应实际设备证据。
 
