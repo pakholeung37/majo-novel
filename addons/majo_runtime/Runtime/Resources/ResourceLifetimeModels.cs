@@ -29,6 +29,8 @@ public sealed record ResourcePreloadContext(
     IReadOnlyList<string> DialogueFallbackChain,
     IReadOnlyList<string> VoiceFallbackChain)
 {
+    public const string LocalePlaceholder = "{locale}";
+
     public static ResourcePreloadContext Unlocalized { get; } = new(
         string.Empty,
         string.Empty,

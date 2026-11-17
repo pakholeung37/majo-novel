@@ -4,7 +4,7 @@ using Majo.Runtime.Preloading;
 using Majo.Runtime.Resources;
 using Xunit;
 
-namespace Majo.Runtime.UnitTests;
+namespace Majo.Runtime.Resources.UnitTests;
 
 public sealed class ResourceLookAheadWindowTests
 {

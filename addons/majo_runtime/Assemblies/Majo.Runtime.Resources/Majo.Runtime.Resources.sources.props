@@ -1,0 +1,8 @@
+<Project>
+  <ItemGroup>
+    <MajoResourceSource Include="$(MSBuildThisFileDirectory)../../Runtime/Resources/*.cs"
+                        Exclude="$(MSBuildThisFileDirectory)../../Runtime/Resources/LocalizedResourceResolver.cs" />
+    <MajoResourceSource Include="$(MSBuildThisFileDirectory)../../Runtime/Preloading/ResourceLookAheadWindow.cs" />
+    <MajoResourceSource Include="$(MSBuildThisFileDirectory)../../Runtime/Preloading/PreloadSizeEstimator.cs" />
+  </ItemGroup>
+</Project>

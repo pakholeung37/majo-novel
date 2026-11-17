@@ -106,7 +106,7 @@ Bootstrap 会将完成注册的命令目录接入默认预加载器，包括插�
 
 `Assemblies/Majo.Runtime.Core/Majo.Runtime.Core.csproj` 独立编译 `Runtime/Core`，只依赖 .NET 8，不引用 Godot、Yarn 或游戏工程。主工程通过 `MajoRuntime.props` 引用此项目并排除这批源文件的重复编译。生命周期、服务图和激活阶段测试位于 `tests/Majo.Runtime.Core.UnitTests`，可直接运行 `dotnet test tests/Majo.Runtime.Core.UnitTests/Majo.Runtime.Core.UnitTests.csproj`；这条命令不会构建游戏或加载引擎依赖。完整测试门禁仍会检查游戏、发行包和实际 PCK。
 
-Core 命名空间与源码签名保持不变，但程序集改为 `Majo.Runtime.Core.dll`，已经编译的扩展需重新构建；兼容性清单已声明这一变化。领域模型和命令协议也已形成下述独立程序集；Godot/Yarn 适配层和无头集成测试仍在游戏工程中，尚未完成全部程序集隔离。
+Core 命名空间与源码签名保持不变，但程序集改为 `Majo.Runtime.Core.dll`，已经编译的扩展需重新构建；兼容性清单已声明这一变化。领域模型、命令协议、持久化和资源管理也已形成下述独立程序集；Godot/Yarn 适配层和无头集成测试仍在游戏工程中，尚未完成全部程序集隔离。
 
 ## 领域模型与规划器程序集
 
@@ -114,7 +114,7 @@ Core 命名空间与源码签名保持不变，但程序集改为 `Majo.Runtime.
 
 `DirectionPlanner` 通过 `IBackdropAppearanceResolver` 读取背景 factory 和完整外观。原来的 `ActorDefinitionResolver` 实现该契约，继续提供配置、约定路径及自定义 factory 的元数据；规划器不再获得创建 Actor 的能力。`ActorFxCue` 与 `ActorVisualDelta`、基础 `ActorDefinition` 与 Godot 纹理描述数据分开编译。后端通过 `DirectionPlan.RecordViewCommit`、`RecordActorCommit`、`TryGetActorCommit` 和 `ResolveCommitState` 交换已经准备好的提交采样，不再访问跨程序集的内部字典。
 
-纯规划、身份/状态、投影、时间曲线和槽替换测试位于 `tests/Majo.Runtime.Domain.UnitTests`，直接引用领域工程。原测试工程保留命令、配置、状态存储、真实 metadata adapter 及 Godot/Yarn 的集成测试；混合测试按依赖拆开，原有行为断言保留。以下命令无需安装 Godot，也不会构建游戏或 Yarn：
+纯规划、身份/状态、投影、时间曲线和槽替换测试位于 `tests/Majo.Runtime.Domain.UnitTests`，直接引用领域工程。原测试工程保留具体命令、配置、读档协调、真实 metadata adapter 及 Godot/Yarn 的集成测试；混合测试按依赖拆开，原有行为断言保留。以下命令无需安装 Godot，也不会构建游戏或 Yarn：
 
 ```sh
 ./tools/test.sh --domain
@@ -136,7 +136,25 @@ dotnet test tests/Majo.Runtime.Domain.UnitTests/Majo.Runtime.Domain.UnitTests.cs
 dotnet test tests/Majo.Runtime.Commands.UnitTests/Majo.Runtime.Commands.UnitTests.csproj
 ```
 
-`--independent` 运行 Core、Domain、Commands 和生成器四个测试工程，无需安装 Godot，也不构建游戏或 Yarn；原 `--domain` 继续只运行 Core 与 Domain。仅安装 .NET 的 CI job 与完整门禁均已接入命令测试。独立 addon 消费者还会在源码安装和实际 PCK 中注册、生成、绑定及执行自己的命令，验证新 DLL 和 analyzer 随发行包正常工作。
+`--independent` 运行 Core、Domain、Commands、Persistence、Resources 和生成器六个测试工程，无需安装 Godot，也不构建游戏或 Yarn；原 `--domain` 继续只运行 Core 与 Domain。仅安装 .NET 的 CI job 与完整门禁均已接入这些测试。独立 addon 消费者还会在源码安装和实际 PCK 中注册、生成、绑定及执行自己的命令，验证新 DLL 和 analyzer 随发行包正常工作。
+
+## 持久化与资源管理程序集
+
+`Assemblies/Majo.Runtime.Persistence/Majo.Runtime.Persistence.csproj` 只引用 Core 和 .NET 8，包含状态模型、contributor/准备恢复/可用性契约、contributor 依赖图、迁移、写入冻结门、规范 JSON 序列化及文件存储。可用性契约与读取输入、脚本阶段的实现分开；`StateJson` 仍是集成层私有的 payload 适配器。`StateManager`、行边界、Godot 用户目录存储、内置 contributor 及实际恢复协调留在集成层。
+
+`StateMigrationRegistry.ResolveRecords` 是显式的公开边界，只根据目标 contributor 元数据迁移和校验记录，不调用其捕获、预检、准备恢复或重置方法。实际事务的预检、准备、提交及激活仍由 `StateManager` 负责。记录重命名、缺失必需记录、较新版本、重复目标及诊断链的行为由独立测试覆盖。
+
+`Assemblies/Majo.Runtime.Resources/Majo.Runtime.Resources.csproj` 也只引用 Core 和 .NET 8，包含 provider/loader 契约、资源键、注册资源、解析、共享加载、缓存、租约、保留范围、预加载窗口和 PNG 内存估计。Godot provider/路径解析及读取 LocaleManager 的本地化适配器仍在集成层。预加载通过 `ResourcePreloadContext` 显式传入语言和回退链；路径占位符由该契约定义，旧 `LocalizedResourceResolver.LocalePlaceholder` 保留为同值别名。资源内部组件仅向专用资源测试程序集开放，用于保留迟到释放竞争的回归测试；游戏没有 friend 访问权限。
+
+两个工程分别使用 `*.sources.props` 作为编译及游戏排除的统一清单；程序集引用测试拒绝引擎、游戏或其他适配层依赖。纯持久化测试位于 `tests/Majo.Runtime.Persistence.UnitTests`，纯资源和预加载测试位于 `tests/Majo.Runtime.Resources.UnitTests`。配置、LocaleManager、Godot provider、输入/脚本恢复事务等集成测试继续引用游戏。
+
+```sh
+./tools/test.sh --independent
+dotnet test tests/Majo.Runtime.Persistence.UnitTests/Majo.Runtime.Persistence.UnitTests.csproj
+dotnet test tests/Majo.Runtime.Resources.UnitTests/Majo.Runtime.Resources.UnitTests.csproj
+```
+
+独立 addon 消费者在源码安装及实际 PCK 中，还会将真实对话边界快照封装、序列化、写入文件并读回，以及取得、固定、释放和注销注册资源。新程序集已接入出包、升级、导出和完整门禁。命名空间、原有源码签名、存档 envelope/snapshot 格式和 checkpoint 版本保持不变；已有二进制扩展需要针对新的 `Majo.Runtime.Persistence.dll` 与 `Majo.Runtime.Resources.dll` 重新构建，兼容性清单已声明。
 
 ## Godot 渲染边界与 GPU 验收
 

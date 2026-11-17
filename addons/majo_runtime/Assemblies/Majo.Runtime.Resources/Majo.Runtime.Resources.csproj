@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>Majo.Runtime.Resources</AssemblyName>
+    <RootNamespace>Majo.Runtime.Resources</RootNamespace>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AnalysisLevel>latest-Recommended</AnalysisLevel>
+  </PropertyGroup>
+  <Import Project="Majo.Runtime.Resources.sources.props" />
+  <ItemGroup>
+    <Compile Include="@(MajoResourceSource)" />
+    <ProjectReference Include="../Majo.Runtime.Core/Majo.Runtime.Core.csproj" />
+    <InternalsVisibleTo Include="Majo.Runtime.Resources.UnitTests" />
+  </ItemGroup>
+</Project>

@@ -11,12 +11,14 @@ UNIT_TEST_PROJECT="$REPOSITORY_ROOT/tests/Majo.Runtime.UnitTests/Majo.Runtime.Un
 CORE_TEST_PROJECT="$REPOSITORY_ROOT/tests/Majo.Runtime.Core.UnitTests/Majo.Runtime.Core.UnitTests.csproj"
 DOMAIN_TEST_PROJECT="$REPOSITORY_ROOT/tests/Majo.Runtime.Domain.UnitTests/Majo.Runtime.Domain.UnitTests.csproj"
 COMMAND_TEST_PROJECT="$REPOSITORY_ROOT/tests/Majo.Runtime.Commands.UnitTests/Majo.Runtime.Commands.UnitTests.csproj"
+PERSISTENCE_TEST_PROJECT="$REPOSITORY_ROOT/tests/Majo.Runtime.Persistence.UnitTests/Majo.Runtime.Persistence.UnitTests.csproj"
+RESOURCE_TEST_PROJECT="$REPOSITORY_ROOT/tests/Majo.Runtime.Resources.UnitTests/Majo.Runtime.Resources.UnitTests.csproj"
 GENERATOR_TEST_PROJECT="$REPOSITORY_ROOT/tests/Majo.CommandGenerator.Tests/Majo.CommandGenerator.Tests.csproj"
 GODOT_EXECUTABLE="${GODOT_BIN:-/Applications/Godot_mono.app/Contents/MacOS/Godot}"
 
 print_usage() {
     printf 'Usage: %s [--independent | --domain | --unit | --fast | --full]\n' "$0"
-    printf '  --independent Run Core, Domain, Commands and generator tests without Godot or the game.\n'
+    printf '  --independent Run engine-independent runtime and generator tests without Godot or the game.\n'
     printf '  --domain Run independent Core/Domain tests without building the game or Yarn.\n'
     printf '  --unit  Build and run pure C# unit tests without launching Godot.\n'
     printf '  --fast  Run the local feedback suite with one Godot integration pass.\n'
@@ -90,6 +92,8 @@ restore_dotnet_projects() {
     run_with_timeout 180 dotnet restore "$CORE_TEST_PROJECT" --nologo
     run_with_timeout 180 dotnet restore "$DOMAIN_TEST_PROJECT" --nologo
     run_with_timeout 180 dotnet restore "$COMMAND_TEST_PROJECT" --nologo
+    run_with_timeout 180 dotnet restore "$PERSISTENCE_TEST_PROJECT" --nologo
+    run_with_timeout 180 dotnet restore "$RESOURCE_TEST_PROJECT" --nologo
 }
 
 run_core_consumer_smoke() {
@@ -128,6 +132,8 @@ if [[ "$TEST_MODE" == "domain" || "$TEST_MODE" == "independent" ]]; then
     run_with_timeout 180 dotnet test "$DOMAIN_TEST_PROJECT" --nologo
     if [[ "$TEST_MODE" == "independent" ]]; then
         run_with_timeout 180 dotnet test "$COMMAND_TEST_PROJECT" --nologo
+        run_with_timeout 180 dotnet test "$PERSISTENCE_TEST_PROJECT" --nologo
+        run_with_timeout 180 dotnet test "$RESOURCE_TEST_PROJECT" --nologo
         run_with_timeout 180 dotnet test "$GENERATOR_TEST_PROJECT" --nologo
     fi
     print_result
@@ -154,6 +160,10 @@ run_with_timeout 180 dotnet test "$DOMAIN_TEST_PROJECT" --nologo --no-restore
 
 printf 'Running independent command protocol and binding tests...\n'
 run_with_timeout 180 dotnet test "$COMMAND_TEST_PROJECT" --nologo --no-restore
+
+printf 'Running independent persistence and resource tests...\n'
+run_with_timeout 180 dotnet test "$PERSISTENCE_TEST_PROJECT" --nologo --no-restore
+run_with_timeout 180 dotnet test "$RESOURCE_TEST_PROJECT" --nologo --no-restore
 
 printf 'Building unit tests and their Godot project dependencies...\n'
 if [[ "$TEST_MODE" == "full" ]]; then

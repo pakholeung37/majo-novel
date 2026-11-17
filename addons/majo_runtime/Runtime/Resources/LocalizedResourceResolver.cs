@@ -77,7 +77,7 @@ public interface ILocalizedResourceResolver : IRuntimeService
 
 public sealed class LocalizedResourceResolver : ILocalizedResourceResolver
 {
-    public const string LocalePlaceholder = "{locale}";
+    public const string LocalePlaceholder = ResourcePreloadContext.LocalePlaceholder;
     private readonly IResourceManager resources;
 
     public LocalizedResourceResolver(IResourceManager resources)

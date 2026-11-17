@@ -109,11 +109,14 @@ public sealed class StateMigrationRegistry
         return new StateMigrationResult<JsonElement>(current, chain.AsReadOnly());
     }
 
-    internal StateMigrationResult<IReadOnlyDictionary<string, StateRecord>> ResolveRecords(
+    /// <summary>Resolve target records against contributor metadata without capturing or restoring live state.</summary>
+    public StateMigrationResult<IReadOnlyDictionary<string, StateRecord>> ResolveRecords(
         StateSnapshot snapshot,
         IReadOnlyList<IStateContributor> contributors,
         StateScope scope)
     {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        ArgumentNullException.ThrowIfNull(contributors);
         var expected = contributors
             .Where(value => value.Scope == scope && value.Capability.SupportsPersistence)
             .ToDictionary(value => value.Key, StringComparer.Ordinal);

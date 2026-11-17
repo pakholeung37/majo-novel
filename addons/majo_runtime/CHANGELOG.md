@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Compile state persistence contracts/models, migrations, mutation gates, canonical serialization and file storage into Majo.Runtime.Persistence, referencing only Core and .NET.
+- Compile resource contracts, resolution, cache/leases, retention and look-ahead windows into Majo.Runtime.Resources, referencing only Core and .NET; keep engine and locale-service adapters in the integration layer.
+- Run persistence and resource regression tests without the game; verify actual dialogue snapshots, file storage and resource leases in installed and packed addon consumers.
+
 - Compile command definitions, binding, generic converters, registration, resource contracts, manifests and wait groups into Majo.Runtime.Commands, referencing only Core and .NET.
 - Move pure command tests and generated command integration tests out of the game project; add an independent test gate without Godot or Yarn.
 - Verify consumer-defined generated commands through Yarn dispatch in both installed source addons and actual packed Release builds.

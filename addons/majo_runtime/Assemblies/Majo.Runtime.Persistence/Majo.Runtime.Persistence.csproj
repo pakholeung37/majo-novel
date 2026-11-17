@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>Majo.Runtime.Persistence</AssemblyName>
+    <RootNamespace>Majo.Runtime.State</RootNamespace>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AnalysisLevel>latest-Recommended</AnalysisLevel>
+  </PropertyGroup>
+  <Import Project="Majo.Runtime.Persistence.sources.props" />
+  <ItemGroup>
+    <Compile Include="@(MajoPersistenceSource)" />
+    <ProjectReference Include="../Majo.Runtime.Core/Majo.Runtime.Core.csproj" />
+  </ItemGroup>
+</Project>

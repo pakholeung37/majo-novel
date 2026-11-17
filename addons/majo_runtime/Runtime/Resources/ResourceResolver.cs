@@ -38,9 +38,9 @@ internal sealed class ResourceResolver
         {
             var candidate = ResourceKey.Combine(root, locale, suffix);
             var candidateOverride = entry.OverridePath?.Contains(
-                    LocalizedResourceResolver.LocalePlaceholder, StringComparison.Ordinal) == true
+                    ResourcePreloadContext.LocalePlaceholder, StringComparison.Ordinal) == true
                 ? entry.OverridePath.Replace(
-                    LocalizedResourceResolver.LocalePlaceholder, locale, StringComparison.Ordinal)
+                    ResourcePreloadContext.LocalePlaceholder, locale, StringComparison.Ordinal)
                 : null;
             if (Resolve(candidate, entry.ResourceType, candidateOverride, false).Location is not null)
             {
@@ -87,9 +87,9 @@ internal sealed class ResourceResolver
     }
 
     private static string? RemoveLocalePlaceholder(string? path) => path?
-        .Replace($"{LocalizedResourceResolver.LocalePlaceholder}/", string.Empty, StringComparison.Ordinal)
-        .Replace($"/{LocalizedResourceResolver.LocalePlaceholder}", string.Empty, StringComparison.Ordinal)
-        .Replace(LocalizedResourceResolver.LocalePlaceholder, string.Empty, StringComparison.Ordinal);
+        .Replace($"{ResourcePreloadContext.LocalePlaceholder}/", string.Empty, StringComparison.Ordinal)
+        .Replace($"/{ResourcePreloadContext.LocalePlaceholder}", string.Empty, StringComparison.Ordinal)
+        .Replace(ResourcePreloadContext.LocalePlaceholder, string.Empty, StringComparison.Ordinal);
 
     private static void ValidateProviders(IResourceProvider[] providers)
     {

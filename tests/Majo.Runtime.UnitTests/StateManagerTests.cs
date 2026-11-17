@@ -24,37 +24,6 @@ public sealed class StateManagerTests
     }
 
     [Fact]
-    public void RegistryBuildsStableTopologicalOrderAndRejectsInvalidGraphs()
-    {
-        var events = new List<string>();
-        var variables = new RecordingContributor("variables", [], events);
-        var actors = new RecordingContributor("actors", ["variables"], events);
-        var script = new RecordingContributor(
-            "script",
-            ["variables", "actors"],
-            events);
-
-        var ordered = new StateContributorRegistry()
-            .Register(script)
-            .Register(actors)
-            .Register(variables)
-            .Build();
-
-        Assert.Equal(["variables", "actors", "script"], ordered.Select(item => item.Key));
-        Assert.Throws<DuplicateStateContributorException>(() =>
-            new StateContributorRegistry().Register(variables).Register(variables));
-        Assert.Throws<StateRuntimeException>(() =>
-            new StateContributorRegistry()
-                .Register(new RecordingContributor("orphan", ["missing"], events))
-                .Build());
-        Assert.Throws<StateRuntimeException>(() =>
-            new StateContributorRegistry()
-                .Register(new RecordingContributor("a", ["b"], events))
-                .Register(new RecordingContributor("b", ["a"], events))
-                .Build());
-    }
-
-    [Fact]
     public async Task RestorePreparesEverythingThenCommitsInDependencyOrderWithoutReset()
     {
         var events = new List<string>();

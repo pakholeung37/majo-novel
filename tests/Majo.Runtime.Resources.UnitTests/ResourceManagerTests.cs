@@ -1,12 +1,10 @@
 using BindingFlags = System.Reflection.BindingFlags;
 using System.Runtime.CompilerServices;
 using Majo.Runtime.Core;
-using Majo.Runtime.Operations;
 using Majo.Runtime.Resources;
-using Majo.Runtime.Resources.Godot;
 using Xunit;
 
-namespace Majo.Runtime.UnitTests;
+namespace Majo.Runtime.Resources.UnitTests;
 
 public sealed class ResourceManagerTests
 {
@@ -429,21 +427,6 @@ public sealed class ResourceManagerTests
             registry.Register(low, priority: 20, replace: true).Providers[0]);
     }
 
-    [Fact]
-    public void GodotProviderAcceptsCustomResourcePathResolver()
-    {
-        var resolver = new TestPathResolver();
-        var provider = new GodotProjectResourceProvider(resolver, new UnusedFrameClock());
-        var request = new ResourceRequest(
-            new ResourceKey("characters/hero/calm"),
-            typeof(TestAsset));
-
-        Assert.Equal(
-            ["res://my-layout/TestAsset/characters/hero/calm.asset"],
-            provider.GetCandidatePaths(request));
-        Assert.Same(request, resolver.LastRequest);
-    }
-
     [Fact(Timeout = 5_000)]
     public async Task ScopedLoaderUsesPriorityExactOverridesAndCache()
     {
@@ -652,33 +635,6 @@ public sealed class ResourceManagerTests
     }
 
     private sealed record TestAsset(string Name);
-
-    private sealed class TestPathResolver : IResourcePathResolver
-    {
-        public ResourceRequest? LastRequest { get; private set; }
-
-        public IReadOnlyList<string> GetCandidatePaths(ResourceRequest request)
-        {
-            LastRequest = request;
-            return [$"res://my-layout/{request.ResourceType.Name}/{request.Key.Path}.asset"];
-        }
-    }
-
-    private sealed class UnusedFrameClock : IFrameClock
-    {
-        public Task NextFrameAsync(CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
-
-        public Task DelayAsync(
-            TimeSpan duration,
-            CancellationToken cancellationToken = default) => Task.CompletedTask;
-
-        public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-    }
 
     private sealed class MemoryProvider : IResourceProvider
     {

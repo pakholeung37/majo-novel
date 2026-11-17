@@ -4,7 +4,7 @@ using System.Text.Json;
 using Majo.Runtime.State;
 using Xunit;
 
-namespace Majo.Runtime.UnitTests;
+namespace Majo.Runtime.Persistence.UnitTests;
 
 public sealed class DurableStateTests
 {

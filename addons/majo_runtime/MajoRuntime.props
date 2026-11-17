@@ -1,17 +1,23 @@
 <Project>
     <Import Project="$(MSBuildThisFileDirectory)Assemblies/Majo.Runtime.Domain/Majo.Runtime.Domain.sources.props" />
     <Import Project="$(MSBuildThisFileDirectory)Assemblies/Majo.Runtime.Commands/Majo.Runtime.Commands.sources.props" />
+    <Import Project="$(MSBuildThisFileDirectory)Assemblies/Majo.Runtime.Persistence/Majo.Runtime.Persistence.sources.props" />
+    <Import Project="$(MSBuildThisFileDirectory)Assemblies/Majo.Runtime.Resources/Majo.Runtime.Resources.sources.props" />
     <ItemGroup>
         <Compile Remove="addons\majo_runtime\Bridges\**" />
         <Compile Remove="addons\majo_runtime\Assemblies\**" />
         <Compile Remove="$(MSBuildThisFileDirectory)Runtime/Core/**/*.cs" />
         <Compile Remove="@(MajoDomainSource)" />
         <Compile Remove="@(MajoCommandSource)" />
+        <Compile Remove="@(MajoPersistenceSource)" />
+        <Compile Remove="@(MajoResourceSource)" />
         <Compile Remove="addons\majo_runtime\SourceGenerators\**" />
         <ProjectReference Include="$(MSBuildThisFileDirectory)Bridges\YarnSpinnerStateBridge\YarnSpinnerStateBridge.csproj" />
         <ProjectReference Include="$(MSBuildThisFileDirectory)Assemblies/Majo.Runtime.Core/Majo.Runtime.Core.csproj" />
         <ProjectReference Include="$(MSBuildThisFileDirectory)Assemblies/Majo.Runtime.Domain/Majo.Runtime.Domain.csproj" />
         <ProjectReference Include="$(MSBuildThisFileDirectory)Assemblies/Majo.Runtime.Commands/Majo.Runtime.Commands.csproj" />
+        <ProjectReference Include="$(MSBuildThisFileDirectory)Assemblies/Majo.Runtime.Persistence/Majo.Runtime.Persistence.csproj" />
+        <ProjectReference Include="$(MSBuildThisFileDirectory)Assemblies/Majo.Runtime.Resources/Majo.Runtime.Resources.csproj" />
         <ProjectReference Include="$(MSBuildThisFileDirectory)SourceGenerators\Majo.CommandGenerator\Majo.CommandGenerator.csproj"
                           ReferenceOutputAssembly="false"
                           OutputItemType="analyzer" />

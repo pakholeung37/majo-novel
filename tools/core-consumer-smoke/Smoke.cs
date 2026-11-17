@@ -10,12 +10,15 @@ using Majo.Runtime;
 using Majo.Runtime.Actors;
 using Majo.Runtime.Actors.Godot;
 using Majo.Runtime.Configuration;
+using Majo.Runtime.Core;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Transitions;
 using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Dialogue.Yarn;
 using Majo.Runtime.Dialogue.Yarn.HotReload;
+using Majo.Runtime.Resources;
+using Majo.Runtime.State;
 using Majo.YarnBridge;
 using YarnSpinnerGodot;
 using DialogueLine = Majo.Runtime.Dialogue.DialogueLine;
@@ -130,7 +133,51 @@ public partial class Smoke : Node
         if (ReferenceEquals(imported, active) || imported.CompiledYarnProgramBase64 != original ||
             active.Program.Nodes["Start"].Instructions[0].RunCommand?.CommandText != YarnProgramBridge.NodeEntryCommand)
             throw new InvalidOperationException("The Yarn bridge did not isolate its executable program from the imported resource.");
+        await VerifyIndependentServicesAsync(runtime.Host.Services);
         await runtime.RequestShutdownAsync();
+    }
+
+    private static async Task VerifyIndependentServicesAsync(IServiceResolver services)
+    {
+        if (typeof(StateSnapshot).Assembly.GetName().Name != "Majo.Runtime.Persistence" ||
+            typeof(ResourceManager).Assembly.GetName().Name != "Majo.Runtime.Resources")
+            throw new InvalidOperationException("Consumer loaded persistence or resources from the wrong assembly.");
+
+        var state = services.Get<IStateManager>();
+        var snapshot = state.CurrentSnapshot ?? throw new InvalidOperationException("Missing dialogue boundary snapshot.");
+        var envelope = state.CreateEnvelope(snapshot, StateScope.Game, MajoRuntimeMetadata.PluginVersion,
+            "consumer-smoke", "majo/core-consumer-smoke");
+        var serializer = services.Get<IStateSerializer>();
+        var storage = services.Get<IStateStorage>();
+        var key = $"assembly-smoke/{Guid.NewGuid():N}";
+        var bytes = serializer.Serialize(envelope);
+        await storage.WriteAsync(key, bytes);
+        try
+        {
+            var restored = serializer.Deserialize(await storage.ReadAsync(key));
+            if (!bytes.SequenceEqual(serializer.Serialize(restored)))
+                throw new InvalidOperationException("Consumer state storage did not preserve the canonical envelope.");
+        }
+        finally
+        {
+            await storage.DeleteAsync(key);
+        }
+
+        var resources = services.Get<IResourceManager>();
+        var resource = new object();
+        var resourceKey = new ResourceKey("assembly-smoke/resource");
+        resources.Register(resourceKey, resource);
+        try
+        {
+            using var lease = resources.LeaseAsync<object>(resourceKey, pinned: true);
+            await lease.Completion;
+            if (!ReferenceEquals(resource, lease.Resource) || !resources.IsPinned<object>(resourceKey))
+                throw new InvalidOperationException("Consumer resource lease did not retain the registered resource.");
+        }
+        finally
+        {
+            resources.Unregister(resourceKey);
+        }
     }
 
     private sealed class ConsumerPresenter : IDialoguePresenter

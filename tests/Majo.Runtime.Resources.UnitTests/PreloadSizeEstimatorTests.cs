@@ -2,7 +2,7 @@ using System.Buffers.Binary;
 using Majo.Runtime.Preloading;
 using Xunit;
 
-namespace Majo.Runtime.UnitTests;
+namespace Majo.Runtime.Resources.UnitTests;
 
 public sealed class PreloadSizeEstimatorTests
 {
