@@ -66,3 +66,10 @@ public interface IStateEligibility : IRuntimeService
         string? diagnostic = null,
         string? playerMessage = null);
 }
+
+/// <summary>Optional eligibility capability for observing its owning state transaction and contributors.</summary>
+public interface IStateEligibilityContextReceiver
+{
+    void Attach(Func<StateManagerStatus> transactionStatusProvider, IReadOnlyList<IStateContributor> stateContributors,
+        Func<bool>? committedBoundaryProvider = null);
+}

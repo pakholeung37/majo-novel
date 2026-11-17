@@ -12,7 +12,7 @@ using Majo.Runtime.Script;
 
 namespace Majo.Runtime.State;
 
-public sealed class StateEligibility : IStateEligibility
+public sealed class StateEligibility : IStateEligibility, IStateEligibilityContextReceiver
 {
     private readonly object sync = new();
     private readonly IScriptPlayback script;
@@ -180,7 +180,7 @@ public sealed class StateEligibility : IStateEligibility
         return handle;
     }
 
-    internal void Attach(
+    public void Attach(
         Func<StateManagerStatus> transactionStatusProvider,
         IReadOnlyList<IStateContributor> stateContributors,
         Func<bool>? committedBoundaryProvider = null)

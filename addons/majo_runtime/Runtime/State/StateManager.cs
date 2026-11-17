@@ -22,9 +22,8 @@ public sealed class StateManager : IStateManager, IStateBoundarySource, IStateRe
     private readonly IRuntimeLogger logger;
     private readonly object restorePlanOwner = new();
     private readonly StateMutationGate mutationGate = new();
-    private IInputHandle? faultInputMuter;
-    private IDisposable? faultPlaybackLease;
-    private IRetainedRestoreOutput? faultOutput;
+    private StateRestoreResources? faultResources;
+    private readonly StateSnapshotCapture capture;
     private bool isInitialized;
 
     public StateManager(
@@ -38,12 +37,13 @@ public sealed class StateManager : IStateManager, IStateBoundarySource, IStateRe
     {
         this.boundarySource = boundarySource;
         this.contributors = contributors ?? throw new ArgumentNullException(nameof(contributors));
+        capture = new StateSnapshotCapture(this.contributors);
         this.input = input ?? throw new ArgumentNullException(nameof(input));
         this.restoreBoundary = restoreBoundary ?? throw new ArgumentNullException(nameof(restoreBoundary));
         this.eligibility = eligibility ?? new PermissiveStateEligibility();
         this.migrations = migrations ?? new StateMigrationRegistry();
         this.logger = logger ?? NullRuntimeLogger.Instance;
-        if (this.eligibility is StateEligibility concreteEligibility)
+        if (this.eligibility is IStateEligibilityContextReceiver concreteEligibility)
         {
             concreteEligibility.Attach(() => Status, contributors,
                 boundarySource is null ? null : () => CurrentBoundary is not null);
@@ -336,23 +336,8 @@ public sealed class StateManager : IStateManager, IStateBoundarySource, IStateRe
         }
     }
 
-    private async Task<StateSnapshot> CaptureRecordsAsync(
-        StateScope scope,
-        LineBoundaryContext? boundary,
-        CancellationToken cancellationToken)
-    {
-        var records = new List<StateRecord>();
-        foreach (var contributor in PersistentContributors(scope))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var record = boundary is not null && contributor is ScriptStateContributor script
-                ? script.CaptureBoundary(boundary.Script)
-                : await contributor.CaptureAsync(cancellationToken);
-            ValidateRecord(contributor, record);
-            records.Add(record);
-        }
-        return new StateSnapshot(StateSnapshot.CurrentFormatVersion, DateTimeOffset.UtcNow, records);
-    }
+    private Task<StateSnapshot> CaptureRecordsAsync(StateScope scope, LineBoundaryContext? boundary,
+        CancellationToken cancellationToken) => capture.CaptureAsync(scope, boundary, cancellationToken);
 
     public async Task RestoreGameAsync(
         StateSnapshot snapshot,
@@ -417,7 +402,7 @@ public sealed class StateManager : IStateManager, IStateBoundarySource, IStateRe
         {
             if (mutationStarted && inputMuter is not null)
             {
-                faultInputMuter = inputMuter;
+                faultResources = new StateRestoreResources { InputMuter = inputMuter };
                 inputMuter = null;
             }
             SetStatus(StateManagerStatus.Faulted);
@@ -501,71 +486,22 @@ public sealed class StateManager : IStateManager, IStateBoundarySource, IStateRe
         EnsureInitialized();
         EnsureEligible(plan.Operation);
         var oldBoundary = CurrentBoundary;
-        // This cancels an in-flight boundary before waiting for the State gate it may own.
-        IDisposable? playbackLease = boundarySource is null ? null :
-            await boundarySource.AcquireRestoreAsync(cancellationToken);
+        using var operation = new StateRestoreOperation(PersistentContributors(plan.Scope), restoreBoundary, logger, RestorePresentationTimeout);
+        // Cancel and drain an in-flight line before waiting for the State gate it may own.
+        await operation.AcquirePlaybackAsync(boundarySource, cancellationToken);
         await transactions.WaitAsync(CancellationToken.None);
-        var candidates = new List<IPreparedStateRestore>();
-        IInputHandle? inputMuter = null;
-        IRetainedRestoreOutput? retainedOutput = null;
-        var commitStarted = false;
-        var stage = "stop";
         try
         {
             EnsureReadyForTransaction("restore");
             EnsureEligible(plan.Operation);
-            inputMuter = input.AcquireMuter(this, new InputMuteOptions(name: "state-restore"));
+            operation.AcquireInput(input, this);
             SetStatus(StateManagerStatus.Restoring);
             restoredBoundary = null;
-            retainedOutput = (restoreBoundary as IRuntimeRestoreOutput)?.RetainRestoreOutput();
-            if (plan.Operation == StateOperationKind.HotReload &&
-                restoreBoundary is IRuntimeHotReloadBoundary hotReloadBoundary)
-                await hotReloadBoundary.CancelForHotReloadAsync(cancellationToken);
-            else
-                await restoreBoundary.CancelForRestoreAsync(cancellationToken);
-            stage = "prepare";
-            var context = new RestoreContext(plan.Scope, plan.Records, plan.Operation);
-            foreach (var contributor in PersistentContributors(plan.Scope))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                var preparer = contributor as IPreparedStateContributor ?? throw new StateCompatibilityException(
-                    $"Contributor '{contributor.Key}' does not implement prepared replacement.");
-                plan.Records.TryGetValue(contributor.Key, out var record);
-                var candidate = await preparer.PrepareRestoreAsync(record, context, cancellationToken);
-                candidates.Add(candidate ?? throw new StateRuntimeException(
-                    $"Contributor '{contributor.Key}' returned no restore candidate."));
-            }
-            logger.Info("state", "state.restore_prepared", "All restore candidates are prepared.");
-            cancellationToken.ThrowIfCancellationRequested();
-            stage = "commit";
-            commitStarted = true;
-            // No awaits, input, resource loading or cancellation points between commits.
-            foreach (var candidate in candidates) candidate.Commit();
-            logger.Info("state", "state.restore_committed", "Committed all prepared state replacements.");
-            stage = "presentation";
-            using (var deadline = new CancellationTokenSource(RestorePresentationTimeout))
-            {
-                foreach (var candidate in candidates.OfType<IStateRestorePresentation>())
-                    await candidate.WaitForPresentationAsync(deadline.Token).WaitAsync(deadline.Token);
-                if (retainedOutput is not null)
-                    await retainedOutput.WaitForTargetAsync(deadline.Token).WaitAsync(deadline.Token);
-            }
-            logger.Info("state", "state.restore_presented", "Target presentation is ready for script activation.");
-            stage = "activation";
-            using (var deadline = new CancellationTokenSource(RestorePresentationTimeout))
-                foreach (var activation in candidates.OfType<IStateRestoreActivation>())
-                    await activation.ActivateAsync(deadline.Token).WaitAsync(deadline.Token);
-            stage = "release";
-            await DisposeCandidatesAsync(candidates);
-            retainedOutput?.Dispose();
-            retainedOutput = null;
-            var committedSnapshot = restoredBoundary is null
-                ? plan.Snapshot
-                : ReconcileActivatedScriptSnapshot(plan.Snapshot, restoredBoundary.Script);
+            await operation.ExecuteAsync(plan, cancellationToken);
+            var committedSnapshot = restoredBoundary is null ? plan.Snapshot : capture.Reconcile(plan.Snapshot, restoredBoundary.Script);
             CurrentSnapshot = committedSnapshot;
-            CurrentBoundary = restoredBoundary is null
-                ? null
-                : new CommittedLineBoundary(restoredBoundary, committedSnapshot, mutationGate.Revision);
+            CurrentBoundary = restoredBoundary is null ? null :
+                new CommittedLineBoundary(restoredBoundary, committedSnapshot, mutationGate.Revision);
             restoredBoundary = null;
             LastFailureMessage = null;
             LastMigrationChain = plan.MigrationChain;
@@ -576,89 +512,26 @@ public sealed class StateManager : IStateManager, IStateBoundarySource, IStateRe
         }
         catch (Exception failure)
         {
-            Exception reported = failure;
-            var faulted = commitStarted;
-            try { await DisposeCandidatesAsync(candidates); }
-            catch (Exception cleanup)
-            {
-                reported = new AggregateException("Restore and candidate cleanup failed.", reported, cleanup);
-                faulted = true;
-            }
-            if (!faulted && oldBoundary is not null && boundarySource is not null)
-            {
-                try
-                {
-                    var recoveryOrigin = plan.Operation == StateOperationKind.HotReload
-                        ? Majo.Runtime.Dialogue.DialoguePresentationOrigin.HotReloadReplay
-                        : Majo.Runtime.Dialogue.DialoguePresentationOrigin.CheckpointRestore;
-                    await boundarySource.ResumeBoundaryAsync(
-                        oldBoundary.Context.Script, recoveryOrigin, CancellationToken.None);
-                    CurrentBoundary = oldBoundary;
-                }
-                catch (Exception recovery)
-                {
-                    reported = new AggregateException("Restore preparation and old boundary recovery failed.", reported, recovery);
-                    faulted = true;
-                }
-            }
+            var recovery = await operation.RecoverAsync(failure, plan.Operation, oldBoundary, boundarySource);
+            if (recovery.RecoveredBoundary) CurrentBoundary = oldBoundary;
             restoredBoundary = null;
-            if (faulted)
-            {
-                faultOutput = retainedOutput;
-                retainedOutput = null;
-                faultPlaybackLease = playbackLease;
-                playbackLease = null;
-                if (inputMuter is not null)
-                {
-                    faultInputMuter = inputMuter;
-                    inputMuter = null;
-                }
-            }
-            SetStatus(faulted ? StateManagerStatus.Faulted : StateManagerStatus.Idle);
-            LastFailureMessage = reported.Message;
-            logger.Error("state", "state.restore_failed", $"Restore failed during {stage}: {reported.Message}", reported,
-                properties: new Dictionary<string, object?> { ["stage"] = stage, ["faulted"] = faulted });
-            Publish(Failed, reported, "Failed");
-            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(reported).Throw();
+            if (recovery.Faulted) faultResources = operation.RetainFaultResources();
+            SetStatus(recovery.Faulted ? StateManagerStatus.Faulted : StateManagerStatus.Idle);
+            LastFailureMessage = recovery.Error.Message;
+            logger.Error("state", "state.restore_failed", $"Restore failed during {operation.StageName}: {recovery.Error.Message}", recovery.Error,
+                properties: new Dictionary<string, object?> { ["stage"] = operation.StageName, ["faulted"] = recovery.Faulted });
+            Publish(Failed, recovery.Error, "Failed");
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(recovery.Error).Throw();
             throw;
         }
         finally
         {
-            retainedOutput?.Dispose();
-            inputMuter?.Dispose();
-            playbackLease?.Dispose();
-            transactions.Release();
+            try { operation.Dispose(); }
+            finally { transactions.Release(); }
         }
     }
 
-    private StateSnapshot ReconcileActivatedScriptSnapshot(
-        StateSnapshot snapshot,
-        ScriptCheckpoint checkpoint)
-    {
-        var script = contributors.OfType<ScriptStateContributor>().SingleOrDefault();
-        if (script is null) return snapshot;
-        var records = snapshot.Records.Values
-            .Where(record => record.Key != BuiltInStateKeys.ScriptPlayback)
-            .Append(script.CaptureBoundary(checkpoint));
-        return new StateSnapshot(snapshot.FormatVersion, snapshot.CapturedAt, records);
-    }
-
-    private static async ValueTask DisposeCandidatesAsync(List<IPreparedStateRestore> candidates)
-    {
-        List<Exception>? failures = null;
-        while (candidates.Count > 0)
-        {
-            var candidate = candidates[^1];
-            candidates.RemoveAt(candidates.Count - 1);
-            try { await candidate.DisposeAsync(); }
-            catch (Exception failure) { (failures ??= new()).Add(failure); }
-        }
-        if (failures is not null) throw new AggregateException("Restore candidate cleanup failed.", failures);
-    }
-
-    private IStateContributor[] PersistentContributors(StateScope scope) =>
-        contributors.Where(value =>
-            value.Scope == scope && value.Capability.SupportsPersistence).ToArray();
+    private IStateContributor[] PersistentContributors(StateScope scope) => capture.PersistentContributors(scope);
 
     private static void ValidateSnapshotFormat(StateSnapshot snapshot) =>
         StateEnvelopeHelper.ValidateSnapshotFormat(snapshot);
@@ -692,15 +565,7 @@ public sealed class StateManager : IStateManager, IStateBoundarySource, IStateRe
         }
     }
 
-    private void ReleaseFaultMuter()
-    {
-        faultOutput?.Dispose();
-        faultOutput = null;
-        faultInputMuter?.Dispose();
-        faultInputMuter = null;
-        faultPlaybackLease?.Dispose();
-        faultPlaybackLease = null;
-    }
+    private void ReleaseFaultMuter() => Interlocked.Exchange(ref faultResources, null)?.Dispose();
 
     private void SetStatus(StateManagerStatus status)
     {

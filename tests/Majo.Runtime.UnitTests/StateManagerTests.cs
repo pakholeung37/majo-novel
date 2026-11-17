@@ -12,6 +12,16 @@ namespace Majo.Runtime.UnitTests;
 public sealed class StateManagerTests
 {
     [Fact]
+    public void ManagerSuppliesTransactionContextThroughTheEligibilityCapability()
+    {
+        var eligibility = new RecordingEligibility();
+        using var manager = CreateManager([], [], eligibility: eligibility);
+        Assert.NotNull(eligibility.StatusProvider);
+        Assert.Equal(StateManagerStatus.Idle, eligibility.StatusProvider!());
+        Assert.Empty(eligibility.AttachedContributors!);
+    }
+
+    [Fact]
     public async Task InitializationRejectsGameContributorWithoutMutationContract()
     {
         var events = new List<string>();
@@ -567,9 +577,17 @@ public sealed class StateManagerTests
             Task.CompletedTask;
     }
 
-    private sealed class RecordingEligibility : IStateEligibility
+    private sealed class RecordingEligibility : IStateEligibility, IStateEligibilityContextReceiver
     {
         public bool Deny { get; set; }
+        public Func<StateManagerStatus>? StatusProvider { get; private set; }
+        public IReadOnlyList<IStateContributor>? AttachedContributors { get; private set; }
+        public void Attach(Func<StateManagerStatus> transactionStatusProvider, IReadOnlyList<IStateContributor> stateContributors,
+            Func<bool>? committedBoundaryProvider = null)
+        {
+            StatusProvider = transactionStatusProvider;
+            AttachedContributors = stateContributors;
+        }
         public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;

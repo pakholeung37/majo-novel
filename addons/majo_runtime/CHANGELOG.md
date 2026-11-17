@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Separate prepared restore execution/recovery and lease ownership from StateManager, with explicit restore phases and exactly-once fault resource transfer.
+- Continue releasing input/playback leases when another release fails, and release the state transaction gate even when cleanup throws.
+- Capture/reconcile supplied script boundaries and attach eligibility context through explicit contributor/capability contracts.
+
 - Coordinate dialogue locale changes through registered asynchronous participants, including safety waits and compensating rollback, for both default and replaced locale managers.
 - Move Yarn/engine/presentation locale application into an owned runtime service and initialize it before settings projection.
 - Verify whole-locale-service replacement, rejected refresh recovery and detached/cancelled participants.

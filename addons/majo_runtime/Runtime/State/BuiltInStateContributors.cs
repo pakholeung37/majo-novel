@@ -448,7 +448,7 @@ public sealed class AudioStateContributor : IPreparedStateContributor, IStateMut
     private sealed record BgmEntry(string ClipId, string TrackId, bool Loop, float Volume);
 }
 
-public sealed class ScriptStateContributor : IPreparedStateContributor, ILineBoundaryOwnedStateContributor
+public sealed class ScriptStateContributor : IPreparedStateContributor, ILineBoundaryOwnedStateContributor, IScriptBoundaryStateContributor
 {
     private static readonly string[] RequiredContributors =
     [
@@ -481,7 +481,7 @@ public sealed class ScriptStateContributor : IPreparedStateContributor, ILineBou
         return ValueTask.FromResult(CaptureBoundary(playback.CaptureCheckpoint()));
     }
 
-    internal StateRecord CaptureBoundary(ScriptCheckpoint checkpoint)
+    public StateRecord CaptureBoundary(ScriptCheckpoint checkpoint)
     {
         var payload = new ScriptPayload(
             checkpoint.FormatVersion,

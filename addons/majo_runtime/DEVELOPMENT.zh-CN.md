@@ -260,3 +260,9 @@ curl -fsSL https://github.com/pakholeung37/majo-novel/releases/download/v0.1.0-r
 `ILocaleManager.RegisterDialogueSwitchParticipant` 是显式的异步扩展边界。管理器在发布语言变更前等待参与者的安全边界及应用操作；失败时以旧语言补偿，并保持原来的已提交语言。注册句柄可幂等释放，取消等待不能进入应用阶段。自定义管理器应实现此契约；包装器应转发注册和变更方法。旧构造器回调继续供独立 `LocaleManager` 用户使用。
 
 `YarnDialogueLocaleCoordinator` 读取注册后的语言、命令、后端、播放器和展示服务，持有参与者注册并在关闭时解除。引擎语言、当前行/选项刷新及后端 locale 均由此协调，不再依赖 Bootstrap 的默认语言工厂闭包。Settings 服务明确依赖该协调器，以覆盖初始化时的语言投影。真实引擎回归验证替换整个语言服务、忙碌边界、刷新失败补偿和后续成功切换；参与者的异步等待、取消及释放由单测覆盖。
+
+## 状态恢复所有权
+
+`StateRestoreOperation` 持有一次恢复的候选对象、执行阶段和失败恢复流程，阶段为 stop、prepare、commit、presentation、activation、release。提交仍是无 await、无取消点的同步循环。提交前失败继续恢复旧脚本边界；提交开始后失败保留输入、播放和画面租约，直到显式重置/关闭。`StateRestoreResources` 统一拥有这些租约，转交故障状态后原操作不再释放它们；某一释放抛错时仍尝试其余释放，并保持幂等。
+
+`StateSnapshotCapture` 负责持久 contributor 的选择、记录校验和脚本边界快照协调。自定义脚本 contributor 可实现 `IScriptBoundaryStateContributor` 使用给定检查点，记录按 contributor 自己的 Key 更新；`IStateEligibilityContextReceiver` 接收事务状态与 contributor 上下文。StateManager 不再依靠具体的 ScriptStateContributor/StateEligibility 类型判断。原存档格式与提交顺序保持不变，阶段失败、旧边界恢复、通知隔离及租约释放由单测和引擎门禁覆盖。
