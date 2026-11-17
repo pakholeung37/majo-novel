@@ -85,16 +85,10 @@ run_core_consumer_smoke() {
     package_directory="$(mktemp -d)"
     trap 'rm -rf "$smoke_directory" "$package_directory"' RETURN
     python3 "$REPOSITORY_ROOT/tools/package-addon.py" --output-dir "$package_directory"
-    python3 - "$package_directory" "$smoke_directory" <<'PY_MAJO_INSTALL'
-from pathlib import Path
-import sys
-import zipfile
-archives = list(Path(sys.argv[1]).glob("*-with-yarn.zip"))
-assert len(archives) == 1, "Expected one bundled addon archive"
-with zipfile.ZipFile(archives[0]) as archive:
-    archive.extractall(sys.argv[2])
-PY_MAJO_INSTALL
     cp -R "$REPOSITORY_ROOT/tools/core-consumer-smoke/." "$smoke_directory/"
+    python3 "$REPOSITORY_ROOT/addons/majo_runtime/Tools/majo.py" install \
+        --project "$smoke_directory" \
+        --archive "$package_directory/majo-runtime-0.1.0-with-yarn.zip"
     if find "$smoke_directory" -path '*/demos/*' -print -quit | grep -q .; then
         printf 'Core consumer smoke unexpectedly copied demo sources.\n' >&2
         return 1
@@ -104,36 +98,12 @@ PY_MAJO_INSTALL
         run_with_timeout 180 dotnet restore CoreConsumerSmoke.csproj --nologo
         run_with_timeout 180 dotnet build CoreConsumerSmoke.csproj --nologo --no-restore
         run_with_timeout 180 "$GODOT_EXECUTABLE" --headless --path "$smoke_directory" --editor --quit
+        python3 "$REPOSITORY_ROOT/addons/majo_runtime/Tools/majo.py" doctor --project "$smoke_directory"
+        python3 "$REPOSITORY_ROOT/addons/majo_runtime/Tools/majo.py" install \
+            --project "$smoke_directory" --archive "$package_directory/majo-runtime-0.1.0-with-yarn.zip"
         run_with_timeout 60 "$GODOT_EXECUTABLE" --headless --path "$smoke_directory"
-        case "$(uname -s)" in
-            Darwin) consumer_preset="Consumer macOS" ;;
-            Linux) consumer_preset="Consumer Linux" ;;
-            *) printf 'Unsupported consumer export host.\n' >&2; exit 1 ;;
-        esac
-        mkdir -p player
-        touch player/.gdignore
-        if ! run_with_timeout 300 "$GODOT_EXECUTABLE" --headless --path "$smoke_directory" \
-            --export-pack "$consumer_preset" "$smoke_directory/player/consumer.pck" \
-            >"$smoke_directory/player/export.log" 2>&1; then
-            tail -n 80 "$smoke_directory/player/export.log"
-            exit 1
-        fi
-        if grep -q '^ERROR: Export .NET Project:' "$smoke_directory/player/export.log"; then
-            tail -n 60 "$smoke_directory/player/export.log"
-            printf 'Consumer .NET export failed.\n' >&2
-            exit 1
-        fi
-        if ! run_with_timeout 60 "$GODOT_EXECUTABLE" --headless --path "$smoke_directory" \
-            --main-pack "$smoke_directory/player/consumer.pck" -- --majo-export-smoke \
-            >"$smoke_directory/player/boot.log" 2>&1; then
-            cat "$smoke_directory/player/boot.log"
-            exit 1
-        fi
-        cat "$smoke_directory/player/boot.log"
-        if ! grep -q '^MAJO_CONSUMER_EXPORT_OK$' "$smoke_directory/player/boot.log"; then
-            printf 'Exported consumer did not initialize and complete its dialogue.\n' >&2
-            exit 1
-        fi
+        python3 "$REPOSITORY_ROOT/tools/test-addon-export.py" "$smoke_directory" "$GODOT_EXECUTABLE"
+
     )
 }
 
@@ -141,6 +111,9 @@ if [[ "$TEST_MODE" != "unit" && ! -x "$GODOT_EXECUTABLE" ]]; then
     printf 'Godot Mono executable was not found or is not executable: %s\n' "$GODOT_EXECUTABLE" >&2
     exit 1
 fi
+
+printf 'Checking addon installation and upgrade protection...\n'
+python3 "$REPOSITORY_ROOT/tools/test-addon-manager.py"
 
 printf 'Restoring .NET dependencies...\n'
 restore_dotnet_projects

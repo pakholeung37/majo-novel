@@ -63,9 +63,11 @@ The runtime validation demo is the runnable reference included in this repositor
 
 ## Install as an addon
 
+For a separate game repository, see the [installation, local development and upgrade guide](addons/majo_runtime/DEVELOPMENT.zh-CN.md). The manager initializes games, syncs source changes and protects local patches during upgrades.
+
 See the [addon installation guide](addons/majo_runtime/README.md) for the required C# imports and a minimal scene. The addon uses unmodified YarnSpinner-Godot 0.3.22 with Yarn Spinner 3.2.0.
 
-Run `python3 tools/package-addon.py` to create standalone and Yarn-bundled ZIPs in `build/releases`, with SHA-256 checksums. These archives contain only addon files and their licenses. The full test gate installs the bundled ZIP into an empty project, imports and plays a branching script with nested detours, then boots its exported PCK.
+Run `python3 tools/package-addon.py` to create standalone, Yarn-bundled and runnable example ZIPs in `build/releases`, with SHA-256 checksums. These archives contain only addon files and their licenses. The full test gate installs the bundled ZIP into an empty project, imports and plays a branching script with nested detours, then boots its exported PCK.
 
 ## Run the runtime validation demo
 

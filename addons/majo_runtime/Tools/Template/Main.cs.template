@@ -1,0 +1,18 @@
+using Godot;
+using Majo.Runtime;
+using Majo.Runtime.Configuration;
+using Majo.Runtime.Dialogue;
+
+public partial class Main : Node
+{
+    public override async void _Ready()
+    {
+        var runtime = new MajoRuntimeBootstrap
+        {
+            Configuration = MajoProjectConfiguration.CreateDefault(),
+        };
+        AddChild(runtime);
+        await runtime.InitializationCompletion;
+        await runtime.Host.Services.Get<IDialoguePlayer>().StartAsync();
+    }
+}

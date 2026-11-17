@@ -25,3 +25,5 @@ artifacts
 !/demos/**/assets/scripts/**
 !/demos/**/assets/localization/
 !/demos/**/assets/localization/**
+
+.tools/

@@ -1,0 +1,8 @@
+title: Start
+---
+Narrator: Welcome to Majo Runtime. Click or press Space to continue. #line:example-welcome
+-> Try a choice #line:example-option
+    Narrator: This project uses the default dialogue interface. #line:example-choice
+-> Finish #line:example-finish
+    Narrator: You can replace this story with your own Yarn scripts. #line:example-end
+===

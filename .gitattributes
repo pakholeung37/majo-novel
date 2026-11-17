@@ -3,3 +3,12 @@
 
 # Preserve the exact upstream bytes of the vendored Yarn Spinner plugin.
 /addons/YarnSpinner-Godot/** -text -whitespace
+
+# Asset Library / GitHub source archives contain only the two distributable addons.
+/* export-ignore
+/addons -export-ignore
+/addons/* export-ignore
+/addons/majo_runtime -export-ignore
+/addons/majo_runtime/** -export-ignore
+/addons/YarnSpinner-Godot -export-ignore
+/addons/YarnSpinner-Godot/** -export-ignore

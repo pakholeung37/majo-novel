@@ -31,6 +31,22 @@ public partial class Smoke : Node
             var packaged = OS.GetCmdlineUserArgs().Contains("--majo-export-smoke");
             if (packaged && !string.IsNullOrEmpty(ProjectSettings.GlobalizePath("res://")))
                 throw new InvalidOperationException("Export smoke did not load a packed project.");
+            if (packaged && typeof(Smoke).Assembly.GetType("Majo.Runtime.MajoRuntimePlugin") is not null)
+                throw new InvalidOperationException("Packed smoke loaded an editor assembly instead of ExportRelease.");
+            foreach (var path in new[] {
+                "res://addons/majo_runtime/Runtime/UI/Dialogue/DefaultVnPresentation.tscn",
+                "res://addons/majo_runtime/Runtime/UI/SaveLoad/DefaultSaveLoadOverlay.tscn",
+                "res://addons/majo_runtime/Runtime/Direction/Shaders/PremultipliedOutput.gdshader",
+                "res://addons/majo_runtime/Runtime/Direction/Shaders/DissolveTransition.gdshader",
+                "res://addons/majo_runtime/Runtime/Direction/Shaders/ScreenSlot.gdshader" })
+                if (!ResourceLoader.Exists(path)) throw new InvalidOperationException("Missing packed resource: " + path);
+            foreach (var path in new[] {
+                "res://addons/majo_runtime/Runtime/UI/Dialogue/DefaultVnPresentation.tscn",
+                "res://addons/majo_runtime/Runtime/UI/SaveLoad/DefaultSaveLoadOverlay.tscn" })
+            {
+                var scene = ResourceLoader.Load<PackedScene>(path) ?? throw new InvalidOperationException(path);
+                scene.Instantiate().Free();
+            }
             await RunAsync();
             GD.Print(packaged ? "MAJO_CONSUMER_EXPORT_OK" : "MAJO_CONSUMER_SOURCE_OK");
             GetTree().Quit();

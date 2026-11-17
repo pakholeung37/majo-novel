@@ -63,9 +63,11 @@ Yarn 负责剧情流程，Majo 演出命令负责画面呈现。`beat` 组织需
 
 ## 作为 addon 安装
 
+准备建立独立游戏仓库时，参见[安装、联调与升级指南](addons/majo_runtime/DEVELOPMENT.zh-CN.md)，可用管理命令自动建项目、同步系统源码并检查升级冲突。
+
 所需的 C# 工程引用及最小场景见[插件安装指南](addons/majo_runtime/README.md)。插件使用未修改的官方 YarnSpinner-Godot 0.3.22 和 Yarn Spinner 3.2.0。
 
-运行 `python3 tools/package-addon.py`，可在 `build/releases` 生成独立版、捆绑 Yarn 版 ZIP 及 SHA-256 校验值。发布包只包含插件文件与许可证。完整测试会将捆绑 ZIP 安装到空工程，首次导入并播放带分支和嵌套 detour 的脚本，再实际启动导出的 PCK。
+运行 `python3 tools/package-addon.py`，可在 `build/releases` 生成独立版、捆绑 Yarn 版、可运行示例工程 ZIP 及 SHA-256 校验值。发布包只包含插件文件与许可证。完整测试会将捆绑 ZIP 安装到空工程，首次导入并播放带分支和嵌套 detour 的脚本，再实际启动导出的 PCK。
 
 ## 运行内部验收 demo
 

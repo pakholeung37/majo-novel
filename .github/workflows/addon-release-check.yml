@@ -46,3 +46,34 @@ jobs:
           path: |
             build/releases/*.zip
             build/releases/SHA256SUMS
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: linux
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: majo-runtime-source-addons
+          path: release-assets
+      - name: Validate tag and create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python3 - <<'PY_TAG'
+          import os, re
+          from pathlib import Path
+          version = re.search(r'version="([^"]+)"', Path('addons/majo_runtime/plugin.cfg').read_text())[1]
+          tag = os.environ['RELEASE_TAG']
+          assert tag == 'v' + version or tag.startswith('v' + version + '-'), (tag, version)
+          PY_TAG
+          cd release-assets
+          sha256sum --check SHA256SUMS
+          prerelease=()
+          if [[ "$RELEASE_TAG" == *-* ]]; then prerelease=(--prerelease); fi
+          gh release create "$RELEASE_TAG" ./*.zip ./SHA256SUMS --draft "${prerelease[@]}" \
+            --title "Majo Runtime $RELEASE_TAG" --notes-file "$GITHUB_WORKSPACE/addons/majo_runtime/CHANGELOG.md"

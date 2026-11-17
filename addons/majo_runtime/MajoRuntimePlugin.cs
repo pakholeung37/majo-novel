@@ -53,8 +53,16 @@ public partial class MajoRuntimePlugin : EditorPlugin
         rebuildQueued = false;
         if (!IsInsideTree() || filesystem.IsScanning())
             return;
+        exportValidationFailed = false;
         RebuildDirectory(filesystem.GetFilesystem());
+        if (System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--majo-validate-export") >= 0)
+        {
+            if (!exportValidationFailed) GD.Print("MAJO_EXPORT_VALIDATED");
+            GetTree().Quit(exportValidationFailed ? 1 : 0);
+        }
     }
+
+    private bool exportValidationFailed;
 
     private void RebuildDirectory(EditorFileSystemDirectory directory)
     {
@@ -69,9 +77,13 @@ public partial class MajoRuntimePlugin : EditorPlugin
                 filesystem.UpdateFile(path);
                 continue;
             }
-            if (path.EndsWith(".yarnproject", StringComparison.OrdinalIgnoreCase) &&
-                MajoDirectionCompiler.Compile(path))
-                filesystem.UpdateFile(MajoDirectionData.GetPath(path));
+            if (path.EndsWith(".yarnproject", StringComparison.OrdinalIgnoreCase))
+            {
+                if (MajoDirectionCompiler.Compile(path))
+                    filesystem.UpdateFile(MajoDirectionData.GetPath(path));
+                if (!FileAccess.FileExists(MajoDirectionData.GetPath(path)))
+                    exportValidationFailed = true;
+            }
         }
         for (var index = 0; index < directory.GetSubdirCount(); index++)
             RebuildDirectory(directory.GetSubdir(index));

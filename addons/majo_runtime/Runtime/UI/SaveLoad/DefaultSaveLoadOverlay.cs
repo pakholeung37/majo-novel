@@ -127,9 +127,11 @@ public sealed class DefaultSaveLoadOverlay : ISaveLoadOverlay, IDisposable
         modalInput = input.AcquireScope(
             this,
             new InputScopeOptions(
-                [MajoInputActions.Menu, MajoInputActions.Cancel,
-                 MajoInputActions.OptionUp, MajoInputActions.OptionDown,
-                 MajoInputActions.Confirm],
+                [MajoInputActions.Menu,
+                    MajoInputActions.Cancel,
+                    MajoInputActions.OptionUp,
+                    MajoInputActions.OptionDown,
+                    MajoInputActions.Confirm],
                 isModal: true,
                 name: "save-load-modal"));
         modalInput.Activated += HandleModalInput;
@@ -275,7 +277,7 @@ public sealed class DefaultSaveLoadOverlay : ISaveLoadOverlay, IDisposable
     private void AddSection(
         string title,
         SaveSlotKind kind,
-        IReadOnlyDictionary<SaveSlotId, SaveSlotMetadata> saved,
+        Dictionary<SaveSlotId, SaveSlotMetadata> saved,
         bool includeEmpty)
     {
         if (entries is null)

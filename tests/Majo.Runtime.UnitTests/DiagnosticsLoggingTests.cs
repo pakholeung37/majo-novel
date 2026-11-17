@@ -145,7 +145,7 @@ public sealed class DiagnosticsLoggingTests
     }
 
     [Fact]
-    public async Task JsonLinesFileSink_WritesAndRotates_Correctly()
+    public void JsonLinesFileSink_WritesAndRotates_Correctly()
     {
         var tempDir = Path.Combine(Path.GetTempPath(), "majo_tests_" + Guid.NewGuid().ToString("N"));
         try

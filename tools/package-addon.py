@@ -99,6 +99,20 @@ def main():
         digest = build_archive(args.output_dir / name, majo_files + (yarn_files if bundled else []), release)
         hashes.append(f"{digest}  {name}")
         print(args.output_dir / name)
+    example_root = ROOT / "addons/majo_runtime/Tools/Template"
+    example_files = addon_files(example_root)
+    name = f"majo-runtime-{version}-example.zip"
+    with zipfile.ZipFile(args.output_dir / name, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        with zipfile.ZipFile(args.output_dir / f"majo-runtime-{version}-with-yarn.zip") as bundled:
+            for entry in bundled.infolist():
+                archive.writestr(entry, bundled.read(entry.filename))
+        for path in example_files:
+            info = zipfile.ZipInfo(path.relative_to(example_root).as_posix().removesuffix(".template"), (1980, 1, 1, 0, 0, 0))
+            info.create_system = 3
+            info.external_attr = 0o100644 << 16
+            archive.writestr(info, path.read_bytes(), compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
+    hashes.append(f"{hashlib.sha256((args.output_dir / name).read_bytes()).hexdigest()}  {name}")
+    print(args.output_dir / name)
     (args.output_dir / "SHA256SUMS").write_text("\n".join(hashes) + "\n")
 
 

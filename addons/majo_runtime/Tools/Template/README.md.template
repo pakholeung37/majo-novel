@@ -1,0 +1,7 @@
+# Majo Runtime example
+
+Extract this archive into an empty directory. Install Godot 4.7.2 .NET and the .NET 8 SDK, build `Example.csproj`, then open `project.godot` and let the enabled editor plugins finish importing. Run the project to try the default dialogue UI and choices. Click or press Space to advance.
+
+Both addons and their licenses are included. This original sample story and host code are covered by `addons/majo_runtime/LICENSE`. See that addon's README for installation, checked export commands and platform limitations.
+
+For local system development and guarded upgrades, see `addons/majo_runtime/DEVELOPMENT.zh-CN.md`. Run `Tools/majo.py install` to adopt the matching bundled release before using managed upgrades, or create a game directly with the system checkout's `majo.py init`.

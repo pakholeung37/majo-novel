@@ -1,0 +1,11 @@
+config_version=5
+[application]
+config/name="Majo Runtime Example"
+run/main_scene="res://Main.tscn"
+[dotnet]
+project/assembly_name="Example"
+[editor_plugins]
+enabled=PackedStringArray("res://addons/YarnSpinner-Godot/plugin.cfg", "res://addons/majo_runtime/plugin.cfg")
+[rendering]
+textures/vram_compression/import_etc2_astc=true
+renderer/rendering_method="gl_compatibility"
