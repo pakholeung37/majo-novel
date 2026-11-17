@@ -1,7 +1,7 @@
 using Majo.Runtime.Direction.Execution;
 using Xunit;
 
-namespace Majo.Runtime.UnitTests;
+namespace Majo.Runtime.Domain.UnitTests;
 
 public sealed class DirectionAnimationSlotTests
 {

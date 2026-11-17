@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -364,7 +365,7 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
         foreach (var (id, view) in sampled.ToArray())
             if (surfaces.TryGetView(id, out var surface))
                 sampled[id] = view with { Idle = surface.CurrentIdle };
-        return state with { Views = DirectionCollections.Freeze(sampled) };
+        return state with { Views = new ReadOnlyDictionary<ViewId, ViewState>(sampled) };
     }
     internal async Task WaitForRenderFenceAsync(CancellationToken cancellationToken)
     {

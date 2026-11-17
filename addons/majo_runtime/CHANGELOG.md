@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Compile Direction models/planning, camera projection/coverage, actor definitions/requests and timing curves into Majo.Runtime.Domain, referencing only Core and .NET.
+- Separate pure metadata resolution and prepared commit samples from Godot actor/renderer implementation details.
+- Move domain tests out of the game-referencing test project; add a Godot-free test command and CI job, and include the domain assembly in source addon builds/exports.
+
 - Separate Godot Direction surface ownership, screen composition, background transition inputs, retained restore output and camera projection from the render host.
 - Release unactivated transition inputs when views are removed or reset, and cover cold disposal, repeated shutdown and screen-slot material ownership.
 - Dispose temporary View/Screen readback images after copying them into owned textures.

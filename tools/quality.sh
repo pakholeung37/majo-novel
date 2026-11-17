@@ -8,6 +8,8 @@ GAME_PROJECT="$REPOSITORY_ROOT/Majo Novel.csproj"
 UNIT_TEST_PROJECT="$REPOSITORY_ROOT/tests/Majo.Runtime.UnitTests/Majo.Runtime.UnitTests.csproj"
 CORE_PROJECT="$REPOSITORY_ROOT/addons/majo_runtime/Assemblies/Majo.Runtime.Core/Majo.Runtime.Core.csproj"
 CORE_TEST_PROJECT="$REPOSITORY_ROOT/tests/Majo.Runtime.Core.UnitTests/Majo.Runtime.Core.UnitTests.csproj"
+DOMAIN_PROJECT="$REPOSITORY_ROOT/addons/majo_runtime/Assemblies/Majo.Runtime.Domain/Majo.Runtime.Domain.csproj"
+DOMAIN_TEST_PROJECT="$REPOSITORY_ROOT/tests/Majo.Runtime.Domain.UnitTests/Majo.Runtime.Domain.UnitTests.csproj"
 FORMAT_MODE="check"
 
 print_usage() {
@@ -52,6 +54,7 @@ collect_cs_files() {
                 unit) unit_format_files+=("${file#"$REPOSITORY_ROOT/"}") ;;
                 core) core_format_files+=("${file#"$REPOSITORY_ROOT/"}") ;;
                 core_unit) core_unit_format_files+=("${file#"$REPOSITORY_ROOT/"}") ;;
+                domain_unit) domain_unit_format_files+=("${file#"$REPOSITORY_ROOT/"}") ;;
             esac
         done < <(find "$directory" -type f -name '*.cs' \
             ! -path '*/bin/*' ! -path '*/obj/*' ! -path '*/.godot/*' -print0)
@@ -62,6 +65,7 @@ game_format_files=()
 unit_format_files=()
 core_format_files=()
 core_unit_format_files=()
+domain_unit_format_files=()
 collect_cs_files game \
     "$REPOSITORY_ROOT/addons/majo_runtime" \
     "$REPOSITORY_ROOT/demos/demo-01" \
@@ -70,27 +74,34 @@ collect_cs_files game \
 collect_cs_files unit "$REPOSITORY_ROOT/tests/Majo.Runtime.UnitTests"
 collect_cs_files core "$REPOSITORY_ROOT/addons/majo_runtime/Runtime/Core"
 collect_cs_files core_unit "$REPOSITORY_ROOT/tests/Majo.Runtime.Core.UnitTests"
+collect_cs_files domain_unit "$REPOSITORY_ROOT/tests/Majo.Runtime.Domain.UnitTests"
 
 cd "$REPOSITORY_ROOT"
 printf 'Restoring .NET dependencies for quality checks...\n'
 dotnet restore "$UNIT_TEST_PROJECT" --nologo
 dotnet restore "$CORE_TEST_PROJECT" --nologo
+dotnet restore "$DOMAIN_TEST_PROJECT" --nologo
 
 run_format() {
     local project="$1"
     shift
+    local options=(--no-restore --verbosity minimal)
     if [[ "$FORMAT_MODE" == "check" ]]; then
-        dotnet format "$project" --no-restore --verify-no-changes \
-            --include "$@" --verbosity minimal
-    else
-        dotnet format "$project" --no-restore \
-            --include "$@" --verbosity minimal
+        options+=(--verify-no-changes)
     fi
+    if [[ "$#" -gt 0 ]]; then
+        options+=(--include "$@")
+    fi
+    dotnet format "$project" "${options[@]}"
 }
 
 printf 'Checking independent Core formatting...\n'
 run_format "$CORE_PROJECT" "${core_format_files[@]}"
 run_format "$CORE_TEST_PROJECT" "${core_unit_format_files[@]}"
+
+printf 'Checking independent domain formatting...\n'
+run_format "$DOMAIN_PROJECT"
+run_format "$DOMAIN_TEST_PROJECT" "${domain_unit_format_files[@]}"
 
 printf 'Checking main project formatting...\n'
 run_format "$GAME_PROJECT" "${game_format_files[@]}"

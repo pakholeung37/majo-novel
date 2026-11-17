@@ -17,15 +17,20 @@ public sealed class SplitLayoutTests
         var scopes = new DirectionScopeResolver();
         var command = TestCatalogBuilder.CreateBound(new ScreenSplitCommand(beats, scopes,
             new DelegateDialogueNodeAccessor(() => "Court"), new DirectionCommandPolicy(beats)));
-        await command.ExecuteAsync(new CommandInput("screen split", ["left:main", "right:main",
-            "divider:35", "angle:10", "leftAt:20,50", "rightAt:55,60"]), new CommandExecutionContext("split"));
+        await command.ExecuteAsync(new CommandInput("screen split", ["left:main",
+            "right:main",
+            "divider:35",
+            "angle:10",
+            "leftAt:20,50",
+            "rightAt:55,60"]), new CommandExecutionContext("split"));
         var patch = Assert.IsType<ScreenPatch>(beats.LastSubmitted);
         var expected = new SplitLayout(35, 10, new DirectionPoint(20, 50), new DirectionPoint(55, 60));
         Assert.Equal(expected, patch.Split);
         using var direction = new DirectionTransactionCoordinator(new DirectionPlanner(), new FakeDirectionBackend { AutoSettle = true });
         await direction.ExecuteAsync([new ViewPosePatch(ViewId.Main,
             DirectionValue.From(new DirectionPoint(35, 71)), DirectionValue.From(3.6f),
-            DirectionValue.From(8f), DirectionTransitionSpec.Cut), patch]);
+            DirectionValue.From(8f), DirectionTransitionSpec.Cut),
+            patch]);
         var pose = direction.State.Views[ViewId.Main].Pose;
         var contributor = new DirectionStateContributor(direction);
         var saved = await contributor.CaptureAsync(default);
@@ -67,14 +72,4 @@ public sealed class SplitLayoutTests
         Assert.Equal(0, backend.FinishCount);
         Assert.Equal(ViewId.Main, direction.State.Screen.Bindings[LayoutSlotId.Main]);
     }
-
-    [Theory]
-    [InlineData(-1, 0)]
-    [InlineData(101, 0)]
-    [InlineData(50, 90)]
-    [InlineData(50, -90)]
-    [InlineData(float.NaN, 0)]
-    [InlineData(50, float.PositiveInfinity)]
-    public void InvalidGeometryIsRejected(float divider, float angle) =>
-        Assert.Throws<ArgumentOutOfRangeException>(() => new SplitLayout(divider, angle).Validate());
 }

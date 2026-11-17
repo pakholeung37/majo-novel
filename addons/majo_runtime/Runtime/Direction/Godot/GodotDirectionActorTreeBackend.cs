@@ -279,8 +279,8 @@ internal sealed class GodotDirectionActorTreeBackend
                 backend.host.RegisterActorModifierTarget(binding.FxTarget, binding.Modifier);
                 binding.Root.Visible = true;
                 if (before?.Actors.ContainsKey(id) != true && target is not null)
-                    plan.CommitActors[(target.Id, id)] = binding.CurrentPose(target.Actors[id]) with
-                    { Appearance = target.Actors[id].Appearance ?? binding.Actor.Appearance };
+                    plan.RecordActorCommit(target.Id, binding.CurrentPose(target.Actors[id]) with
+                    { Appearance = target.Actors[id].Appearance ?? binding.Actor.Appearance });
             }
             foreach (var (id, binding) in backend.active.ToArray())
                 if (target?.Actors.ContainsKey(id) != true ||
@@ -379,7 +379,7 @@ internal sealed class GodotDirectionActorTreeBackend
                 Scale = scale.HasValue ? scale.Value : source.Scale,
                 RotationDegrees = rotation.HasValue ? rotation.Value : source.RotationDegrees,
             };
-            if (plan.CommitActors.TryGetValue((target!.Id, state.Id), out var committed))
+            if (plan.TryGetActorCommit(target!.Id, state.Id, out var committed))
                 destination = destination with { Appearance = committed.Appearance };
             MergeCommittedActor(state.Id, destination);
             slots.Add(backend.Animate(binding.Space, transition, p => binding.ApplySpace(destination with
@@ -393,10 +393,9 @@ internal sealed class GodotDirectionActorTreeBackend
 
         private void MergeCommittedActor(ActorId id, ActorState update)
         {
-            var key = (target!.Id, id);
-            if (plan.CommitActors.TryGetValue(key, out var current))
+            if (plan.TryGetActorCommit(target!.Id, id, out var current))
             {
-                plan.CommitActors[key] = current with
+                plan.RecordActorCommit(target.Id, current with
                 {
                     Position = update.Position,
                     Scale = update.Scale,
@@ -405,9 +404,9 @@ internal sealed class GodotDirectionActorTreeBackend
                     Visible = update.Visible,
                     Z = update.Z,
                     DefinitionId = update.DefinitionId,
-                };
+                });
             }
-            else plan.CommitActors[key] = update;
+            else plan.RecordActorCommit(target.Id, update);
         }
 
         private void ApplyHide(ActorHidePatch patch)

@@ -4,12 +4,13 @@ using System;
 using System.Collections.Generic;
 using Majo.Runtime.Core;
 using Majo.Runtime.Resources;
+using Majo.Runtime.Direction.Core;
 
 namespace Majo.Runtime.Actors;
 
 /// <summary>Resolves definitions and appearance metadata without creating actor instances.
 /// The supplied factories and excluded definitions describe one target domain.</summary>
-public sealed class ActorDefinitionResolver
+public sealed class ActorDefinitionResolver : IBackdropAppearanceResolver
 {
     private readonly IReadOnlyDictionary<string, ActorDefinition> definitions;
     private readonly IReadOnlyDictionary<string, ActorDefinition> unsupportedDefinitions;
@@ -55,6 +56,17 @@ public sealed class ActorDefinitionResolver
     public ResolvedActorAppearance ResolveBackdropAppearance(string definitionId, string? appearance = null,
         string? previousAppearance = null, string? requiredFactoryId = null)
         => ResolveAppearance(definitionId, appearance, previousAppearance, requiredFactoryId, strict: false);
+
+    string IBackdropAppearanceResolver.ResolveFactoryId(string definitionId) =>
+        Resolve(new ActorSpawnRequest("main", ActorFactoryIds.Background, "Default")
+        { DefinitionId = definitionId, UseBackdropResourceConvention = true }).FactoryId;
+
+    ResolvedBackdropAppearance IBackdropAppearanceResolver.ResolveAppearance(
+        string definitionId, string? appearance, string? previousAppearance)
+    {
+        var resolved = ResolveBackdropAppearance(definitionId, appearance, previousAppearance);
+        return new(resolved.Factory.FactoryId, resolved.Appearance);
+    }
 
     private ResolvedActorAppearance ResolveAppearance(string definitionId, string? appearance,
         string? previousAppearance, string? requiredFactoryId, bool strict)

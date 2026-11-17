@@ -275,7 +275,7 @@ internal sealed class GodotDirectionViewBackend : IDirectionViewBackend
                         BackgroundScale = intent.BackgroundScale.HasValue ? intent.BackgroundScale.Value : before.Pose.BackgroundScale,
                     }
                 };
-                plan.CommitViews[viewId] = target;
+                plan.RecordViewCommit(target);
             }
             backend.active[Key] = this;
             generation = host.BeginViewGeneration(viewId, channel);

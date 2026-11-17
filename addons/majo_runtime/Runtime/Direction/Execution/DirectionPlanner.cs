@@ -4,7 +4,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Majo.Runtime.Direction.Actors;
-using Majo.Runtime.Actors;
 using Majo.Runtime.Direction.Core;
 
 namespace Majo.Runtime.Direction.Execution;
@@ -23,9 +22,9 @@ public interface IDirectionPlanner
 
 public sealed class DirectionPlanner : IDirectionPlanner
 {
-    private readonly ActorDefinitionResolver? definitions;
+    private readonly IBackdropAppearanceResolver? definitions;
 
-    public DirectionPlanner(ActorDefinitionResolver? definitions = null) => this.definitions = definitions;
+    public DirectionPlanner(IBackdropAppearanceResolver? definitions = null) => this.definitions = definitions;
 
     public DirectionPlan PlanDomain(
         DirectionState beforeState,
@@ -275,13 +274,12 @@ public sealed class DirectionPlanner : IDirectionPlanner
         if (!stages.TryGetValue(intent.StageId, out var stage))
             throw new DirectionReferenceException($"Stage '{intent.StageId}' is not defined.");
         var resolver = definitions ?? throw new DirectionException("Backdrop intents require an actor definition resolver.");
-        var definition = resolver.Resolve(new ActorSpawnRequest("main", ActorFactoryIds.Background, "Default")
-        { DefinitionId = intent.DefinitionId, UseBackdropResourceConvention = true });
+        var factoryId = resolver.ResolveFactoryId(intent.DefinitionId);
         var previous = stage.Backdrop;
-        var same = previous?.DefinitionId == intent.DefinitionId && previous.FactoryId == definition.FactoryId;
-        var resolved = resolver.ResolveBackdropAppearance(intent.DefinitionId, intent.Appearance,
+        var same = previous?.DefinitionId == intent.DefinitionId && previous.FactoryId == factoryId;
+        var resolved = resolver.ResolveAppearance(intent.DefinitionId, intent.Appearance,
             same ? previous!.Appearance : null);
-        var target = new BackdropState(intent.DefinitionId, resolved.Factory.FactoryId, resolved.Appearance,
+        var target = new BackdropState(intent.DefinitionId, resolved.FactoryId, resolved.Appearance,
             intent.Fit, intent.Tint)
         {
             Distance = intent.Distance.HasValue ? intent.Distance.Value : same ? previous!.Distance : 1,

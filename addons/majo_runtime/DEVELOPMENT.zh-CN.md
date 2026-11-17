@@ -108,6 +108,21 @@ Bootstrap 会将完成注册的命令目录接入默认预加载器，包括插�
 
 Core 命名空间与源码签名保持不变，但程序集改为 `Majo.Runtime.Core.dll`，已经编译的扩展需重新构建；兼容性清单已声明这一变化。当前只是第一条编译边界，领域实现、Godot/Yarn 适配层和无头集成测试仍在游戏工程中，尚未完成全部程序集隔离。
 
+## 领域模型与规划器程序集
+
+`Assemblies/Majo.Runtime.Domain/Majo.Runtime.Domain.csproj` 只引用 Core 和 .NET 8。它编译 Direction 状态、指令、规划器和动画槽、镜头投影与覆盖计算、Actor 定义/创建请求/FX 数据，以及时间曲线。`Majo.Runtime.Domain.sources.props` 是唯一的领域源码清单：领域工程据此编译，游戏工程据此排除重复编译。编译依赖为游戏/Godot/Yarn 适配层 → Domain → Core，领域工程不引用引擎、游戏、资源实例或命令绑定器。
+
+`DirectionPlanner` 通过 `IBackdropAppearanceResolver` 读取背景 factory 和完整外观。原来的 `ActorDefinitionResolver` 实现该契约，继续提供配置、约定路径及自定义 factory 的元数据；规划器不再获得创建 Actor 的能力。`ActorFxCue` 与 `ActorVisualDelta`、基础 `ActorDefinition` 与 Godot 纹理描述数据分开编译。后端通过 `DirectionPlan.RecordViewCommit`、`RecordActorCommit`、`TryGetActorCommit` 和 `ResolveCommitState` 交换已经准备好的提交采样，不再访问跨程序集的内部字典。
+
+纯规划、身份/状态、投影、时间曲线和槽替换测试位于 `tests/Majo.Runtime.Domain.UnitTests`，直接引用领域工程。原测试工程保留命令、配置、状态存储、真实 metadata adapter 及 Godot/Yarn 的集成测试；混合测试按依赖拆开，原有行为断言保留。以下命令无需安装 Godot，也不会构建游戏或 Yarn：
+
+```sh
+./tools/test.sh --domain
+dotnet test tests/Majo.Runtime.Domain.UnitTests/Majo.Runtime.Domain.UnitTests.csproj
+```
+
+独立 CI job 仅安装 .NET 执行这条门禁；完整门禁也包含这些测试。程序集引用测试会拒绝 Domain/Core 引入引擎或其他适配层程序集。既有命名空间与玩家存档布局保持不变，但已编译扩展须针对 `Majo.Runtime.Domain.dll` 重新构建；`DirectionPlanner` 的构造参数现在是只读元数据契约，原 `ActorDefinitionResolver` 的源码调用可直接使用。该二进制布局变化已经记录在兼容性清单中。
+
 ## Godot 渲染边界与 GPU 验收
 
 `GodotDirectionRenderHost` 保留生命周期、操作代次、渲染需求和帧等待，连接下列内部组件。它们各自持有状态和资源，不依赖宿主对象；这些拆分不增加游戏侧注册入口，也不改变 Direction 命令或存档格式。

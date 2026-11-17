@@ -9,11 +9,13 @@ REPOSITORY_ROOT="$(CDPATH= cd -- "$SCRIPT_DIRECTORY/.." && pwd)"
 GAME_PROJECT="$REPOSITORY_ROOT"
 UNIT_TEST_PROJECT="$REPOSITORY_ROOT/tests/Majo.Runtime.UnitTests/Majo.Runtime.UnitTests.csproj"
 CORE_TEST_PROJECT="$REPOSITORY_ROOT/tests/Majo.Runtime.Core.UnitTests/Majo.Runtime.Core.UnitTests.csproj"
+DOMAIN_TEST_PROJECT="$REPOSITORY_ROOT/tests/Majo.Runtime.Domain.UnitTests/Majo.Runtime.Domain.UnitTests.csproj"
 GENERATOR_TEST_PROJECT="$REPOSITORY_ROOT/tests/Majo.CommandGenerator.Tests/Majo.CommandGenerator.Tests.csproj"
 GODOT_EXECUTABLE="${GODOT_BIN:-/Applications/Godot_mono.app/Contents/MacOS/Godot}"
 
 print_usage() {
-    printf 'Usage: %s [--unit | --fast | --full]\n' "$0"
+    printf 'Usage: %s [--domain | --unit | --fast | --full]\n' "$0"
+    printf '  --domain Run independent Core/Domain tests without building the game or Yarn.\n'
     printf '  --unit  Build and run pure C# unit tests without launching Godot.\n'
     printf '  --fast  Run the local feedback suite with one Godot integration pass.\n'
     printf '  --full  Run the complete distributability and release gate (default).\n'
@@ -25,6 +27,9 @@ if [[ "$#" -gt 1 ]]; then
 fi
 if [[ "$#" -eq 1 ]]; then
     case "$1" in
+        --domain)
+            TEST_MODE="domain"
+            ;;
         --unit)
             TEST_MODE="unit"
             ;;
@@ -78,6 +83,7 @@ restore_dotnet_projects() {
     fi
     run_with_timeout 180 dotnet restore "$GENERATOR_TEST_PROJECT" --nologo
     run_with_timeout 180 dotnet restore "$CORE_TEST_PROJECT" --nologo
+    run_with_timeout 180 dotnet restore "$DOMAIN_TEST_PROJECT" --nologo
 }
 
 run_core_consumer_smoke() {
@@ -111,6 +117,13 @@ run_core_consumer_smoke() {
     )
 }
 
+if [[ "$TEST_MODE" == "domain" ]]; then
+    run_with_timeout 180 dotnet test "$CORE_TEST_PROJECT" --nologo
+    run_with_timeout 180 dotnet test "$DOMAIN_TEST_PROJECT" --nologo
+    print_result
+    exit 0
+fi
+
 if [[ "$TEST_MODE" != "unit" && ! -x "$GODOT_EXECUTABLE" ]]; then
     printf 'Godot Mono executable was not found or is not executable: %s\n' "$GODOT_EXECUTABLE" >&2
     exit 1
@@ -125,6 +138,9 @@ restore_dotnet_projects
 
 printf 'Running independent Core tests without Godot or Yarn dependencies...\n'
 run_with_timeout 180 dotnet test "$CORE_TEST_PROJECT" --nologo --no-restore
+
+printf 'Running independent domain model and planner tests...\n'
+run_with_timeout 180 dotnet test "$DOMAIN_TEST_PROJECT" --nologo --no-restore
 
 printf 'Building unit tests and their Godot project dependencies...\n'
 if [[ "$TEST_MODE" == "full" ]]; then

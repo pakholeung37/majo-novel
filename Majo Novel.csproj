@@ -8,7 +8,7 @@
     <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
     <CompilerGeneratedFilesOutputPath>$(BaseIntermediateOutputPath)generated</CompilerGeneratedFilesOutputPath>
     <NoWarn>$(NoWarn);SYSLIB1220;CS0618;CS1998</NoWarn>
-    <DefaultItemExcludes>$(DefaultItemExcludes);tools/**;tests/Majo.Runtime.UnitTests/**;tests/Majo.Runtime.Core.UnitTests/**;tests/Majo.CommandGenerator.Tests/**;tests/fixtures/**;**/bin/**;**/obj/**</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);tools/**;tests/*Tests/**;tests/fixtures/**;**/bin/**;**/obj/**</DefaultItemExcludes>
   </PropertyGroup>
 
   <Import Project="addons\YarnSpinner-Godot\YarnSpinner-Godot.props" />

@@ -2,7 +2,7 @@ using Majo.Runtime.Direction.Camera;
 using Majo.Runtime.Direction.Core;
 using Xunit;
 
-namespace Majo.Runtime.UnitTests;
+namespace Majo.Runtime.Domain.UnitTests;
 
 public sealed class CameraProjectionTests
 {

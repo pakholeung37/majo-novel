@@ -29,42 +29,6 @@ public sealed class BackdropIntentTests
     }
 
     [Fact]
-    public void OmittedAppearanceAlwaysResetsToDefaultWhileDistancePersists()
-    {
-        var planner = new DirectionPlanner(CreateResolver("Court"));
-        var plan = planner.PlanDomain(DirectionState.CreateDefault(), [Intent("Court", "Night", 6), Intent("Court")]);
-        var background = plan.TargetState.Stages[StageId.Main].Backdrop!;
-        Assert.Equal("Day", background.Appearance);
-        Assert.Equal(6, background.Distance);
-    }
-
-    [Fact]
-    public void NewDefinitionResetsDistanceAndIncrementalBaseline()
-    {
-        var plan = new DirectionPlanner(CreateResolver("Court", "Room")).PlanDomain(DirectionState.CreateDefault(),
-            [Intent("Court", "Night", 6), Intent("Room", "+Rain")]);
-        Assert.Equal("Day+Rain", plan.TargetState.Stages[StageId.Main].Backdrop!.Appearance);
-        Assert.Equal(1, plan.TargetState.Stages[StageId.Main].Backdrop!.Distance);
-    }
-
-    [Fact]
-    public void PlacementIsNotImplicitlyInherited()
-    {
-        var first = Intent("Court") with { Placement = new(new(40, 30), new(.5f, .5f), 2) };
-        var plan = new DirectionPlanner(CreateResolver("Court")).PlanDomain(DirectionState.CreateDefault(), [first, Intent("Court")]);
-        Assert.Null(plan.TargetState.Stages[StageId.Main].Backdrop!.Placement);
-    }
-
-    [Fact]
-    public void NullPatchClearsBackdrop()
-    {
-        var planner = new DirectionPlanner(CreateResolver("Court"));
-        var before = planner.PlanDomain(DirectionState.CreateDefault(), [Intent("Court")]).TargetState;
-        var plan = planner.PlanDomain(before, [new BackdropPatch(StageId.Main, null, DirectionTransitionSpec.Cut)]);
-        Assert.Null(plan.TargetState.Stages[StageId.Main].Backdrop);
-    }
-
-    [Fact]
     public void MissingDefinitionsUseConventionsButWrongDomainsFailBeforePreparation()
     {
         Assert.Equal("missing", new DirectionPlanner(CreateResolver("Court"))
@@ -74,22 +38,6 @@ public sealed class BackdropIntentTests
         Assert.Throws<ActorDefinitionException>(() => new DirectionPlanner(excluded)
             .PlanDomain(DirectionState.CreateDefault(), [Intent("Court")]));
     }
-
-    [Fact]
-    public void ConflictingTransitionsInSameBeatAreRejected()
-    {
-        var last = Intent("Court", "Night") with { Transition = new("dissolve", 1) };
-        Assert.Throws<DirectionBeatException>(() => new DirectionPlanner(CreateResolver("Court"))
-            .PlanDomain(DirectionState.CreateDefault(), [Intent("Court"), last]));
-    }
-
-    [Theory]
-    [InlineData("", "background", "Day")]
-    [InlineData("Court", "", "Day")]
-    [InlineData("Court", "background", " ")]
-    [InlineData("fx", "background", "Day")]
-    public void IncompleteOrReservedIdentityCannotEnterStableState(string id, string factory, string appearance) =>
-        Assert.ThrowsAny<ArgumentException>(() => new BackdropState(id, factory, appearance).Validate());
 
     private sealed class BackgroundMetadata : IActorFactory
     {

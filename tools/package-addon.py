@@ -80,6 +80,8 @@ def main():
         "README.md", "LICENSE", "THIRD_PARTY_NOTICES.md", "CHANGELOG.md", "MajoRuntime.props",
         "Bridges/YarnSpinnerStateBridge/YarnSpinnerStateBridge.csproj",
         "Assemblies/Majo.Runtime.Core/Majo.Runtime.Core.csproj",
+        "Assemblies/Majo.Runtime.Domain/Majo.Runtime.Domain.csproj",
+        "Assemblies/Majo.Runtime.Domain/Majo.Runtime.Domain.sources.props",
         "SourceGenerators/Majo.CommandGenerator/Majo.CommandGenerator.csproj",
     ):
         if not (directory / required).is_file():
