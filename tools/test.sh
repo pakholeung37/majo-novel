@@ -86,9 +86,10 @@ run_core_consumer_smoke() {
     trap 'rm -rf "$smoke_directory" "$package_directory"' RETURN
     python3 "$REPOSITORY_ROOT/tools/package-addon.py" --output-dir "$package_directory"
     cp -R "$REPOSITORY_ROOT/tools/core-consumer-smoke/." "$smoke_directory/"
+    local addon_archive
+    addon_archive="$(find "$package_directory" -name '*-with-yarn.zip' -print -quit)"
     python3 "$REPOSITORY_ROOT/addons/majo_runtime/Tools/majo.py" install \
-        --project "$smoke_directory" \
-        --archive "$package_directory/majo-runtime-0.1.0-with-yarn.zip"
+        --project "$smoke_directory" --archive "$addon_archive"
     if find "$smoke_directory" -path '*/demos/*' -print -quit | grep -q .; then
         printf 'Core consumer smoke unexpectedly copied demo sources.\n' >&2
         return 1
@@ -100,7 +101,7 @@ run_core_consumer_smoke() {
         run_with_timeout 180 "$GODOT_EXECUTABLE" --headless --path "$smoke_directory" --editor --quit
         python3 "$REPOSITORY_ROOT/addons/majo_runtime/Tools/majo.py" doctor --project "$smoke_directory"
         python3 "$REPOSITORY_ROOT/addons/majo_runtime/Tools/majo.py" install \
-            --project "$smoke_directory" --archive "$package_directory/majo-runtime-0.1.0-with-yarn.zip"
+            --project "$smoke_directory" --archive "$addon_archive"
         run_with_timeout 60 "$GODOT_EXECUTABLE" --headless --path "$smoke_directory"
         python3 "$REPOSITORY_ROOT/tools/test-addon-export.py" "$smoke_directory" "$GODOT_EXECUTABLE"
 
@@ -114,6 +115,7 @@ fi
 
 printf 'Checking addon installation and upgrade protection...\n'
 python3 "$REPOSITORY_ROOT/tools/test-addon-manager.py"
+python3 "$REPOSITORY_ROOT/tools/test-installer.py"
 
 printf 'Restoring .NET dependencies...\n'
 restore_dotnet_projects

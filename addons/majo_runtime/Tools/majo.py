@@ -181,7 +181,7 @@ def find_project(project):
     return candidates[0]
 
 
-def install(project, content, provenance, report=True):
+def install(project, content, provenance, report=True, restore_config=None, restore_lock=None):
     validate(content)
     csproj = find_project(project)
     previous = load_lock(project)
@@ -192,6 +192,8 @@ def install(project, content, provenance, report=True):
         if solution is None:
             raise ValueError("Project has no .sln and the package has no solution template")
         config[project / (csproj.stem + ".sln")] = solution.decode("utf-8-sig").replace("Example", csproj.stem).encode()
+    if restore_config is not None:
+        config.update({project / p: data for p, data in restore_config.items()})
     if any(p.is_symlink() for p in [*config, project / LOCK]):
         raise ValueError("Host configuration and lock files must not be symlinks")
     checksums = {p: digest(b) for p, b in sorted(content.items())}
@@ -219,8 +221,10 @@ def install(project, content, provenance, report=True):
                     backups[target] = None
                 (staging / "addons" / addon).rename(target)
             for path, data in config.items():
-                path.write_bytes(data)
-            (project / LOCK).write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
+                if data is None: path.unlink(missing_ok=True)
+                else: path.write_bytes(data)
+            (project / LOCK).write_bytes(restore_lock if restore_lock is not None else
+                                        (json.dumps(record, indent=2, sort_keys=True) + "\n").encode())
         except BaseException:
             for target, backup in backups.items():
                 if target.exists(): shutil.rmtree(target)
@@ -234,7 +238,132 @@ def install(project, content, provenance, report=True):
     return record
 
 
-def initialize(project, name, content, provenance):
+def run_checks(project, godot=None, check_command=None):
+    """Validate a disposable candidate copy; never execute checks in the live game."""
+    executable = godot or os.environ.get("GODOT_BIN") or shutil.which("godot")
+    if not executable or not Path(executable).is_file():
+        raise ValueError("--check requires --godot /path/to/Godot .NET")
+    commands = [["dotnet", "build", str(find_project(project)), "--nologo"],
+                [executable, "--headless", "--path", str(project), "--editor", "--quit"],
+                [executable, "--headless", "--path", str(project), "--editor", "--quit", "--", "--majo-validate-export"]]
+    if check_command:
+        import shlex
+        commands.append(shlex.split(check_command))
+    for index, command in enumerate(commands):
+        print("Checking candidate:", " ".join(command), flush=True)
+        result = subprocess.run(command, cwd=project, stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, text=True, timeout=240)
+        print(result.stdout, end="", flush=True)
+        # Initial upstream Yarn import can log a transient load error; the second
+        # import must validate successfully and emit the Majo sentinel.
+        if result.returncode or (index == 2 and "MAJO_EXPORT_VALIDATED" not in result.stdout):
+            raise RuntimeError("Candidate validation failed; the installed game was not changed")
+
+
+def host_paths(project):
+    return list(dict.fromkeys([find_project(project), project / "project.godot", project / ".gitattributes",
+                              project / (find_project(project).stem + ".sln"), *project.glob("*.sln")]))
+
+
+def save_snapshot(project):
+    import uuid
+    previous = load_lock(project)
+    if previous is None:
+        return None
+    identifier = time.strftime("%Y%m%dT%H%M%S", time.gmtime()) + "-" + uuid.uuid4().hex[:8]
+    directory = project / ".majo/history" / identifier
+    directory.mkdir(parents=True)
+    config = {p.relative_to(project).as_posix(): p.read_bytes() if p.exists() else None for p in host_paths(project)}
+    with zipfile.ZipFile(directory / "snapshot.zip", "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for path in previous["files"]:
+            archive.writestr(path, (project / path).read_bytes())
+        archive.writestr(LOCK, (project / LOCK).read_bytes())
+        for path, data in config.items():
+            if data is not None: archive.writestr(path, data)
+    metadata = {"format": 1, "id": identifier, "version": previous["version"], "status": "pending",
+                "config": {p: b is not None for p, b in config.items()}}
+    (directory / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
+    return directory
+
+
+def mark_snapshot(directory, status):
+    if directory:
+        metadata = json.loads((directory / "metadata.json").read_text())
+        metadata["status"] = status
+        (directory / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
+
+
+def checked_install(project, content, provenance, check=False, godot=None, check_command=None):
+    previous = load_lock(project)
+    ensure_clean(project, previous, content)
+    validate(content)
+    if check:
+        with tempfile.TemporaryDirectory(prefix="majo-candidate-") as temp:
+            stage = Path(temp) / "game"
+            shutil.copytree(project, stage, ignore=shutil.ignore_patterns(
+                *IGNORED, "artifacts", ".majo", "TestResults", ".tools"))
+            install(stage, content, provenance, report=False)
+            run_checks(stage, godot, check_command)
+    snapshot = save_snapshot(project)
+    try:
+        record = install(project, content, provenance)
+    except BaseException:
+        mark_snapshot(snapshot, "failed")
+        raise
+    mark_snapshot(snapshot, "available")
+    if snapshot:
+        metadata = json.loads((snapshot / "metadata.json").read_text())
+        metadata["installedConfig"] = {p.relative_to(project).as_posix(): digest(p.read_bytes()) if p.exists() else None
+                                       for p in host_paths(project)}
+        (snapshot / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
+    if snapshot: print("Rollback point:", snapshot.name, flush=True)
+    return record
+
+
+def rollback(project, identifier=None, list_only=False, check=False, godot=None, check_command=None):
+    directories = sorted((project / ".majo/history").glob("*/metadata.json"), reverse=True)
+    available = [(path.parent, json.loads(path.read_text())) for path in directories]
+    available = [(path, info) for path, info in available if info["status"] == "available"]
+    if list_only:
+        print(json.dumps([info for _, info in available], indent=2))
+        return
+    selected = next(((path, info) for path, info in available if identifier is None or info["id"] == identifier), None)
+    if selected is None: raise ValueError("No matching rollback point")
+    directory, info = selected
+    if info.get("format") != 1: raise ValueError("Unsupported rollback snapshot format")
+    # Only root host files may be restored outside the managed addon directories.
+    if any('/' in p or '\\' in p or p not in {"project.godot", ".gitattributes"} and not p.endswith((".csproj", ".sln")) for p in info["config"]):
+        raise ValueError("Invalid snapshot configuration paths")
+    with zipfile.ZipFile(directory / "snapshot.zip") as archive:
+        names = archive.namelist()
+        old_lock = json.loads(archive.read(LOCK))
+        content = {p: archive.read(p) for p in names if safe_path(p)}
+        configs = {p: archive.read(p) if exists else None for p, exists in info["config"].items()}
+        lock_bytes = archive.read(LOCK)
+    if {p: digest(b) for p, b in content.items()} != old_lock["files"]:
+        raise ValueError("Rollback snapshot hashes do not match its lock")
+    ensure_clean(project, load_lock(project))
+    for path, checksum in info.get("installedConfig", {}).items():
+        if "/" in path or "\\" in path: raise ValueError("Invalid snapshot host path")
+        current = digest((project / path).read_bytes()) if (project / path).exists() else None
+        if current != checksum: raise ValueError(f"Host configuration changed since upgrade: {path}; merge it before rollback")
+    if check:
+        with tempfile.TemporaryDirectory(prefix="majo-rollback-check-") as temp:
+            stage = Path(temp) / "game"
+            shutil.copytree(project, stage, ignore=shutil.ignore_patterns(*IGNORED, "artifacts", ".majo", ".tools"))
+            install(stage, content, old_lock["source"], report=False)
+            for p, data in configs.items():
+                if data is None: (stage / p).unlink(missing_ok=True)
+                else: (stage / p).write_bytes(data)
+            (stage / LOCK).write_bytes(lock_bytes)
+            run_checks(stage, godot, check_command)
+    install(project, content, old_lock["source"], report=False,
+            restore_config=configs, restore_lock=lock_bytes)
+    mark_snapshot(directory, "restored")
+    print(f"Restored Majo {old_lock['version']} from {info['id']}. Rebuild/import the game before running.")
+
+
+def initialize(project, name, content, provenance, check=False, godot=None, check_command=None):
     if project.exists() and any(project.iterdir()):
         raise ValueError("init requires an empty game directory")
     if not re.fullmatch(r'[A-Za-z][A-Za-z0-9_]*', name):
@@ -257,6 +386,7 @@ def initialize(project, name, content, provenance):
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_text(text)
         install(staged, content, provenance, report=False)
+        if check: run_checks(staged, godot, check_command)
         if project.exists():
             project.rmdir()  # Only an empty destination is allowed.
         staged.rename(project)
@@ -265,15 +395,23 @@ def initialize(project, name, content, provenance):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["init", "install", "sync", "watch", "doctor"])
+    parser.add_argument("command", choices=["init", "install", "upgrade", "rollback", "sync", "watch", "doctor"])
     parser.add_argument("--project", type=Path, required=True)
     parser.add_argument("--source", type=Path, help="Local system repository, not its addons folder")
     parser.add_argument("--archive", type=Path, help="Bundled with-yarn ZIP")
     parser.add_argument("--sha256", help="Expected archive SHA-256")
     parser.add_argument("--name", default="Game")
     parser.add_argument("--no-build", action="store_true", help="Watch: sync without dotnet build")
+    parser.add_argument("--check", action="store_true", help="Validate candidate in an isolated game copy before installation")
+    parser.add_argument("--godot", help="Godot .NET executable used by --check")
+    parser.add_argument("--check-command", help="Additional game regression command, executed without a shell in the candidate copy")
+    parser.add_argument("--to", help="Rollback point ID; defaults to the latest available point")
+    parser.add_argument("--list", action="store_true", help="List available rollback points")
     args = parser.parse_args()
     project = args.project.resolve()
+    if args.command == "rollback":
+        rollback(project, args.to, args.list, args.check, args.godot, args.check_command)
+        return
     if args.command == "doctor":
         find_project(project)
         record = load_lock(project)
@@ -299,7 +437,9 @@ def main():
         return result
     content, provenance = read()
     if args.command == "init":
-        initialize(project, args.name, content, provenance)
+        initialize(project, args.name, content, provenance, args.check, args.godot, args.check_command)
+    elif args.command in {"upgrade", "install"}:
+        checked_install(project, content, provenance, args.check, args.godot, args.check_command)
     else:
         install(project, content, provenance)
     if args.command != "watch":

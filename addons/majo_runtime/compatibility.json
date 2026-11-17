@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "apiVersion": "0.1",
+  "godot": "4.7.2",
+  "targetFramework": "net8.0",
+  "yarnGodot": "0.3.22",
+  "yarnRuntime": "3.2.0",
+  "scriptCheckpoints": {"read": [2, 3], "write": 3},
+  "directionCompanionSchema": 2,
+  "breakingChanges": [],
+  "notes": [
+    "Candidates rc.1 and rc.2 share runtime API and serialized state layouts.",
+    "Nested detour saves require the same compiled Yarn program fingerprint.",
+    "The installer does not migrate player saves; test historical saves before a game release."
+  ]
+}

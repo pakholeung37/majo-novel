@@ -55,6 +55,37 @@ class ManagerTests(unittest.TestCase):
                 manager.initialize(other, "Other", self.content, {})
         self.assertEqual(list(other.iterdir()), [])
 
+    def test_checked_upgrade_failure_leaves_live_game_untouched(self):
+        before = manager.files(self.game)
+        updated = dict(self.content)
+        updated["addons/majo_runtime/Runtime.cs"] = b"incompatible candidate"
+        with patch.object(manager, "run_checks", side_effect=RuntimeError("game regression")):
+            with self.assertRaisesRegex(RuntimeError, "game regression"):
+                manager.checked_install(self.game, updated, {}, check=True)
+        self.assertEqual(manager.files(self.game), before)
+
+    def test_successful_upgrade_and_rollback_restore_exact_pin_preserve_story(self):
+        before = (self.game / manager.LOCK).read_bytes()
+        updated = dict(self.content)
+        updated["addons/majo_runtime/Runtime.cs"] = b"new candidate"
+        with patch.object(manager, "run_checks") as checks:
+            manager.checked_install(self.game, updated, {}, check=True)
+            self.assertNotEqual(checks.call_args[0][0], self.game)
+        story = self.game / "assets/scripts/main.yarn"
+        story.write_text("Game content edited after upgrade")
+        manager.rollback(self.game)
+        self.assertEqual((self.game / manager.LOCK).read_bytes(), before)
+        self.assertEqual((self.game / "addons/majo_runtime/Runtime.cs").read_bytes(), self.content["addons/majo_runtime/Runtime.cs"])
+        self.assertEqual(story.read_text(), "Game content edited after upgrade")
+
+    def test_rollback_refuses_modified_host_configuration(self):
+        manager.checked_install(self.game, self.content, {})
+        settings = self.game / "project.godot"
+        settings.write_text(settings.read_text() + "\n; user edit\n")
+        with self.assertRaisesRegex(ValueError, "Host configuration changed"):
+            manager.rollback(self.game)
+        self.assertIn("user edit", settings.read_text())
+
     def test_missing_solution_is_created_for_existing_host(self):
         (self.game / "MyGame.sln").unlink()
         manager.install(self.game, self.content, {})

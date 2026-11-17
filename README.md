@@ -63,6 +63,15 @@ The runtime validation demo is the runnable reference included in this repositor
 
 ## Install as an addon
 
+Install an explicit candidate without cloning the system repository:
+
+```sh
+curl -fsSL https://github.com/pakholeung37/majo-novel/releases/download/v0.1.0-rc.1/install.py | python3 - init --version v0.1.0-rc.1 --project ./my-game --name MyGame
+```
+
+The bootstrap verifies release checksums. Managed `upgrade --check` validates an isolated game copy before replacing dependencies; `rollback` restores a local dependency snapshot. See the addon README for prerequisites, commands and compatibility limits.
+
+
 For a separate game repository, see the [installation, local development and upgrade guide](addons/majo_runtime/DEVELOPMENT.zh-CN.md). The manager initializes games, syncs source changes and protects local patches during upgrades.
 
 See the [addon installation guide](addons/majo_runtime/README.md) for the required C# imports and a minimal scene. The addon uses unmodified YarnSpinner-Godot 0.3.22 with Yarn Spinner 3.2.0.

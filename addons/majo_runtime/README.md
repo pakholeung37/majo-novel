@@ -2,6 +2,33 @@
 
 A C# visual novel runtime for **Godot 4.7.2 .NET**, targeting **.NET 8**.
 
+## Install a published candidate
+
+Requirements: Godot 4.7.2 .NET, .NET 8 SDK, Python 3.10+ and network access for the release and initial NuGet restore. No system repository clone is needed:
+
+```sh
+curl -fsSL https://github.com/pakholeung37/majo-novel/releases/download/v0.1.0-rc.1/install.py | python3 - init --version v0.1.0-rc.1 --project ./my-game --name MyGame
+cd my-game
+dotnet build
+```
+
+Open `project.godot`, let imports finish, then run. The bootstrap selects an explicit version, downloads its bundled addon and SHA256SUMS, verifies the archive, and configures the host through that release's manager. It does not silently follow latest/main.
+
+For an existing game, use `install` instead of `init`. Before upgrades, stop source watching and commit your game. Validate a candidate before switching:
+
+```sh
+curl -fsSL https://github.com/pakholeung37/majo-novel/releases/download/v0.1.0-rc.1/install.py | python3 - upgrade --version v0.1.0-rc.1 --project ./my-game --check --godot /path/to/godot --check-command "python3 tools/dev.py check"
+```
+
+`--check` builds/imports a disposable game copy and runs the optional game regression command there. A failed check leaves the live addon and lock unchanged. Successful upgrades save the previous addons, lock and host configuration under `.majo/history` (keep this local directory out of Git):
+
+```sh
+python3 addons/majo_runtime/Tools/majo.py rollback --project . --list
+python3 addons/majo_runtime/Tools/majo.py rollback --project . --check --godot /path/to/godot --check-command "python3 tools/dev.py check"
+```
+
+Rollback preserves story/assets outside addon folders, refuses conflicting host-configuration edits and restores the exact previous dependency lock. Rebuild/import the active game after switching. This does not roll back or migrate player saves. See `compatibility.json` and CHANGELOG for API and state-format boundaries.
+
 ## Separate game repository
 
 See [安装、联调与升级指南](DEVELOPMENT.zh-CN.md) for the complete workflow. From the system checkout, create a sibling game with:
@@ -73,7 +100,7 @@ Checkpoints are captured before line presentation. Nested and dynamic `detour` c
 
 The repository's full gate runs unit tests, Godot integration tests, and a clean consumer installed from the release ZIP. It also boots that consumer from a PCK and requires successful initialization and dialogue completion. macOS has local validation; a Linux CI workflow is provided. Other platforms have not been validated.
 
-The `majo-runtime-0.1.0-example.zip` archive is a complete project with both addons, a minimal host, and an original Yarn story using the default UI. Extract it separately from an existing game.
+The `majo-runtime-0.1.0-rc.1-example.zip` archive is a complete project with both addons, a minimal host, and an original Yarn story using the default UI. Extract it separately from an existing game.
 
 Build release ZIPs with `python3 tools/package-addon.py` from the repository root. Runtime ZIPs exclude demos, showcase assets, native Live2D integrations, build outputs and caches.
 

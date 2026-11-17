@@ -1,6 +1,13 @@
 # Changelog
 
-## 0.1.0 — release candidate
+## 0.1.0-rc.1
+
+- Publish a version-pinned online installer alongside checksummed addon archives.
+- Validate upgrades in an isolated consumer copy before changing the live project.
+- Save local rollback points and restore exact dependency locks and host settings.
+- Document API/state compatibility and preserve game-owned story and asset files.
+
+## 0.1.0 — initial release preparation
 
 - Isolate Yarn-specific behavior in Majo-owned program, presentation and Runner bridges, using unmodified YarnSpinner-Godot 0.3.22 and Yarn Spinner 3.2.0.
 - Validate loaded Yarn assemblies during game startup so packed projects do not require source metadata.

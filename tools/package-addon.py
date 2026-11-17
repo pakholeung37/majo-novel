@@ -113,6 +113,9 @@ def main():
             archive.writestr(info, path.read_bytes(), compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
     hashes.append(f"{hashlib.sha256((args.output_dir / name).read_bytes()).hexdigest()}  {name}")
     print(args.output_dir / name)
+    installer = (ROOT / "install.py").read_bytes()
+    (args.output_dir / "install.py").write_bytes(installer)
+    hashes.append(f"{hashlib.sha256(installer).hexdigest()}  install.py")
     (args.output_dir / "SHA256SUMS").write_text("\n".join(hashes) + "\n")
 
 

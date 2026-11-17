@@ -27,7 +27,7 @@ python3 addons/majo_runtime/Tools/majo.py install --project ../my-game --source 
 也可以使用发布 ZIP。管理命令可从系统仓库运行；手工解压到新项目后，也可使用包内同一路径的脚本：
 
 ```sh
-python3 addons/majo_runtime/Tools/majo.py install --project ../my-game --archive /path/to/majo-runtime-0.1.0-with-yarn.zip --sha256 EXPECTED_SHA256
+python3 addons/majo_runtime/Tools/majo.py install --project ../my-game --archive /path/to/majo-runtime-0.1.0-rc.1-with-yarn.zip --sha256 EXPECTED_SHA256
 ```
 
 将校验值替换为发布包 `SHA256SUMS` 中的值。仅支持捆绑 Yarn 的 addon ZIP；示例 ZIP 是完整项目，直接解压到空目录使用。已有解决方案文件会保留；缺少 `.sln` 时管理器会生成与游戏工程对应的解决方案，便于后续导出。
@@ -75,3 +75,16 @@ python3 addons/majo_runtime/Tools/majo.py doctor --project ../my-game
 游戏 CI 从已提交的 addon 副本构建，先运行包内 `Tools/majo.py doctor --project .`，再执行游戏自己的构建、导入和回归。不要在游戏 CI 使用开发者的 `--source` 路径或自动追踪系统 main 分支。
 
 正式出包使用 `addons/majo_runtime/Editor/export.py`，详见插件 README。管理锁中的版本不能替代平台验收；当前本机 macOS 的 PCK 和 Last Bell 独立游戏可执行程序均已验证；远程 Linux CI、Windows 和其他架构仍需补充验证。每款游戏仍应验收自己的实际导出包。
+
+
+## 候选版在线安装和受检升级
+
+不克隆系统仓库时，可以从已发布的明确版本取得安装入口：
+
+```sh
+curl -fsSL https://github.com/pakholeung37/majo-novel/releases/download/v0.1.0-rc.1/install.py | python3 - init --version v0.1.0-rc.1 --project ./my-game --name MyGame
+```
+
+升级命令改用 `upgrade --check`，可加 `--check-command "python3 tools/dev.py check"`。它在临时游戏副本中安装候选依赖、构建、导入并执行游戏回归，全部通过才切换当前项目。失败时当前依赖与锁文件不变；通过后，在 `.majo/history` 留下旧版依赖、锁文件和宿主配置。
+
+用包内管理器的 `rollback --list` 查看记录，`rollback --check --godot /path/to/godot` 检查并恢复上一版。回退不会覆盖剧情或素材；升级后若修改了宿主工程配置，回退会停止并要求先合并。切换后需要重新构建/导入实际项目，玩家存档不随此流程恢复或迁移。`.majo/` 应加入游戏的 `.gitignore`。
