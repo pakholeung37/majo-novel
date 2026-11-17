@@ -59,7 +59,7 @@ public sealed class DirectionCompletionTests
             }).ToArray(),
             functions = Array.Empty<object>(),
         };
-        var generated = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true }) + "\n";
+        var generated = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true }).ReplaceLineEndings("\n") + "\n";
         var root = new DirectoryInfo(AppContext.BaseDirectory);
         while (root is not null && !File.Exists(Path.Combine(root.FullName, "Majo Novel.csproj"))) root = root.Parent;
         Assert.NotNull(root);
