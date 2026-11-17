@@ -196,13 +196,15 @@ def install(project, content, provenance, report=True, restore_config=None, rest
         config.update({project / p: data for p, data in restore_config.items()})
     if any(p.is_symlink() for p in [*config, project / LOCK]):
         raise ValueError("Host configuration and lock files must not be symlinks")
+    compatibility = json.loads(content.get("addons/majo_runtime/compatibility.json", b"{}"))
     checksums = {p: digest(b) for p, b in sorted(content.items())}
     record = {"format": 1, "version": version(content["addons/majo_runtime/plugin.cfg"]),
               "source": provenance, "files": checksums,
-              "contentHash": digest(json.dumps(checksums, sort_keys=True).encode())}
+              "contentHash": digest(json.dumps(checksums, sort_keys=True).encode()),
+              "compatibility": compatibility}
     # Stage everything before replacing folders; keep a rollback copy until configs and lock commit.
     with tempfile.TemporaryDirectory(prefix="majo-install-", dir=project) as temp:
-        staging = Path(temp)
+        staging = Path(temp).resolve()
         for path, data in content.items():
             target = staging / path
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -238,25 +240,51 @@ def install(project, content, provenance, report=True, restore_config=None, rest
     return record
 
 
+def game_checks(project, explicit=None):
+    if explicit:
+        import shlex
+        return [{"argv": shlex.split(explicit), "timeoutSeconds": 240}]
+    path = project / "majo-check.json"
+    if not path.exists():
+        print("No majo-check.json: checking build/import only; register game regressions before release.", flush=True)
+        return []
+    profile = json.loads(path.read_text())
+    if profile.get("format") != 1 or not isinstance(profile.get("commands"), list) or not profile["commands"]:
+        raise ValueError("Unsupported or empty majo-check.json profile")
+    commands = []
+    import sys
+    for entry in profile["commands"]:
+        argv = entry.get("argv")
+        timeout = entry.get("timeoutSeconds", 240)
+        marker = entry.get("requiredOutput")
+        if not isinstance(argv, list) or not argv or any(not isinstance(arg, str) or not arg for arg in argv):
+            raise ValueError("Game check argv must be a non-empty array of strings")
+        if not isinstance(timeout, int) or not 1 <= timeout <= 600 or marker is not None and (not isinstance(marker, str) or not marker):
+            raise ValueError("Invalid game check timeout or requiredOutput")
+        commands.append({"argv": [sys.executable if arg == "{python}" else arg for arg in argv],
+                         "timeoutSeconds": timeout, "requiredOutput": marker})
+    return commands
+
+
 def run_checks(project, godot=None, check_command=None):
     """Validate a disposable candidate copy; never execute checks in the live game."""
     executable = godot or os.environ.get("GODOT_BIN") or shutil.which("godot")
     if not executable or not Path(executable).is_file():
         raise ValueError("--check requires --godot /path/to/Godot .NET")
-    commands = [["dotnet", "build", str(find_project(project)), "--nologo"],
-                [executable, "--headless", "--path", str(project), "--editor", "--quit"],
-                [executable, "--headless", "--path", str(project), "--editor", "--quit", "--", "--majo-validate-export"]]
-    if check_command:
-        import shlex
-        commands.append(shlex.split(check_command))
-    for index, command in enumerate(commands):
-        print("Checking candidate:", " ".join(command), flush=True)
-        result = subprocess.run(command, cwd=project, stdout=subprocess.PIPE,
-                                stderr=subprocess.STDOUT, text=True, timeout=240)
+    commands = [
+        {"argv": ["dotnet", "build", str(find_project(project)), "--nologo"]},
+        {"argv": [executable, "--headless", "--path", str(project), "--editor", "--quit"]},
+        {"argv": [executable, "--headless", "--path", str(project), "--editor", "--quit", "--", "--majo-validate-export"],
+         "requiredOutput": "MAJO_EXPORT_VALIDATED"},
+        *game_checks(project, check_command),
+    ]
+    for entry in commands:
+        print("Checking candidate:", " ".join(entry["argv"]), flush=True)
+        result = subprocess.run(entry["argv"], cwd=project, stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, text=True, timeout=entry.get("timeoutSeconds", 240))
         print(result.stdout, end="", flush=True)
-        # Initial upstream Yarn import can log a transient load error; the second
-        # import must validate successfully and emit the Majo sentinel.
-        if result.returncode or (index == 2 and "MAJO_EXPORT_VALIDATED" not in result.stdout):
+        marker = entry.get("requiredOutput")
+        if result.returncode or marker and marker not in result.stdout:
             raise RuntimeError("Candidate validation failed; the installed game was not changed")
 
 
@@ -293,13 +321,21 @@ def mark_snapshot(directory, status):
         (directory / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
 
 
-def checked_install(project, content, provenance, check=False, godot=None, check_command=None):
+def checked_install(project, content, provenance, check=False, godot=None, check_command=None, allow_breaking=False):
     previous = load_lock(project)
     ensure_clean(project, previous, content)
     validate(content)
+    new_contract = json.loads(content.get("addons/majo_runtime/compatibility.json", b"{}"))
+    old_contract = (previous or {}).get("compatibility", {})
+    current_contract = project / "addons/majo_runtime/compatibility.json"
+    if not old_contract and current_contract.exists(): old_contract = json.loads(current_contract.read_text())
+    changed = [key for key in ("apiVersion", "godot", "targetFramework", "yarnGodot", "yarnRuntime")
+               if key in old_contract and old_contract.get(key) != new_contract.get(key)]
+    if previous and (changed or new_contract.get("breakingChanges")) and not (allow_breaking and check):
+        raise ValueError(f"Compatibility boundary changed ({', '.join(changed)}); review migrations and use --allow-breaking --check")
     if check:
         with tempfile.TemporaryDirectory(prefix="majo-candidate-") as temp:
-            stage = Path(temp) / "game"
+            stage = Path(temp).resolve() / "game"
             shutil.copytree(project, stage, ignore=shutil.ignore_patterns(
                 *IGNORED, "artifacts", ".majo", "TestResults", ".tools"))
             install(stage, content, provenance, report=False)
@@ -349,7 +385,7 @@ def rollback(project, identifier=None, list_only=False, check=False, godot=None,
         if current != checksum: raise ValueError(f"Host configuration changed since upgrade: {path}; merge it before rollback")
     if check:
         with tempfile.TemporaryDirectory(prefix="majo-rollback-check-") as temp:
-            stage = Path(temp) / "game"
+            stage = Path(temp).resolve() / "game"
             shutil.copytree(project, stage, ignore=shutil.ignore_patterns(*IGNORED, "artifacts", ".majo", ".tools"))
             install(stage, content, old_lock["source"], report=False)
             for p, data in configs.items():
@@ -375,7 +411,7 @@ def initialize(project, name, content, provenance, check=False, godot=None, chec
         raise ValueError("Package has no game template")
     project.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".majo-init-", dir=project.parent) as temp:
-        staged = Path(temp) / "game"
+        staged = Path(temp).resolve() / "game"
         staged.mkdir()
         for path, data in templates.items():
             path = path.replace("Example", name)
@@ -407,6 +443,7 @@ def main():
     parser.add_argument("--check-command", help="Additional game regression command, executed without a shell in the candidate copy")
     parser.add_argument("--to", help="Rollback point ID; defaults to the latest available point")
     parser.add_argument("--list", action="store_true", help="List available rollback points")
+    parser.add_argument("--allow-breaking", action="store_true", help="Explicitly accept a compatibility boundary change; requires --check")
     args = parser.parse_args()
     project = args.project.resolve()
     if args.command == "rollback":
@@ -439,7 +476,7 @@ def main():
     if args.command == "init":
         initialize(project, args.name, content, provenance, args.check, args.godot, args.check_command)
     elif args.command in {"upgrade", "install"}:
-        checked_install(project, content, provenance, args.check, args.godot, args.check_command)
+        checked_install(project, content, provenance, args.check, args.godot, args.check_command, args.allow_breaking)
     else:
         install(project, content, provenance)
     if args.command != "watch":

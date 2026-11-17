@@ -28,6 +28,7 @@ def main():
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--godot")
     parser.add_argument("--check-command")
+    parser.add_argument("--allow-breaking", action="store_true")
     args = parser.parse_args()
     if not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?', args.version):
         parser.error("Use an explicit version tag; moving latest/main installs are not supported")
@@ -57,6 +58,7 @@ def main():
                "--archive", str(archive), "--sha256", matches[0]]
         if args.command == "init": cmd += ["--name", args.name]
         if args.check: cmd += ["--check"]
+        if args.allow_breaking: cmd += ["--allow-breaking"]
         if args.godot: cmd += ["--godot", args.godot]
         if args.check_command: cmd += ["--check-command", args.check_command]
         result = subprocess.run(cmd)

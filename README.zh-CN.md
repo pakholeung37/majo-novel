@@ -66,7 +66,7 @@ Yarn 负责剧情流程，Majo 演出命令负责画面呈现。`beat` 组织需
 现在可以直接安装指定候选版，不需要克隆系统仓库：
 
 ```sh
-curl -fsSL https://github.com/pakholeung37/majo-novel/releases/download/v0.1.0-rc.1/install.py | python3 - init --version v0.1.0-rc.1 --project ./my-game --name MyGame
+curl -fsSL https://github.com/pakholeung37/majo-novel/releases/download/v0.1.0-rc.2/install.py | python3 - init --version v0.1.0-rc.2 --project ./my-game --name MyGame
 ```
 
 安装器校验发布包 SHA-256，创建工程、配置引用和插件，并锁定依赖。`upgrade --check` 在隔离游戏副本中构建、导入及回归，通过后才切换；`rollback` 恢复本地历史版本。运行环境、兼容边界和完整命令见[插件安装指南](addons/majo_runtime/README.md)。

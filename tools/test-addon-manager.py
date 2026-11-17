@@ -71,6 +71,7 @@ class ManagerTests(unittest.TestCase):
         with patch.object(manager, "run_checks") as checks:
             manager.checked_install(self.game, updated, {}, check=True)
             self.assertNotEqual(checks.call_args[0][0], self.game)
+            self.assertEqual(checks.call_args[0][0], checks.call_args[0][0].resolve())
         story = self.game / "assets/scripts/main.yarn"
         story.write_text("Game content edited after upgrade")
         manager.rollback(self.game)
@@ -85,6 +86,34 @@ class ManagerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Host configuration changed"):
             manager.rollback(self.game)
         self.assertIn("user edit", settings.read_text())
+
+    def test_api_boundary_change_requires_explicit_checked_migration(self):
+        import json
+        old = dict(self.content)
+        old["addons/majo_runtime/compatibility.json"] = json.dumps({"apiVersion": "0.1"}).encode()
+        manager.install(self.game, old, {})
+        new = dict(old)
+        new["addons/majo_runtime/compatibility.json"] = json.dumps({"apiVersion": "0.2"}).encode()
+        before = (self.game / manager.LOCK).read_bytes()
+        with self.assertRaisesRegex(ValueError, "Compatibility boundary changed"):
+            manager.checked_install(self.game, new, {}, check=True)
+        self.assertEqual((self.game / manager.LOCK).read_bytes(), before)
+
+    def test_profile_uses_current_python_and_required_output(self):
+        import json, sys
+        (self.game / "majo-check.json").write_text(json.dumps({"format": 1, "commands": [
+            {"argv": ["{python}", "test.py"], "requiredOutput": "GAME_OK"}]}))
+        commands = manager.game_checks(self.game)
+        self.assertEqual(commands[0]["argv"][0], sys.executable)
+        self.assertEqual(commands[0]["requiredOutput"], "GAME_OK")
+
+    def test_zero_exit_without_game_success_marker_is_rejected(self):
+        import json, subprocess
+        (self.game / "majo-check.json").write_text(json.dumps({"format": 1, "commands": [
+            {"argv": ["test"], "requiredOutput": "GAME_OK"}]}))
+        with patch.object(manager.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "MAJO_EXPORT_VALIDATED")):
+            with self.assertRaisesRegex(RuntimeError, "Candidate validation failed"):
+                manager.run_checks(self.game, __file__)
 
     def test_missing_solution_is_created_for_existing_host(self):
         (self.game / "MyGame.sln").unlink()

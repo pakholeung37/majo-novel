@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.0-rc.2
+
+- Resolve temporary candidate paths before invoking MSBuild/Godot, fixing macOS C# resource mapping during checked upgrades.
+
+- Discover game-owned `majo-check.json` regression profiles during checked upgrade and rollback.
+- Require declared success output as well as exit 0, so missing game completion cannot pass.
+- Record compatibility contracts in dependency locks and require explicit checked opt-in across API/engine dependency boundaries.
+- Runtime API 0.1, Yarn dependencies and serialized state layouts remain compatible with rc.1; no player-save migration is performed.
+
 ## 0.1.0-rc.1
 
 - Publish a version-pinned online installer alongside checksummed addon archives.
