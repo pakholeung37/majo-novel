@@ -8,6 +8,7 @@ SCRIPT_DIRECTORY="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 REPOSITORY_ROOT="$(CDPATH= cd -- "$SCRIPT_DIRECTORY/.." && pwd)"
 GAME_PROJECT="$REPOSITORY_ROOT"
 UNIT_TEST_PROJECT="$REPOSITORY_ROOT/tests/Majo.Runtime.UnitTests/Majo.Runtime.UnitTests.csproj"
+DEMO_TEST_PROJECT="$REPOSITORY_ROOT/tests/Majo.Demos.UnitTests/Majo.Demos.UnitTests.csproj"
 CORE_TEST_PROJECT="$REPOSITORY_ROOT/tests/Majo.Runtime.Core.UnitTests/Majo.Runtime.Core.UnitTests.csproj"
 DOMAIN_TEST_PROJECT="$REPOSITORY_ROOT/tests/Majo.Runtime.Domain.UnitTests/Majo.Runtime.Domain.UnitTests.csproj"
 COMMAND_TEST_PROJECT="$REPOSITORY_ROOT/tests/Majo.Runtime.Commands.UnitTests/Majo.Runtime.Commands.UnitTests.csproj"
@@ -94,6 +95,10 @@ restore_dotnet_projects() {
     run_with_timeout 180 dotnet restore "$COMMAND_TEST_PROJECT" --nologo
     run_with_timeout 180 dotnet restore "$PERSISTENCE_TEST_PROJECT" --nologo
     run_with_timeout 180 dotnet restore "$RESOURCE_TEST_PROJECT" --nologo
+    run_with_timeout 180 dotnet restore "$DEMO_TEST_PROJECT" --nologo
+    if [[ "$TEST_MODE" != "unit" ]]; then
+        run_with_timeout 180 dotnet restore "$GAME_PROJECT/Majo Novel.csproj" --nologo
+    fi
 }
 
 run_core_consumer_smoke() {
@@ -165,7 +170,7 @@ printf 'Running independent persistence and resource tests...\n'
 run_with_timeout 180 dotnet test "$PERSISTENCE_TEST_PROJECT" --nologo --no-restore
 run_with_timeout 180 dotnet test "$RESOURCE_TEST_PROJECT" --nologo --no-restore
 
-printf 'Building unit tests and their Godot project dependencies...\n'
+printf 'Building runtime tests without the game project...\n'
 if [[ "$TEST_MODE" == "full" ]]; then
     run_with_timeout 180 dotnet build "$UNIT_TEST_PROJECT" --nologo --no-restore --no-incremental
 else
@@ -174,6 +179,9 @@ fi
 
 printf 'Running pure C# unit tests...\n'
 run_with_timeout 180 dotnet test "$UNIT_TEST_PROJECT" --nologo --no-restore --no-build
+
+printf 'Running separate demo unit tests...\n'
+run_with_timeout 180 dotnet test "$DEMO_TEST_PROJECT" --nologo --no-restore
 
 printf 'Running command generator unit tests...\n'
 run_with_timeout 180 dotnet test "$GENERATOR_TEST_PROJECT" --nologo --no-restore
@@ -184,6 +192,7 @@ if [[ "$TEST_MODE" == "unit" ]]; then
 fi
 
 printf 'Checking Godot headless import and C# compilation for main game project...\n'
+run_with_timeout 180 dotnet build "$GAME_PROJECT/Majo Novel.csproj" --nologo --no-restore
 run_with_timeout 180 "$GODOT_EXECUTABLE" --headless --path "$GAME_PROJECT" --editor --quit
 
 printf 'Running Godot headless integration tests...\n'

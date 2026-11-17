@@ -2,7 +2,7 @@ using Majo.Runtime.Actors;
 using Majo.Demos.Manosaba.Actors.Layered;
 using Xunit;
 
-namespace Majo.Runtime.UnitTests;
+namespace Majo.Demos.UnitTests;
 
 public sealed class LayerCompositionResolverTests
 {

@@ -1,7 +1,7 @@
 using Majo.Demos.Manosaba;
 using Xunit;
 
-namespace Majo.Runtime.UnitTests;
+namespace Majo.Demos.UnitTests;
 
 public sealed class CharacterNameCatalogTests
 {

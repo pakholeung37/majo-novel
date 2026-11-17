@@ -16,6 +16,10 @@ PERSISTENCE_PROJECT="$REPOSITORY_ROOT/addons/majo_runtime/Assemblies/Majo.Runtim
 PERSISTENCE_TEST_PROJECT="$REPOSITORY_ROOT/tests/Majo.Runtime.Persistence.UnitTests/Majo.Runtime.Persistence.UnitTests.csproj"
 RESOURCE_PROJECT="$REPOSITORY_ROOT/addons/majo_runtime/Assemblies/Majo.Runtime.Resources/Majo.Runtime.Resources.csproj"
 RESOURCE_TEST_PROJECT="$REPOSITORY_ROOT/tests/Majo.Runtime.Resources.UnitTests/Majo.Runtime.Resources.UnitTests.csproj"
+ENGINE_PROJECT="$REPOSITORY_ROOT/addons/majo_runtime/Assemblies/Majo.Runtime.Godot/Majo.Runtime.Godot.csproj"
+DEMO_PROJECT="$REPOSITORY_ROOT/demos/Majo.Demos.csproj"
+DEMO_TEST_PROJECT="$REPOSITORY_ROOT/tests/Majo.Demos.UnitTests/Majo.Demos.UnitTests.csproj"
+HEADLESS_PROJECT="$REPOSITORY_ROOT/tests/Majo.Runtime.Headless/Majo.Runtime.Headless.csproj"
 FORMAT_MODE="check"
 
 print_usage() {
@@ -90,6 +94,8 @@ dotnet restore "$DOMAIN_TEST_PROJECT" --nologo
 dotnet restore "$COMMAND_TEST_PROJECT" --nologo
 dotnet restore "$PERSISTENCE_TEST_PROJECT" --nologo
 dotnet restore "$RESOURCE_TEST_PROJECT" --nologo
+dotnet restore "$DEMO_TEST_PROJECT" --nologo
+dotnet restore "$GAME_PROJECT" --nologo
 
 run_format() {
     local project="$1"
@@ -123,7 +129,11 @@ run_format "$RESOURCE_PROJECT"
 run_format "$RESOURCE_TEST_PROJECT"
 
 printf 'Checking main project formatting...\n'
-run_format "$GAME_PROJECT" "${game_format_files[@]}"
+run_format "$ENGINE_PROJECT"
+run_format "$DEMO_PROJECT"
+run_format "$HEADLESS_PROJECT"
+run_format "$GAME_PROJECT"
+run_format "$DEMO_TEST_PROJECT"
 
 printf 'Checking unit test formatting...\n'
 run_format "$UNIT_TEST_PROJECT" "${unit_format_files[@]}"

@@ -106,7 +106,7 @@ Bootstrap 会将完成注册的命令目录接入默认预加载器，包括插�
 
 `Assemblies/Majo.Runtime.Core/Majo.Runtime.Core.csproj` 独立编译 `Runtime/Core`，只依赖 .NET 8，不引用 Godot、Yarn 或游戏工程。主工程通过 `MajoRuntime.props` 引用此项目并排除这批源文件的重复编译。生命周期、服务图和激活阶段测试位于 `tests/Majo.Runtime.Core.UnitTests`，可直接运行 `dotnet test tests/Majo.Runtime.Core.UnitTests/Majo.Runtime.Core.UnitTests.csproj`；这条命令不会构建游戏或加载引擎依赖。完整测试门禁仍会检查游戏、发行包和实际 PCK。
 
-Core 命名空间与源码签名保持不变，但程序集改为 `Majo.Runtime.Core.dll`，已经编译的扩展需重新构建；兼容性清单已声明这一变化。领域模型、命令协议、持久化和资源管理也已形成下述独立程序集；Godot/Yarn 适配层和无头集成测试仍在游戏工程中，尚未完成全部程序集隔离。
+Core 命名空间与源码签名保持不变，但程序集改为 `Majo.Runtime.Core.dll`，已经编译的扩展需重新构建；兼容性清单已声明这一变化。领域模型、命令协议、持久化、资源管理以及下述 Godot/Yarn 适配、示例、测试工程也已形成独立程序集，游戏只保留装配入口。
 
 ## 领域模型与规划器程序集
 
@@ -140,7 +140,7 @@ dotnet test tests/Majo.Runtime.Commands.UnitTests/Majo.Runtime.Commands.UnitTest
 
 ## 持久化与资源管理程序集
 
-`Assemblies/Majo.Runtime.Persistence/Majo.Runtime.Persistence.csproj` 只引用 Core 和 .NET 8，包含状态模型、contributor/准备恢复/可用性契约、contributor 依赖图、迁移、写入冻结门、规范 JSON 序列化及文件存储。可用性契约与读取输入、脚本阶段的实现分开；`StateJson` 仍是集成层私有的 payload 适配器。`StateManager`、行边界、Godot 用户目录存储、内置 contributor 及实际恢复协调留在集成层。
+`Assemblies/Majo.Runtime.Persistence/Majo.Runtime.Persistence.csproj` 只引用 Core 和 .NET 8，包含状态模型、contributor/准备恢复/可用性契约、contributor 依赖图、迁移、写入冻结门、规范 JSON 序列化及文件存储。`StatePayloadJson` 为扩展提供相同 camelCase payload 编解码规则，集成层私有 `StateJson` 委托给它。`StateManager`、行边界、Godot 用户目录存储、内置 contributor 及实际恢复协调留在 Godot 集成程序集。
 
 `StateMigrationRegistry.ResolveRecords` 是显式的公开边界，只根据目标 contributor 元数据迁移和校验记录，不调用其捕获、预检、准备恢复或重置方法。实际事务的预检、准备、提交及激活仍由 `StateManager` 负责。记录重命名、缺失必需记录、较新版本、重复目标及诊断链的行为由独立测试覆盖。
 
@@ -155,6 +155,29 @@ dotnet test tests/Majo.Runtime.Resources.UnitTests/Majo.Runtime.Resources.UnitTe
 ```
 
 独立 addon 消费者在源码安装及实际 PCK 中，还会将真实对话边界快照封装、序列化、写入文件并读回，以及取得、固定、释放和注销注册资源。新程序集已接入出包、升级、导出和完整门禁。命名空间、原有源码签名、存档 envelope/snapshot 格式和 checkpoint 版本保持不变；已有二进制扩展需要针对新的 `Majo.Runtime.Persistence.dll` 与 `Majo.Runtime.Resources.dll` 重新构建，兼容性清单已声明。
+
+## 引擎、示例与测试程序集
+
+`Assemblies/Majo.Runtime.Godot/Majo.Runtime.Godot.csproj` 编译剩余运行时、Bootstrap、配置、UI 及工具模式的 Majo 编辑器插件，只引用前述独立程序集、VM bridge 与 `YarnSpinner.Godot`，不引用游戏、示例或测试。`Assemblies/YarnSpinner.Godot` 从原目录编译未经修改的上游源码和生成器，其文件哈希仍由发行门禁校验。上游只向版本绑定的 Majo Runner bridge 开放内部 dispatcher；游戏和示例没有运行时 friend 权限。
+
+Godot 运行时程序集仍包含 Majo 的 Yarn 后端及脚本/状态协调；它们与引擎集成层之间还可以继续细分。这次边界确保完整运行时可以脱离游戏编译，并没有宣称所有可替换后端已经各自形成程序集。
+
+`GodotLibrary.props` 保留消费项目根目录作为 `GodotProjectDir`，生成的 `res://` 路径不变，独立库的 `bin/obj` 不与游戏混用。库只禁用主程序专用的 `GodotPluginsInitializer`，继续生成脚本路径、方法、属性与序列化代码。构建会为库输出目录创建 `.gdignore`。
+
+Godot 默认扫描主程序集。游戏必须把以下 `[Tool]` 加载器放在 **第一个 autoload**，在编辑器插件和场景加载前通过公开的 `ScriptManagerBridge.LookupScriptsInAssembly` 注册库脚本：
+
+```ini
+[autoload]
+MajoAssemblies="*res://addons/majo_runtime/Build/MajoAssemblyLoader.cs"
+```
+
+安装器自动添加此项、保持其他 autoload 的相对顺序并检查同名冲突；手动安装须按 README 配置。`MajoRuntime.props` 只向宿主编译加载器及 Yarn action 初始化胶水，不再编译运行时或上游源码。生成的游戏 `[YarnFunction]`/`[YarnCommand]` 仍在游戏自己的模块初始化阶段注册。普通 .NET 测试只排队库注册，不调用尚未初始化的原生引擎接口。程序集布局升级后应重新构建并重启游戏/编辑器。
+
+本仓库的 `demos/Majo.Demos.csproj` 独立编译示例，`tests/Majo.Runtime.Headless` 编译无头集成和渲染探针，游戏通过 `GameAssemblyRegistration` 登记它们。Headless 仅在 Debug 装配进入游戏，发行 addon 不包含示例或测试。压力探针通过 `IRenderDemandDiagnostics` 读取需求及取得全 View 需求作用域；共享 `RuntimePerformanceTrace` 与内置 dissolve 的相同输入能力是明确公开的扩展 API。
+
+运行时单测直接引用引擎运行时库；示例测试位于 `tests/Majo.Demos.UnitTests` 并只引用示例库。所有单测均已脱离游戏工程。`./tools/test.sh --unit` 不构建游戏、不启动 Godot；`--independent` 进一步只编译不依赖引擎的六个测试工程。完整门禁另行构建游戏、加载无头测试、安装发行包，并在真实 PCK 中检查库脚本、游戏自定义 Yarn 函数和生成命令。
+
+编译依赖为：游戏 → 示例/Headless/引擎运行时；示例 → 引擎运行时；Headless → 示例/引擎运行时；引擎运行时 → Core/Domain/Commands/Persistence/Resources/Yarn 适配。运行时程序集引用测试会拒绝反向依赖。库类型的命名空间、资源路径及存档格式不变；二进制扩展需要针对新的 `Majo.Runtime.Godot.dll`、`YarnSpinner.Godot.dll` 重编译，清单已声明布局和 autoload 要求。
 
 ## Godot 渲染边界与 GPU 验收
 
@@ -184,6 +207,8 @@ python3 tools/test-rendering.py --method gl_compatibility --driver opengl3
 2026-11-17 在 Apple M4、Godot 4.7.2 .NET 上，以上三条渲染路径各通过 13 项用例、200 次恢复和 600 次恢复画面采样。恢复循环的节点数保持 62，候选创建/释放均为 200；Metal Mobile 的 6 张恢复截图与重构前基线逐字节一致。本次原始日志、图片和统计位于 `build/render-host-refactor/final`，三个路径记录的渲染源码摘要相同。
 
 GPU 验收与 `tools/test.sh --full` 分开运行，后者仍负责单测、无头集成、独立项目安装、导出及实际 PCK 启动。
+
+本次引擎程序集隔离后，Apple M4 的 Metal Forward+ 再次通过全部 13 项用例、200 次恢复和 600 次画面采样；候选创建/释放各 200，无着色器或资源泄漏错误。日志、图片和统计位于 `build/engine-assembly-isolation/gpu`。完整发行门禁、游戏 ExportRelease 编译及全部格式检查也已通过。
 
 ## CI 与发布
 

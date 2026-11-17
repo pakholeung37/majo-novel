@@ -75,13 +75,13 @@ public sealed class ManosabaUiService : IManosabaUiService, IPreparedStateContri
                 Key,
                 Scope,
                 SchemaVersion,
-                StateJson.Serialize(payload)));
+                StatePayloadJson.Serialize(payload)));
     }
 
     public ValueTask PreflightAsync(StateRecord record, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        _ = StateJson.Deserialize<ManosabaUiStatePayload>(record);
+        _ = StatePayloadJson.Deserialize<ManosabaUiStatePayload>(record);
         return ValueTask.CompletedTask;
     }
 
@@ -90,7 +90,7 @@ public sealed class ManosabaUiService : IManosabaUiService, IPreparedStateContri
     {
         cancellationToken.ThrowIfCancellationRequested();
         var mode = record is null ? ManosabaFrameMode.Default :
-            (ManosabaFrameMode)StateJson.Deserialize<ManosabaUiStatePayload>(record).FrameMode;
+            (ManosabaFrameMode)StatePayloadJson.Deserialize<ManosabaUiStatePayload>(record).FrameMode;
         if (!Enum.IsDefined(mode)) throw new StateSnapshotException("Unknown Manosaba frame mode.");
         return ValueTask.FromResult<IPreparedStateRestore>(new PreparedStateRestore(() => SetFrameMode(mode)));
     }

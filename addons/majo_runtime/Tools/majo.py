@@ -165,6 +165,18 @@ def configured(project, csproj):
         config = config[:section.start(1)] + body + config[section.end(1):]
     else:
         config += '\n[editor_plugins]\nenabled=PackedStringArray(' + ', '.join(json.dumps(p) for p in plugins) + ')\n'
+    # Godot scans the main assembly. Register library scripts before any other autoload or plugin.
+    loader = 'MajoAssemblies="*res://addons/majo_runtime/Build/MajoAssemblyLoader.cs"\n'
+    section = re.search(r'^\[autoload\]\s*\n(.*?)(?=^\[|\Z)', config, re.M | re.S)
+    if section:
+        body = section[1]
+        existing_loader = re.search(r'^MajoAssemblies\s*=.*$', body, re.M)
+        if existing_loader and existing_loader[0].strip() != loader.strip():
+            raise ValueError("autoload/MajoAssemblies is already used; resolve the host name conflict first")
+        body = re.sub(r'^MajoAssemblies\s*=.*(?:\n|$)', '', body, flags=re.M)
+        config = config[:section.start(1)] + loader + body.lstrip('\n') + config[section.end(1):]
+    else:
+        config += '\n[autoload]\n' + loader
     attributes = project / ".gitattributes"
     attrs = attributes.read_text() if attributes.exists() else ""
     for addon in ADDONS:
@@ -457,9 +469,9 @@ def main():
         validate({p: (project / p).read_bytes() for p in record["files"]})
         updates = configured(project, find_project(project))
         if any(p.read_bytes() != b for p, b in updates.items()):
-            raise ValueError("Host imports or editor plugins are missing; run install/sync to configure")
+            raise ValueError("Host imports, MajoAssemblies autoload or editor plugins are missing; run install/sync to configure")
         print(json.dumps({k: v for k, v in record.items() if k != "files"}, indent=2))
-        print("Majo dependencies, file hashes, project imports and editor plugins OK")
+        print("Majo dependencies, file hashes, imports, autoload and editor plugins OK")
         return
     if bool(args.source) == bool(args.archive):
         raise ValueError("Specify exactly one of --source or --archive")

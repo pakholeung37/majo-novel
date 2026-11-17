@@ -67,7 +67,7 @@ public sealed class CameraEnvironmentCommandTests
         var plan = new DirectionPlanner().PlanDomain(DirectionState.CreateDefault(),
         [
             new ViewPosePatch(ViewId.Main, default, default, default, new DirectionTransitionSpec(DirectionTransitionId.Move, 8))
-                { Dolly = DirectionValue.From(-0.25f) },
+            { Dolly = DirectionValue.From(-0.25f) },
             new ViewParallaxPatch(ViewId.Main,
                 new ViewParallaxState(0.5f, new(50, 50), new(3, 2)), new DirectionTransitionSpec(DirectionTransitionId.Move, 2)),
             new ViewIdlePatch(ViewId.Main,

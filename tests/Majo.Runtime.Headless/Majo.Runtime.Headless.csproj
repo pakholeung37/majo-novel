@@ -1,0 +1,13 @@
+<Project>
+  <PropertyGroup>
+    <GodotProjectDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)../..'))</GodotProjectDir>
+  </PropertyGroup>
+  <Import Project="../../addons/majo_runtime/Assemblies/GodotLibrary.props" />
+  <ItemGroup>
+    <Compile Include="../headless/**/*.cs" />
+    <Compile Include="../rendering/**/*.cs" />
+    <ProjectReference Include="../../demos/Majo.Demos.csproj" />
+  </ItemGroup>
+  <Import Project="../../addons/majo_runtime/MajoRuntime.props" />
+  <Import Project="Sdk.targets" Sdk="Godot.NET.Sdk" Version="4.7.2" />
+</Project>

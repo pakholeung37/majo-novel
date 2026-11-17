@@ -1,0 +1,6 @@
+<Project>
+  <ItemGroup>
+    <MajoYarnGodotSource Include="$(MSBuildThisFileDirectory)../../../YarnSpinner-Godot/**/*.cs"
+                         Exclude="$(MSBuildThisFileDirectory)../../../YarnSpinner-Godot/SourceGenerator/**;**/bin/**;**/obj/**" />
+  </ItemGroup>
+</Project>

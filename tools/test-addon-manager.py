@@ -14,6 +14,25 @@ spec.loader.exec_module(manager)
 
 
 class ManagerTests(unittest.TestCase):
+    def test_loader_is_first_and_preserves_game_autoloads_on_repeated_install(self):
+        settings = self.game / "project.godot"
+        settings.write_text(settings.read_text().replace('[autoload]\n', '[autoload]\nGameState="*res://GameState.cs"\n'))
+        manager.install(self.game, self.content, {})
+        first = settings.read_text()
+        self.assertLess(first.index('MajoAssemblies='), first.index('GameState='))
+        manager.install(self.game, self.content, {})
+        self.assertEqual(first, settings.read_text())
+
+    def test_conflicting_loader_name_leaves_host_untouched(self):
+        settings = self.game / "project.godot"
+        settings.write_text(settings.read_text().replace(
+            'MajoAssemblies="*res://addons/majo_runtime/Build/MajoAssemblyLoader.cs"',
+            'MajoAssemblies="*res://Other.cs"'))
+        before = manager.files(self.game)
+        with self.assertRaisesRegex(ValueError, 'autoload/MajoAssemblies'):
+            manager.install(self.game, self.content, {})
+        self.assertEqual(before, manager.files(self.game))
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="majo-manager-test-")
         self.addCleanup(self.temp.cleanup)

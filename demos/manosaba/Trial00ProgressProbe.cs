@@ -147,18 +147,32 @@ public partial class Trial00ProgressProbe : Node
         Write("lines.json", lines);
         Write("events.json", runtime.RingBuffer!.RecentEvents.Select(e => new
         {
-            timeMs = (e.Timestamp - epoch).TotalMilliseconds, e.Category, e.EventId, e.Message, e.Correlation, e.Properties,
+            timeMs = (e.Timestamp - epoch).TotalMilliseconds,
+            e.Category,
+            e.EventId,
+            e.Message,
+            e.Correlation,
+            e.Properties,
         }).ToArray());
         var configuration = new
         {
-            completed = finished, lineCount = lineNumber, seconds = clock.Elapsed.TotalSeconds,
-            progressionMode = rapid ? "rapid" : "normal", actionIntervalMs = rapid ? 100 : 500,
-            lineDwellMs = rapid ? 100 : 2000, openingDwellMs = 28000,
-            maxFps = Engine.MaxFps, vsync = DisplayServer.WindowGetVsyncMode().ToString(),
-            refreshHz = DisplayServer.ScreenGetRefreshRate(), windowSize = GetWindow().Size.ToString(),
-            renderer = RenderingServer.GetCurrentRenderingMethod().ToString(), epoch,
+            completed = finished,
+            lineCount = lineNumber,
+            seconds = clock.Elapsed.TotalSeconds,
+            progressionMode = rapid ? "rapid" : "normal",
+            actionIntervalMs = rapid ? 100 : 500,
+            lineDwellMs = rapid ? 100 : 2000,
+            openingDwellMs = 28000,
+            maxFps = Engine.MaxFps,
+            vsync = DisplayServer.WindowGetVsyncMode().ToString(),
+            refreshHz = DisplayServer.ScreenGetRefreshRate(),
+            windowSize = GetWindow().Size.ToString(),
+            renderer = RenderingServer.GetCurrentRenderingMethod().ToString(),
+            epoch,
             focusPercent = 100.0 * frames.Count(f => f.Focused) / frames.Count,
-            spans = spans.Count, logs = runtime.RingBuffer.Count, logCapacity = runtime.RingBuffer.Capacity,
+            spans = spans.Count,
+            logs = runtime.RingBuffer.Count,
+            logCapacity = runtime.RingBuffer.Capacity,
         };
         Write("configuration.json", configuration);
         using (var image = GetViewport().GetTexture().GetImage()) image.SavePng(Path.Combine(directory, "final.png"));

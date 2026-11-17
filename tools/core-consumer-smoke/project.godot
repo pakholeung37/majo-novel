@@ -5,6 +5,9 @@ config/name="Majo Core Consumer Smoke"
 run/main_scene="res://Smoke.tscn"
 config/features=PackedStringArray("4.7", "C#", "Forward Plus")
 
+[autoload]
+MajoAssemblies="*res://addons/majo_runtime/Build/MajoAssemblyLoader.cs"
+
 [dotnet]
 project/assembly_name="CoreConsumerSmoke"
 

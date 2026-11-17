@@ -1,0 +1,14 @@
+<Project>
+  <Import Project="../GodotLibrary.props" />
+  <Import Project="../../../YarnSpinner-Godot/YarnSpinner-Godot.props" />
+  <Import Project="YarnSpinner.Godot.sources.props" />
+  <ItemGroup>
+    <Compile Include="@(MajoYarnGodotSource)" />
+    <ProjectReference Remove="addons/YarnSpinner-Godot/SourceGenerator/YarnSpinnerGodotSourceGenerator.csproj" />
+    <ProjectReference Include="../../../YarnSpinner-Godot/SourceGenerator/YarnSpinnerGodotSourceGenerator.csproj"
+                      ReferenceOutputAssembly="false" OutputItemType="Analyzer" />
+    <!-- The version-pinned Runner bridge uses the upstream internal dispatcher. -->
+    <InternalsVisibleTo Include="Majo.Runtime.Godot" />
+  </ItemGroup>
+  <Import Project="Sdk.targets" Sdk="Godot.NET.Sdk" Version="4.7.2" />
+</Project>

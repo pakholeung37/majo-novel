@@ -1,6 +1,7 @@
 title: Start
 ---
 <<consumer probe alpha count:7>>
+<<set $consumer_probe = consumer_library_probe()>>
 First. #line:consumer-first
 -> Unselected #line:consumer-option-first
     Wrong. #line:consumer-wrong

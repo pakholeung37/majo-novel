@@ -46,6 +46,9 @@ public partial class MajoRuntimeBootstrap : Node
                     resolver.Get<IFrameClock>(),
                     Logger),
                 typeof(IFrameClock))
+            .AddSingleton<IRenderDemandDiagnostics>(
+                resolver => new GodotRenderDemandDiagnostics(resolver.Get<GodotDirectionRenderHost>()),
+                typeof(GodotDirectionRenderHost))
             .AddSingleton<GodotDirectionStageBackend>(
                 resolver => new GodotDirectionStageBackend(
                     resolver.Get<GodotDirectionRenderHost>(),

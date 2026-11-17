@@ -29,6 +29,15 @@ public partial class HeadlessTestRunner
         {
             AssertViewRendering(main, true, "Initial screen");
             AssertViewRendering(second, false, "Preparing an unused View must not render it");
+            var diagnostics = new GodotRenderDemandDiagnostics(host);
+            using (var requested = diagnostics.AcquireAllViews("public diagnostics"))
+            {
+                AssertViewRendering(second, true, "Public diagnostic demand");
+                Assert(diagnostics.InspectViewDemand().All(view => view.Requests.Contains("public diagnostics")),
+                    "Public diagnostics did not acquire all Views.");
+                requested.Dispose();
+            }
+            AssertViewRendering(second, false, "Public diagnostic scope releases all demand");
             using (var first = host.AcquireViewDemand(second, "capture one"))
             {
                 var other = host.AcquireViewDemand(second, "capture two");
@@ -135,7 +144,8 @@ public partial class HeadlessTestRunner
         // A native actor-owned producer, with Stage still ordered under disabled main Content.
         var producer = new SubViewport
         {
-            Size = new Vector2I(640, 360), TransparentBg = true,
+            Size = new Vector2I(640, 360),
+            TransparentBg = true,
             RenderTargetUpdateMode = SubViewport.UpdateMode.Always,
         };
         host.Actors.AddChild(producer);

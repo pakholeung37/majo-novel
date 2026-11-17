@@ -7,7 +7,7 @@ using Majo.Runtime.State;
 using Majo.Runtime.UnitTests.Testing;
 using Xunit;
 
-namespace Majo.Runtime.UnitTests;
+namespace Majo.Demos.UnitTests;
 
 public sealed class ManosabaCommandTests
 {

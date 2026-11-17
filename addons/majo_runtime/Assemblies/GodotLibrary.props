@@ -1,0 +1,25 @@
+<Project>
+  <PropertyGroup>
+    <Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>
+    <GodotProjectDir Condition="'$(GodotProjectDir)' == ''">$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)../../..'))</GodotProjectDir>
+    <BaseIntermediateOutputPath>$(MSBuildProjectDirectory)/obj/</BaseIntermediateOutputPath>
+    <IntermediateOutputPath>$(BaseIntermediateOutputPath)$(Configuration)/</IntermediateOutputPath>
+    <MajoGodotLibrary>true</MajoGodotLibrary>
+  </PropertyGroup>
+  <Import Project="Sdk.props" Sdk="Godot.NET.Sdk" Version="4.7.2" />
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <GodotDisabledSourceGenerators>GodotPluginsInitializer</GodotDisabledSourceGenerators>
+    <BaseOutputPath>$(MSBuildProjectDirectory)/bin/</BaseOutputPath>
+    <OutputPath>$(BaseOutputPath)$(Configuration)/</OutputPath>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);SYSLIB1220;CS0618;CS1998</NoWarn>
+    <DefineConstants Condition="'$(Configuration)' == 'Debug'">$(DefineConstants);TOOLS</DefineConstants>
+  </PropertyGroup>
+  <Target Name="MajoIgnoreLibraryOutputs" BeforeTargets="PrepareForBuild">
+    <MakeDir Directories="$(BaseOutputPath);$(BaseIntermediateOutputPath)" />
+    <Touch Files="$(BaseOutputPath).gdignore;$(BaseIntermediateOutputPath).gdignore" AlwaysCreate="true" />
+  </Target>
+</Project>

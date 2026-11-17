@@ -88,6 +88,12 @@ def main():
         "Assemblies/Majo.Runtime.Persistence/Majo.Runtime.Persistence.sources.props",
         "Assemblies/Majo.Runtime.Resources/Majo.Runtime.Resources.csproj",
         "Assemblies/Majo.Runtime.Resources/Majo.Runtime.Resources.sources.props",
+        "Assemblies/GodotLibrary.props",
+        "Assemblies/Majo.Runtime.Godot/Majo.Runtime.Godot.csproj",
+        "Assemblies/Majo.Runtime.Godot/Majo.Runtime.Godot.sources.props",
+        "Assemblies/YarnSpinner.Godot/YarnSpinner.Godot.csproj",
+        "Assemblies/YarnSpinner.Godot/YarnSpinner.Godot.sources.props",
+        "Build/MajoAssemblyLoader.cs", "Build/YarnHostRegistration.cs",
         "SourceGenerators/Majo.CommandGenerator/Majo.CommandGenerator.csproj",
     ):
         if not (directory / required).is_file():

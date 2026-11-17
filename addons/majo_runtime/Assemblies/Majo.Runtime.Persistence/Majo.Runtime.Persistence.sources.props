@@ -1,6 +1,7 @@
 <Project>
   <ItemGroup>
     <MajoPersistenceSource Include="$(MSBuildThisFileDirectory)../../Runtime/State/StateModels.cs" />
+    <MajoPersistenceSource Include="$(MSBuildThisFileDirectory)../../Runtime/State/StatePayloadJson.cs" />
     <MajoPersistenceSource Include="$(MSBuildThisFileDirectory)../../Runtime/State/StateExceptions.cs" />
     <MajoPersistenceSource Include="$(MSBuildThisFileDirectory)../../Runtime/State/StateEligibilityContracts.cs" />
     <MajoPersistenceSource Include="$(MSBuildThisFileDirectory)../../Runtime/State/IStateContributor.cs" />

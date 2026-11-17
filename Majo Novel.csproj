@@ -13,4 +13,9 @@
 
   <Import Project="addons\YarnSpinner-Godot\YarnSpinner-Godot.props" />
   <Import Project="addons\majo_runtime\MajoRuntime.props" />
+  <ItemGroup>
+    <Compile Remove="demos/**/*.cs;tests/**/*.cs" />
+    <ProjectReference Include="demos/Majo.Demos.csproj" />
+    <ProjectReference Include="tests/Majo.Runtime.Headless/Majo.Runtime.Headless.csproj" Condition="'$(Configuration)' == 'Debug'" />
+  </ItemGroup>
 </Project>

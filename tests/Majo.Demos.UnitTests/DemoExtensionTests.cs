@@ -2,7 +2,7 @@ using Majo.Demo;
 using Majo.Runtime.Core;
 using Xunit;
 
-namespace Majo.Runtime.UnitTests;
+namespace Majo.Demos.UnitTests;
 
 public sealed class DemoExtensionTests
 {

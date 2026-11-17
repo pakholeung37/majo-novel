@@ -85,7 +85,10 @@ public sealed class EmoteCharacterActor : GodotCharacterActorBase
 {
     private static readonly Dictionary<string, string> Expressions = new(StringComparer.Ordinal)
     {
-        ["neutral"] = "表情_普通", ["uneasy"] = "表情_哀しい00", ["angry"] = "表情_怒る00", ["surprised"] = "表情_驚き00",
+        ["neutral"] = "表情_普通",
+        ["uneasy"] = "表情_哀しい00",
+        ["angry"] = "表情_怒る00",
+        ["surprised"] = "表情_驚き00",
     };
     private readonly EmoteRig rig;
     private readonly EmoteRegistry registry;

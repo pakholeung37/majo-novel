@@ -35,7 +35,7 @@ public partial class Smoke : Node
             var packaged = OS.GetCmdlineUserArgs().Contains("--majo-export-smoke");
             if (packaged && !string.IsNullOrEmpty(ProjectSettings.GlobalizePath("res://")))
                 throw new InvalidOperationException("Export smoke did not load a packed project.");
-            if (packaged && typeof(Smoke).Assembly.GetType("Majo.Runtime.MajoRuntimePlugin") is not null)
+            if (packaged && typeof(MajoRuntimeBootstrap).Assembly.GetType("Majo.Runtime.MajoRuntimePlugin") is not null)
                 throw new InvalidOperationException("Packed smoke loaded an editor assembly instead of ExportRelease.");
             foreach (var path in new[] {
                 "res://addons/majo_runtime/Runtime/UI/Dialogue/DefaultVnPresentation.tscn",
@@ -129,6 +129,10 @@ public partial class Smoke : Node
             command.Executions != 1 || command.LastArguments?.Target != "alpha" ||
             command.LastArguments.Options.Count.Value != 7 || !command.LastArguments.Options.Wait.Value)
             throw new InvalidOperationException("Independent consumer did not bind and execute its generated command across assemblies.");
+        if (typeof(MajoRuntimeBootstrap).Assembly.GetName().Name != "Majo.Runtime.Godot" ||
+            typeof(DialogueRunner).Assembly.GetName().Name != "YarnSpinner.Godot" ||
+            runtime.Host.Services.Get<IDialogueVariables>().GetValue("consumer_probe").NumberValue != 7)
+            throw new InvalidOperationException("Independent consumer did not load library scripts and game-owned Yarn functions.");
         var active = runtime.Host.Services.Get<IYarnDialogueBackend>().Runner.YarnProject!;
         if (ReferenceEquals(imported, active) || imported.CompiledYarnProgramBase64 != original ||
             active.Program.Nodes["Start"].Instructions[0].RunCommand?.CommandText != YarnProgramBridge.NodeEntryCommand)
@@ -244,4 +248,10 @@ public sealed partial class ConsumerProbeCommand : RuntimeCommand<ConsumerProbeC
         LastArguments = arguments;
         return ValueTask.CompletedTask;
     }
+}
+
+public static class ConsumerYarnFunctions
+{
+    [YarnFunction("consumer_library_probe")]
+    public static int LibraryProbe() => 7;
 }

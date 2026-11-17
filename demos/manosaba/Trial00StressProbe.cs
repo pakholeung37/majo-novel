@@ -26,7 +26,7 @@ public partial class Trial00StressProbe : Node
     private bool sampling = true;
     private SubViewport[] viewports = [];
     private string directory = "";
-    private GodotDirectionRenderHost renderHost = null!;
+    private Majo.Runtime.Direction.Rendering.IRenderDemandDiagnostics renderHost = null!;
 
     public override void _Process(double delta)
     {
@@ -42,7 +42,7 @@ public partial class Trial00StressProbe : Node
         var originalVsync = DisplayServer.WindowGetVsyncMode();
         var originalCap = Engine.MaxFps;
         var baselineRequests = new List<IDisposable>();
-        renderHost = runtime.Host!.Services.Get<GodotDirectionRenderHost>();
+        renderHost = runtime.Host!.Services.Get<Majo.Runtime.Direction.Rendering.IRenderDemandDiagnostics>();
         directory = ProjectSettings.GlobalizePath("res://artifacts/trial00-stress/" +
             DateTime.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture));
         Directory.CreateDirectory(directory);
@@ -56,10 +56,13 @@ public partial class Trial00StressProbe : Node
             viewports = runtime.FindChildren("*", "SubViewport", true, false).Cast<SubViewport>().ToArray();
             var config = new
             {
-                maxFps = Engine.MaxFps, vsync = originalVsync.ToString(),
-                refreshHz = DisplayServer.ScreenGetRefreshRate(), lowProcessor = OS.LowProcessorUsageMode,
+                maxFps = Engine.MaxFps,
+                vsync = originalVsync.ToString(),
+                refreshHz = DisplayServer.ScreenGetRefreshRate(),
+                lowProcessor = OS.LowProcessorUsageMode,
                 frameDelay = ProjectSettings.GetSetting("application/run/frame_delay", 0).AsInt32(),
-                windowSize = GetWindow().Size.ToString(), renderer = RenderingServer.GetCurrentRenderingMethod().ToString(),
+                windowSize = GetWindow().Size.ToString(),
+                renderer = RenderingServer.GetCurrentRenderingMethod().ToString(),
                 viewDemand = renderHost.InspectViewDemand(),
                 viewports = viewports.Select(v => new { path = v.GetPath().ToString(), size = v.Size.ToString(), mode = v.RenderTargetUpdateMode.ToString() }).ToArray(),
             };
@@ -74,14 +77,12 @@ public partial class Trial00StressProbe : Node
 
             // Exercise the normal demand contract for the all-on baseline, without
             // introducing a competing mode writer into the diagnostic.
-            foreach (var id in renderHost.ViewIds)
-                baselineRequests.Add(renderHost.AcquireViewDemand(renderHost.RequireView(id), "stress baseline"));
+            baselineRequests.Add(renderHost.AcquireAllViews("stress baseline"));
             await MeasureAsync("all-views-requested");
             foreach (var request in baselineRequests) request.Dispose();
             baselineRequests.Clear();
             await MeasureAsync("scheduled-repeat");
-            foreach (var id in renderHost.ViewIds)
-                baselineRequests.Add(renderHost.AcquireViewDemand(renderHost.RequireView(id), "stress baseline"));
+            baselineRequests.Add(renderHost.AcquireAllViews("stress baseline"));
             await MeasureAsync("all-views-requested-repeat");
             foreach (var request in baselineRequests) request.Dispose();
             baselineRequests.Clear();
@@ -116,13 +117,19 @@ public partial class Trial00StressProbe : Node
         image.SavePng(Path.Combine(directory, name + ".png"));
         var result = new
         {
-            name, frames = samples.Count, fps = 1000 / sorted.Average(), medianMs = sorted[sorted.Length / 2],
-            p95Ms = sorted[(int)(sorted.Length * .95)], p99Ms = sorted[(int)(sorted.Length * .99)], maxMs = sorted[^1],
+            name,
+            frames = samples.Count,
+            fps = 1000 / sorted.Average(),
+            medianMs = sorted[sorted.Length / 2],
+            p95Ms = sorted[(int)(sorted.Length * .95)],
+            p99Ms = sorted[(int)(sorted.Length * .99)],
+            maxMs = sorted[^1],
             overBudgetPercent = 100.0 * sorted.Count(v => v > 1000.0 / 120) / sorted.Length,
             focusedPercent = 100.0 * samples.Count(s => s.Focused) / samples.Count,
             drawCalls = Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame),
             videoMiB = Performance.GetMonitor(Performance.Monitor.RenderVideoMemUsed) / 1048576,
-            rssMiB = process.WorkingSet64 / 1048576.0, managedMiB = GC.GetTotalMemory(false) / 1048576.0,
+            rssMiB = process.WorkingSet64 / 1048576.0,
+            managedMiB = GC.GetTotalMemory(false) / 1048576.0,
             activeViewports = viewports.Count(v => v.RenderTargetUpdateMode != SubViewport.UpdateMode.Disabled),
             viewDemand = renderHost.InspectViewDemand(),
             screenSha256 = Convert.ToHexString(SHA256.HashData(image.GetData())),

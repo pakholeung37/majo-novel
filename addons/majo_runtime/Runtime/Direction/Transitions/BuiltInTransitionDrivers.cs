@@ -59,7 +59,7 @@ public sealed class DissolveTransitionDriver : ITransitionDriver
     }
 
     // A supplied shader may deliberately animate even identical inputs.
-    internal bool PreservesIdenticalInputs => shader is null;
+    public bool PreservesIdenticalInputs => shader is null;
 
     public DirectionTransitionId Id => DirectionTransitionId.Dissolve;
     public TransitionDomains Domains => TransitionDomains.View | TransitionDomains.Stage | TransitionDomains.Screen | TransitionDomains.Actor;

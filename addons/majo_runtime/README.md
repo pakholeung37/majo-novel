@@ -50,7 +50,14 @@ The manager configures project imports and editor plugins, records content hashe
    ```
 
    If your project treats warnings as errors, add `CS1998;SYSLIB1220;CS0618` to `NoWarn` for the pinned upstream adapter. Keep `TargetFramework` set to `net8.0` and `EnableDynamicLoading` set to `true`. Include the addon Bridge and SourceGenerator projects; the imports configure their references and source exclusions.
-3. Build the C# project, then enable **Yarn Spinner** and **Majo Runtime** in Project Settings > Plugins. Complete the editor's initial import before running.
+3. Add the script-library loader as the **first** autoload in `project.godot` (the managed installer does this automatically):
+
+   ```ini
+   [autoload]
+   MajoAssemblies="*res://addons/majo_runtime/Build/MajoAssemblyLoader.cs"
+   ```
+
+4. Build the C# project, then enable **Yarn Spinner** and **Majo Runtime** in Project Settings > Plugins. Complete the editor's initial import before running. Runtime and upstream scripts compile into `Majo.Runtime.Godot.dll` and `YarnSpinner.Godot.dll`; the tool-enabled loader registers their original `res://` script paths before plugins and scenes load.
 
 The dependency is unmodified upstream code. Majo's bridges require **Yarn Spinner 3.2.0** and the pinned Godot adapter; updating either dependency requires bridge compatibility checks.
 

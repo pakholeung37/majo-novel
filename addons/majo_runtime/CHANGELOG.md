@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Compile the engine runtime and unmodified upstream Godot Yarn adapter into separate libraries; keep their generated script paths relative to the consuming Godot project.
+- Register library scripts before plugins/scenes through a tool-enabled host autoload; preserve game-owned generated Yarn action registration.
+- Compile demos and headless/rendering probes separately; runtime unit tests now reference the runtime library directly, while demo tests use their own project.
+- Expose render-demand diagnostics, shared performance spans and state payload serialization as explicit extension APIs used by demos.
+
 - Compile state persistence contracts/models, migrations, mutation gates, canonical serialization and file storage into Majo.Runtime.Persistence, referencing only Core and .NET.
 - Compile resource contracts, resolution, cache/leases, retention and look-ahead windows into Majo.Runtime.Resources, referencing only Core and .NET; keep engine and locale-service adapters in the integration layer.
 - Run persistence and resource regression tests without the game; verify actual dialogue snapshots, file storage and resource leases in installed and packed addon consumers.

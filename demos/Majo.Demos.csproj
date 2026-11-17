@@ -1,0 +1,18 @@
+<Project>
+  <PropertyGroup>
+    <GodotProjectDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..'))</GodotProjectDir>
+  </PropertyGroup>
+  <Import Project="../addons/majo_runtime/Assemblies/GodotLibrary.props" />
+  <ItemGroup>
+    <Compile Include="**/*.cs" Exclude="**/bin/**;**/obj/**" />
+    <InternalsVisibleTo Include="Majo.Runtime.Headless" />
+  </ItemGroup>
+  <Import Project="../addons/YarnSpinner-Godot/YarnSpinner-Godot.props" />
+  <Import Project="../addons/majo_runtime/MajoRuntime.props" />
+  <ItemGroup>
+    <ProjectReference Remove="addons/YarnSpinner-Godot/SourceGenerator/YarnSpinnerGodotSourceGenerator.csproj" />
+    <ProjectReference Include="../addons/YarnSpinner-Godot/SourceGenerator/YarnSpinnerGodotSourceGenerator.csproj"
+                      ReferenceOutputAssembly="false" OutputItemType="Analyzer" />
+  </ItemGroup>
+  <Import Project="Sdk.targets" Sdk="Godot.NET.Sdk" Version="4.7.2" />
+</Project>

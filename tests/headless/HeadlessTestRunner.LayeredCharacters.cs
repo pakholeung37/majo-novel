@@ -127,13 +127,13 @@ public partial class HeadlessTestRunner
         // Fade intentionally hides even identical input; a custom dissolve may do so too.
         using var customShader = GD.Load<Shader>("res://addons/majo_runtime/Runtime/Direction/Shaders/DissolveTransition.gdshader");
         foreach (var driver in new ITransitionDriver[] { new FadeTransitionDriver(), new DissolveTransitionDriver(customShader) })
-        using (var effect = await ((IActorAppearanceTarget)character).PrepareAppearanceTransitionAsync(
-            character.Appearance, "Default", new AnimationSpec(.2), driver))
-        {
-            effect.Commit();
-            Assert(character.View.GetChildren().OfType<Sprite2D>().Any(), "Non-identity driver was incorrectly elided.");
-            effect.Finish();
-        }
+            using (var effect = await ((IActorAppearanceTarget)character).PrepareAppearanceTransitionAsync(
+                character.Appearance, "Default", new AnimationSpec(.2), driver))
+            {
+                effect.Commit();
+                Assert(character.View.GetChildren().OfType<Sprite2D>().Any(), "Non-identity driver was incorrectly elided.");
+                effect.Finish();
+            }
         using (var prepared = await ((IActorAppearanceTarget)character).PrepareAppearanceTransitionAsync(
             character.Appearance, "Surprised1", new AnimationSpec(.2),
             new Majo.Runtime.Direction.Transitions.DissolveTransitionDriver()))

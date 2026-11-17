@@ -92,12 +92,19 @@ public sealed class CompositeBackgroundPlugin : IMajoPlugin
                 token.ThrowIfCancellationRequested();
                 CanvasItem content = appearance == "Day" ? new Node2D() : new Control { MouseFilter = Control.MouseFilterEnum.Ignore };
                 if (appearance == "Day")
-                    content.AddChild(new Polygon2D { Color = new Color("315749"), Polygon = new[]
-                    { bounds.Position, new Vector2(bounds.End.X, bounds.Position.Y), bounds.End, new Vector2(bounds.Position.X, bounds.End.Y) } });
+                    content.AddChild(new Polygon2D
+                    {
+                        Color = new Color("315749"),
+                        Polygon = new[]
+                    { bounds.Position, new Vector2(bounds.End.X, bounds.Position.Y), bounds.End, new Vector2(bounds.Position.X, bounds.End.Y) }
+                    });
                 content.AddChild(new Sprite2D { Texture = far, Position = bounds.GetCenter() + new Vector2(-25, 10), Scale = new Vector2(1.4f, 1.4f) });
                 content.AddChild(new Sprite2D { Texture = near, Position = bounds.GetCenter() + new Vector2(55, -25), Modulate = new Color(1, 1, 1, .65f) });
-                content.AddChild(new AnimatedBackdropAccent { Position = bounds.GetCenter(),
-                    Polygon = new[] { new Vector2(-15, 20), new Vector2(0, -12), new Vector2(15, 20) } });
+                content.AddChild(new AnimatedBackdropAccent
+                {
+                    Position = bounds.GetCenter(),
+                    Polygon = new[] { new Vector2(-15, 20), new Vector2(0, -12), new Vector2(15, 20) }
+                });
                 return OwnContent(content, bounds, appearance == "Day" ? BackgroundCoverage.OpaqueRectangle : BackgroundCoverage.Unknown, scope);
             }
             catch { scope.Dispose(); throw; }

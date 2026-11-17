@@ -14,6 +14,7 @@ public partial class MajoDirectionExportPlugin : EditorExportPlugin
     {
         // These assets are loaded by runtime paths, so scene dependency traversal cannot find them.
         IncludeRuntimeDirectory("res://addons/majo_runtime/Runtime");
+        IncludeRuntimeDirectory("res://addons/majo_runtime/Build");
         IncludeRuntimeDirectory("res://addons/YarnSpinner-Godot/Runtime");
         const string optionScene = "res://addons/YarnSpinner-Godot/Scenes/OptionItem.tscn";
         AddFile(optionScene, FileAccess.GetFileAsBytes(optionScene), false);

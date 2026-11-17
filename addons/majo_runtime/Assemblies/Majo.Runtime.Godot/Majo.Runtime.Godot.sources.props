@@ -1,0 +1,14 @@
+<Project>
+  <Import Project="../Majo.Runtime.Domain/Majo.Runtime.Domain.sources.props" />
+  <Import Project="../Majo.Runtime.Commands/Majo.Runtime.Commands.sources.props" />
+  <Import Project="../Majo.Runtime.Persistence/Majo.Runtime.Persistence.sources.props" />
+  <Import Project="../Majo.Runtime.Resources/Majo.Runtime.Resources.sources.props" />
+  <ItemGroup>
+    <MajoGodotSource Include="$(MSBuildThisFileDirectory)../../Runtime/**/*.cs"
+                     Exclude="$(MSBuildThisFileDirectory)../../Runtime/Core/**" />
+    <MajoGodotExcluded Include="@(MajoDomainSource);@(MajoCommandSource);@(MajoPersistenceSource);@(MajoResourceSource)" />
+    <MajoGodotSource Remove="@(MajoGodotExcluded)" MatchOnMetadata="FullPath" MatchOnMetadataOptions="PathLike" />
+    <MajoGodotSource Include="$(MSBuildThisFileDirectory)../../Editor/*.cs" />
+    <MajoGodotSource Include="$(MSBuildThisFileDirectory)../../MajoRuntimePlugin.cs" />
+  </ItemGroup>
+</Project>

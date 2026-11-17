@@ -119,9 +119,11 @@ public sealed class DefaultSettingsOverlay : ISettingsOverlay, IDisposable
         {
             modalInput = input.AcquireScope(this,
                 new InputScopeOptions(
-                    [MajoInputActions.Cancel, MajoInputActions.Settings,
-                     MajoInputActions.OptionUp, MajoInputActions.OptionDown,
-                     MajoInputActions.Confirm],
+                    [MajoInputActions.Cancel,
+                        MajoInputActions.Settings,
+                        MajoInputActions.OptionUp,
+                        MajoInputActions.OptionDown,
+                        MajoInputActions.Confirm],
                     isModal: true, name: "settings-modal"));
             modalInput.Activated += HandleModalInput;
         }
