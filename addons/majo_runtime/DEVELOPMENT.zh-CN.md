@@ -106,7 +106,7 @@ Bootstrap 会将完成注册的命令目录接入默认预加载器，包括插�
 
 `Assemblies/Majo.Runtime.Core/Majo.Runtime.Core.csproj` 独立编译 `Runtime/Core`，只依赖 .NET 8，不引用 Godot、Yarn 或游戏工程。主工程通过 `MajoRuntime.props` 引用此项目并排除这批源文件的重复编译。生命周期、服务图和激活阶段测试位于 `tests/Majo.Runtime.Core.UnitTests`，可直接运行 `dotnet test tests/Majo.Runtime.Core.UnitTests/Majo.Runtime.Core.UnitTests.csproj`；这条命令不会构建游戏或加载引擎依赖。完整测试门禁仍会检查游戏、发行包和实际 PCK。
 
-Core 命名空间与源码签名保持不变，但程序集改为 `Majo.Runtime.Core.dll`，已经编译的扩展需重新构建；兼容性清单已声明这一变化。当前只是第一条编译边界，领域实现、Godot/Yarn 适配层和无头集成测试仍在游戏工程中，尚未完成全部程序集隔离。
+Core 命名空间与源码签名保持不变，但程序集改为 `Majo.Runtime.Core.dll`，已经编译的扩展需重新构建；兼容性清单已声明这一变化。领域模型和命令协议也已形成下述独立程序集；Godot/Yarn 适配层和无头集成测试仍在游戏工程中，尚未完成全部程序集隔离。
 
 ## 领域模型与规划器程序集
 
@@ -122,6 +122,21 @@ dotnet test tests/Majo.Runtime.Domain.UnitTests/Majo.Runtime.Domain.UnitTests.cs
 ```
 
 独立 CI job 仅安装 .NET 执行这条门禁；完整门禁也包含这些测试。程序集引用测试会拒绝 Domain/Core 引入引擎或其他适配层程序集。既有命名空间与玩家存档布局保持不变，但已编译扩展须针对 `Majo.Runtime.Domain.dll` 重新构建；`DirectionPlanner` 的构造参数现在是只读元数据契约，原 `ActorDefinitionResolver` 的源码调用可直接使用。该二进制布局变化已经记录在兼容性清单中。
+
+## 命令协议程序集
+
+`Assemblies/Majo.Runtime.Commands/Majo.Runtime.Commands.csproj` 只引用 Core 和 .NET 8，不引用 Domain、Godot、Yarn 或游戏工程。它编译命令定义/属性、参数绑定、基础转换器及其注册、命令注册目录、资源需求描述契约、manifest 和通用等待参数组。`Majo.Runtime.Commands.sources.props` 同时用于独立编译和游戏工程的源码排除，避免同一类型重复编译。
+
+具体演出、音频和存档命令，Direction/时间曲线转换器、Godot 向量转换器、节点访问器及读取对话会话的调度器仍在集成层；命令协议不会因此依赖它们。原有命名空间、源码签名、manifest v2 和玩家存档格式保持不变；已编译的命令扩展需要针对 `Majo.Runtime.Commands.dll` 重新构建，兼容性清单已声明此变化。
+
+`tests/Majo.Runtime.Commands.UnitTests` 仅引用命令工程及命令生成器 analyzer。绑定、默认值、转换器、注册回滚、manifest 与生成命令的测试不再构建游戏；资源描述测试同时验证最长命令路径匹配、参数大小写、类型转换及分析不执行命令。依赖具体命令、Godot/Yarn、对话会话和演出状态的测试保留在原集成测试工程。
+
+```sh
+./tools/test.sh --independent
+dotnet test tests/Majo.Runtime.Commands.UnitTests/Majo.Runtime.Commands.UnitTests.csproj
+```
+
+`--independent` 运行 Core、Domain、Commands 和生成器四个测试工程，无需安装 Godot，也不构建游戏或 Yarn；原 `--domain` 继续只运行 Core 与 Domain。仅安装 .NET 的 CI job 与完整门禁均已接入命令测试。独立 addon 消费者还会在源码安装和实际 PCK 中注册、生成、绑定及执行自己的命令，验证新 DLL 和 analyzer 随发行包正常工作。
 
 ## Godot 渲染边界与 GPU 验收
 

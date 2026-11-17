@@ -10,7 +10,8 @@
   "breakingChanges": [
     "Low-level YarnPreloadPlanner.Resources(tokens) callers must now pass the runtime command catalog; standalone preload planners require an attached catalog for command resource analysis.",
     "Core lifecycle and service contracts now live in Majo.Runtime.Core.dll. Rebuild binary extensions against the updated addon; namespaces and source signatures remain unchanged.",
-    "Direction, timing and actor model types now live in Majo.Runtime.Domain.dll. Rebuild binary extensions. DirectionPlanner accepts IBackdropAppearanceResolver; ActorDefinitionResolver implements this read-only metadata contract."
+    "Direction, timing and actor model types now live in Majo.Runtime.Domain.dll. Rebuild binary extensions. DirectionPlanner accepts IBackdropAppearanceResolver; ActorDefinitionResolver implements this read-only metadata contract.",
+    "Command definitions, binding, converters, registration, manifests and generic wait groups now live in Majo.Runtime.Commands.dll. Rebuild binary command extensions; namespaces, source signatures and command manifest format remain unchanged."
   ],
   "notes": [
     "Candidates rc.1 and rc.2 share runtime API and serialized state layouts.",

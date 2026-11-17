@@ -1,10 +1,10 @@
 #nullable enable
 
 using Majo.Runtime.Dialogue.Commands;
-using Majo.Runtime.UnitTests.Testing;
+using Majo.Runtime.Commands.UnitTests.Testing;
 using Xunit;
 
-namespace Majo.Runtime.UnitTests;
+namespace Majo.Runtime.Commands.UnitTests;
 
 public sealed class CommandDefinitionAndBindingTests
 {

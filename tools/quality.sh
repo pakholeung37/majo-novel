@@ -10,6 +10,8 @@ CORE_PROJECT="$REPOSITORY_ROOT/addons/majo_runtime/Assemblies/Majo.Runtime.Core/
 CORE_TEST_PROJECT="$REPOSITORY_ROOT/tests/Majo.Runtime.Core.UnitTests/Majo.Runtime.Core.UnitTests.csproj"
 DOMAIN_PROJECT="$REPOSITORY_ROOT/addons/majo_runtime/Assemblies/Majo.Runtime.Domain/Majo.Runtime.Domain.csproj"
 DOMAIN_TEST_PROJECT="$REPOSITORY_ROOT/tests/Majo.Runtime.Domain.UnitTests/Majo.Runtime.Domain.UnitTests.csproj"
+COMMAND_PROJECT="$REPOSITORY_ROOT/addons/majo_runtime/Assemblies/Majo.Runtime.Commands/Majo.Runtime.Commands.csproj"
+COMMAND_TEST_PROJECT="$REPOSITORY_ROOT/tests/Majo.Runtime.Commands.UnitTests/Majo.Runtime.Commands.UnitTests.csproj"
 FORMAT_MODE="check"
 
 print_usage() {
@@ -81,6 +83,7 @@ printf 'Restoring .NET dependencies for quality checks...\n'
 dotnet restore "$UNIT_TEST_PROJECT" --nologo
 dotnet restore "$CORE_TEST_PROJECT" --nologo
 dotnet restore "$DOMAIN_TEST_PROJECT" --nologo
+dotnet restore "$COMMAND_TEST_PROJECT" --nologo
 
 run_format() {
     local project="$1"
@@ -102,6 +105,10 @@ run_format "$CORE_TEST_PROJECT" "${core_unit_format_files[@]}"
 printf 'Checking independent domain formatting...\n'
 run_format "$DOMAIN_PROJECT"
 run_format "$DOMAIN_TEST_PROJECT" "${domain_unit_format_files[@]}"
+
+printf 'Checking independent command formatting...\n'
+run_format "$COMMAND_PROJECT"
+run_format "$COMMAND_TEST_PROJECT"
 
 printf 'Checking main project formatting...\n'
 run_format "$GAME_PROJECT" "${game_format_files[@]}"

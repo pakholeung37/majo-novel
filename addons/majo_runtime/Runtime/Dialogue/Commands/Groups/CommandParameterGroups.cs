@@ -1,28 +1,9 @@
 #nullable enable
 
-using System;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Timing;
 
 namespace Majo.Runtime.Dialogue.Commands;
-
-public sealed class BlockingWait : ICommandGroupConfiguration
-{
-    public void Configure(CommandGroupConfigurationContext context)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-        context.SetDefaultText("Wait", "true");
-    }
-}
-
-public sealed class NonBlockingWait : ICommandGroupConfiguration
-{
-    public void Configure(CommandGroupConfigurationContext context)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-        context.SetDefaultText("Wait", "false");
-    }
-}
 
 public sealed record TransitionArguments(
     [Option(ValueHint = "seconds", Minimum = 0, Order = 21)]
@@ -85,10 +66,6 @@ public readonly record struct TimingParameterOptions(
     int DurationOrder = 21,
     int EaseOrder = 22,
     int WaitOrder = 23);
-
-public sealed record WaitArguments(
-    [Option(ValueHint = "bool", DefaultText = "false", Order = 20)]
-    CommandValue<bool> Wait);
 
 public sealed record AudioFadeArguments(
     [Option(ValueHint = "seconds", Minimum = 0, Order = 10)]

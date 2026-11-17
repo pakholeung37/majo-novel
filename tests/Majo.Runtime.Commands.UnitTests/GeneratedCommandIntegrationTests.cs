@@ -3,7 +3,7 @@
 using Majo.Runtime.Dialogue.Commands;
 using Xunit;
 
-namespace Majo.Runtime.UnitTests;
+namespace Majo.Runtime.Commands.UnitTests;
 
 public sealed class GeneratedCommandIntegrationTests
 {

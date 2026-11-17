@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>Majo.Runtime.Commands</AssemblyName>
+    <RootNamespace>Majo.Runtime.Dialogue.Commands</RootNamespace>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AnalysisLevel>latest-Recommended</AnalysisLevel>
+  </PropertyGroup>
+  <Import Project="Majo.Runtime.Commands.sources.props" />
+  <ItemGroup>
+    <Compile Include="@(MajoCommandSource)" />
+    <ProjectReference Include="../Majo.Runtime.Core/Majo.Runtime.Core.csproj" />
+  </ItemGroup>
+</Project>

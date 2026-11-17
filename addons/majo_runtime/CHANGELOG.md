@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Compile command definitions, binding, generic converters, registration, resource contracts, manifests and wait groups into Majo.Runtime.Commands, referencing only Core and .NET.
+- Move pure command tests and generated command integration tests out of the game project; add an independent test gate without Godot or Yarn.
+- Verify consumer-defined generated commands through Yarn dispatch in both installed source addons and actual packed Release builds.
+
 - Compile Direction models/planning, camera projection/coverage, actor definitions/requests and timing curves into Majo.Runtime.Domain, referencing only Core and .NET.
 - Separate pure metadata resolution and prepared commit samples from Godot actor/renderer implementation details.
 - Move domain tests out of the game-referencing test project; add a Godot-free test command and CI job, and include the domain assembly in source addon builds/exports.

@@ -13,6 +13,7 @@ using Majo.Runtime.Configuration;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Transitions;
 using Majo.Runtime.Dialogue;
+using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Dialogue.Yarn;
 using Majo.Runtime.Dialogue.Yarn.HotReload;
 using Majo.YarnBridge;
@@ -108,7 +109,9 @@ public partial class Smoke : Node
         configuration.Presentation!.Enabled = false;
         configuration.Diagnostics!.ShowFpsOverlay = false;
         var presenter = new ConsumerPresenter();
+        var command = new ConsumerProbeCommand();
         var runtime = new MajoRuntimeBootstrap { Configuration = configuration };
+        runtime.ConfigureCommands = registry => registry.Add("consumer probe", _ => command, "consumer");
         runtime.ConfigureDialoguePresenters = registry => registry.Register(presenter);
         AddChild(runtime);
         await runtime.InitializationCompletion;
@@ -119,6 +122,10 @@ public partial class Smoke : Node
         await dialogue.Completion.WaitAsync(TimeSpan.FromSeconds(5));
         if (string.Join(",", presenter.Lines) != "line:consumer-first,line:consumer-selected,line:consumer-inner,line:consumer-outer,line:consumer-last")
             throw new InvalidOperationException("Independent consumer did not play the expected Yarn branch.");
+        if (typeof(RuntimeCommandRegistry).Assembly.GetName().Name != "Majo.Runtime.Commands" ||
+            command.Executions != 1 || command.LastArguments?.Target != "alpha" ||
+            command.LastArguments.Options.Count.Value != 7 || !command.LastArguments.Options.Wait.Value)
+            throw new InvalidOperationException("Independent consumer did not bind and execute its generated command across assemblies.");
         var active = runtime.Host.Services.Get<IYarnDialogueBackend>().Runner.YarnProject!;
         if (ReferenceEquals(imported, active) || imported.CompiledYarnProgramBase64 != original ||
             active.Program.Nodes["Start"].Instructions[0].RunCommand?.CommandText != YarnProgramBridge.NodeEntryCommand)
@@ -169,5 +176,25 @@ public partial class Smoke : Node
             string sourceAppearance, string appearance, AnimationSpec animation,
             ITransitionDriver driver, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("This smoke actor intentionally supports cut presentation only.");
+    }
+}
+
+[Command("consumer probe")]
+public sealed partial class ConsumerProbeCommand : RuntimeCommand<ConsumerProbeCommand.Arguments>
+{
+    public sealed record Options(
+        [Option] CommandValue<int> Count,
+        [Option(DefaultText = "true")] CommandValue<bool> Wait);
+
+    public sealed record Arguments([Primary] string Target, [Group] Options Options);
+
+    public int Executions { get; private set; }
+    public Arguments? LastArguments { get; private set; }
+
+    protected override ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
+    {
+        Executions++;
+        LastArguments = arguments;
+        return ValueTask.CompletedTask;
     }
 }

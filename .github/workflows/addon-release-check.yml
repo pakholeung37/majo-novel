@@ -17,8 +17,8 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
-      - name: Test Core and domain without Godot
-        run: ./tools/test.sh --domain
+      - name: Test independent runtime assemblies and generator without Godot
+        run: ./tools/test.sh --independent
 
   linux:
     runs-on: ubuntu-24.04

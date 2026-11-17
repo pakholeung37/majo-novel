@@ -1,5 +1,6 @@
 title: Start
 ---
+<<consumer probe alpha count:7>>
 First. #line:consumer-first
 -> Unselected #line:consumer-option-first
     Wrong. #line:consumer-wrong

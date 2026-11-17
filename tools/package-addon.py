@@ -82,6 +82,8 @@ def main():
         "Assemblies/Majo.Runtime.Core/Majo.Runtime.Core.csproj",
         "Assemblies/Majo.Runtime.Domain/Majo.Runtime.Domain.csproj",
         "Assemblies/Majo.Runtime.Domain/Majo.Runtime.Domain.sources.props",
+        "Assemblies/Majo.Runtime.Commands/Majo.Runtime.Commands.csproj",
+        "Assemblies/Majo.Runtime.Commands/Majo.Runtime.Commands.sources.props",
         "SourceGenerators/Majo.CommandGenerator/Majo.CommandGenerator.csproj",
     ):
         if not (directory / required).is_file():

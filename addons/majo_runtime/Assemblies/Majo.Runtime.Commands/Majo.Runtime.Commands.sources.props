@@ -1,0 +1,12 @@
+<Project>
+  <ItemGroup>
+    <MajoCommandSource Include="$(MSBuildThisFileDirectory)../../Runtime/Dialogue/Commands/Core/**/*.cs"
+                       Exclude="$(MSBuildThisFileDirectory)../../Runtime/Dialogue/Commands/Core/IDialogueNodeAccessor.cs" />
+    <MajoCommandSource Include="$(MSBuildThisFileDirectory)../../Runtime/Dialogue/Commands/Attributes/**/*.cs" />
+    <MajoCommandSource Include="$(MSBuildThisFileDirectory)../../Runtime/Dialogue/Commands/Binding/**/*.cs" />
+    <MajoCommandSource Include="$(MSBuildThisFileDirectory)../../Runtime/Dialogue/Commands/Manifest/**/*.cs" />
+    <MajoCommandSource Include="$(MSBuildThisFileDirectory)../../Runtime/Dialogue/Commands/Groups/WaitArguments.cs" />
+    <MajoCommandSource Include="$(MSBuildThisFileDirectory)../../Runtime/Dialogue/Commands/RuntimeCommandRegistry.cs" />
+    <MajoCommandSource Include="$(MSBuildThisFileDirectory)../../Runtime/Dialogue/Commands/RuntimeCommandException.cs" />
+  </ItemGroup>
+</Project>
