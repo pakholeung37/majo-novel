@@ -3,7 +3,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Majo.Runtime.Core;
@@ -14,8 +13,6 @@ namespace Majo.Runtime.Actors;
 
 public sealed class ActorManager : IActorManager, IActorReplacementSource, IStateMutationParticipant, IDisposable
 {
-    private static readonly ConditionalWeakTable<IActor, ActorManager> ActorOwners = new();
-    private static readonly object ActorOwnerGate = new();
     private readonly object gate = new();
     private readonly Dictionary<string, ActorDefinition> definitions =
         new(StringComparer.Ordinal);
@@ -26,17 +23,12 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
     private readonly Dictionary<string, IActor> actors =
         new(StringComparer.Ordinal);
     private readonly List<string> actorOrder = new();
-    private readonly Dictionary<string, PendingActorCreation> pendingActors =
-        new(StringComparer.Ordinal);
-    private CancellationTokenSource actorLifetime = new();
-    private readonly ILocaleManager? locales;
-    private readonly IRuntimeLogger logger;
+    private readonly ActorCreationQueue creations = new();
+    private readonly ActorPresentationRegistry presentation;
+    private readonly ActorLocaleRefresher localeRefresh;
     private readonly ActorCreationConventions conventions;
     public ActorDefinitionResolver DefinitionResolver { get; }
-    public bool RefreshBackgroundsOnLocaleChange { get; set; } = true;
-    private readonly IActorPresentationHost? presentationHost;
-    private readonly Dictionary<IBackgroundActor, string> backgroundSlots = new(ReferenceEqualityComparer.Instance);
-    private readonly HashSet<IActor> presentedActors = new(ReferenceEqualityComparer.Instance);
+    public bool RefreshBackgroundsOnLocaleChange { get => localeRefresh.RefreshBackgrounds; set => localeRefresh.RefreshBackgrounds = value; }
     private bool isInitialized;
     private StateMutationGate? mutationGate;
 
@@ -61,9 +53,9 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
         IEnumerable<ActorDefinition>? unsupportedDefinitions = null,
         IActorPresentationHost? presentationHost = null)
     {
-        this.presentationHost = presentationHost;
-        this.locales = locales;
-        this.logger = logger ?? NullRuntimeLogger.Instance;
+        presentation = new ActorPresentationRegistry(presentationHost);
+        var runtimeLogger = logger ?? NullRuntimeLogger.Instance;
+        localeRefresh = new ActorLocaleRefresher(locales, () => Actors, runtimeLogger);
         this.conventions = conventions ?? new ActorCreationConventions();
         ArgumentNullException.ThrowIfNull(definitions);
         foreach (var definition in definitions)
@@ -81,7 +73,7 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
         }
 
         DefinitionResolver = new ActorDefinitionResolver(this.definitions, this.factories,
-            this.unsupportedDefinitions, this.conventions, this.logger);
+            this.unsupportedDefinitions, this.conventions, runtimeLogger);
 
         if (factories is null)
         {
@@ -137,10 +129,7 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
                 throw new ActorFactoryNotFoundException(definition.FactoryId, definition.Id);
         }
 
-        if (locales is not null)
-        {
-            locales.DialogueLocaleChanged += HandleDialogueLocaleChanged;
-        }
+        localeRefresh.Attach();
 
         isInitialized = true;
         return Task.CompletedTask;
@@ -150,8 +139,9 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
     {
         EnsureInitialized();
         cancellationToken.ThrowIfCancellationRequested();
-        await CancelPendingCreationsAsync(cancellationToken);
-        DestroyAll();
+        var cancellationFailure = await creations.CancelAndDrainAsync(cancellationToken);
+        try { DestroyAll(cancellationFailure); }
+        finally { creations.Resume(); }
     }
 
     public async Task ShutdownAsync(CancellationToken cancellationToken)
@@ -162,14 +152,14 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        await CancelPendingCreationsAsync(cancellationToken, replaceLifetime: false);
-        DestroyAll();
-        if (locales is not null)
+        var cancellationFailure = await creations.CancelAndDrainAsync(cancellationToken);
+        try { DestroyAll(cancellationFailure); }
+        finally
         {
-            locales.DialogueLocaleChanged -= HandleDialogueLocaleChanged;
+            localeRefresh.Dispose();
+            isInitialized = false;
+            creations.Dispose();
         }
-        isInitialized = false;
-        actorLifetime.Dispose();
     }
 
     public Task<IActor> CreateAsync(
@@ -186,7 +176,7 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
                 throw new DuplicateActorIdException(actorId);
             }
 
-            if (pendingActors.TryGetValue(actorId, out var pending))
+            if (creations.TryGet(actorId, out var pending))
             {
                 creation = pending.Task;
             }
@@ -226,7 +216,7 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
                 return Task.FromResult(existing);
             }
 
-            if (pendingActors.TryGetValue(request.ActorId, out var pending))
+            if (creations.TryGet(request.ActorId, out var pending))
             {
                 ValidateRequiredFactory(request, pending.FactoryId);
                 ValidateDefinitionIdentity(request, pending.DefinitionId);
@@ -405,7 +395,7 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
             {
                 lock (owner.gate)
                 {
-                    if (owner.pendingActors.Count != 0)
+                    if (owner.creations.Count != 0)
                         throw new ActorException("Actor creation must quiesce before replacement.");
                     retired = owner.actorOrder.Select(id => owner.actors[id]).ToArray();
                     owner.actors.Clear();
@@ -433,7 +423,7 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
         }
     }
 
-    private void DestroyAll()
+    private void DestroyAll(Exception? lifecycleFailure = null)
     {
         IActor[] snapshot;
         lock (gate)
@@ -443,6 +433,7 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
             actorOrder.Clear();
         }
         var exceptions = new List<Exception>();
+        if (lifecycleFailure is not null) exceptions.Add(lifecycleFailure);
         foreach (var actor in snapshot)
         {
             try
@@ -462,140 +453,41 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
         }
     }
 
-    private void HandleDialogueLocaleChanged(LocaleChangedEvent change)
-    {
-        IActor[] snapshot;
-        lock (gate)
-        {
-            snapshot = actors.Values.Where(actor => actor.Visible).ToArray();
-        }
-
-        foreach (var actor in snapshot)
-        {
-            if (!RefreshBackgroundsOnLocaleChange && actor is IBackgroundActor) continue;
-            try
-            {
-                actor.SetAppearance(actor.Appearance);
-            }
-            catch (Exception exception)
-            {
-                logger.Warning(
-                    "locale",
-                    "locale.actor_refresh_failed",
-                    $"Actor '{actor.Id}' kept its previous appearance after dialogue locale switched to '{change.CurrentLocale}': {exception.Message}",
-                    exception);
-            }
-        }
-    }
-
-    // Called under gate so both public entry points publish the same creation metadata.
-    private Task<IActor> StartCreation(
-        string actorId,
-        ActorDefinition definition,
-        IActorFactory factory,
-        ActorCreationMode creationMode)
+    // Called while the active inventory is locked; the queue owns the shared job and its generation.
+    private Task<IActor> StartCreation(string actorId, ActorDefinition definition, IActorFactory factory, ActorCreationMode mode)
     {
         factory.ValidateDefinition(definition);
-        var completion = new TaskCompletionSource<IActor>(
-            TaskCreationOptions.RunContinuationsAsynchronously);
-        pendingActors.Add(actorId, new PendingActorCreation(
-            completion.Task, definition.FactoryId, definition.DefinitionId));
-        _ = CompleteCreationAsync(
-            actorId, definition, factory, creationMode, completion, actorLifetime.Token);
-        return completion.Task;
+        return creations.Start(actorId, definition, token => CreateAndPublishAsync(actorId, definition, factory, mode, token));
     }
 
-    private sealed record PendingActorCreation(Task<IActor> Task, string FactoryId, string DefinitionId);
-
-    private async Task CompleteCreationAsync(
-        string actorId,
-        ActorDefinition definition,
-        IActorFactory factory,
-        ActorCreationMode creationMode,
-        TaskCompletionSource<IActor> completion,
-        CancellationToken cancellationToken)
+    private async Task<IActor> CreateAndPublishAsync(string actorId, ActorDefinition definition,
+        IActorFactory factory, ActorCreationMode mode, CancellationToken token)
     {
         IActor? actor = null;
         var claimed = false;
         try
         {
-            actor = await factory.CreateAsync(definition, creationMode, cancellationToken);
+            actor = await factory.CreateAsync(definition, mode, token);
             ClaimCreatedActor(actor);
             claimed = true;
-            cancellationToken.ThrowIfCancellationRequested();
+            token.ThrowIfCancellationRequested();
             ValidateCreatedActor(actorId, definition, factory, actor);
             BindActor(actor);
             await MutateAsync(_ =>
             {
-                lock (gate)
-                {
-                    actors.Add(actorId, actor);
-                    actorOrder.Add(actorId);
-                }
+                lock (gate) { actors.Add(actorId, actor); actorOrder.Add(actorId); }
                 return Task.CompletedTask;
-            }, cancellationToken);
-
-            completion.TrySetResult(actor);
-            actor = null;
+            }, token);
+            return actor;
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (Exception failure)
         {
-            completion.TrySetCanceled(cancellationToken);
-        }
-        catch (Exception exception)
-        {
-            completion.TrySetException(exception);
-        }
-        finally
-        {
-            try
+            if (actor is not null && claimed)
             {
-                if (actor is not null && claimed)
-                {
-                    DestroyOwnedActor(actor);
-                }
+                try { DestroyOwnedActor(actor); }
+                catch (Exception cleanup) { throw new AggregateException("Actor creation and cleanup failed.", failure, cleanup); }
             }
-            finally
-            {
-                lock (gate) pendingActors.Remove(actorId);
-            }
-        }
-    }
-
-    private async Task CancelPendingCreationsAsync(
-        CancellationToken cancellationToken,
-        bool replaceLifetime = true)
-    {
-        actorLifetime.Cancel();
-        Task<IActor>[] pending;
-        lock (gate)
-        {
-            pending = pendingActors.Values.Select(creation => creation.Task).ToArray();
-        }
-
-        foreach (var creation in pending)
-        {
-            try
-            {
-                await creation.WaitAsync(cancellationToken);
-            }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-            {
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch
-            {
-                // The caller that requested creation observes the factory failure.
-            }
-        }
-
-        if (replaceLifetime)
-        {
-            actorLifetime.Dispose();
-            actorLifetime = new CancellationTokenSource();
+            throw;
         }
     }
 
@@ -632,77 +524,19 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
         }
     }
 
-    private void ClaimCreatedActor(IActor actor)
-    {
-        ArgumentNullException.ThrowIfNull(actor);
-        lock (ActorOwnerGate)
-        {
-            if (ActorOwners.TryGetValue(actor, out _))
-                throw new ActorException($"Actor '{actor.Id}' is already managed. Factories must return a new instance.");
-            ActorOwners.Add(actor, this);
-        }
-    }
+    private void ClaimCreatedActor(IActor actor) => presentation.Claim(actor);
 
     private void BindActor(IActor actor)
     {
         if (actor is not IStateMutationParticipant participant)
-            throw new StateCompatibilityException(
-                $"Actor '{actor.Id}' does not implement the persistent write gate contract.");
+            throw new StateCompatibilityException($"Actor '{actor.Id}' does not implement the persistent write gate contract.");
         if (mutationGate is not null) participant.BindStateMutationGate(mutationGate);
-        bool attach;
-        lock (gate)
-        {
-            if (actor is IBackgroundActor background) backgroundSlots.TryAdd(background, BackgroundSlotIds.Main);
-            attach = presentationHost is not null && presentedActors.Add(actor);
-        }
-        if (attach) presentationHost!.Attach(actor);
+        presentation.Attach(actor);
     }
 
-    public string GetBackgroundSlot(IBackgroundActor actor)
-    {
-        ArgumentNullException.ThrowIfNull(actor);
-        lock (gate) return backgroundSlots.TryGetValue(actor, out var slot) ? slot
-            : throw new ActorException($"Background '{actor.Id}' is not owned by this manager.");
-    }
-
-    public void SetBackgroundSlot(IBackgroundActor actor, string slot) => Mutate(() =>
-    {
-        var normalized = BackgroundSlotIds.Normalize(slot);
-        lock (gate)
-        {
-            if (!backgroundSlots.ContainsKey(actor))
-                throw new ActorException($"Background '{actor.Id}' is not owned by this manager.");
-            backgroundSlots[actor] = normalized;
-        }
-    });
-
-    private void DestroyOwnedActor(IActor actor)
-    {
-        Exception? detachFailure = null;
-        try { ReleaseActor(actor); }
-        catch (Exception error) { detachFailure = error; }
-        try { actor.Destroy(); }
-        catch (Exception error) when (detachFailure is not null)
-        { throw new AggregateException("Actor presentation and content cleanup failed.", detachFailure, error); }
-        if (detachFailure is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(detachFailure).Throw();
-    }
-
-    private void ReleaseActor(IActor actor)
-    {
-        bool detach;
-        lock (gate)
-        {
-            if (actor is IBackgroundActor background) backgroundSlots.Remove(background);
-            detach = presentedActors.Remove(actor);
-        }
-        try { if (detach) presentationHost?.Detach(actor); }
-        finally
-        {
-            lock (ActorOwnerGate)
-                if (ActorOwners.TryGetValue(actor, out var owner) && ReferenceEquals(owner, this))
-                    ActorOwners.Remove(actor);
-        }
-    }
+    public string GetBackgroundSlot(IBackgroundActor actor) => presentation.GetBackgroundSlot(actor);
+    public void SetBackgroundSlot(IBackgroundActor actor, string slot) => Mutate(() => presentation.SetBackgroundSlot(actor, slot));
+    private void DestroyOwnedActor(IActor actor) => presentation.Destroy(actor);
 
     private void Mutate(Action mutation)
     {
@@ -719,5 +553,9 @@ public sealed class ActorManager : IActorManager, IActorReplacementSource, IStat
         ? mutation(cancellationToken)
         : mutationGate.WriteAsync(mutation, cancellationToken);
 
-    public void Dispose() => actorLifetime.Dispose();
+    public void Dispose()
+    {
+        localeRefresh.Dispose();
+        creations.Dispose();
+    }
 }

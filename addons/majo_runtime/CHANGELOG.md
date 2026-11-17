@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Give actor creation jobs, presentation ownership/background slots and locale refresh separate owners behind ActorManager.
+- Drain the complete creation/cleanup worker before reset can reopen a generation; keep caller cancellation independent from shared factory work.
+- Report creation and cleanup failures together, release locale subscriptions even after content destruction fails, and finish teardown when a cancellation callback throws.
+
 - Separate save-slot capacity validation, stored metadata/envelope access, save/thumbnail transactions and operation notifications behind the existing manager API.
 - Preserve old slot data and thumbnail ownership on failed/cancelled writes, including providers returning an already referenced thumbnail.
 

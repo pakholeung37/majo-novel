@@ -280,3 +280,21 @@ curl -fsSL https://github.com/pakholeung37/majo-novel/releases/download/v0.1.0-r
 SaveSlotManager 保留串行操作入口、可用性和游戏会话协调。`SaveSlotCatalog` 拥有容量及槽位校验，`SaveSlotRepository` 负责列表/元数据查询、兼容性校验和 envelope I/O，`SaveSlotSaveTransaction` 负责捕获、缩略图、序列化写入与失败补偿，`SaveSlotOperationTracker` 拥有操作阶段和隔离的通知。现有轮换策略和 metadata codec 继续共享；公开 API、槽位键和存档 envelope 格式不变。
 
 写入失败或取消时，只清理本次新取得且未被旧槽位引用的缩略图；旧槽位提交前不会被删除。事务重试、阶段报告、通知隔离和保留旧数据的行为由 Application 单测及引擎门禁覆盖。Application 测试现有 82 项，无引擎门禁合计 259 项。
+
+## Actor 生命周期内部组件
+
+`ActorCreationQueue` 拥有共享创建任务、任务元数据和生命周期取消源。单个调用者取消只取消自己的等待；重置暂停新任务并取消旧代次，等待工厂返回、候选清理和任务退场，然后销毁旧库存并开放下一代次。公开创建任务在清理及任务登记退场后才完成。创建和清理同时失败时向同一调用者报告聚合异常；取消回调抛错时仍完成 worker drain 和内容清理。
+
+`ActorPresentationRegistry` 拥有跨管理器实例所有权、展示 attach/detach 和背景槽；释放展示失败仍尝试销毁内容并解除所有权。`ActorLocaleRefresher` 拥有语言事件订阅，内容销毁失败也会解除订阅。ActorManager 保留定义/工厂、活跃库存、持久写入 gate 和准备替换的入口。回归覆盖迟到工厂清理、共享请求、取消、跨管理器借用对象、聚合失败及关闭后的订阅释放。
+
+## 后续五项重构的完成情况
+
+| 项目 | 完成边界 |
+| --- | --- |
+| 整个语言服务替换 | 异步参与者、安全边界及失败补偿，由真实引擎替换回归覆盖 |
+| 状态恢复事务 | RestoreOperation/RestoreResources/SnapshotCapture，明确阶段和故障资源转交 |
+| 纯应用层 | 独立 Application DLL 和 82 项无 Godot/Yarn 应用单测 |
+| 存档槽流程 | Catalog/Repository/SaveTransaction/OperationTracker，保持键及格式 |
+| Actor 生命周期 | CreationQueue/PresentationRegistry/LocaleRefresher，完整 worker drain 和释放 |
+
+本轮本机完整门禁通过 700 项 .NET 单测及 36 个步骤，包含安装、受检升级、实际 Release PCK 启动和无效导出拒绝；独立门禁为 259 项测试。全部格式检查通过。Apple M4 的 Metal Forward+、Metal Mobile、OpenGL3 各通过 13 项 GPU 用例、200 次恢复与 600 次采样，节点保持 62，候选创建/释放各 200。当前证据位于 `build/application-refactor/final`。现有命名空间、资源路径和存档格式不变；二进制扩展及自定义语言/输入实现按 compatibility.json 的契约说明调整。
