@@ -5,7 +5,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Godot;
 using Majo.Runtime.Core;
 
 namespace Majo.Runtime.Input;
@@ -14,6 +13,7 @@ public sealed class InputManager : IInputManager
 {
     private readonly object sync = new();
     private readonly IInputBackend backend;
+    private readonly IInputOwnerLifetime? ownerLifetime;
     private readonly IRuntimeLogger logger;
     private readonly bool defaultEnabled;
     private readonly List<InputHandle> handles = new();
@@ -29,9 +29,11 @@ public sealed class InputManager : IInputManager
     public InputManager(
         IInputBackend backend,
         bool enabled = true,
-        IRuntimeLogger? logger = null)
+        IRuntimeLogger? logger = null,
+        IInputOwnerLifetime? ownerLifetime = null)
     {
         this.backend = backend ?? throw new ArgumentNullException(nameof(backend));
+        this.ownerLifetime = ownerLifetime ?? backend as IInputOwnerLifetime;
         defaultEnabled = enabled;
         this.enabled = enabled;
         this.logger = logger ?? NullRuntimeLogger.Instance;
@@ -314,7 +316,7 @@ public sealed class InputManager : IInputManager
             return;
         }
 
-        owners.Add(owner, new OwnerRegistration(owner, () => ReleaseOwner(owner)));
+        owners.Add(owner, new OwnerRegistration(ownerLifetime?.ObserveOwner(owner, () => ReleaseOwner(owner))));
     }
 
     private void EnsureInitializedLocked()
@@ -461,31 +463,8 @@ public sealed class InputManager : IInputManager
         }
     }
 
-    private sealed class OwnerRegistration
+    private sealed class OwnerRegistration(IDisposable? registration)
     {
-        private readonly Node? node;
-        private readonly Action? treeExitingHandler;
-
-        public OwnerRegistration(object owner, Action released)
-        {
-            if (owner is not Node ownerNode)
-            {
-                return;
-            }
-
-            node = ownerNode;
-            treeExitingHandler = released;
-            node.TreeExiting += treeExitingHandler;
-        }
-
-        public void Detach()
-        {
-            if (node is not null &&
-                treeExitingHandler is not null &&
-                GodotObject.IsInstanceValid(node))
-            {
-                node.TreeExiting -= treeExitingHandler;
-            }
-        }
+        public void Detach() => registration?.Dispose();
     }
 }

@@ -28,7 +28,7 @@ internal sealed class StateSnapshotCapture(IReadOnlyList<IStateContributor> cont
             token.ThrowIfCancellationRequested();
             var record = boundary is not null && contributor is IScriptBoundaryStateContributor script
                 ? script.CaptureBoundary(boundary.Script) : await contributor.CaptureAsync(token);
-            StateEnvelopeHelper.ValidateRecord(contributor, record);
+            StateEnvelopeFactory.ValidateRecord(contributor, record);
             records.Add(record);
         }
         return new StateSnapshot(StateSnapshot.CurrentFormatVersion, DateTimeOffset.UtcNow, records);
@@ -39,7 +39,7 @@ internal sealed class StateSnapshotCapture(IReadOnlyList<IStateContributor> cont
         var script = contributors.OfType<IScriptBoundaryStateContributor>().SingleOrDefault();
         if (script is null) return snapshot;
         var record = script.CaptureBoundary(checkpoint);
-        StateEnvelopeHelper.ValidateRecord(script, record);
+        StateEnvelopeFactory.ValidateRecord(script, record);
         return new StateSnapshot(snapshot.FormatVersion, snapshot.CapturedAt,
             snapshot.Records.Values.Where(value => value.Key != script.Key).Append(record));
     }

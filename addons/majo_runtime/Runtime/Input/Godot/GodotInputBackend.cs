@@ -9,7 +9,7 @@ using Majo.Runtime.Configuration;
 
 namespace Majo.Runtime.Input.Godot;
 
-public sealed class GodotInputBackend : IInputBackend, IDisposable
+public sealed class GodotInputBackend : IInputBackend, IInputOwnerLifetime, IDisposable
 {
     private readonly Node owner;
     private readonly InputConfiguration configuration;
@@ -26,6 +26,9 @@ public sealed class GodotInputBackend : IInputBackend, IDisposable
     }
 
     public event Action<InputActivation>? Activated;
+
+    public IDisposable? ObserveOwner(object owner, Action released) =>
+        new GodotInputOwnerLifetime().ObserveOwner(owner, released);
 
     public Task InitializeAsync(CancellationToken cancellationToken)
     {

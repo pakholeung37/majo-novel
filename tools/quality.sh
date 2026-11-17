@@ -22,6 +22,8 @@ COMPOSITION_PROJECT="$REPOSITORY_ROOT/addons/majo_runtime/Assemblies/Majo.Runtim
 DEMO_PROJECT="$REPOSITORY_ROOT/demos/Majo.Demos.csproj"
 DEMO_TEST_PROJECT="$REPOSITORY_ROOT/tests/Majo.Demos.UnitTests/Majo.Demos.UnitTests.csproj"
 HEADLESS_PROJECT="$REPOSITORY_ROOT/tests/Majo.Runtime.Headless/Majo.Runtime.Headless.csproj"
+APPLICATION_PROJECT="$REPOSITORY_ROOT/addons/majo_runtime/Assemblies/Majo.Runtime.Application/Majo.Runtime.Application.csproj"
+APPLICATION_TEST_PROJECT="$REPOSITORY_ROOT/tests/Majo.Runtime.Application.UnitTests/Majo.Runtime.Application.UnitTests.csproj"
 FORMAT_MODE="check"
 
 print_usage() {
@@ -97,6 +99,7 @@ dotnet restore "$COMMAND_TEST_PROJECT" --nologo
 dotnet restore "$PERSISTENCE_TEST_PROJECT" --nologo
 dotnet restore "$RESOURCE_TEST_PROJECT" --nologo
 dotnet restore "$DEMO_TEST_PROJECT" --nologo
+dotnet restore "$APPLICATION_TEST_PROJECT" --nologo
 dotnet restore "$GAME_PROJECT" --nologo
 
 run_format() {
@@ -129,6 +132,8 @@ run_format "$PERSISTENCE_PROJECT"
 run_format "$PERSISTENCE_TEST_PROJECT"
 run_format "$RESOURCE_PROJECT"
 run_format "$RESOURCE_TEST_PROJECT"
+run_format "$APPLICATION_PROJECT"
+run_format "$APPLICATION_TEST_PROJECT"
 
 printf 'Checking main project formatting...\n'
 run_format "$ENGINE_PROJECT"

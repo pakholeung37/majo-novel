@@ -2,7 +2,7 @@ using System.Reflection;
 using Majo.Runtime.Input;
 using Xunit;
 
-namespace Majo.Runtime.UnitTests;
+namespace Majo.Runtime.Application.UnitTests;
 
 public sealed class InputManagerTests
 {

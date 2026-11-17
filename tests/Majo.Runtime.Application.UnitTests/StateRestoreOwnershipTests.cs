@@ -5,7 +5,7 @@ using Majo.Runtime.Script;
 using Majo.Runtime.State;
 using Xunit;
 
-namespace Majo.Runtime.UnitTests;
+namespace Majo.Runtime.Application.UnitTests;
 
 public sealed class StateRestoreOwnershipTests
 {

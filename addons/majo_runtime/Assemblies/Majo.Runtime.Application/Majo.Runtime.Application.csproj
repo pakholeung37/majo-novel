@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Majo.Runtime</RootNamespace>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AnalysisLevel>latest-Recommended</AnalysisLevel>
+  </PropertyGroup>
+  <Import Project="Majo.Runtime.Application.sources.props" />
+  <ItemGroup>
+    <Compile Include="@(MajoApplicationSource)" />
+    <ProjectReference Include="../Majo.Runtime.Core/Majo.Runtime.Core.csproj" />
+    <ProjectReference Include="../Majo.Runtime.Commands/Majo.Runtime.Commands.csproj" />
+    <ProjectReference Include="../Majo.Runtime.Persistence/Majo.Runtime.Persistence.csproj" />
+    <InternalsVisibleTo Include="Majo.Runtime.UnitTests" />
+    <InternalsVisibleTo Include="Majo.Runtime.Application.UnitTests" />
+  </ItemGroup>
+</Project>

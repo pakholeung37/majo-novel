@@ -2,10 +2,10 @@ using Majo.Runtime.Dialogue;
 using Majo.Runtime.Input;
 using Majo.Runtime.Save;
 using Majo.Runtime.Script;
-using Majo.Runtime.UnitTests.Testing;
+using Majo.Runtime.Application.UnitTests.Testing;
 using Xunit;
 
-namespace Majo.Runtime.UnitTests;
+namespace Majo.Runtime.Application.UnitTests;
 
 public sealed class SaveProductManagerTests
 {

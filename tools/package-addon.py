@@ -89,6 +89,8 @@ def main():
         "Assemblies/Majo.Runtime.Resources/Majo.Runtime.Resources.csproj",
         "Assemblies/Majo.Runtime.Resources/Majo.Runtime.Resources.sources.props",
         "Assemblies/GodotLibrary.props",
+        "Assemblies/Majo.Runtime.Application/Majo.Runtime.Application.csproj",
+        "Assemblies/Majo.Runtime.Application/Majo.Runtime.Application.sources.props",
         "Assemblies/Majo.Runtime.Engine/Majo.Runtime.Engine.csproj",
         "Assemblies/Majo.Runtime.Engine/Majo.Runtime.Engine.sources.props",
         "Assemblies/Majo.Runtime.Yarn/Majo.Runtime.Yarn.csproj",

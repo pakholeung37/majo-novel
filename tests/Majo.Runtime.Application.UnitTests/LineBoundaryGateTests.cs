@@ -1,7 +1,7 @@
 using Majo.Runtime.Script;
 using Xunit;
 
-namespace Majo.Runtime.UnitTests;
+namespace Majo.Runtime.Application.UnitTests;
 
 public sealed class LineBoundaryGateTests
 {

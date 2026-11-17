@@ -136,7 +136,7 @@ dotnet test tests/Majo.Runtime.Domain.UnitTests/Majo.Runtime.Domain.UnitTests.cs
 dotnet test tests/Majo.Runtime.Commands.UnitTests/Majo.Runtime.Commands.UnitTests.csproj
 ```
 
-`--independent` 运行 Core、Domain、Commands、Persistence、Resources 和生成器六个测试工程，无需安装 Godot，也不构建游戏或 Yarn；原 `--domain` 继续只运行 Core 与 Domain。仅安装 .NET 的 CI job 与完整门禁均已接入这些测试。独立 addon 消费者还会在源码安装和实际 PCK 中注册、生成、绑定及执行自己的命令，验证新 DLL 和 analyzer 随发行包正常工作。
+`--independent` 运行 Core、Domain、Commands、Persistence、Resources、Application 和生成器七个测试工程，无需安装 Godot，也不构建游戏或 Yarn；原 `--domain` 继续只运行 Core 与 Domain。仅安装 .NET 的 CI job 与完整门禁均已接入这些测试。独立 addon 消费者还会在源码安装和实际 PCK 中注册、生成、绑定及执行自己的命令，验证新 DLL 和 analyzer 随发行包正常工作。
 
 ## 持久化与资源管理程序集
 
@@ -177,7 +177,7 @@ MajoAssemblies="*res://addons/majo_runtime/Build/MajoAssemblyLoader.cs"
 
 本仓库的 `demos/Majo.Demos.csproj` 独立编译示例，`tests/Majo.Runtime.Headless` 编译无头集成和渲染探针，游戏通过 `GameAssemblyRegistration` 登记它们。Headless 仅在 Debug 装配进入游戏，发行 addon 不包含示例或测试。压力探针通过 `IRenderDemandDiagnostics` 读取需求及取得全 View 需求作用域；共享 `RuntimePerformanceTrace` 与内置 dissolve 的相同输入能力是明确公开的扩展 API。
 
-运行时单测直接引用引擎运行时库；示例测试位于 `tests/Majo.Demos.UnitTests` 并只引用示例库。所有单测均已脱离游戏工程。`./tools/test.sh --unit` 不构建游戏、不启动 Godot；`--independent` 进一步只编译不依赖引擎的六个测试工程。完整门禁另行构建游戏、加载无头测试、安装发行包，并在真实 PCK 中检查库脚本、游戏自定义 Yarn 函数和生成命令。
+运行时单测直接引用引擎运行时库；示例测试位于 `tests/Majo.Demos.UnitTests` 并只引用示例库。所有单测均已脱离游戏工程。`./tools/test.sh --unit` 不构建游戏、不启动 Godot；`--independent` 进一步只编译不依赖引擎的七个测试工程。完整门禁另行构建游戏、加载无头测试、安装发行包，并在真实 PCK 中检查库脚本、游戏自定义 Yarn 函数和生成命令。
 
 编译依赖为：游戏 → 示例/Headless/Bootstrap 装配；示例 → Bootstrap 装配；Headless → 示例/Bootstrap 装配；Bootstrap 装配 → Engine/Yarn；Yarn → Engine/上游/VM bridge；Engine → Core/Domain/Commands/Persistence/Resources/Godot。运行时程序集引用测试会拒绝 Engine 对 Yarn/装配的反向依赖，以及 Yarn 对装配的引用。纯领域和命令测试继续拒绝所有引擎/第三方引用。库类型的命名空间、资源路径及存档格式不变；二进制扩展需要针对新的 DLL 重新构建，清单已声明布局和 autoload 要求。
 
@@ -266,3 +266,11 @@ curl -fsSL https://github.com/pakholeung37/majo-novel/releases/download/v0.1.0-r
 `StateRestoreOperation` 持有一次恢复的候选对象、执行阶段和失败恢复流程，阶段为 stop、prepare、commit、presentation、activation、release。提交仍是无 await、无取消点的同步循环。提交前失败继续恢复旧脚本边界；提交开始后失败保留输入、播放和画面租约，直到显式重置/关闭。`StateRestoreResources` 统一拥有这些租约，转交故障状态后原操作不再释放它们；某一释放抛错时仍尝试其余释放，并保持幂等。
 
 `StateSnapshotCapture` 负责持久 contributor 的选择、记录校验和脚本边界快照协调。自定义脚本 contributor 可实现 `IScriptBoundaryStateContributor` 使用给定检查点，记录按 contributor 自己的 Key 更新；`IStateEligibilityContextReceiver` 接收事务状态与 contributor 上下文。StateManager 不再依靠具体的 ScriptStateContributor/StateEligibility 类型判断。原存档格式与提交顺序保持不变，阶段失败、旧边界恢复、通知隔离及租约释放由单测和引擎门禁覆盖。
+
+## 纯应用层程序集
+
+`Assemblies/Majo.Runtime.Application` 使用标准 .NET SDK，只引用 Core、Commands、Persistence 和 .NET。它包含逻辑输入、对话模型/播放器、脚本播放与行边界、状态/恢复事务、存档槽和存档产品服务，以及历史/游戏会话协议。Godot/Yarn 适配、具体 Actors/音频 contributor、会话后端和 UI 留在 Engine/Yarn。`StateEnvelopeFactory` 与原有 BuiltInStateKeys 位于 Persistence，现有集成层的内部 envelope facade 委托给它。
+
+`InputManager` 通过可选的 `IInputOwnerLifetime` 观察 owner 退出，接口可由后端提供或通过构造器显式注入。GodotInputBackend 自动提供 Godot 节点退出观察；纯单测使用逻辑 owner 或假的观察器，无需加载引擎。自定义引擎输入后端应提供自己的生命周期能力。库脚本登记使用 GodotInputBackend 定位 Engine，避免因输入接口迁入 Application 而遗漏库脚本。
+
+`tests/Majo.Runtime.Application.UnitTests` 的 80 项回归只引用 Application；恢复、取消、输入所有权和存档回归均在不包含 Godot/Yarn 项目及包的依赖图中运行。Bootstrap API 和真实 Actor contributor 的回归保留在引擎集成测试中。`--independent` 现在运行七个测试工程（六个独立运行时测试工程及生成器），共 257 项测试。本阶段完整门禁通过 694 项 .NET 单测、源码安装/受检升级和实际 Release PCK 启动，证据位于 `build/application-refactor/assembly`。运行时源码命名空间、资源路径和存档格式保持不变，已有二进制扩展需重编译。

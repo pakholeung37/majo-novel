@@ -4,7 +4,7 @@ using System.Collections.ObjectModel;
 using Majo.Runtime.Save;
 using Xunit;
 
-namespace Majo.Runtime.UnitTests;
+namespace Majo.Runtime.Application.UnitTests;
 
 public sealed class SaveSlotRotationPolicyTests
 {

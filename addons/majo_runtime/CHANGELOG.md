@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Compile logical input, dialogue, script playback, state/restore coordination and save-slot/product services into an independent Majo.Runtime.Application assembly.
+- Keep Godot Node lifetime observation in an engine adapter; GodotInputBackend supplies it automatically through the input owner lifetime capability.
+- Move application regressions into an independent test project and include them in the no-Godot test gate; validate the new DLL in installed and packed consumers.
+- Expose shared envelope validation/construction from Persistence and retain the existing internal integration facade.
+
 - Separate prepared restore execution/recovery and lease ownership from StateManager, with explicit restore phases and exactly-once fault resource transfer.
 - Continue releasing input/playback leases when another release fails, and release the state transaction gate even when cleanup throws.
 - Capture/reconcile supplied script boundaries and attach eligibility context through explicit contributor/capability contracts.

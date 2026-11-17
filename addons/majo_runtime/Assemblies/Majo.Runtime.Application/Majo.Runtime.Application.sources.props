@@ -1,0 +1,20 @@
+<Project>
+  <ItemGroup>
+    <MajoApplicationSource Include="$(MSBuildThisFileDirectory)../../Runtime/Input/*.cs" />
+    <MajoApplicationSource Include="$(MSBuildThisFileDirectory)../../Runtime/Dialogue/*.cs" />
+    <MajoApplicationSource Include="$(MSBuildThisFileDirectory)../../Runtime/Dialogue/Presentation/*.cs" />
+    <MajoApplicationSource Include="$(MSBuildThisFileDirectory)../../Runtime/Script/*.cs" />
+    <MajoApplicationSource Include="$(MSBuildThisFileDirectory)../../Runtime/Save/*.cs" />
+    <MajoApplicationSource Include="$(MSBuildThisFileDirectory)../../Runtime/History/HistoryModels.cs" />
+    <MajoApplicationSource Include="$(MSBuildThisFileDirectory)../../Runtime/History/IHistoryManager.cs" />
+    <MajoApplicationSource Include="$(MSBuildThisFileDirectory)../../Runtime/State/IStateManager.cs" />
+    <MajoApplicationSource Include="$(MSBuildThisFileDirectory)../../Runtime/State/StateManager.cs" />
+    <MajoApplicationSource Include="$(MSBuildThisFileDirectory)../../Runtime/State/StateEligibility.cs" />
+    <MajoApplicationSource Include="$(MSBuildThisFileDirectory)../../Runtime/State/PermissiveStateEligibility.cs" />
+    <MajoApplicationSource Include="$(MSBuildThisFileDirectory)../../Runtime/State/StateRestoreOperation.cs" />
+    <MajoApplicationSource Include="$(MSBuildThisFileDirectory)../../Runtime/State/StateRestoreResources.cs" />
+    <MajoApplicationSource Include="$(MSBuildThisFileDirectory)../../Runtime/State/StateSnapshotCapture.cs" />
+    <MajoApplicationSource Include="$(MSBuildThisFileDirectory)../../Runtime/State/ScriptStateContributor.cs" />
+    <MajoApplicationSource Include="$(MSBuildThisFileDirectory)../../Runtime/State/IGameSessionCoordinator.cs" />
+  </ItemGroup>
+</Project>

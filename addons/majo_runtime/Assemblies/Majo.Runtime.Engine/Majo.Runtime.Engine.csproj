@@ -8,6 +8,7 @@
   <Import Project="Majo.Runtime.Engine.sources.props" />
   <ItemGroup>
     <Compile Include="@(MajoEngineSource)" />
+    <ProjectReference Include="../Majo.Runtime.Application/Majo.Runtime.Application.csproj" />
     <ProjectReference Include="../Majo.Runtime.Core/Majo.Runtime.Core.csproj" />
     <ProjectReference Include="../Majo.Runtime.Domain/Majo.Runtime.Domain.csproj" />
     <ProjectReference Include="../Majo.Runtime.Commands/Majo.Runtime.Commands.csproj" />

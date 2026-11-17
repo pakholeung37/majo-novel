@@ -14,5 +14,7 @@
     <MajoPersistenceSource Include="$(MSBuildThisFileDirectory)../../Runtime/State/IStateStorage.cs" />
     <MajoPersistenceSource Include="$(MSBuildThisFileDirectory)../../Runtime/State/CanonicalJsonStateSerializer.cs" />
     <MajoPersistenceSource Include="$(MSBuildThisFileDirectory)../../Runtime/State/FileStateStorage.cs" />
+    <MajoPersistenceSource Include="$(MSBuildThisFileDirectory)../../Runtime/State/BuiltInStateKeys.cs" />
+    <MajoPersistenceSource Include="$(MSBuildThisFileDirectory)../../Runtime/State/StateEnvelopeFactory.cs" />
   </ItemGroup>
 </Project>

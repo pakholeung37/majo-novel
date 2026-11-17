@@ -171,7 +171,7 @@ public sealed class StateManager : IStateManager, IStateBoundarySource, IStateRe
         string gameBuildId,
         string storageNamespace,
         IReadOnlyDictionary<string, string>? displayMetadata = null) =>
-        StateEnvelopeHelper.CreateEnvelope(
+        StateEnvelopeFactory.CreateEnvelope(
             snapshot,
             scope,
             contributors,
@@ -534,10 +534,10 @@ public sealed class StateManager : IStateManager, IStateBoundarySource, IStateRe
     private IStateContributor[] PersistentContributors(StateScope scope) => capture.PersistentContributors(scope);
 
     private static void ValidateSnapshotFormat(StateSnapshot snapshot) =>
-        StateEnvelopeHelper.ValidateSnapshotFormat(snapshot);
+        StateEnvelopeFactory.ValidateSnapshotFormat(snapshot);
 
     private static void ValidateRecord(IStateContributor contributor, StateRecord record) =>
-        StateEnvelopeHelper.ValidateRecord(contributor, record);
+        StateEnvelopeFactory.ValidateRecord(contributor, record);
 
     private void EnsureEligible(StateOperationKind operation)
     {
@@ -595,7 +595,7 @@ public sealed class StateManager : IStateManager, IStateBoundarySource, IStateRe
     }
 
     private static string FormatMigrationChain(IReadOnlyList<string> chain) =>
-        StateEnvelopeHelper.FormatMigrationChain(chain);
+        StateEnvelopeFactory.FormatMigrationChain(chain);
 
     public void Dispose()
     {

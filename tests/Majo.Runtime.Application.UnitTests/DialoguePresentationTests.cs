@@ -2,7 +2,7 @@ using Majo.Runtime.Dialogue;
 using Majo.Runtime.Dialogue.Presentation;
 using Xunit;
 
-namespace Majo.Runtime.UnitTests;
+namespace Majo.Runtime.Application.UnitTests;
 
 public sealed class DialoguePresentationTests
 {

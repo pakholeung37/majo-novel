@@ -17,11 +17,12 @@ PROJECTS = {
     "commands": "tests/Majo.Runtime.Commands.UnitTests/Majo.Runtime.Commands.UnitTests.csproj",
     "persistence": "tests/Majo.Runtime.Persistence.UnitTests/Majo.Runtime.Persistence.UnitTests.csproj",
     "resources": "tests/Majo.Runtime.Resources.UnitTests/Majo.Runtime.Resources.UnitTests.csproj",
+    "application": "tests/Majo.Runtime.Application.UnitTests/Majo.Runtime.Application.UnitTests.csproj",
     "generator": "tests/Majo.CommandGenerator.Tests/Majo.CommandGenerator.Tests.csproj",
     "runtime": "tests/Majo.Runtime.UnitTests/Majo.Runtime.UnitTests.csproj",
     "demos": "tests/Majo.Demos.UnitTests/Majo.Demos.UnitTests.csproj",
 }
-INDEPENDENT = ("core", "domain", "commands", "persistence", "resources", "generator")
+INDEPENDENT = ("core", "domain", "commands", "persistence", "resources", "application", "generator")
 GAME = ROOT / "Majo Novel.csproj"
 
 

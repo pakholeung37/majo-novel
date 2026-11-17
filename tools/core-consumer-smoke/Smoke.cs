@@ -18,6 +18,7 @@ using Majo.Runtime.Dialogue.Commands;
 using Majo.Runtime.Dialogue.Yarn;
 using Majo.Runtime.Dialogue.Yarn.HotReload;
 using Majo.Runtime.Input;
+using Majo.Runtime.Input.Godot;
 using Majo.Runtime.Resources;
 using Majo.Runtime.State;
 using Majo.YarnBridge;
@@ -132,7 +133,9 @@ public partial class Smoke : Node
             throw new InvalidOperationException("Independent consumer did not bind and execute its generated command across assemblies.");
         if (typeof(MajoRuntimeBootstrap).Assembly.GetName().Name != "Majo.Runtime.Godot" ||
             typeof(DialogueRunner).Assembly.GetName().Name != "YarnSpinner.Godot" ||
-            typeof(IInputManager).Assembly.GetName().Name != "Majo.Runtime.Engine" ||
+            typeof(GodotInputBackend).Assembly.GetName().Name != "Majo.Runtime.Engine" ||
+            typeof(IInputManager).Assembly.GetName().Name != "Majo.Runtime.Application" ||
+            typeof(StateManager).Assembly.GetName().Name != "Majo.Runtime.Application" ||
             typeof(YarnDialogueBackend).Assembly.GetName().Name != "Majo.Runtime.Yarn" ||
             typeof(NodeEntryRequest).Assembly.GetName().Name != "Majo.Runtime.Domain" ||
             typeof(IYarnCommandAdapter).Assembly.GetName().Name != "Majo.Runtime.Commands" ||
