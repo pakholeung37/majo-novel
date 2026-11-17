@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Isolate state notification failures from capture and restore outcomes, including input-lock cleanup.
+- Activate commands and plugins inside the host lifecycle deadline; deactivate plugins before runtime dependencies close.
+- Move rendering, replay, audio and skip coordination out of Core/RuntimeHost into a replaceable execution coordinator.
+- Report plugin initialization rollback errors alongside the original failure.
+
 ## 0.1.0-rc.2
 
 - Resolve temporary candidate paths before invoking MSBuild/Godot, fixing macOS C# resource mapping during checked upgrades.

@@ -219,6 +219,40 @@ public sealed class PluginAndDirectionExtensibilityTests
             new PluginContext(new TestServiceResolver(), null, NullRuntimeLogger.Instance)));
     }
 
+    [Fact]
+    public async Task FailedPluginInitializationReportsRollbackFailuresAndCleansEveryAttemptedPlugin()
+    {
+        var manager = new PluginManager();
+        var calls = new List<string>();
+        manager.Register(new FailingPlugin("first", calls, failStart: false));
+        manager.Register(new FailingPlugin("second", calls, failStart: true));
+        var context = new PluginContext(new TestServiceResolver(), null, NullRuntimeLogger.Instance);
+
+        var error = await Assert.ThrowsAsync<AggregateException>(() => manager.InitializeAllAsync(context, default));
+
+        Assert.Equal(["first:start", "second:start", "second:stop", "first:stop"], calls);
+        Assert.Equal(3, error.InnerExceptions.Count);
+        Assert.Contains("start failed", error.InnerExceptions[0].Message, StringComparison.Ordinal);
+        await manager.ShutdownAllAsync(default);
+        Assert.Equal(4, calls.Count);
+    }
+
+    private sealed class FailingPlugin(string id, List<string> calls, bool failStart) : IMajoPlugin
+    {
+        public string Id => id;
+        public Task InitializeAsync(PluginContext context, CancellationToken token)
+        {
+            calls.Add($"{id}:start");
+            if (failStart) throw new InvalidOperationException("start failed");
+            return Task.CompletedTask;
+        }
+        public Task ShutdownAsync(PluginContext context, CancellationToken token)
+        {
+            calls.Add($"{id}:stop");
+            throw new InvalidOperationException($"{id}:stop failed");
+        }
+    }
+
     private sealed class TestTransitionDriver : ITransitionDriver
     {
         public TestTransitionDriver(DirectionTransitionId id) => Id = id;

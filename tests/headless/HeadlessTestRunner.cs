@@ -162,6 +162,8 @@ public partial class HeadlessTestRunner : Node
         await MeasureAsync(nameof(ValidateDefaultPresentationAsync), ValidateDefaultPresentationAsync);
         await MeasureAsync(nameof(ValidateSuccessfulRuntimeLifecycleAsync), ValidateSuccessfulRuntimeLifecycleAsync);
         await MeasureAsync(nameof(ValidateLifecycleTimeoutAsync), ValidateLifecycleTimeoutAsync);
+        await MeasureAsync(nameof(ValidatePluginLifecycleAsync), ValidatePluginLifecycleAsync);
+        await MeasureAsync(nameof(ValidatePluginInitializationTimeoutAsync), ValidatePluginInitializationTimeoutAsync);
         await MeasureAsync(nameof(ValidateOperationKernelAsync), ValidateOperationKernelAsync);
         await MeasureAsync(nameof(ValidateDirectionRenderingAsync), ValidateDirectionRenderingAsync);
         await MeasureAsync(nameof(ValidateTransitionRegressionsAsync), ValidateTransitionRegressionsAsync);

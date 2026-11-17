@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
+using Majo.Runtime.Plugins;
 
 namespace Majo.Runtime.HeadlessTests;
 
@@ -56,6 +57,66 @@ public partial class HeadlessTestRunner
         Assert(service.ShutdownCount == 1, "Repeated shutdown completion changed service state.");
         Assert(shutdownSignalCount == 1,
             "Repeated shutdown completion emitted another Runtime shutdown signal.");
+    }
+
+    private async Task ValidatePluginLifecycleAsync()
+    {
+        var service = new HeadlessLifecycleService();
+        var plugin = new LifecycleProbePlugin
+        {
+            Start = (context, token) =>
+            {
+                Assert(context.Services.Get<HeadlessLifecycleService>().InitializeCount == 1,
+                    "Plugin started before its services initialized.");
+                return Task.CompletedTask;
+            },
+            Stop = () => Assert(service.ShutdownCount == 0,
+                "Plugin stopped after its runtime dependencies shut down."),
+        };
+        var bootstrap = new MajoRuntimeBootstrap
+        {
+            Configuration = CreateHeadlessConfiguration(),
+            ConfigureServices = services => services.AddSingleton(_ => service),
+        };
+        bootstrap.AddPlugin(plugin);
+        AddChild(bootstrap);
+        await bootstrap.InitializationCompletion;
+        await bootstrap.RequestShutdownAsync();
+        Assert(plugin.Stops == 1 && service.ShutdownCount == 1,
+            "Plugin and service cleanup must each execute once.");
+    }
+
+    private async Task ValidatePluginInitializationTimeoutAsync()
+    {
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var plugin = new LifecycleProbePlugin { Start = (_, _) => release.Task };
+        var configuration = CreateHeadlessConfiguration();
+        configuration.Runtime!.LifecycleTimeoutSeconds = 0.5;
+        var bootstrap = new MajoRuntimeBootstrap { Configuration = configuration };
+        bootstrap.AddPlugin(plugin);
+        AddChild(bootstrap);
+        Exception failure = null;
+        try { await bootstrap.InitializationCompletion; }
+        catch (Exception exception) { failure = exception; }
+        finally { release.TrySetResult(); }
+        Assert(failure is TimeoutException, "Plugin initialization bypassed the lifecycle timeout.");
+        await bootstrap.ShutdownCompletion;
+        Assert(plugin.Stops == 1, "Late plugin initialization was not cleaned up exactly once.");
+    }
+
+    private sealed class LifecycleProbePlugin : IMajoPlugin
+    {
+        public string Id => "lifecycle-probe";
+        public Func<PluginContext, CancellationToken, Task> Start { get; init; } = (_, _) => Task.CompletedTask;
+        public Action Stop { get; init; } = () => { };
+        public int Stops { get; private set; }
+        public Task InitializeAsync(PluginContext context, CancellationToken token) => Start(context, token);
+        public Task ShutdownAsync(PluginContext context, CancellationToken token)
+        {
+            Stops++;
+            Stop();
+            return Task.CompletedTask;
+        }
     }
 
     private async Task ValidateLifecycleTimeoutAsync()

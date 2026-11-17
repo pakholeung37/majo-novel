@@ -229,8 +229,8 @@ public sealed class StateManager : IStateManager, IStateBoundarySource, IStateRe
                         ["lineId"] = current.Context.Script.Spot.LineId,
                         ["mutationRevision"] = current.MutationRevision,
                     });
-                BoundaryCommitted?.Invoke(current);
-                Captured?.Invoke(snapshot);
+                Publish(BoundaryCommitted, current, "BoundaryCommitted");
+                Publish(Captured, snapshot, "Captured");
                 return current;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -244,7 +244,7 @@ public sealed class StateManager : IStateManager, IStateBoundarySource, IStateRe
                 SetStatus(StateManagerStatus.Faulted);
                 logger.Error("state", "state.boundary_revision_failed",
                     $"Persistent-state boundary revision failed: {exception.Message}", exception);
-                Failed?.Invoke(exception);
+                Publish(Failed, exception, "Failed");
                 throw;
             }
         }
@@ -300,9 +300,9 @@ public sealed class StateManager : IStateManager, IStateBoundarySource, IStateRe
                         ["lineId"] = boundary.Script.Spot.LineId,
                         ["elapsedMs"] = System.Diagnostics.Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds,
                     });
-                BoundaryCommitted?.Invoke(CurrentBoundary!);
+                Publish(BoundaryCommitted, CurrentBoundary!, "BoundaryCommitted");
             }
-            Captured?.Invoke(snapshot);
+            Publish(Captured, snapshot, "Captured");
             return snapshot;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -327,7 +327,7 @@ public sealed class StateManager : IStateManager, IStateBoundarySource, IStateRe
                 "state.capture_failed",
                 $"State capture failed: {exception.Message}",
                 exception);
-            Failed?.Invoke(exception);
+            Publish(Failed, exception, "Failed");
             throw;
         }
         finally
@@ -422,7 +422,7 @@ public sealed class StateManager : IStateManager, IStateBoundarySource, IStateRe
             }
             SetStatus(StateManagerStatus.Faulted);
             LastFailureMessage = exception.Message;
-            Failed?.Invoke(exception);
+            Publish(Failed, exception, "Failed");
             throw;
         }
         finally
@@ -570,9 +570,9 @@ public sealed class StateManager : IStateManager, IStateBoundarySource, IStateRe
             LastFailureMessage = null;
             LastMigrationChain = plan.MigrationChain;
             SetStatus(StateManagerStatus.Idle);
-            Restored?.Invoke(committedSnapshot);
+            Publish(Restored, committedSnapshot, "Restored");
             if (plan.Operation == StateOperationKind.HotReload && CurrentBoundary is not null)
-                BoundaryCommitted?.Invoke(CurrentBoundary);
+                Publish(BoundaryCommitted, CurrentBoundary, "BoundaryCommitted");
         }
         catch (Exception failure)
         {
@@ -618,7 +618,7 @@ public sealed class StateManager : IStateManager, IStateBoundarySource, IStateRe
             LastFailureMessage = reported.Message;
             logger.Error("state", "state.restore_failed", $"Restore failed during {stage}: {reported.Message}", reported,
                 properties: new Dictionary<string, object?> { ["stage"] = stage, ["faulted"] = faulted });
-            Failed?.Invoke(reported);
+            Publish(Failed, reported, "Failed");
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(reported).Throw();
             throw;
         }
@@ -711,7 +711,22 @@ public sealed class StateManager : IStateManager, IStateBoundarySource, IStateRe
 
         var previous = Status;
         Status = status;
-        StatusChanged?.Invoke(new StateStatusChanged(previous, status));
+        Publish(StatusChanged, new StateStatusChanged(previous, status), "StatusChanged");
+    }
+
+    // Notifications cannot change the outcome of an already committed transaction.
+    private void Publish<T>(Action<T>? observers, T value, string eventName)
+    {
+        if (observers is null) return;
+        foreach (Action<T> observer in observers.GetInvocationList())
+        {
+            try { observer(value); }
+            catch (Exception exception)
+            {
+                logger.Warning("state", "state.observer_failed",
+                    $"State observer for '{eventName}' failed: {exception.Message}", exception);
+            }
+        }
     }
 
     private static string FormatMigrationChain(IReadOnlyList<string> chain) =>

@@ -228,6 +228,9 @@ public partial class MajoRuntimeBootstrap : Node
             // before the graph is sealed and instantiated.
             pluginManager.ConfigureServices(services);
             ConfigureServices?.Invoke(services);
+            services.AddSingleton(_ => new BootstrapRuntimeBindings(
+                InitializeRuntimeBindingsAsync,
+                resolver => new PluginContext(resolver, Configuration, Logger!)));
             Host = services.Build(Logger);
             Logger?.SetRootCorrelation(new RuntimeLogCorrelation(
                 Host.RuntimeId,
@@ -237,20 +240,6 @@ public partial class MajoRuntimeBootstrap : Node
                 token => Host.InitializeAsync(token),
                 "initialization",
                 bootstrapLifetime.Token);
-
-            var backend = Host.Services.Get<IYarnDialogueBackend>();
-            var innerAdapter = CreateYarnCommandAdapter(
-                backend,
-                Host.Services);
-            await innerAdapter.InitializeAsync(bootstrapLifetime.Token);
-            yarnCommandAdapter.Attach(innerAdapter);
-            yarnCommandAdapter.CommandFailed += HandleCommandFailed;
-
-            var pluginContext = new PluginContext(
-                Host.Services,
-                Configuration,
-                Logger!);
-            await pluginManager.InitializeAllAsync(pluginContext, bootstrapLifetime.Token);
 
             InitializeOverlays();
 
@@ -275,6 +264,16 @@ public partial class MajoRuntimeBootstrap : Node
                 QueueFree();
             }
         }
+    }
+
+    private async Task InitializeRuntimeBindingsAsync(IServiceResolver services, CancellationToken cancellationToken)
+    {
+        var backend = services.Get<IYarnDialogueBackend>();
+        var innerAdapter = CreateYarnCommandAdapter(backend, services);
+        // Attach before initialization so partial initialization is owned by host cleanup.
+        yarnCommandAdapter.Attach(innerAdapter);
+        yarnCommandAdapter.CommandFailed += HandleCommandFailed;
+        await innerAdapter.InitializeAsync(cancellationToken);
     }
 
     private void ConfigureAndSealPlugins()

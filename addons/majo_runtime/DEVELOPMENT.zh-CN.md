@@ -70,6 +70,16 @@ python3 addons/majo_runtime/Tools/majo.py doctor --project ../my-game
 
 为游戏设置独立的应用名称、存档 StorageNamespace 和 GameBuildId。不要为了框架升级随意更改存档 namespace。框架源码可升级不代表旧存档自动兼容：当前嵌套 detour 检查点要求相同的编译程序，State Contributor 的 schema 变化也可能需要迁移。正式升级应保留真实旧存档样本，验证跨版本加载结果；本工具不会迁移玩家存档。
 
+## 扩展的启动与退出顺序
+
+服务先按声明的依赖顺序执行 `InitializeAsync`，全部完成后再执行实现了 `IRuntimeActivation` 的服务的 `ActivateAsync`。这个阶段可以通过传入的 resolver 访问完整服务图。命令适配器和插件在此阶段接入；插件初始化完成后 Host 才进入 `Initialized` 并发出 RuntimeInitialized。游戏应在等待 Bootstrap 的 `InitializationCompletion` 后开始播放，插件初始化期间不应开启游戏会话。
+
+初始化与激活共用生命周期超时。激活失败也会清理已经尝试激活的服务；即使插件忽略取消、超时后才返回，也会在初始化结束后执行退出清理。退出时先按激活的逆序执行 `DeactivateAsync`，再按依赖逆序关闭服务，因此插件的关闭回调可以使用仍然存活的依赖。每个激活的退出回调只尝试一次；失败会汇总报告，其他服务仍继续关闭。
+
+`RuntimeHost` 只处理通用生命周期，通过 `IRuntimeExecutionCoordinator` 委托演出重置、读档停止、热重载停止和画面保留。默认实现位于 `Runtime/Lifecycle`；替换该服务时，用 `ManagedResetServices` 声明已经由协调器重置的服务类型，Host 不再重复重置它们。协调器自身也只重置一次，未托管的服务仍执行普通重置。
+
+状态管理的 `StatusChanged`、`Captured`、`BoundaryCommitted`、`Restored` 和 `Failed` 都是通知事件。单个订阅者的异常会被记录为 `state.observer_failed`，不会改变事务结果，也不会阻止后续订阅者。需要阻止提交的校验应放在状态 contributor 的预检或准备阶段。
+
 ## CI 与发布
 
 游戏 CI 从已提交的 addon 副本构建，先运行包内 `Tools/majo.py doctor --project .`，再执行游戏自己的构建、导入和回归。不要在游戏 CI 使用开发者的 `--source` 路径或自动追踪系统 main 分支。

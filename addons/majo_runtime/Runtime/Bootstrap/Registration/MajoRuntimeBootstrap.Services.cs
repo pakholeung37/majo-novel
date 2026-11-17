@@ -2,6 +2,7 @@
 
 using Godot;
 using Majo.Runtime.Core;
+using Majo.Runtime.Lifecycle;
 
 namespace Majo.Runtime;
 
@@ -15,5 +16,6 @@ public partial class MajoRuntimeBootstrap : Node
         RegisterDirectionServices(services);
         RegisterDialogueServices(services);
         RegisterStateAndSaveServices(services);
+        services.AddSingleton<IRuntimeExecutionCoordinator>(_ => new RuntimeExecutionCoordinator(Logger));
     }
 }

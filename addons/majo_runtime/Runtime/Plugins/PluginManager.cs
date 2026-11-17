@@ -138,19 +138,23 @@ public sealed class PluginManager : IPluginManager
         {
             foreach (var plugin in ordered)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 initialized.Add(plugin);
                 await plugin.InitializeAsync(context, cancellationToken);
                 context.Logger.Info("plugin", "plugin.loaded", $"Loaded plugin: {plugin.Name} (v{plugin.Version})");
             }
             this.context = context;
         }
-        catch
+        catch (Exception initializationFailure)
         {
+            var failures = new List<Exception> { initializationFailure };
             for (var index = initialized.Count - 1; index >= 0; index--)
             {
                 try { await initialized[index].ShutdownAsync(context, CancellationToken.None); }
-                catch { }
+                catch (Exception cleanupFailure) { failures.Add(cleanupFailure); }
             }
+            if (failures.Count > 1)
+                throw new AggregateException("Plugin initialization and rollback failed.", failures);
             throw;
         }
     }

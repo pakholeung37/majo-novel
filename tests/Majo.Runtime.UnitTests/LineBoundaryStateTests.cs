@@ -12,6 +12,30 @@ namespace Majo.Runtime.UnitTests;
 public sealed class LineBoundaryStateTests
 {
     [Fact]
+    public async Task BoundaryNotificationsCannotInterruptPlaybackCapture()
+    {
+        var source = new BoundarySource();
+        using var manager = new StateManager([], new InputManager(new FakeInputBackend()),
+            new RestoreBoundary(), boundarySource: source);
+        await manager.InitializeAsync(default);
+        var committed = 0;
+        var captured = 0;
+        manager.BoundaryCommitted += _ => throw new InvalidOperationException("history observer failed");
+        manager.BoundaryCommitted += _ => committed++;
+        manager.Captured += _ => throw new InvalidOperationException("capture observer failed");
+        manager.Captured += _ => captured++;
+
+        await source.CommitAsync(Boundary(1));
+        await source.CommitAsync(Boundary(2));
+
+        Assert.Equal(2, committed);
+        Assert.Equal(2, captured);
+        Assert.Equal(2, manager.CurrentBoundary!.Context.OccurrenceSequence);
+        Assert.Equal(StateManagerStatus.Idle, manager.Status);
+        Assert.Null(manager.LastFailureMessage);
+    }
+
+    [Fact]
     public async Task FrozenSaveAllowsVisualActivitiesButStillHonorsExternalBarriers()
     {
         var source = new BoundarySource();

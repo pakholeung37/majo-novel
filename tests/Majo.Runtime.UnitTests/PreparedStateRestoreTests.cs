@@ -9,6 +9,48 @@ namespace Majo.Runtime.UnitTests;
 public sealed class PreparedStateRestoreTests
 {
     [Fact]
+    public async Task NotificationFailuresDoNotFaultCommittedRestoreOrBlockLaterObservers()
+    {
+        var probe = new Probe("game");
+        var (manager, input, _) = await CreateAsync(probe);
+        var restored = 0;
+        var statuses = new List<StateManagerStatus>();
+        manager.StatusChanged += _ => throw new InvalidOperationException("status observer failed");
+        manager.StatusChanged += change => statuses.Add(change.Current);
+        manager.Restored += _ => throw new InvalidOperationException("UI observer failed");
+        manager.Restored += _ => restored++;
+
+        await manager.RestoreGameAsync(Target(probe));
+        await manager.RestoreGameAsync(Target(probe));
+
+        Assert.Equal(9, probe.LiveValue);
+        Assert.True(probe.Activated);
+        Assert.Equal(2, restored);
+        Assert.Contains(StateManagerStatus.Restoring, statuses);
+        Assert.Equal(StateManagerStatus.Idle, statuses[^1]);
+        Assert.Equal(StateManagerStatus.Idle, manager.Status);
+        Assert.Null(manager.LastFailureMessage);
+        Assert.Equal(0, input.ActiveHandleCount);
+    }
+
+    [Fact]
+    public async Task FailureObserverCannotReplaceTransactionFailureOrPreventCleanup()
+    {
+        var probe = new Probe("game") { FailPrepare = true };
+        var (manager, input, _) = await CreateAsync(probe);
+        var failures = 0;
+        manager.Failed += _ => throw new InvalidOperationException("observer failed");
+        manager.Failed += _ => failures++;
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => manager.RestoreGameAsync(Target(probe)));
+
+        Assert.Equal("prepare failed", error.Message);
+        Assert.Equal(1, failures);
+        Assert.Equal(StateManagerStatus.Idle, manager.Status);
+        Assert.Equal(0, input.ActiveHandleCount);
+    }
+
+    [Fact]
     public async Task OutputIsRetainedBeforeStopAndReleasedOnlyAfterTargetActivation()
     {
         var probe = new Probe("game");

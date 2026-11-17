@@ -5,13 +5,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Majo.Runtime.Audio;
-using Majo.Runtime.Auto;
-using Majo.Runtime.Dialogue;
-using Majo.Runtime.Direction.Execution;
-using Majo.Runtime.Direction.Godot;
-using Majo.Runtime.Operations;
-using Majo.Runtime.Script;
 
 namespace Majo.Runtime.Core;
 
@@ -28,8 +21,7 @@ public sealed class RuntimeHost : IRuntimeLifetime, IRuntimeSessionController,
     private readonly string runtimeId = Guid.NewGuid().ToString("N");
     private string sessionId = Guid.NewGuid().ToString("N");
     private bool isDisposed;
-    private bool directionSkipSubscribed;
-    private Task directionSkipTask = Task.CompletedTask;
+    private readonly List<IRuntimeActivation> activations = new();
 
     internal RuntimeHost(RuntimeServiceGraph graph, IRuntimeLogger logger)
     {
@@ -124,8 +116,22 @@ public sealed class RuntimeHost : IRuntimeLifetime, IRuntimeSessionController,
                     }
                 }
 
+                foreach (var descriptor in initializedServices)
+                {
+                    if (resolver.GetRuntimeService(descriptor.ServiceType) is not IRuntimeActivation activation)
+                        continue;
+                    if (activations.Any(value => ReferenceEquals(value, activation))) continue;
+                    cancellationToken.ThrowIfCancellationRequested();
+                    activations.Add(activation);
+                    try { await activation.ActivateAsync(resolver, cancellationToken); }
+                    catch (Exception exception)
+                    {
+                        throw new RuntimeLifecycleException(
+                            $"Service '{descriptor.ServiceType.FullName}' failed to activate.", exception);
+                    }
+                }
+                cancellationToken.ThrowIfCancellationRequested();
                 State = RuntimeHostState.Initialized;
-                SubscribeDirectionSkip();
                 logger.Info("core.lifecycle", "core.lifecycle.initialize_completed", "Majo Runtime initialization completed.", RootCorrelation);
             }
             catch (Exception initializationException)
@@ -134,6 +140,7 @@ public sealed class RuntimeHost : IRuntimeLifetime, IRuntimeSessionController,
                 var cleanupExceptions = new List<Exception>();
                 TryCancel(sessionCancellation, "session", cleanupExceptions);
                 TryCancel(runtimeCancellation, "runtime", cleanupExceptions);
+                cleanupExceptions.AddRange(await DeactivateServicesAsync(CancellationToken.None));
                 cleanupExceptions.AddRange(await ShutdownInitializedServicesAsync(
                     CancellationToken.None));
                 var exception = CreateInitializationException(
@@ -169,77 +176,18 @@ public sealed class RuntimeHost : IRuntimeLifetime, IRuntimeSessionController,
             }
             previousSessionCancellation.Dispose();
 
-            var directionReset = false;
-            var directionStageBackendReset = false;
-            var directionRenderHostReset = false;
-            if (resolver.TryGet<IDirectionBeatRuntime>(out var beats) && beats is not null)
-                beats.AbortOpen();
-            if (resolver.TryGet<IDirectionTransactionCoordinator>(out var direction) &&
-                direction is not null)
+            resolver.TryGet<IRuntimeExecutionCoordinator>(out var execution);
+            if (execution is not null)
             {
-                // This service is handled explicitly below. Mark it handled
-                // before invoking it so a failed attempt is not retried later,
-                // after its Godot dependencies may already have been reset.
-                directionReset = true;
-                try
-                {
-                    // Restore through the backend first so the visible render state
-                    // is reset as well as the coordinator's durable state.
-                    await direction.RestoreAsync(
-                        Majo.Runtime.Direction.Core.DirectionState.CreateDefault(),
-                        cancellationToken);
-                    await direction.ResetAsync(cancellationToken);
-                }
-                catch (Exception exception)
-                {
-                    exceptions.Add(new RuntimeLifecycleException(
-                        "Direction coordinator failed to reset its render state.",
-                        exception));
-                }
-            }
-
-            // Direction stage trees own Godot nodes below the render host. They
-            // must release those trees before the host removes its viewports;
-            // the normal service reset order is dependency-first and therefore
-            // has the opposite shape for this pair.
-            if (resolver.TryGet<GodotDirectionStageBackend>(out var directionStages) &&
-                directionStages is not null)
-            {
-                directionStageBackendReset = true;
-                try
-                {
-                    await directionStages.ResetAsync(cancellationToken);
-                }
-                catch (Exception exception)
-                {
-                    exceptions.Add(new RuntimeLifecycleException(
-                        "Direction stage backend failed to reset.", exception));
-                }
-            }
-            if (resolver.TryGet<GodotDirectionRenderHost>(out var directionRenderHost) &&
-                directionRenderHost is not null)
-            {
-                directionRenderHostReset = true;
-                try
-                {
-                    await directionRenderHost.ResetAsync(cancellationToken);
-                }
-                catch (Exception exception)
-                {
-                    exceptions.Add(new RuntimeLifecycleException(
-                        "Direction render host failed to reset.", exception));
-                }
+                try { await execution.ResetAsync(cancellationToken); }
+                catch (Exception exception) { exceptions.Add(exception); }
             }
 
             foreach (var descriptor in initializedServices)
             {
-                if ((directionReset &&
-                     descriptor.ServiceType == typeof(IDirectionTransactionCoordinator)) ||
-                    (directionStageBackendReset &&
-                     descriptor.ServiceType == typeof(GodotDirectionStageBackend)) ||
-                    (directionRenderHostReset &&
-                     descriptor.ServiceType == typeof(GodotDirectionRenderHost)) ||
-                    descriptor.ServiceType == typeof(IRuntimeActivityRegistry))
+                if (execution is not null &&
+                    (descriptor.ServiceType == typeof(IRuntimeExecutionCoordinator) ||
+                     execution.ManagedResetServices.Contains(descriptor.ServiceType)))
                     continue;
                 try
                 {
@@ -306,13 +254,8 @@ public sealed class RuntimeHost : IRuntimeLifetime, IRuntimeSessionController,
             State = RuntimeHostState.ShuttingDown;
             logger.Info("core.lifecycle", "core.lifecycle.shutdown_started", "Majo Runtime shutdown started.", RootCorrelation);
             var exceptions = new List<Exception>();
-            UnsubscribeDirectionSkip();
             CancelLifetimes(exceptions);
-            if (!directionSkipTask.IsCompleted)
-            {
-                try { await directionSkipTask; }
-                catch (Exception exception) { exceptions.Add(exception); }
-            }
+            exceptions.AddRange(await DeactivateServicesAsync(cancellationToken));
 
             exceptions.AddRange(await ShutdownInitializedServicesAsync(cancellationToken));
             await AddQuiescenceFailureAsync(exceptions, "shutdown", cancellationToken);
@@ -382,66 +325,21 @@ public sealed class RuntimeHost : IRuntimeLifetime, IRuntimeSessionController,
     }
 
     public IRetainedRestoreOutput? RetainRestoreOutput() =>
-        resolver.TryGet<GodotDirectionRenderHost>(out var renderer) && renderer is not null
-            ? renderer.RetainRestoreOutput() : null;
+        resolver.TryGet<IRuntimeExecutionCoordinator>(out var execution)
+            ? execution?.RetainRestoreOutput() : null;
 
-    public Task CancelForRestoreAsync(CancellationToken cancellationToken = default) =>
-        CancelForStateReplacementAsync(false, cancellationToken);
-
-    public Task CancelForHotReloadAsync(CancellationToken cancellationToken) =>
-        CancelForStateReplacementAsync(true, cancellationToken);
-
-    private async Task CancelForStateReplacementAsync(
-        bool hotReload,
-        CancellationToken cancellationToken)
+    public Task CancelForRestoreAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var failures = new List<Exception>();
+        return resolver.TryGet<IRuntimeExecutionCoordinator>(out var execution) && execution is not null
+            ? execution.CancelForRestoreAsync(cancellationToken) : Task.CompletedTask;
+    }
 
-        if (hotReload && resolver.TryGet<IScriptPlayback>(out var script) &&
-            script?.BoundarySource is IScriptCheckpointReplayBackend replay)
-        {
-            try { await replay.StopForReplayAsync(cancellationToken); }
-            catch (Exception exception) { failures.Add(exception); }
-        }
-        else if (resolver.TryGet<IDialoguePlayer>(out var dialogue) && dialogue is not null)
-        {
-            try { await dialogue.StopAsync(cancellationToken); }
-            catch (Exception exception) { failures.Add(exception); }
-        }
-        if (resolver.TryGet<IDirectionTransactionCoordinator>(out var direction) && direction is not null)
-        {
-            try
-            {
-                if (direction is not IDirectionStateReplacementSource replacement)
-                    throw new InvalidOperationException("Direction backend cannot stop execution while retaining output.");
-                await replacement.StopExecutionForRestoreAsync(cancellationToken);
-            }
-            catch (Exception exception) { failures.Add(exception); }
-        }
-        if (resolver.TryGet<IAudioManager>(out var audio) && audio is not null)
-        {
-            try
-            {
-                if (audio is not IAudioReplacementSource replacement)
-                    throw new InvalidOperationException("Audio backend cannot stop execution for prepared replacement.");
-                await replacement.StopExecutionForRestoreAsync(cancellationToken);
-            }
-            catch (Exception exception) { failures.Add(exception); }
-        }
-        if (resolver.TryGet<IOperationRunner>(out var operations) && operations is not null)
-        {
-            try { await operations.ResetAsync(cancellationToken); }
-            catch (Exception exception) { failures.Add(exception); }
-        }
-
-        await AddQuiescenceFailureAsync(failures, "restore", cancellationToken);
-        if (failures.Count > 0)
-        {
-            throw new RuntimeLifecycleException(
-                "One or more runtime domains failed to quiesce for restore.",
-                new AggregateException(failures));
-        }
+    public Task CancelForHotReloadAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return resolver.TryGet<IRuntimeExecutionCoordinator>(out var execution) && execution is not null
+            ? execution.CancelForHotReloadAsync(cancellationToken) : Task.CompletedTask;
     }
 
     public async Task WaitForQuiescenceAsync(CancellationToken cancellationToken = default)
@@ -477,74 +375,28 @@ public sealed class RuntimeHost : IRuntimeLifetime, IRuntimeSessionController,
         }
     }
 
-    private void SubscribeDirectionSkip()
+    private async Task<IReadOnlyList<Exception>> DeactivateServicesAsync(CancellationToken cancellationToken)
     {
-        if (directionSkipSubscribed ||
-            !resolver.TryGet<IPlaybackModeManager>(out var playback) || playback is null ||
-            !resolver.TryGet<IDirectionTransactionCoordinator>(out var direction) || direction is null)
-            return;
-
-        playback.ModeChanged += HandlePlaybackModeChanged;
-        directionSkipSubscribed = true;
-    }
-
-    private void UnsubscribeDirectionSkip()
-    {
-        if (!directionSkipSubscribed)
-            return;
-        if (resolver.TryGet<IPlaybackModeManager>(out var playback) && playback is not null)
-            playback.ModeChanged -= HandlePlaybackModeChanged;
-        directionSkipSubscribed = false;
-    }
-
-    private void HandlePlaybackModeChanged(PlaybackModeChanged change)
-    {
-        if (change.Current is not (PlaybackMode.SkipReadOnly or PlaybackMode.SkipAll) ||
-            !resolver.TryGet<IDirectionTransactionCoordinator>(out var direction) || direction is null)
-            return;
-        var previous = directionSkipTask;
-        directionSkipTask = FinishDirectionSkipAfterAsync(
-            previous,
-            direction,
-            SessionCancellationToken);
-    }
-
-    private async Task FinishDirectionSkipAsync(
-        IDirectionTransactionCoordinator direction,
-        CancellationToken cancellationToken)
-    {
-        try { await direction.FinishSkippableAsync(cancellationToken); }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
-        catch (Exception exception)
+        var failures = new List<Exception>();
+        for (var index = activations.Count - 1; index >= 0; index--)
         {
-            logger.Error(
-                "core.lifecycle",
-                "core.lifecycle.direction_skip_failed",
-                $"Direction skip completion failed: {exception.Message}",
-                exception,
-                RootCorrelation);
+            var activation = activations[index];
+            try
+            {
+                await activation.DeactivateAsync(cancellationToken);
+            }
+            catch (Exception exception)
+            {
+                failures.Add(new RuntimeLifecycleException(
+                    $"Service activation '{activation.GetType().FullName}' failed to deactivate.", exception));
+            }
+            finally
+            {
+                // Services will shut down next; a later retry must not call into closed dependencies.
+                activations.RemoveAt(index);
+            }
         }
-    }
-
-    private async Task FinishDirectionSkipAfterAsync(
-        Task previous,
-        IDirectionTransactionCoordinator direction,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            await previous;
-        }
-        catch (Exception exception)
-        {
-            logger.Warning(
-                "core.lifecycle",
-                "core.lifecycle.direction_skip_previous_failed",
-                $"A previous Direction skip operation failed: {exception.Message}",
-                exception,
-                RootCorrelation);
-        }
-        await FinishDirectionSkipAsync(direction, cancellationToken);
+        return failures;
     }
 
     private void ThrowIfShutdownFailed(List<Exception> exceptions)
