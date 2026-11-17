@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Camera;
@@ -9,7 +10,7 @@ using Majo.Runtime.Direction.Execution;
 namespace Majo.Runtime.Dialogue.Commands;
 
 [Command("backdrop", Category = "Direction")]
-public sealed partial class BackdropCommand : RuntimeCommand<BackdropCommand.Arguments>
+public sealed partial class BackdropCommand : RuntimeCommand<BackdropCommand.Arguments>, ICommandResourceProvider<BackdropCommand.Arguments>
 {
     private readonly IDirectionBeatRuntime beats;
     private readonly IDirectionScopeResolver scopes;
@@ -30,6 +31,10 @@ public sealed partial class BackdropCommand : RuntimeCommand<BackdropCommand.Arg
         this.policy = policy ?? throw new ArgumentNullException(nameof(policy));
         this.environment = environment ?? new CameraEnvironmentPresetCatalog();
     }
+
+    public IReadOnlyList<CommandResourceReference> DescribeResources(Arguments arguments) =>
+        [new("backdrop", arguments.Definition, Appearance: arguments.Appearance.Value,
+            Stage: arguments.Stage.GetValueOrDefault("main"))];
 
     protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {

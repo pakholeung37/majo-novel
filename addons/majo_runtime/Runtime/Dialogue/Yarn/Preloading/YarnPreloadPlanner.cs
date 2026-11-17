@@ -4,6 +4,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using YarnSpinnerGodot;
+using Majo.Runtime.Dialogue.Commands;
+using Majo.Runtime.Core;
 
 namespace Majo.Runtime.Dialogue.Yarn.Preloading;
 
@@ -17,8 +19,36 @@ public sealed record YarnPreloadReference(
 /// <summary>Reads only straight-line instructions; never evaluates Yarn expressions.</summary>
 public sealed class YarnPreloadPlanner
 {
+    private RuntimeCommandCatalog? commands;
+    private readonly IRuntimeLogger logger;
     private global::Yarn.Node? node;
     private int cursor;
+
+    public YarnPreloadPlanner(RuntimeCommandCatalog? commands = null, IRuntimeLogger? logger = null)
+    {
+        this.commands = commands;
+        this.logger = logger ?? NullRuntimeLogger.Instance;
+    }
+
+    public void SetCommandCatalog(RuntimeCommandCatalog catalog) =>
+        commands = catalog ?? throw new ArgumentNullException(nameof(catalog));
+
+    public IReadOnlyList<YarnPreloadReference> GetResources(IReadOnlyList<string> tokens)
+    {
+        if (commands is null) return Array.Empty<YarnPreloadReference>();
+        try { return Resources(tokens, commands); }
+        catch (Exception exception)
+        {
+            // Speculation must not stop playback, or discard the rest of the bounded window.
+            logger.Warning("preload", "preload.command_analysis_failed",
+                $"Could not describe resources for command '{string.Join(' ', tokens)}': {exception.Message}", exception);
+            return Array.Empty<YarnPreloadReference>();
+        }
+    }
+
+    internal static bool IsBeat(IReadOnlyList<string> tokens, string action) =>
+        tokens.Count >= 2 && tokens[0].Equals("beat", StringComparison.OrdinalIgnoreCase) &&
+        tokens[1].Equals(action, StringComparison.OrdinalIgnoreCase);
 
     public void Enter(global::Yarn.Node? value)
     {
@@ -42,15 +72,24 @@ public sealed class YarnPreloadPlanner
         if (node is null || cursor < 0 || cursor >= node.Instructions.Count) return;
         var command = node.Instructions[cursor].RunCommand;
         cursor = command is not null && command.SubstitutionCount == 0 &&
-            DialogueRunner.SplitCommandText(command.CommandText).SequenceEqual(tokens)
+            CommandsMatch(DialogueRunner.SplitCommandText(command.CommandText).ToArray(), tokens)
             ? cursor + 1 : -1;
+    }
+
+    private bool CommandsMatch(IReadOnlyList<string> expected, IReadOnlyList<string> actual)
+    {
+        if (commands is null) return expected.SequenceEqual(actual);
+        var first = commands.Resolve(expected, out var expectedInput);
+        var second = commands.Resolve(actual, out var actualInput);
+        return first is not null && ReferenceEquals(first, second) &&
+            expectedInput!.RawArguments.SequenceEqual(actualInput!.RawArguments);
     }
 
     public IReadOnlyList<YarnPreloadReference> LookAhead(int voiceLines = 4, int maxInstructions = 128,
         Func<string, bool>? hasVoice = null)
     {
         var result = new List<YarnPreloadReference>();
-        var characterDefinitions = new Dictionary<(string Stage, string Instance), string>();
+        var actorDefinitions = new Dictionary<(string Stage, string Instance), string>();
         if (node is null || cursor < 0) return result;
         var lines = 0;
         var beats = 0;
@@ -66,19 +105,19 @@ public sealed class YarnPreloadPlanner
             else if (instruction.RunCommand is { SubstitutionCount: 0 } command)
             {
                 var tokens = DialogueRunner.SplitCommandText(command.CommandText).ToArray();
-                if (tokens.Length >= 2 && tokens[0] == "beat" && tokens[1] == "begin" && beats++ > 0) break;
-                var references = Resources(tokens);
+                if (IsBeat(tokens, "begin") && beats++ > 0) break;
+                var references = GetResources(tokens);
                 foreach (var reference in references)
                 {
-                    if (reference.Kind != "character")
+                    if (reference.Kind is not ("character" or "object"))
                     {
                         result.Add(reference);
                         continue;
                     }
                     var key = (reference.Stage ?? "main", reference.Id);
                     var definition = reference.Asset;
-                    if (definition is null) characterDefinitions.TryGetValue(key, out definition);
-                    if (definition is not null) characterDefinitions[key] = definition;
+                    if (definition is null) actorDefinitions.TryGetValue(key, out definition);
+                    if (definition is not null) actorDefinitions[key] = definition;
                     result.Add(reference with { Asset = definition });
                 }
             }
@@ -92,33 +131,11 @@ public sealed class YarnPreloadPlanner
         return result.ToArray();
     }
 
-    public static IReadOnlyList<YarnPreloadReference> Resources(IReadOnlyList<string> tokens)
+    public static IReadOnlyList<YarnPreloadReference> Resources(
+        IReadOnlyList<string> tokens, RuntimeCommandCatalog commands)
     {
-        if (tokens.Count < 2 || string.IsNullOrWhiteSpace(tokens[1])) return Array.Empty<YarnPreloadReference>();
-        var kind = tokens[0].ToLowerInvariant();
-        if ((kind is "character" or "object") && (tokens[1] is "move" or "fx" or "hide") ||
-            kind == "backdrop" && tokens[1] == "fx") return Array.Empty<YarnPreloadReference>();
-        if (kind == "object")
-        {
-            var asset = tokens.Skip(2).FirstOrDefault(token => token.StartsWith("asset:", StringComparison.OrdinalIgnoreCase));
-            var appearance = tokens.Skip(2).FirstOrDefault(token => token.StartsWith("appearance:", StringComparison.OrdinalIgnoreCase));
-            if (asset is not null)
-                return new[] { new YarnPreloadReference(kind, tokens[1], asset[6..], appearance?[11..] ?? "Default") };
-        }
-        if (kind is "bgm" or "sfx" or "voice")
-            return new[] { new YarnPreloadReference(kind, tokens[1]) };
-        if (kind is "character" or "backdrop")
-        {
-            var asset = tokens.Skip(2).FirstOrDefault(token => token.StartsWith("asset:", StringComparison.OrdinalIgnoreCase));
-            var appearance = tokens.Skip(2).FirstOrDefault(token => token.StartsWith("appearance:", StringComparison.OrdinalIgnoreCase));
-            var stage = tokens.Skip(2).FirstOrDefault(token => token.StartsWith("stage:", StringComparison.OrdinalIgnoreCase));
-            return new[] { new YarnPreloadReference(
-                kind,
-                tokens[1],
-                asset?["asset:".Length..],
-                appearance?["appearance:".Length..],
-                stage?["stage:".Length..]) };
-        }
-        return Array.Empty<YarnPreloadReference>();
+        ArgumentNullException.ThrowIfNull(commands);
+        return commands.DescribeResources(tokens).Select(reference => new YarnPreloadReference(
+            reference.Kind, reference.Id, reference.Asset, reference.Appearance, reference.Stage)).ToArray();
     }
 }

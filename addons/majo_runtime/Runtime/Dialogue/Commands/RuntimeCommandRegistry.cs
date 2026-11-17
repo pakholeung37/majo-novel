@@ -344,6 +344,7 @@ public sealed class RuntimeCommandRegistry : IRuntimeCommandRegistrar
 public sealed class RuntimeCommandCatalog
 {
     private readonly ReadOnlyDictionary<string, IBoundCommand> commandsByName;
+    private readonly Dictionary<string, IBoundCommand[]> commandsByRoot;
 
     public RuntimeCommandCatalog(IReadOnlyList<IBoundCommand> commands)
         : this(commands.Select(command => new RuntimeCommandCatalogEntry(command, string.Empty, null)).ToArray())
@@ -369,6 +370,9 @@ public sealed class RuntimeCommandCatalog
         }
 
         commandsByName = new ReadOnlyDictionary<string, IBoundCommand>(dict);
+        commandsByRoot = Commands.GroupBy(command => command.RootName, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.OrderByDescending(command => command.Path.Count).ToArray(),
+                StringComparer.OrdinalIgnoreCase);
     }
 
     public IReadOnlyList<IBoundCommand> Commands { get; }
@@ -389,6 +393,35 @@ public sealed class RuntimeCommandCatalog
 
     public bool TryGet(string commandName, out IBoundCommand? command) =>
         commandsByName.TryGetValue(commandName, out command);
+
+    /// <summary>Resolves the longest command path using the same rules for playback and analysis.</summary>
+    public IBoundCommand? Resolve(IReadOnlyList<string> tokens, out CommandInput? input)
+    {
+        ArgumentNullException.ThrowIfNull(tokens);
+        input = null;
+        if (tokens.Count == 0 || !commandsByRoot.TryGetValue(tokens[0], out var candidates)) return null;
+        foreach (var command in candidates)
+        {
+            if (command.Path.Count > tokens.Count) continue;
+            var matches = true;
+            for (var index = 1; index < command.Path.Count; index++)
+                if (!command.Path[index].Equals(tokens[index], StringComparison.OrdinalIgnoreCase))
+                {
+                    matches = false;
+                    break;
+                }
+            if (!matches) continue;
+            input = new CommandInput(command.Name, tokens.Skip(command.Path.Count).ToArray());
+            return command;
+        }
+        return null;
+    }
+
+    public IReadOnlyList<CommandResourceReference> DescribeResources(IReadOnlyList<string> tokens)
+    {
+        var command = Resolve(tokens, out var input);
+        return command?.DescribeResources(input!) ?? Array.Empty<CommandResourceReference>();
+    }
 
     public BoundCommand<TArguments> Get<TArguments>(string commandName)
         where TArguments : class

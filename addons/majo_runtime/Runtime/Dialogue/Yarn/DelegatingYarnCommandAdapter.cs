@@ -14,6 +14,8 @@ public sealed class DelegatingYarnCommandAdapter : IYarnCommandAdapter
 
     public event Action<RuntimeCommandException>? CommandFailed;
 
+    public RuntimeCommandCatalog? Catalog => target?.Catalog;
+
     public RuntimeCommandException? LastFailure => target?.LastFailure;
 
     public bool AbortOnRecoverableFailure => target?.AbortOnRecoverableFailure ?? true;

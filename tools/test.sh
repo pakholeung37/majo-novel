@@ -101,7 +101,8 @@ run_core_consumer_smoke() {
         run_with_timeout 180 "$GODOT_EXECUTABLE" --headless --path "$smoke_directory" --editor --quit
         python3 "$REPOSITORY_ROOT/addons/majo_runtime/Tools/majo.py" doctor --project "$smoke_directory"
         python3 "$REPOSITORY_ROOT/addons/majo_runtime/Tools/majo.py" install \
-            --project "$smoke_directory" --archive "$addon_archive"
+            --project "$smoke_directory" --archive "$addon_archive" \
+            --allow-breaking --check --godot "$GODOT_EXECUTABLE"
         run_with_timeout 60 "$GODOT_EXECUTABLE" --headless --path "$smoke_directory"
         python3 "$REPOSITORY_ROOT/tools/test-addon-export.py" "$smoke_directory" "$GODOT_EXECUTABLE"
 

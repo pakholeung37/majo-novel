@@ -14,7 +14,6 @@ using Majo.Runtime.Dialogue.Yarn.Preloading;
 using Majo.Runtime.Localization;
 using Majo.Runtime.Resources;
 using Majo.Runtime.Script;
-using Majo.YarnBridge;
 using YarnSpinnerGodot;
 
 namespace Majo.Runtime.Dialogue.Yarn;
@@ -40,13 +39,8 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
     private readonly IDirectionScopeResolver? directionScopes;
     private readonly IReadOnlyList<IDialoguePresenter> presenters;
     private readonly ILocaleManager? localeManager;
-    private readonly DialogueSpeakerNameResolver? speakerNameResolver;
     private readonly IRuntimeLogger logger;
-    private readonly bool requireExactProgramFingerprint;
-    private readonly YarnVmStateBridge stateBridge = new();
     private readonly YarnDialogueVariableStore variableStore = new();
-    private readonly YarnLineTextProcessor textProcessor = new();
-    private readonly object sync = new();
     private DialogueRunner? runner;
     private YarnDialogueRunnerBridge? runnerBridge;
     private bool lineProcessorRegistered;
@@ -56,25 +50,15 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
     private Callable nodeCompleted;
     private Callable dialogueCompleted;
     private Callable dialogueStarted;
-    private TaskCompletionSource<DialogueCompletion> completion = CompletedSource();
-    private string currentProjectId = string.Empty;
-    private string currentStartNode = string.Empty;
     private string currentNodeName = string.Empty;
     private string currentLineId = string.Empty;
     private IReadOnlyList<string> currentSubstitutions = Array.Empty<string>();
-    private DialogueLine? currentLine;
 
-    public DialogueLine? CurrentLine => currentLine;
-    private IReadOnlyList<DialogueOption> currentOptions = Array.Empty<DialogueOption>();
-    private ScriptCheckpoint? pendingRestore;
-    private Exception? pendingFailure;
-    private bool isStopping;
+    private readonly YarnPlaybackSession session = new();
+    private readonly YarnCheckpointController checkpoints;
+    private readonly YarnLocalizedDialogue localized;
+    public DialogueLine? CurrentLine => localized.CurrentLine;
     private bool isInitialized;
-    private bool isInternalMigration;
-    private bool hotReloadProgressionFrozen;
-    private DialoguePresentationOrigin pendingPresentationOrigin;
-    private int nextLineRequested;
-    private string configuredLocale = "en";
     private Func<CancellationToken, Task>? presentationQuiescenceWaiter;
 
     public YarnDialogueBackend(
@@ -98,9 +82,9 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
         this.preloader = preloader;
         this.presenters = presenters ?? throw new ArgumentNullException(nameof(presenters));
         this.localeManager = localeManager;
-        this.speakerNameResolver = speakerNameResolver;
         this.logger = logger ?? NullRuntimeLogger.Instance;
-        this.requireExactProgramFingerprint = requireExactProgramFingerprint;
+        checkpoints = new YarnCheckpointController(this.projectVersions, requireExactProgramFingerprint, this.logger);
+        localized = new YarnLocalizedDialogue(localeManager, speakerNameResolver);
     }
 
     public event Action<string>? NodeEntered;
@@ -118,16 +102,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
 
     public IDialogueVariableStore VariableStore => variableStore;
 
-    public Task<DialogueCompletion> Completion
-    {
-        get
-        {
-            lock (sync)
-            {
-                return completion.Task;
-            }
-        }
-    }
+    public Task<DialogueCompletion> Completion => session.Completion;
 
     public Task InitializeAsync(CancellationToken cancellationToken)
     {
@@ -150,7 +125,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
             HandleLinePresented,
             options =>
             {
-                currentOptions = options;
+                localized.RecordOptions(options);
                 OptionsPresented?.Invoke(options);
             },
             ConvertPresentedLine)
@@ -161,7 +136,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
             PreparationChanged = preparing => PreparationChanged?.Invoke(preparing),
             BoundaryFailed = failure =>
             {
-                lock (sync) pendingFailure = failure;
+                session.RecordFailure(failure);
                 Failed?.Invoke(failure);
             },
             OptionsStarting = preloader is null ? null : preloader.OptionsStarting,
@@ -174,7 +149,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
         runner.AddCommandHandler(YarnNodeEntryTransform.CommandName, (Func<Task>)EnterPendingNodeAsync);
         runnerBridge = new YarnDialogueRunnerBridge(runner);
         owner.AddChild(runner);
-        configuredLocale = localeManager?.DialogueLocale ?? TranslationServer.GetLocale();
+        SetLocale(localeManager?.DialogueLocale ?? TranslationServer.GetLocale());
 
         nodeStarted = Callable.From<string>(HandleNodeStarted);
         nodeCompleted = Callable.From<string>(HandleNodeCompleted);
@@ -191,8 +166,8 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
     public async Task ResetAsync(CancellationToken cancellationToken)
     {
         await StopAsync(cancellationToken);
-        pendingFailure = null;
-        pendingRestore = null;
+        session.ClearFailure();
+        checkpoints.ClearPending();
     }
 
     public async Task ShutdownAsync(CancellationToken cancellationToken)
@@ -220,7 +195,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
 
         runner = null;
         presenterAdapter = null;
-        pendingRestore = null;
+        checkpoints.ClearPending();
         isInitialized = false;
     }
 
@@ -281,24 +256,13 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
         nodeEntryCancellation.Cancel();
         nodeEntryCancellation.Dispose();
         nodeEntryCancellation = new CancellationTokenSource();
-        nodeEntryReason = pendingRestore is not null ? NodeEntryReason.Restore :
-            isInternalMigration ? NodeEntryReason.InternalRebuild : NodeEntryReason.Normal;
-        lock (sync)
-        {
-            currentProjectId = projectId;
-            currentStartNode = startNode;
-            currentNodeName = startNode;
-            currentLineId = string.Empty;
-            currentEntryCheckpoint = null;
-            currentSubstitutions = Array.Empty<string>();
-            pendingFailure = null;
-            isStopping = false;
-            if (resetCompletion)
-            {
-                completion = new TaskCompletionSource<DialogueCompletion>(
-                    TaskCreationOptions.RunContinuationsAsynchronously);
-            }
-        }
+        nodeEntryReason = checkpoints.Pending is not null ? NodeEntryReason.Restore :
+            session.IsReplaying ? NodeEntryReason.InternalRebuild : NodeEntryReason.Normal;
+        session.Begin(projectId, startNode, resetCompletion);
+        currentNodeName = startNode;
+        currentLineId = string.Empty;
+        checkpoints.BeginSession();
+        currentSubstitutions = Array.Empty<string>();
     }
 
     private async Task StartProjectAsync(
@@ -310,20 +274,20 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
         Runner.SetProject(project);
         if (!lineProcessorRegistered)
         {
-            Runner.LineProvider.RegisterMarkerProcessor("br", textProcessor.LineBreakMarkupReplacer);
+            Runner.LineProvider.RegisterMarkerProcessor("br", localized.LineBreakMarkupReplacer);
             lineProcessorRegistered = true;
         }
-        SetLocale(configuredLocale);
+        SetLocale(localized.Locale);
         presenterAdapter!.BeginSession();
         if (preloader is not null) await preloader.PrepareStartAsync(project,
-            pendingRestore?.Spot.Script.NodeName ?? startNode, cancellationToken, pendingRestore?.Spot.LineId);
+            checkpoints.Pending?.Spot.Script.NodeName ?? startNode, cancellationToken, checkpoints.Pending?.Spot.LineId);
         cancellationToken.ThrowIfCancellationRequested();
         await Runner.StartDialogue(startNode);
         cancellationToken.ThrowIfCancellationRequested();
         if (!Runner.IsDialogueRunning && !Completion.IsCompleted)
         {
             throw new DialogueProjectException(
-                currentProjectId,
+                session.ProjectId,
                 $"node '{startNode}' did not start.");
         }
     }
@@ -338,10 +302,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
 
         nodeEntryCancellation.Cancel();
         preloader?.Clear();
-        lock (sync)
-        {
-            isStopping = true;
-        }
+        session.RequestStop();
 
         if (Runner.IsDialogueRunning)
         {
@@ -388,7 +349,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
             await commandAdapter.WaitForQuiescenceAsync(cancellationToken);
         }
 
-        if (!isInternalMigration)
+        if (!session.IsReplaying)
         {
             CompleteSession(DialogueCompletionKind.Stopped);
         }
@@ -396,7 +357,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
 
     public void RequestHurryUp()
     {
-        if (isInitialized && !hotReloadProgressionFrozen)
+        if (isInitialized && !session.ProgressionFrozen)
         {
             if (presenterAdapter?.DeferAdvance(hurryUp: true) == true) return;
             Runner.RequestHurryUpLine();
@@ -405,10 +366,10 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
 
     public void RequestNextLine()
     {
-        if (isInitialized && !hotReloadProgressionFrozen &&
+        if (isInitialized && !session.ProgressionFrozen &&
             presenterAdapter?.DeferAdvance() == true) return;
-        if (isInitialized && !hotReloadProgressionFrozen && Runner.IsDialogueRunning &&
-            Interlocked.Exchange(ref nextLineRequested, 1) == 0)
+        if (isInitialized && !session.ProgressionFrozen && Runner.IsDialogueRunning &&
+            session.TryRequestAdvance())
         {
             Runner.RequestNextLine();
         }
@@ -424,6 +385,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
 
         commandAdapter = adapter;
         adapter.CommandFailed += HandleCommandFailed;
+        if (adapter.Catalog is { } catalog) preloader?.SetCommandCatalog(catalog);
         if (adapter is YarnCommandAdapter yarnAdapter && preloader is not null)
             yarnAdapter.PrepareCommandAsync = preloader.BeforeCommandAsync;
     }
@@ -437,21 +399,20 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
         ArgumentNullException.ThrowIfNull(version);
         ArgumentNullException.ThrowIfNull(checkpoint);
         EnsureInitialized();
-        if (!Runner.IsDialogueRunning && string.IsNullOrWhiteSpace(currentProjectId))
+        if (!Runner.IsDialogueRunning && string.IsNullOrWhiteSpace(session.ProjectId))
         {
             throw new DialogueException("No running Yarn dialogue can be hot reloaded.");
         }
 
-        hotReloadProgressionFrozen = true;
-        isInternalMigration = true;
+        session.SetProgressionFrozen(true);
+        using var replay = session.EnterReplay();
         try
         {
             if (Runner.IsDialogueRunning)
             {
                 await StopAsync(cancellationToken);
             }
-            pendingRestore = checkpoint;
-            pendingPresentationOrigin = replayOrigin;
+            checkpoints.ReplacePending(checkpoint, replayOrigin);
             BeginProjectSession(
                 checkpoint.Spot.Script.ProjectId,
                 checkpoint.Spot.Script.NodeName,
@@ -463,169 +424,39 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
         }
         catch
         {
-            pendingRestore = null;
-            pendingPresentationOrigin = DialoguePresentationOrigin.Normal;
+            checkpoints.ClearPending();
             throw;
-        }
-        finally
-        {
-            isInternalMigration = false;
         }
     }
 
     public void SetHotReloadProgressionFrozen(bool frozen) =>
-        hotReloadProgressionFrozen = frozen;
+        session.SetProgressionFrozen(frozen);
 
-    public async Task<ScriptDescriptor> ResolveAsync(
-        ScriptId id,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(id);
-        YarnProject project;
-        try
-        {
-            project = await projectVersions.GetActiveAsync(id.ProjectId, cancellationToken);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception exception)
-        {
-            throw new ScriptRuntimeException(
-                $"Failed to load script project '{id.ProjectId}'.",
-                exception);
-        }
+    public Task<ScriptDescriptor> ResolveAsync(ScriptId id, CancellationToken cancellationToken = default) =>
+        checkpoints.ResolveAsync(id, cancellationToken);
 
-        return CreateDescriptor(project, id);
-    }
-
-    public ScriptCheckpoint CaptureCheckpoint() => currentEntryCheckpoint ?? CaptureCheckpointCore(false);
-
-    private ScriptCheckpoint? currentEntryCheckpoint;
+    public ScriptCheckpoint CaptureCheckpoint() => CaptureCheckpointCore(false);
 
     private ScriptCheckpoint CaptureCheckpointCore(bool atEntry)
     {
         EnsureInitialized();
-        var project = Runner.YarnProject ?? throw new ScriptCheckpointException(
-            "No Yarn project is active.");
-        if (string.IsNullOrWhiteSpace(currentNodeName) ||
-            string.IsNullOrWhiteSpace(currentLineId))
-        {
-            throw new ScriptCheckpointException(
-                "Yarn playback is not waiting at a line boundary.");
-        }
-
-        var id = new ScriptId(currentProjectId, currentNodeName);
-        var descriptor = CreateDescriptor(project, id);
-        var snapshot = atEntry
-            ? stateBridge.CaptureAtLineEntry(Runner.Dialogue, currentLineId, currentSubstitutions)
-            : stateBridge.CaptureAtLine(Runner.Dialogue, currentLineId, currentSubstitutions);
-        return new ScriptCheckpoint(
-            ScriptCheckpoint.CurrentFormatVersion,
-            descriptor.ProgramFingerprint,
-            new ScriptPlaybackSpot(id, snapshot.LineId),
-            snapshot.ResolvedSubstitutions,
-            snapshot.CallStack.Select(frame => new ScriptCallFrame(frame.NodeName, frame.InstructionIndex)),
-            snapshot.OperandStack.Select(value => new ScriptStackValue(value.Type, value.Value)));
+        if (string.IsNullOrWhiteSpace(currentNodeName) || string.IsNullOrWhiteSpace(currentLineId))
+            throw new ScriptCheckpointException("Yarn playback is not waiting at a line boundary.");
+        return checkpoints.Capture(Runner, new ScriptId(session.ProjectId, currentNodeName),
+            currentLineId, currentSubstitutions, atEntry);
     }
 
-    public async Task ValidateCheckpointAsync(
-        ScriptCheckpoint checkpoint,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(checkpoint);
-        if (checkpoint.FormatVersion is not (ScriptCheckpoint.CurrentFormatVersion or ScriptCheckpoint.LegacyFormatVersion) ||
-            (checkpoint.FormatVersion == ScriptCheckpoint.LegacyFormatVersion &&
-                (checkpoint.CallStack.Count > 0 || checkpoint.OperandStack.Count > 0)))
-        {
-            throw new ScriptCheckpointException(
-                $"Unsupported script checkpoint format '{checkpoint.FormatVersion}'; " +
-                $"expected '{ScriptCheckpoint.CurrentFormatVersion}'.");
-        }
+    public Task ValidateCheckpointAsync(ScriptCheckpoint checkpoint, CancellationToken cancellationToken = default) =>
+        checkpoints.ValidateCheckpointAsync(checkpoint, cancellationToken);
 
-        if (checkpoint.Spot.Boundary != ScriptCheckpointBoundary.LineEntry)
-        {
-            throw new ScriptCheckpointException(
-                $"Unsupported script checkpoint boundary '{checkpoint.Spot.Boundary}'.");
-        }
-
-        var descriptor = await ResolveAsync(checkpoint.Spot.Script, cancellationToken);
-        if (!descriptor.LineIds.Contains(checkpoint.Spot.LineId, StringComparer.Ordinal))
-        {
-            throw new ScriptCheckpointException(
-                $"Line '{checkpoint.Spot.LineId}' does not exist in script " +
-                $"'{checkpoint.Spot.Script}'.");
-        }
-
-        if (descriptor.LineSubstitutionCounts.TryGetValue(
-                checkpoint.Spot.LineId,
-                out var substitutionCount) &&
-            substitutionCount != checkpoint.ResolvedSubstitutions.Count)
-        {
-            throw new ScriptCheckpointException(
-                $"Line '{checkpoint.Spot.LineId}' now requires {substitutionCount} substitutions, " +
-                $"but the checkpoint contains {checkpoint.ResolvedSubstitutions.Count}.");
-        }
-
-        var exactProgram = string.Equals(
-                descriptor.ProgramFingerprint,
-                checkpoint.ProgramFingerprint,
-                StringComparison.Ordinal);
-        if (!exactProgram && (requireExactProgramFingerprint ||
-                checkpoint.CallStack.Count > 0 || checkpoint.OperandStack.Count > 0))
-        {
-            throw new ScriptCheckpointException(
-                $"Script '{checkpoint.Spot.Script}' no longer matches checkpoint fingerprint.");
-        }
-
-        var project = await projectVersions.GetActiveAsync(checkpoint.Spot.Script.ProjectId, cancellationToken);
-        stateBridge.ValidateReplay(project.Program, CreateBridgeSnapshot(checkpoint));
-        if (exactProgram) return;
-
-        logger.Debug(
-            "script",
-            "script.checkpoint_program_changed",
-            $"Script '{checkpoint.Spot.Script}' changed after the checkpoint was captured; " +
-            "restore will continue using its stable line ID.",
-            properties: new Dictionary<string, object?>
-            {
-                ["projectId"] = checkpoint.Spot.Script.ProjectId,
-                ["nodeName"] = checkpoint.Spot.Script.NodeName,
-                ["lineId"] = checkpoint.Spot.LineId,
-                ["checkpointFingerprint"] = checkpoint.ProgramFingerprint,
-                ["currentFingerprint"] = descriptor.ProgramFingerprint,
-            });
-    }
-
-    public void PrepareRestore(ScriptCheckpoint checkpoint)
-    {
-        ArgumentNullException.ThrowIfNull(checkpoint);
-        if (pendingRestore is not null)
-        {
-            throw new ScriptCheckpointException(
-                "Another script checkpoint restore is already pending.");
-        }
-
-        pendingRestore = checkpoint;
-        pendingPresentationOrigin = DialoguePresentationOrigin.CheckpointRestore;
-    }
-
-    public void PrepareRestore(
-        ScriptCheckpoint checkpoint,
-        DialoguePresentationOrigin origin)
-    {
-        if (origin == DialoguePresentationOrigin.Normal)
-            throw new ScriptCheckpointException("Checkpoint replay requires a non-normal presentation origin.");
-        PrepareRestore(checkpoint);
-        pendingPresentationOrigin = origin;
-    }
+    public void PrepareRestore(ScriptCheckpoint checkpoint) => checkpoints.PrepareRestore(checkpoint);
+    public void PrepareRestore(ScriptCheckpoint checkpoint, DialoguePresentationOrigin origin) =>
+        checkpoints.PrepareRestore(checkpoint, origin);
 
     public async Task StopForReplayAsync(CancellationToken cancellationToken)
     {
-        isInternalMigration = true;
-        try { await StopAsync(cancellationToken); }
-        finally { isInternalMigration = false; }
+        using var replay = session.EnterReplay();
+        await StopAsync(cancellationToken);
     }
 
     public async Task ActivatePreparedReplayAsync(
@@ -633,31 +464,17 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
         DialoguePresentationOrigin origin,
         CancellationToken cancellationToken)
     {
-        if (pendingRestore is null)
+        if (checkpoints.Pending is null)
             throw new ScriptCheckpointException("No prepared checkpoint replay is available.");
-        isInternalMigration = true;
-        try
-        {
-            var project = await projectVersions.GetActiveAsync(
-                checkpoint.Spot.Script.ProjectId, cancellationToken);
-            pendingPresentationOrigin = origin;
-            BeginProjectSession(checkpoint.Spot.Script.ProjectId,
-                checkpoint.Spot.Script.NodeName, resetCompletion: false);
-            await StartProjectAsync(project, checkpoint.Spot.Script.NodeName, cancellationToken);
-            projectVersions.MarkRunning(checkpoint.Spot.Script.ProjectId, project);
-        }
-        finally { isInternalMigration = false; }
+        using var replay = session.EnterReplay();
+        var project = await projectVersions.GetActiveAsync(checkpoint.Spot.Script.ProjectId, cancellationToken);
+        checkpoints.ReplacePending(checkpoint, origin);
+        BeginProjectSession(checkpoint.Spot.Script.ProjectId, checkpoint.Spot.Script.NodeName, resetCompletion: false);
+        await StartProjectAsync(project, checkpoint.Spot.Script.NodeName, cancellationToken);
+        projectVersions.MarkRunning(checkpoint.Spot.Script.ProjectId, project);
     }
 
-    public void CancelPreparedRestore(ScriptCheckpoint checkpoint)
-    {
-        ArgumentNullException.ThrowIfNull(checkpoint);
-        if (pendingRestore is null || ReferenceEquals(pendingRestore, checkpoint) || pendingRestore == checkpoint)
-        {
-            pendingRestore = null;
-            pendingPresentationOrigin = DialoguePresentationOrigin.Normal;
-        }
-    }
+    public void CancelPreparedRestore(ScriptCheckpoint checkpoint) => checkpoints.CancelPreparedRestore(checkpoint);
 
     public void RegisterNativePresenter(Node presenter)
     {
@@ -686,7 +503,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
 
     private void HandleNodeStarted(string nodeName)
     {
-        var callDepth = stateBridge.GetCallStackDepth(Runner.Dialogue);
+        var callDepth = checkpoints.GetCallStackDepth(Runner);
         // Return completes only the child; jump completes every unwound caller too.
         var returning = callDepth < nodeCallDepth && nodeCompletions == 1;
         nodeCallDepth = callDepth;
@@ -707,13 +524,13 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
         var token = nodeEntryCancellation.Token;
         try
         {
-            if (pendingFailure is { } boundaryFailure) throw boundaryFailure;
+            if (session.Failure is { } boundaryFailure) throw boundaryFailure;
             var module = FindModule(nodeName);
             if (module is not null && module.Diagnostics.Any(value =>
                 value.Severity.Equals("error", StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException($"Node '{nodeName}' has invalid Direction metadata.");
             if (BeforeNodeEntryAsync is { } enter)
-                await enter(new NodeEntryRequest(currentProjectId, nodeName, activation, module, nodeEntryReason), token);
+                await enter(new NodeEntryRequest(session.ProjectId, nodeName, activation, module, nodeEntryReason), token);
             token.ThrowIfCancellationRequested();
             if (activation != nodeActivation) return;
             ApplyPendingModule(nodeName);
@@ -721,14 +538,14 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         catch (Exception error)
         {
-            pendingFailure = error;
+            session.RecordFailure(error);
             Failed?.Invoke(error);
             await Runner.Stop();
         }
     }
 
     private NodeDirectionModule? FindModule(string nodeName) =>
-        projectVersions.GetActiveVersion(currentProjectId)?.DirectionModules
+        projectVersions.GetActiveVersion(session.ProjectId)?.DirectionModules
             .FirstOrDefault(candidate => candidate.NodeId.Equals(nodeName, StringComparison.Ordinal));
 
     private void ApplyPendingModule(string nodeName)
@@ -749,7 +566,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
         try { NodeExited?.Invoke(nodeName); }
         catch (Exception error)
         {
-            pendingFailure = error;
+            session.RecordFailure(error);
             Failed?.Invoke(error);
         }
         finally { directionScopes?.ExitNode(nodeName); }
@@ -758,63 +575,24 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
     private void HandleDialogueCompleted()
     {
         preloader?.Clear();
-        if (isInternalMigration)
+        if (session.IsReplaying)
         {
             return;
         }
-        projectVersions.EndSession(currentProjectId);
-        Exception? failure;
-        bool stopping;
-        lock (sync)
+        projectVersions.EndSession(session.ProjectId);
+        if (session.Failure is not null)
         {
-            failure = pendingFailure;
-            stopping = isStopping;
-        }
-
-        if (failure is not null)
-        {
-            completion.TrySetException(failure);
-            _ = completion.Task.Exception;
+            session.Fault();
             return;
         }
 
-        CompleteSession(stopping
-            ? DialogueCompletionKind.Stopped
-            : DialogueCompletionKind.Completed);
+        CompleteSession(session.IsStopping ? DialogueCompletionKind.Stopped : DialogueCompletionKind.Completed);
     }
 
     private void HandleDialogueStarted()
     {
-        if (pendingRestore is not { } checkpoint)
-        {
-            return;
-        }
-
-        pendingRestore = null;
-
-        var project = Runner.YarnProject ?? throw new ScriptCheckpointException(
-            "DialogueRunner has no Yarn project during checkpoint restore.");
-        var bridgeSnapshot = CreateBridgeSnapshot(checkpoint);
-        stateBridge.InjectReplayAfterNodeSelected(
-            Runner.Dialogue,
-            project.Program,
-            bridgeSnapshot);
-        nodeCallDepth = bridgeSnapshot.CallStackDepth;
+        if (checkpoints.RestoreSelectedNode(Runner) is { } depth) nodeCallDepth = depth;
     }
-
-    private static YarnVmLineSnapshot CreateBridgeSnapshot(ScriptCheckpoint checkpoint) => new(
-            checkpoint.Spot.Script.NodeName,
-            checkpoint.Spot.LineId,
-            0,
-            "WaitingForContinue",
-            checkpoint.OperandStack.Count,
-            checkpoint.CallStack.Count,
-            0,
-            checkpoint.ResolvedSubstitutions)
-    {
-        CallStack = checkpoint.CallStack.Select(frame => new YarnVmCallFrame(frame.NodeName, frame.InstructionIndex)).ToArray(),
-        OperandStack = checkpoint.OperandStack.Select(value => new YarnVmStackValue(value.Type, value.Value)).ToArray(),
-    };
 
     private LineBoundaryContext? activeBoundary;
     public Task<IDisposable> AcquireRestoreAsync(CancellationToken token) =>
@@ -845,10 +623,9 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
         cancellationToken.ThrowIfCancellationRequested();
         currentLineId = line.Id;
         currentSubstitutions = substitutions;
-        currentLine = line;
-        currentOptions = Array.Empty<DialogueOption>();
-        Volatile.Write(ref nextLineRequested, 0);
-        currentEntryCheckpoint = CaptureCheckpointCore(true);
+        localized.RecordLine(line);
+        session.ResetAdvance();
+        CaptureCheckpointCore(true);
         if (CommitLineBoundaryAsync is not null)
         {
             activeBoundary = new LineBoundaryContext(generation, sequence, CaptureCheckpoint(), line);
@@ -863,9 +640,8 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
     {
         currentLineId = line.Id;
         currentSubstitutions = substitutions;
-        currentLine = line;
-        currentOptions = Array.Empty<DialogueOption>();
-        Volatile.Write(ref nextLineRequested, 0);
+        localized.RecordLine(line);
+        session.ResetAdvance();
         LinePresented?.Invoke(line);
         if (line.Origin == DialoguePresentationOrigin.HotReloadReplay &&
             Runner.IsDialogueRunning)
@@ -874,120 +650,13 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
         }
     }
 
-    public DialogueLine? ReResolveCurrentLine(string locale, IReadOnlyList<string> fallbackChain)
-    {
-        if (string.IsNullOrWhiteSpace(currentLineId) || runner?.YarnProject is null)
-        {
-            return null;
-        }
+    public DialogueLine? ReResolveCurrentLine(string locale, IReadOnlyList<string> fallbackChain) =>
+        localized.ReResolveCurrentLine(runner?.YarnProject, currentLineId, currentSubstitutions, locale, fallbackChain);
 
-        var project = runner.YarnProject;
-        string? rawText = null;
-        string? resolvedLocale = null;
+    public IReadOnlyList<DialogueOption> ReResolveCurrentOptions(string locale, IReadOnlyList<string> fallbackChain) =>
+        localized.ReResolveCurrentOptions(runner?.YarnProject, locale, fallbackChain);
 
-        foreach (var candidate in fallbackChain)
-        {
-            var translated = ResolveExactGodotTranslation(currentLineId, candidate);
-            if (translated is not null)
-            {
-                rawText = translated;
-                resolvedLocale = candidate;
-                break;
-            }
-        }
-
-        if (rawText is null && project.baseLocalization is not null)
-        {
-            rawText = project.baseLocalization.GetLocalizedString(currentLineId);
-            resolvedLocale = project.baseLocalization.LocaleCode;
-        }
-
-        if (rawText is null)
-        {
-            return currentLine;
-        }
-
-        var localized = CreateLocalizedLine(
-            currentLineId,
-            rawText,
-            currentSubstitutions,
-            project.LineMetadata?.GetMetadata(currentLineId) ?? Array.Empty<string>(),
-            locale);
-        var reResolved = YarnLineConverter.Convert(
-            localized,
-            resolvedLocale,
-            speakerNameResolver,
-            locale);
-
-        currentLine = reResolved;
-        return reResolved;
-    }
-
-    public IReadOnlyList<DialogueOption> ReResolveCurrentOptions(string locale, IReadOnlyList<string> fallbackChain)
-    {
-        if (currentOptions.Count == 0 || runner?.YarnProject is null)
-        {
-            return currentOptions;
-        }
-
-        var project = runner.YarnProject;
-        var list = new List<DialogueOption>(currentOptions.Count);
-        foreach (var option in currentOptions)
-        {
-            var lineId = option.Line.Id;
-            string? rawText = null;
-            string? resolvedLocale = null;
-            foreach (var candidate in fallbackChain)
-            {
-                var translated = ResolveExactGodotTranslation(lineId, candidate);
-                if (translated is not null)
-                {
-                    rawText = translated;
-                    resolvedLocale = candidate;
-                    break;
-                }
-            }
-
-            if (rawText is null && project.baseLocalization is not null)
-            {
-                rawText = project.baseLocalization.GetLocalizedString(lineId);
-                resolvedLocale = project.baseLocalization.LocaleCode;
-            }
-
-            if (rawText is not null)
-            {
-                var metadata = project.LineMetadata?.GetMetadata(lineId) ?? Array.Empty<string>();
-                var substitutions = option.Substitutions ?? Array.Empty<string>();
-                var localized = CreateLocalizedLine(lineId, rawText, substitutions, metadata, locale);
-                var newLine = YarnLineConverter.Convert(
-                    localized,
-                    resolvedLocale,
-                    speakerNameResolver,
-                    locale);
-                list.Add(new DialogueOption(option.Id, newLine, option.IsAvailable, substitutions));
-            }
-            else
-            {
-                list.Add(option);
-            }
-        }
-
-        currentOptions = list.AsReadOnly();
-        return currentOptions;
-    }
-
-    public void SetLocale(string locale)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(locale);
-        configuredLocale = LocaleManager.NormalizeLocale(locale);
-        if (runner?.YarnProject is not null)
-        {
-            if (runner.LineProvider is LineProviderBehaviour provider)
-            {
-                provider.LocaleCode = configuredLocale;
-            }
-        }
-    }
+    public void SetLocale(string locale) => localized.SetLocale(locale, runner);
 
     public Task WaitForLocaleSwitchBoundaryAsync(CancellationToken cancellationToken)
     {
@@ -1000,26 +669,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
     }
 
     private DialogueLine ConvertPresentedLine(LocalizedLine line) =>
-        YarnLineTextProcessor.ConvertPresentedLine(
-            line,
-            pendingPresentationOrigin,
-            out pendingPresentationOrigin,
-            speakerNameResolver,
-            localeManager,
-            configuredLocale,
-            runner?.LineProvider.LocaleCode,
-            runner?.YarnProject?.baseLocalization?.LocaleCode);
-
-    private LocalizedLine CreateLocalizedLine(
-        string lineId,
-        string rawText,
-        IReadOnlyList<string> substitutions,
-        IReadOnlyList<string> metadata,
-        string parserLocale) =>
-        textProcessor.CreateLocalizedLine(lineId, rawText, substitutions, metadata, parserLocale);
-
-    private static string? ResolveExactGodotTranslation(string lineId, string locale) =>
-        YarnLineTextProcessor.ResolveExactGodotTranslation(lineId, locale);
+        localized.ConvertPresentedLine(line, checkpoints.ConsumePresentationOrigin(), runner);
 
     private void HandleCommandFailed(RuntimeCommandException failure)
     {
@@ -1029,10 +679,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
             return;
         }
 
-        lock (sync)
-        {
-            pendingFailure = failure;
-        }
+        session.RecordFailure(failure);
 
         Failed?.Invoke(failure);
     }
@@ -1040,13 +687,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
     private void CompleteSession(DialogueCompletionKind kind)
     {
         directionScopes?.ExitNode(currentNodeName);
-        lock (sync)
-        {
-            completion.TrySetResult(new DialogueCompletion(
-                kind,
-                currentProjectId,
-                currentStartNode));
-        }
+        session.Complete(kind);
     }
 
     private void DisconnectSignals()
@@ -1078,26 +719,12 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
         }
     }
 
-    private static ScriptDescriptor CreateDescriptor(YarnProject project, ScriptId id) =>
-        YarnScriptCatalogHelper.CreateDescriptor(project, id);
-
     private void EnsureInitialized()
     {
         if (!isInitialized)
         {
             throw new DialogueException("Yarn dialogue backend has not been initialized.");
         }
-    }
-
-    private static TaskCompletionSource<DialogueCompletion> CompletedSource()
-    {
-        var source = new TaskCompletionSource<DialogueCompletion>(
-            TaskCreationOptions.RunContinuationsAsynchronously);
-        source.SetResult(new DialogueCompletion(
-            DialogueCompletionKind.Completed,
-            string.Empty,
-            string.Empty));
-        return source;
     }
 
     public void Dispose()

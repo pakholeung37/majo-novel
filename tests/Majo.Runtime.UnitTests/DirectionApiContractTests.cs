@@ -44,10 +44,11 @@ public sealed class DirectionApiContractTests
     [Fact]
     public void ObjectPreloadSeparatesAssetAndInstanceAndDoesNotTreatFxAsBackdrop()
     {
-        var resource = Assert.Single(YarnPreloadPlanner.Resources(new[] { "object", "knife1", "asset:evidence/knife", "appearance:blue" }));
-        Assert.Equal(new YarnPreloadReference("object", "knife1", "evidence/knife", "blue"), resource);
-        Assert.Empty(YarnPreloadPlanner.Resources(new[] { "backdrop", "fx", "shake" }));
-        Assert.Empty(YarnPreloadPlanner.Resources(new[] { "character", "move", "hero", "at:left" }));
+        var planner = new YarnPreloadPlanner(TestPreloadCatalog.Create());
+        var resource = Assert.Single(planner.GetResources(new[] { "object", "knife1", "asset:evidence/knife", "appearance:blue" }));
+        Assert.Equal(new YarnPreloadReference("object", "knife1", "evidence/knife", "blue", "main"), resource);
+        Assert.Empty(planner.GetResources(new[] { "backdrop", "fx", "shake" }));
+        Assert.Empty(planner.GetResources(new[] { "character", "move", "hero", "at:left" }));
     }
 
     [Fact]

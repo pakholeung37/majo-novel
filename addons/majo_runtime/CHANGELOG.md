@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Separate Yarn playback session completion, checkpoint replay and localized presentation state from the Runner backend.
+- Separate hot reload source monitoring from candidate application and rollback; drain scans and notifications during shutdown, including cancellation callback failures.
+- Verify that rejected live reloads preserve the public dialogue session and allow a later successful reload.
+
+- Share catalog path resolution and typed argument binding between Yarn execution and resource preloading; support opt-in plugin resource providers.
+- Preserve command casing rules, named argument order, quoted IDs, contract defaults and object aliases during preload analysis.
+- Require the runtime command catalog for low-level preload helpers; migrate `Resources(tokens)` to `Resources(tokens, catalog)` or an attached planner's `GetResources(tokens)`.
+
 - Isolate state notification failures from capture and restore outcomes, including input-lock cleanup.
 - Activate commands and plugins inside the host lifecycle deadline; deactivate plugins before runtime dependencies close.
 - Move rendering, replay, audio and skip coordination out of Core/RuntimeHost into a replaceable execution coordinator.

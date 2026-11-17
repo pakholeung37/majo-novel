@@ -10,6 +10,7 @@ using Majo.Runtime.Dialogue.Presentation;
 using Majo.Runtime.Dialogue.Yarn;
 using Majo.Runtime.Dialogue.Yarn.HotReload;
 using Majo.Runtime.Script;
+using Majo.Runtime.State;
 using YarnSpinnerGodot;
 
 namespace Majo.Runtime.HeadlessTests;
@@ -44,6 +45,7 @@ public partial class HeadlessTestRunner
 
             var presenter = new HotReloadPresenter();
             var runOnceMarkup = new RunOnceMarkupProbe();
+            var preflight = new HotReloadPreflightProbe();
             var configuration = CreateHeadlessConfiguration();
             configuration.Resources!.RootPath = "res://tests";
             configuration.Resources.ScriptsPath = "headless";
@@ -62,6 +64,7 @@ public partial class HeadlessTestRunner
             };
             bootstrap.ConfigureDialoguePresenters += presenters => presenters.Register(presenter);
             bootstrap.ConfigureDialogueMarkupHandlers += handlers => handlers.Register(runOnceMarkup);
+            bootstrap.ConfigureStateContributors += contributors => contributors.Register(preflight);
             AddChild(bootstrap);
             await bootstrap.InitializationCompletion;
 
@@ -84,6 +87,18 @@ public partial class HeadlessTestRunner
             Assert(runOnceMarkup.Prepared == 1,
                 "Run-once markup did not execute on normal line entry.");
             var sessionId = ((DialoguePlayer)dialogue).CurrentDialogueSessionId;
+            var completion = dialogue.Completion;
+            await hotReload.RequestReloadAsync("YarnVmBridge");
+            await WaitForConditionAsync(
+                () => hotReload.Status.Message?.Contains("was rolled back", StringComparison.Ordinal) == true,
+                3);
+            Assert(preflight.Rejections == 1 && services.Get<IStateManager>().Status == StateManagerStatus.Idle &&
+                    script.Phase == ScriptPlaybackPhase.AwaitingAdvance &&
+                    ReferenceEquals(completion, dialogue.Completion) && !completion.IsCompleted &&
+                    ((DialoguePlayer)dialogue).CurrentDialogueSessionId == sessionId &&
+                    stopped == 0 && completed == 0,
+                "Rejected hot reload changed or completed the running story session.");
+            preflight.Reject = false;
             delayedPresenter.DelayNextDismissal = true;
             await hotReload.RequestReloadAsync("YarnVmBridge");
             await WaitForConditionAsync(
@@ -197,5 +212,32 @@ public partial class HeadlessTestRunner
         public DialogueMarkupReplayPolicy ReplayPolicy => DialogueMarkupReplayPolicy.RunOnce;
         public int Prepared { get; private set; }
         public void OnLinePrepared(DialogueText text) => Prepared++;
+    }
+
+    private sealed class HotReloadPreflightProbe : IPreparedStateContributor, IStateMutationParticipant
+    {
+        public bool Reject { get; set; } = true;
+        public int Rejections { get; private set; }
+        public string Key => "test.hot-reload-preflight";
+        public StateScope Scope => StateScope.Game;
+        public int SchemaVersion => 1;
+        public StateContributorCapability Capability => StateContributorCapability.DurableRollback;
+        public void BindStateMutationGate(StateMutationGate gate) { }
+        public ValueTask<StateRecord> CaptureAsync(CancellationToken token) => ValueTask.FromResult(
+            new StateRecord(Key, Scope, SchemaVersion, System.Text.Json.JsonSerializer.SerializeToElement(0)));
+        public ValueTask PreflightAsync(StateRecord record, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            if (Reject)
+            {
+                Rejections++;
+                throw new StateCompatibilityException("Injected hot reload preflight rejection.");
+            }
+            return ValueTask.CompletedTask;
+        }
+        public ValueTask ResetAsync(CancellationToken token) => ValueTask.CompletedTask;
+        public ValueTask<IPreparedStateRestore> PrepareRestoreAsync(
+            StateRecord record, RestoreContext context, CancellationToken token) =>
+            ValueTask.FromResult<IPreparedStateRestore>(new PreparedStateRestore(() => { }));
     }
 }

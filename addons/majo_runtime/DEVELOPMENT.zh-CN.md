@@ -80,6 +80,20 @@ python3 addons/majo_runtime/Tools/majo.py doctor --project ../my-game
 
 状态管理的 `StatusChanged`、`Captured`、`BoundaryCommitted`、`Restored` 和 `Failed` 都是通知事件。单个订阅者的异常会被记录为 `state.observer_failed`，不会改变事务结果，也不会阻止后续订阅者。需要阻止提交的校验应放在状态 contributor 的预检或准备阶段。
 
+## 自定义命令的资源预加载
+
+需要预加载的 `RuntimeCommand<TArguments>` 可以实现 `ICommandResourceProvider<TArguments>`，在 `DescribeResources` 中从已绑定的参数返回 `CommandResourceReference` 列表。例如 `new("character", arguments.Actor, arguments.Asset.Value, arguments.Appearance.Value, arguments.Stage.GetValueOrDefault("main"))`；支持的 Kind 为 `character`、`object`、`backdrop`、`bgm`、`sfx` 和 `voice`。没有资源需求的命令无需实现此接口。
+
+资源描述使用与执行相同的命令目录、最长命令路径匹配、参数绑定器、转换器及契约默认值，不调用命令的 `ExecuteAsync`。描述方法及所用转换器、校验器必须没有副作用，不应创建 Actor、改变变量或开始播放。描述失败只记录 `preload.command_analysis_failed` 并跳过这条命令的预加载，实际执行时仍按正式命令的错误策略处理。向前分析遇到动态参数、分支、选项和跳转时停止，执行到动态命令后再分析已经求值的参数。
+
+Bootstrap 会将完成注册的命令目录接入默认预加载器，包括插件命令。手动构造 `YarnWindowPreloader` 或 `YarnPreloadPlanner` 时，通过 `commands` 参数传入 `services.Get<IYarnCommandAdapter>().Catalog`，或在目录就绪后调用 `SetCommandCatalog`；尚未接入目录时只分析语音行。旧的低层静态调用 `YarnPreloadPlanner.Resources(tokens)` 需要迁移为 `Resources(tokens, catalog)`，也可改用已接入目录的 `planner.GetResources(tokens)`。该源码 API 变化已声明在兼容性清单中，受管理项目升级需使用 `--allow-breaking --check` 并验证游戏自己的回归。
+
+## Yarn 会话与热重载的内部边界
+
+`YarnDialogueBackend` 负责 Runner 装配、节点进入和展示边界连接。`YarnPlaybackSession` 持有对外的 Completion、停止阶段和推进限制；内部重放通过可嵌套的作用域抑制会话结束，读档和热重载不会因此完成原来的对话会话。`YarnCheckpointController` 独立持有 VM bridge、行入口检查点、待恢复数据和首次重放来源；`YarnLocalizedDialogue` 持有当前行、选项与语言刷新状态。这些组件是内部实现，不增加游戏侧注册入口。
+
+热重载的 `YarnSourceMonitor` 独立拥有文件监听器、扫描计时器和扫描任务；编译接受的指纹及重置都会使旧扫描结果失效。`ShutdownAsync` 会取消并等待扫描与已开始的通知结束，再关闭其余依赖。`YarnHotReloadApplier` 只在引擎线程处理安全边界检查、版本激活、恢复事务和失败回退；服务入口负责去抖、编译代次、候选排队与主线程调度。Runner 停止及恢复后的帧等待仍保留，用于等待 Yarn 展示回调与 VM continuation 稳定。
+
 ## CI 与发布
 
 游戏 CI 从已提交的 addon 副本构建，先运行包内 `Tools/majo.py doctor --project .`，再执行游戏自己的构建、导入和回归。不要在游戏 CI 使用开发者的 `--source` 路径或自动追踪系统 main 分支。

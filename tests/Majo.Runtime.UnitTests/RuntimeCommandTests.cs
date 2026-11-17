@@ -18,6 +18,31 @@ namespace Majo.Runtime.UnitTests;
 public sealed class RuntimeCommandTests
 {
     [Fact]
+    public async Task YarnDispatchAndPreloadingShareCaseInsensitiveSubcommandResolution()
+    {
+        var registry = new FakeCommandRegistry();
+        var catalog = TestPreloadCatalog.Create();
+        var dispatcher = new RuntimeCommandDispatcher();
+        var adapter = new YarnCommandAdapter(registry, catalog, dispatcher);
+        await adapter.InitializeAsync(default);
+        IReadOnlyList<CommandResourceReference>? resources = null;
+        adapter.PrepareCommandAsync = (root, arguments, _) =>
+        {
+            resources = catalog.DescribeResources(new[] { root }.Concat(arguments).ToArray());
+            return Task.CompletedTask;
+        };
+        var handler = Assert.IsType<Func<string[], Task>>(registry.Handlers["character"]);
+
+        await handler(["MOVE", "hero", "at:50,50"]);
+
+        Assert.NotNull(resources);
+        Assert.Empty(resources);
+        Assert.Null(dispatcher.LastFailure);
+        Assert.Same(catalog, adapter.Catalog);
+        await adapter.ShutdownAsync(default);
+    }
+
+    [Fact]
     public async Task NewAppearanceWithPositionUsesVisibilityFadeByDefault()
     {
         var beats = new FakeDirectionBeatRuntime();

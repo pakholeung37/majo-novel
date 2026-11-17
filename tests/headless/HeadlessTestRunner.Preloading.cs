@@ -12,6 +12,8 @@ using Majo.Runtime.Actors;
 using Majo.Runtime.Actors.Godot;
 using Majo.Runtime.Configuration;
 using Majo.Runtime.Dialogue;
+using Majo.Runtime.Dialogue.Commands;
+using Majo.Runtime.Dialogue.Yarn;
 using Majo.Runtime.Dialogue.Yarn.Preloading;
 using Majo.Runtime.Direction.Core;
 using Majo.Runtime.Direction.Execution;
@@ -53,11 +55,13 @@ public partial class HeadlessTestRunner
             manifestReads[path] = manifestReads.GetValueOrDefault(path) + 1;
             return Task.FromResult(LayeredCharacterManifest.Parse(FileAccess.GetFileAsString(path)));
         });
+        var customCommand = new PreloadOnlyCommand();
         var bootstrap = new MajoRuntimeBootstrap
         {
             Name = "WindowPreloadRuntime",
             Configuration = configuration,
             ConfigureServices = registry => registry.ReplaceSingleton<LayeredCharacterManifestCache>(_ => cache),
+            ConfigureCommands = commands => commands.Add("preload_assets", _ => customCommand, "headless"),
             ConfigureActorFactories = registry => registry.Register("test.background-metadata", ActorFactoryDomains.Direction,
                 context =>
                 {
@@ -80,7 +84,7 @@ public partial class HeadlessTestRunner
         });
         node.Instructions.Add(new global::Yarn.Instruction
         {
-            RunCommand = new global::Yarn.Instruction.Types.RunCommandInstruction { CommandText = "character Plain appearance:1" },
+            RunCommand = new global::Yarn.Instruction.Types.RunCommandInstruction { CommandText = "preload_assets" },
         });
         node.Instructions.Add(new global::Yarn.Instruction
         {
@@ -90,7 +94,8 @@ public partial class HeadlessTestRunner
         using var project = new YarnProject { CompiledYarnProgramBase64 = Convert.ToBase64String(program.ToByteArray()) };
         using var preloader = new YarnWindowPreloader(resources, configuration.Resources, configuration.Audio!,
             services.Get<ILocaleManager>(), services.Get<ILocalizedResourceResolver>(), actors,
-            directionDefinitions: services.Get<DirectionActorDefinitionEnvironment>().Resolver);
+            directionDefinitions: services.Get<DirectionActorDefinitionEnvironment>().Resolver,
+            commands: services.Get<IYarnCommandAdapter>().Catalog);
         await preloader.PrepareStartAsync(project, "Start", CancellationToken.None, "line:preload-voice");
         preloader.EnterNode(project, "Start");
         var restoredWindow = resources.CaptureCacheSnapshot();
@@ -102,14 +107,22 @@ public partial class HeadlessTestRunner
         Assert(snapshot.Entries.Any(entry => entry.ResolvedPath.Contains("room", StringComparison.Ordinal)) &&
             snapshot.Entries.Any(entry => entry.ResolvedPath.Contains("Plain/1", StringComparison.Ordinal)) &&
             snapshot.Entries.Any(entry => entry.ResolvedPath.Contains("preload-voice", StringComparison.Ordinal)),
-            "Opening window did not preload background, character and voice before execution.");
+            "Opening window did not preload background, custom-command character and voice before execution.");
+        Assert(customCommand.Executions == 0, "Speculative preloading executed the custom command.");
         Assert(actors.Actors.Count == 0, "Resource discovery created actors prematurely.");
+
+        var descriptions = customCommand.ResourceDescriptions;
+        configuration.Resources.EnableYarnPreloading = false;
+        await preloader.BeforeCommandAsync("preload_assets", Array.Empty<string>(), CancellationToken.None);
+        Assert(customCommand.ResourceDescriptions == descriptions,
+            "Disabled preloading still invoked the command resource provider.");
+        configuration.Resources.EnableYarnPreloading = true;
 
         var misses = snapshot.CacheMisses;
         await preloader.BeforeCommandAsync("backdrop", ["room"], CancellationToken.None);
         await resources.LoadAsync<Texture2D>(new ResourceKey("backgrounds/room/Default"),
             "res://tests/headless/fixtures/resources/backgrounds/room.png");
-        await preloader.BeforeCommandAsync("character", ["Plain", "appearance:1"], CancellationToken.None);
+        await preloader.BeforeCommandAsync("preload_assets", Array.Empty<string>(), CancellationToken.None);
         await resources.LoadAsync<Texture2D>(new ResourceKey("characters/Plain/1"));
         await preloader.BeforeLineAsync(new DialogueLine("line:preload-voice", "LayeredA",
             new DialogueText(string.Empty, Array.Empty<DialogueMarkupSpan>()), Array.Empty<string>()), CancellationToken.None);
@@ -138,7 +151,7 @@ public partial class HeadlessTestRunner
         await preloader.BeforeCommandAsync("character", ["LayeredB", "appearance:Surprised1"], CancellationToken.None);
         await coordinator.ExecuteAsync(
             [ActorPatchFor("LayeredB", new DirectionPoint(30, 0), "Surprised1", 1, 0),
-             ActorPatchFor("LayeredA", new DirectionPoint(70, 0), "Fearful1", 1, 0)], DirectionCompletionBarrier.Settle);
+                ActorPatchFor("LayeredA", new DirectionPoint(70, 0), "Fearful1", 1, 0)], DirectionCompletionBarrier.Settle);
         var pairSnapshot = resources.CaptureCacheSnapshot();
         Assert(pairSnapshot.Entries.Single(entry => entry.ResolvedPath.Contains("LayeredA/atlas", StringComparison.Ordinal)).EstimatedBytes == 1024L * 1024 * 4,
             "LayeredA estimate charged mipmaps disabled by the texture importer.");
@@ -189,11 +202,12 @@ public partial class HeadlessTestRunner
         await WaitForConditionAsync(() => resources.CaptureCacheSnapshot().ActiveLeaseCount == 0, 2);
         using (var metadataPreloader = new YarnWindowPreloader(resources, configuration.Resources, configuration.Audio!,
             services.Get<ILocaleManager>(), services.Get<ILocalizedResourceResolver>(), actors,
-            directionDefinitions: services.Get<DirectionActorDefinitionEnvironment>().Resolver))
+            directionDefinitions: services.Get<DirectionActorDefinitionEnvironment>().Resolver,
+            commands: services.Get<IYarnCommandAdapter>().Catalog))
         {
             await metadataPreloader.BeforeCommandAsync("backdrop", ["Composite", "appearance:+Rain"], CancellationToken.None);
             Assert(preloadedBackgrounds.Count == 0, "Preload guessed an unknown incremental appearance baseline.");
-            await metadataPreloader.BeforeCommandAsync("beat", ["begin"], CancellationToken.None);
+            await metadataPreloader.BeforeCommandAsync("BEAT", ["BEGIN"], CancellationToken.None);
             foreach (var appearance in new[] { "Night", "+Rain", "Night", "+Snow" })
                 await metadataPreloader.BeforeCommandAsync("backdrop", ["Composite", "appearance:" + appearance], CancellationToken.None);
             Assert(preloadedBackgrounds.Contains("Night+Rain") && preloadedBackgrounds.Contains("Night+Snow") &&
@@ -205,6 +219,27 @@ public partial class HeadlessTestRunner
         }
         await bootstrap.RequestShutdownAsync();
     }
+    private sealed class PreloadOnlyCommand : RuntimeCommand<PreloadOnlyCommand.Arguments>,
+        ICommandResourceProvider<PreloadOnlyCommand.Arguments>
+    {
+        public sealed record Arguments;
+        private static readonly CommandDefinition<Arguments> Schema = CommandDefinition<Arguments>
+            .Create("preload_assets").Build(_ => _ => new Arguments());
+        public override CommandDefinition<Arguments> Definition => Schema;
+        public int Executions { get; private set; }
+        public int ResourceDescriptions { get; private set; }
+        public IReadOnlyList<CommandResourceReference> DescribeResources(Arguments arguments)
+        {
+            ResourceDescriptions++;
+            return [new("character", "Plain", Appearance: "1")];
+        }
+        protected override ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
+        {
+            Executions++;
+            return ValueTask.CompletedTask;
+        }
+    }
+
     private sealed class PreloadBackgroundMetadataFactory(List<string> appearances) : IActorFactory
     {
         public string FactoryId => "test.background-metadata";

@@ -32,6 +32,9 @@ public interface IBoundCommand : IRuntimeCommand
     object BindUntyped(RawCommandArguments raw);
 
     object BindUntyped(CommandInput input);
+
+    IReadOnlyList<CommandResourceReference> DescribeResources(CommandInput input) =>
+        Array.Empty<CommandResourceReference>();
 }
 
 public sealed class BoundParameterSlot
@@ -376,6 +379,11 @@ public sealed class BoundCommand<TArguments> : IBoundCommand
     public object BindUntyped(RawCommandArguments raw) => Bind(raw);
 
     public object BindUntyped(CommandInput input) => Bind(input);
+
+    public IReadOnlyList<CommandResourceReference> DescribeResources(CommandInput input) =>
+        command is ICommandResourceProvider<TArguments> provider
+            ? provider.DescribeResources(Bind(input))
+            : Array.Empty<CommandResourceReference>();
 
     public async ValueTask ExecuteAsync(CommandInput input, CommandExecutionContext context)
     {

@@ -13,7 +13,7 @@ using Majo.Runtime.Configuration;
 using Majo.Runtime.Core;
 using Majo.Runtime.Script;
 using Majo.Runtime.State;
-using YarnSpinnerGodot;
+using static Majo.Runtime.Dialogue.Yarn.HotReload.YarnHotReloadLog;
 
 namespace Majo.Runtime.Dialogue.Yarn.HotReload;
 
@@ -22,7 +22,6 @@ public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
     private const string LogCategory = "script.hot_reload";
     private readonly IYarnProjectVersionStore versions;
     private readonly IScriptPlayback script;
-    private readonly IYarnDialogueBackend backend;
     private readonly YarnHotReloadConfiguration configuration;
     private readonly string defaultProjectId;
     private readonly string scriptsRoot;
@@ -32,21 +31,18 @@ public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
     private readonly YarnProjectMaterializer materializer;
     private readonly IPlaybackModeManager? playback;
     private readonly IRuntimeLogger logger;
-    private readonly IStateManager? state;
+    private readonly YarnHotReloadApplier applier;
     private readonly object sync = new();
     private readonly SemaphoreSlim compileGate = new(1, 1);
     private CancellationTokenSource? lifetime;
     private CancellationTokenSource? pendingReload;
-    private FileSystemWatcher? watcher;
-    private System.Threading.Timer? consistencyTimer;
+    private YarnSourceMonitor? sourceMonitor;
     private YarnHotReloadDispatcher? dispatcher;
     private long requestedGeneration;
     private bool enabled;
     private readonly Dictionary<string, YarnProjectVersion> pendingCandidates =
         new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> lastRejectedSourceFingerprints =
-        new(StringComparer.Ordinal);
-    private readonly Dictionary<string, string> observedSourceFingerprints =
         new(StringComparer.Ordinal);
     private readonly SemaphoreSlim applyGate = new(1, 1);
     private CancellationTokenSource? resetCancellation;
@@ -68,7 +64,7 @@ public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
     {
         this.versions = versions ?? throw new ArgumentNullException(nameof(versions));
         this.script = script ?? throw new ArgumentNullException(nameof(script));
-        this.backend = backend ?? throw new ArgumentNullException(nameof(backend));
+        ArgumentNullException.ThrowIfNull(backend);
         this.configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         this.defaultProjectId = RequireId(defaultProjectId, nameof(defaultProjectId));
         this.sourceFilesAvailable = sourceFilesAvailable;
@@ -79,7 +75,7 @@ public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
         this.compiler = compiler ?? new YarnRuntimeCompiler();
         this.materializer = materializer ?? new YarnProjectMaterializer();
         this.playback = playback;
-        this.state = state;
+        applier = new YarnHotReloadApplier(versions, script, backend, configuration, playback, state, this.logger);
     }
 
     public event Action<YarnHotReloadStatusChanged>? StatusChanged;
@@ -114,23 +110,11 @@ public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
         {
             playback.PauseChanged += HandlePlaybackPauseChanged;
         }
-        watcher = new FileSystemWatcher(scriptsRoot)
-        {
-            IncludeSubdirectories = true,
-            NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite |
-                NotifyFilters.CreationTime | NotifyFilters.Size,
-            EnableRaisingEvents = true,
-        };
-        watcher.Changed += HandleSourceEvent;
-        watcher.Created += HandleSourceEvent;
-        watcher.Deleted += HandleSourceEvent;
-        watcher.Renamed += HandleSourceEvent;
-        watcher.Error += HandleWatcherError;
-        consistencyTimer = new System.Threading.Timer(
-            _ => _ = RunConsistencyScanAsync(defaultProjectId),
-            null,
-            configuration.ConsistencyScanMilliseconds,
-            configuration.ConsistencyScanMilliseconds);
+        sourceMonitor = new YarnSourceMonitor(scriptsRoot, configuration.ConsistencyScanMilliseconds,
+            async token => (await YarnSourceSnapshotReader.ReadAsync(defaultProjectId,
+                ResolveManifestPath(defaultProjectId), token)).SourceFingerprint,
+            fingerprint => versions.UpdateSourceFingerprint(defaultProjectId, fingerprint),
+            () => QueueReload(defaultProjectId), logger);
         SetStatus(new YarnHotReloadStatus(
             YarnHotReloadState.Watching,
             0,
@@ -165,8 +149,8 @@ public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
             resetCancellation = new CancellationTokenSource();
             pendingCandidates.Clear();
             lastRejectedSourceFingerprints.Clear();
-            observedSourceFingerprints.Clear();
         }
+        sourceMonitor?.ResetBaseline();
         pendingToDispose?.Cancel();
         pendingToDispose?.Dispose();
         resetToCancel?.Cancel();
@@ -189,15 +173,13 @@ public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
 
     public async Task ShutdownAsync(CancellationToken cancellationToken)
     {
-        watcher?.Dispose();
-        watcher = null;
+        if (sourceMonitor is not null) await sourceMonitor.DisposeAsync();
+        sourceMonitor = null;
         script.PhaseChanged -= HandlePhaseChanged;
         if (playback is not null)
         {
             playback.PauseChanged -= HandlePlaybackPauseChanged;
         }
-        await (consistencyTimer?.DisposeAsync() ?? ValueTask.CompletedTask);
-        consistencyTimer = null;
         CancellationTokenSource? lifetimeToDispose;
         CancellationTokenSource? pendingToDispose;
         CancellationTokenSource? resetToDispose;
@@ -236,72 +218,6 @@ public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
         var targetProject = RequireId(projectId ?? defaultProjectId, nameof(projectId));
         var generation = Interlocked.Increment(ref requestedGeneration);
         await CompileGenerationAsync(targetProject, generation, cancellationToken);
-    }
-
-    private void HandleSourceEvent(object sender, FileSystemEventArgs args)
-    {
-        if (IsYarnPath(args.FullPath))
-        {
-            QueueReload(defaultProjectId);
-        }
-    }
-
-    private void HandleWatcherError(object sender, ErrorEventArgs args)
-    {
-        logger.Warning(
-            LogCategory,
-            "script.hot_reload.watcher_overflow",
-            "The Yarn source watcher lost events; a consistency scan was scheduled.",
-            args.GetException());
-        QueueReload(defaultProjectId);
-    }
-
-    private async Task RunConsistencyScanAsync(string projectId)
-    {
-        var currentLifetime = lifetime;
-        if (!enabled || currentLifetime?.IsCancellationRequested != false)
-        {
-            return;
-        }
-
-        try
-        {
-            var snapshot = await YarnSourceSnapshotReader.ReadAsync(
-                projectId,
-                ResolveManifestPath(projectId),
-                currentLifetime.Token);
-            string? previous;
-            lock (sync)
-            {
-                observedSourceFingerprints.TryGetValue(projectId, out previous);
-                observedSourceFingerprints[projectId] = snapshot.SourceFingerprint;
-            }
-
-            // The first consistency scan establishes the baseline. In
-            // particular, this avoids treating the imported project's empty
-            // source fingerprint as a change during a cold start.
-            if (previous is null)
-            {
-                versions.UpdateSourceFingerprint(projectId, snapshot.SourceFingerprint);
-                return;
-            }
-
-            if (!string.Equals(previous, snapshot.SourceFingerprint, StringComparison.Ordinal))
-            {
-                QueueReload(projectId);
-            }
-        }
-        catch (OperationCanceledException) when (currentLifetime.Token.IsCancellationRequested)
-        {
-        }
-        catch (Exception exception)
-        {
-            logger.Warning(
-                LogCategory,
-                "script.hot_reload.consistency_scan_failed",
-                $"Yarn consistency scan failed for project '{projectId}'.",
-                exception);
-        }
     }
 
     private void QueueReload(string projectId)
@@ -382,10 +298,8 @@ public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
                 projectId,
                 ResolveManifestPath(projectId),
                 cancellationToken);
-            lock (sync)
-            {
-                observedSourceFingerprints[projectId] = snapshot.SourceFingerprint;
-            }
+            if (string.Equals(projectId, defaultProjectId, StringComparison.Ordinal))
+                sourceMonitor?.AcceptFingerprint(snapshot.SourceFingerprint);
             var active = versions.GetActiveVersion(projectId);
             if (active is not null && string.Equals(
                 active.SourceFingerprint,
@@ -468,9 +382,7 @@ public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
             }
 
             versions.StageForNextSession(version);
-            if (playback?.IsPaused != true &&
-                script.Phase == ScriptPlaybackPhase.AwaitingAdvance &&
-                script.CanCaptureCheckpoint)
+            if (applier.IsAtSafePoint)
             {
                 await ApplyCandidateAsync(version, cancellationToken);
                 return;
@@ -533,9 +445,7 @@ public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
 
     private void TryApplyPendingCandidate()
     {
-        if (playback?.IsPaused == true ||
-            script.Phase != ScriptPlaybackPhase.AwaitingAdvance ||
-            !script.CanCaptureCheckpoint)
+        if (!applier.IsAtSafePoint)
         {
             return;
         }
@@ -600,9 +510,7 @@ public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
         {
             return;
         }
-        if (playback?.IsPaused == true ||
-            script.Phase != ScriptPlaybackPhase.AwaitingAdvance ||
-            !script.CanCaptureCheckpoint)
+        if (!applier.IsAtSafePoint)
         {
             lock (sync)
             {
@@ -614,214 +522,17 @@ public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
             return;
         }
 
-        var spot = script.CurrentSpot;
-        var running = versions.GetRunningVersion(candidate.ProjectId);
-        if (spot is null || running is null ||
-            !string.Equals(spot.Script.ProjectId, candidate.ProjectId, StringComparison.Ordinal) ||
-            !candidate.NodeNames.Contains(spot.Script.NodeName) ||
-            !candidate.LineNodes.TryGetValue(spot.LineId, out var candidateNode) ||
-            !string.Equals(candidateNode, spot.Script.NodeName, StringComparison.Ordinal) ||
-            candidate.ImplicitLineIds.Contains(spot.LineId))
+        var result = await applier.ApplyAsync(candidate, phase =>
         {
-            var reason = $"Current line '{spot?.LineId ?? "<none>"}' is not a stable reload target; " +
-                $"generation {candidate.Generation} will be used by the next dialogue session.";
-            SetWatching(candidate.Generation, candidate.ProjectId,
-                candidate.SourceFingerprint, candidate.ProgramFingerprint,
-                candidate.Diagnostics, reason);
-            logger.Warning(LogCategory, "script.hot_reload.live_apply_rejected", reason,
-                properties: Properties(candidate.ProjectId, candidate.Generation,
-                    candidate.SourceFingerprint, candidate.ProgramFingerprint,
-                    YarnHotReloadOutcome.CompatibilityRejected));
-            PublishAttempt(candidate.ProjectId, candidate.Generation,
-                YarnHotReloadOutcome.CompatibilityRejected,
-                candidate.SourceFingerprint, candidate.ProgramFingerprint,
-                candidate.Diagnostics, reason, TimeSpan.Zero);
-            return;
-        }
-
-        var stableBoundary = state is IStateBoundarySource boundaries
-            ? await boundaries.CaptureSaveBoundaryAsync(cancellationToken)
-            : null;
-        var checkpoint = stableBoundary?.Context.Script ?? script.CaptureCheckpoint();
-        if ((checkpoint.CallStack.Count > 0 || checkpoint.OperandStack.Count > 0) &&
-            !string.Equals(candidate.ProgramFingerprint, checkpoint.ProgramFingerprint, StringComparison.Ordinal))
-        {
-            const string reason = "A nested script checkpoint requires the same compiled program; the candidate will be used by the next dialogue session.";
-            SetWatching(candidate.Generation, candidate.ProjectId, candidate.SourceFingerprint,
-                candidate.ProgramFingerprint, candidate.Diagnostics, reason);
-            PublishAttempt(candidate.ProjectId, candidate.Generation, YarnHotReloadOutcome.CompatibilityRejected,
-                candidate.SourceFingerprint, candidate.ProgramFingerprint, candidate.Diagnostics, reason, TimeSpan.Zero);
-            return;
-        }
-        var variables = backend.VariableStore.Capture();
-        var stopwatch = Stopwatch.StartNew();
-        SetStatus(new YarnHotReloadStatus(
-            YarnHotReloadState.Applying,
-            candidate.Generation,
-            candidate.ProjectId,
-            candidate.SourceFingerprint,
-            candidate.ProgramFingerprint,
-            candidate.Diagnostics,
-            null));
-        logger.Info(LogCategory, "script.hot_reload.apply_started",
-            $"Applying Yarn hot reload generation {candidate.Generation}.",
-            properties: Properties(candidate.ProjectId, candidate.Generation,
-                candidate.SourceFingerprint, candidate.ProgramFingerprint,
-                YarnHotReloadOutcome.Applied));
-
-        using var playbackPause = playback?.AcquirePause(PlaybackPauseReason.HotReload);
-        backend.SetHotReloadProgressionFrozen(true);
-        try
-        {
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(configuration.ApplyTimeoutMilliseconds);
-            versions.Activate(candidate);
-            if (state is not null && stableBoundary is not null)
-            {
-                var plan = await state.RestoreTransaction.PreflightAsync(
-                    stableBoundary.Snapshot,
-                    StateScope.Game,
-                    StateOperationKind.HotReload,
-                    timeout.Token);
-                await state.RestoreTransaction.ExecuteAsync(plan, timeout.Token);
-            }
-            else
-            {
-                await backend.ReplaceRunningProjectAsync(
-                    candidate,
-                    checkpoint,
-                    DialoguePresentationOrigin.HotReloadReplay,
-                    timeout.Token);
-            }
-            await WaitForStableBoundaryAsync(checkpoint.Spot, timeout.Token);
-            versions.MarkRunning(candidate.ProjectId, candidate.Project);
-            var message = $"Yarn hot reload generation {candidate.Generation} was applied.";
-            SetWatching(candidate.Generation, candidate.ProjectId,
-                candidate.SourceFingerprint, candidate.ProgramFingerprint,
-                candidate.Diagnostics, message);
-            logger.Info(LogCategory, "script.hot_reload.applied", message,
-                properties: Properties(candidate.ProjectId, candidate.Generation,
-                    candidate.SourceFingerprint, candidate.ProgramFingerprint,
-                    YarnHotReloadOutcome.Applied));
-            PublishAttempt(candidate.ProjectId, candidate.Generation,
-                YarnHotReloadOutcome.Applied,
-                candidate.SourceFingerprint, candidate.ProgramFingerprint,
-                candidate.Diagnostics, message, stopwatch.Elapsed);
-        }
-        catch (Exception applyException)
-        {
-            if (state?.Status == StateManagerStatus.Faulted)
-                throw;
-            SetStatus(Status with { State = YarnHotReloadState.RollingBack });
-            logger.Warning(LogCategory, "script.hot_reload.rollback_started",
-                "Yarn hot reload failed; restoring the last-known-good project.",
-                applyException);
-            try
-            {
-                versions.Activate(running);
-                using var rollbackTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                rollbackTimeout.CancelAfter(configuration.ApplyTimeoutMilliseconds);
-                if (state is null || stableBoundary is null)
-                {
-                    await backend.ReplaceRunningProjectAsync(
-                        running,
-                        checkpoint,
-                        DialoguePresentationOrigin.CheckpointRestore,
-                        rollbackTimeout.Token);
-                    backend.VariableStore.ReplaceAll(variables);
-                    await WaitForStableBoundaryAsync(checkpoint.Spot, rollbackTimeout.Token);
-                }
-                versions.MarkRunning(running.ProjectId, running.Project);
-                // Keep the successfully compiled candidate available for the
-                // next session. A live apply can fail after the active version
-                // has already been switched, so Activate(running) alone would
-                // otherwise silently discard the candidate.
-                versions.StageForNextSession(candidate);
-                var message = "Yarn hot reload was rolled back to the last-known-good project.";
-                SetWatching(candidate.Generation, candidate.ProjectId,
-                    candidate.SourceFingerprint, running.ProgramFingerprint,
-                    candidate.Diagnostics, message);
-                logger.Error(LogCategory, "script.hot_reload.rolled_back", message, applyException);
-                PublishAttempt(candidate.ProjectId, candidate.Generation,
-                    YarnHotReloadOutcome.RolledBack,
-                    candidate.SourceFingerprint, running.ProgramFingerprint,
-                    candidate.Diagnostics, message, stopwatch.Elapsed);
-            }
-            catch (Exception rollbackException)
-            {
-                throw new AggregateException(
-                    "Yarn hot reload and rollback both failed.",
-                    applyException,
-                    rollbackException);
-            }
-        }
-        finally
-        {
-            backend.SetHotReloadProgressionFrozen(false);
-        }
-    }
-
-    private async Task WaitForBoundaryAsync(
-        ScriptPlaybackSpot expected,
-        CancellationToken cancellationToken)
-    {
-        var completion = new TaskCompletionSource(
-            TaskCreationOptions.RunContinuationsAsynchronously);
-        void Observe()
-        {
-            if (script.Phase == ScriptPlaybackPhase.AwaitingAdvance)
-            {
-                var actual = script.CurrentSpot;
-                if (actual == expected)
-                {
-                    completion.TrySetResult();
-                }
-                else
-                {
-                    completion.TrySetException(new InvalidOperationException(
-                        $"Yarn hot reload reached '{actual}' instead of '{expected}'."));
-                }
-            }
-            else if (script.Phase is ScriptPlaybackPhase.Idle or ScriptPlaybackPhase.Faulted)
-            {
-                completion.TrySetException(new InvalidOperationException(
-                    $"Yarn hot reload ended in phase '{script.Phase}'."));
-            }
-        }
-        void Changed(ScriptPlaybackPhaseChanged _) => Observe();
-        script.PhaseChanged += Changed;
-        try
-        {
-            Observe();
-            await completion.Task.WaitAsync(cancellationToken);
-        }
-        finally
-        {
-            script.PhaseChanged -= Changed;
-        }
-    }
-
-    private async Task WaitForStableBoundaryAsync(
-        ScriptPlaybackSpot expected,
-        CancellationToken cancellationToken)
-    {
-        await WaitForBoundaryAsync(expected, cancellationToken);
-
-        // DisplayCompleted is raised from inside Yarn's presenter callback. Let
-        // that callback and the restored VM continuation fully settle before
-        // auto/skip or player input can advance the replayed line.
-        await YarnTask.NextFrame();
-        await YarnTask.NextFrame();
-        cancellationToken.ThrowIfCancellationRequested();
-
-        if (script.Phase != ScriptPlaybackPhase.AwaitingAdvance ||
-            script.CurrentSpot != expected)
-        {
-            throw new InvalidOperationException(
-                "Yarn hot reload did not remain at its restored line boundary: " +
-                $"expected '{expected}', actual '{script.CurrentSpot}' " +
-                $"in phase '{script.Phase}'.");
-        }
+            if (phase == YarnHotReloadState.Applying)
+                SetStatus(new YarnHotReloadStatus(phase, candidate.Generation, candidate.ProjectId,
+                    candidate.SourceFingerprint, candidate.ProgramFingerprint, candidate.Diagnostics, null));
+            else SetStatus(Status with { State = phase });
+        }, cancellationToken);
+        SetWatching(result.Generation, result.ProjectId, result.SourceFingerprint,
+            result.ProgramFingerprint, result.Diagnostics, result.Message);
+        PublishAttempt(result.ProjectId, result.Generation, result.Outcome, result.SourceFingerprint,
+            result.ProgramFingerprint, result.Diagnostics, result.Message, result.Elapsed);
     }
 
     private string ResolveManifestPath(string projectId)
@@ -890,25 +601,6 @@ public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
             message,
             elapsed));
 
-    private static Dictionary<string, object?> Properties(
-        string projectId,
-        long generation,
-        string? sourceFingerprint,
-        string? programFingerprint,
-        YarnHotReloadOutcome outcome) => new Dictionary<string, object?>
-        {
-            ["projectId"] = projectId,
-            ["generation"] = generation,
-            ["sourceFingerprint"] = sourceFingerprint,
-            ["programFingerprint"] = programFingerprint,
-            ["outcome"] = outcome.ToString(),
-        };
-
-    private static bool IsYarnPath(string path) =>
-        path.EndsWith(".yarn", StringComparison.OrdinalIgnoreCase) ||
-        path.EndsWith(YarnSpinnerGodot.YarnProject.YARN_PROJECT_EXTENSION,
-            StringComparison.OrdinalIgnoreCase);
-
     private static string RequireId(string value, string parameter)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(value, parameter);
@@ -921,8 +613,7 @@ public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
         applyGate.Dispose();
         lifetime?.Dispose();
         pendingReload?.Dispose();
-        watcher?.Dispose();
-        consistencyTimer?.Dispose();
+        sourceMonitor?.Dispose();
         resetCancellation?.Dispose();
     }
 }

@@ -28,6 +28,8 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
         this.dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
     }
 
+    public RuntimeCommandCatalog Catalog => catalog;
+
     public Func<string, IReadOnlyList<string>, CancellationToken, Task>? PrepareCommandAsync { get; set; }
 
     public event Action<RuntimeCommandException>? CommandFailed;
@@ -64,7 +66,7 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
             {
                 var handler = new CatalogCommandHandler(
                     group.Key,
-                    group.ToArray(),
+                    catalog,
                     dispatcher,
                     registry,
                     dispatcher.AbortOnRecoverableFailure,
@@ -173,7 +175,7 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
     private sealed class CatalogCommandHandler
     {
         private readonly string rootName;
-        private readonly IReadOnlyList<IRuntimeCommand> commands;
+        private readonly RuntimeCommandCatalog catalog;
         private readonly RuntimeCommandDispatcher dispatcher;
         private readonly IYarnCommandRegistry registry;
         private readonly bool abortOnRecoverableFailure;
@@ -181,14 +183,14 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
 
         public CatalogCommandHandler(
             string rootName,
-            IReadOnlyList<IRuntimeCommand> commands,
+            RuntimeCommandCatalog catalog,
             RuntimeCommandDispatcher dispatcher,
             IYarnCommandRegistry registry,
             bool abortOnRecoverableFailure,
             Func<string, IReadOnlyList<string>, CancellationToken, Task> prepare)
         {
             this.rootName = rootName;
-            this.commands = commands;
+            this.catalog = catalog;
             this.dispatcher = dispatcher;
             this.registry = registry;
             this.abortOnRecoverableFailure = abortOnRecoverableFailure;
@@ -199,7 +201,8 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
         {
             try
             {
-                var command = Resolve(arguments, out var consumedSegments);
+                var tokens = new[] { rootName }.Concat(arguments).ToArray();
+                var command = catalog.Resolve(tokens, out var input);
                 if (command is null)
                 {
                     dispatcher.ReportUnknownCommand(string.Join(
@@ -207,13 +210,9 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
                     return;
                 }
 
-                var input = new CommandInput(
-                    command.Name,
-                    arguments.Skip(consumedSegments).ToArray());
-
                 await dispatcher.ExecuteAsync(
                     command,
-                    input,
+                    input!,
                     registry.DialogueCancellationToken,
                     () => prepare(rootName, arguments, registry.DialogueCancellationToken));
             }
@@ -225,32 +224,5 @@ public sealed class YarnCommandAdapter : IYarnCommandAdapter
             }
         }
 
-        private IRuntimeCommand? Resolve(
-            string[] arguments,
-            out int consumedSegments)
-        {
-            IRuntimeCommand? result = null;
-            consumedSegments = 0;
-            foreach (var candidate in commands)
-            {
-                var childSegments = candidate.Path.Skip(1).ToArray();
-                if (childSegments.Length > arguments.Length ||
-                    !childSegments.Select((segment, index) => segment.Equals(
-                        arguments[index], StringComparison.OrdinalIgnoreCase)).All(value => value))
-                {
-                    continue;
-                }
-
-                if (childSegments.Length < consumedSegments)
-                {
-                    continue;
-                }
-
-                result = candidate;
-                consumedSegments = childSegments.Length;
-            }
-
-            return result;
-        }
     }
 }

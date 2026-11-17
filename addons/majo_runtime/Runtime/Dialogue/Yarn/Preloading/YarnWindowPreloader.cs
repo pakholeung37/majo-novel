@@ -31,7 +31,7 @@ public sealed class YarnWindowPreloader : IDisposable
     private readonly ILocaleManager locales;
     private readonly ILocalizedResourceResolver localized;
     private readonly ResourceLookAheadWindow window;
-    private readonly YarnPreloadPlanner planner = new();
+    private readonly YarnPreloadPlanner planner;
     private readonly Dictionary<string, long> textureEstimates = new(StringComparer.Ordinal);
     private YarnProject? project;
     private readonly List<YarnPreloadReference> beatResources = new();
@@ -60,7 +60,7 @@ public sealed class YarnWindowPreloader : IDisposable
         IActorManager actors, IRuntimeLogger? logger = null,
         IDirectionTransactionCoordinator? direction = null,
         IDirectionScopeResolver? scopes = null,
-        ActorDefinitionResolver? directionDefinitions = null)
+        ActorDefinitionResolver? directionDefinitions = null, RuntimeCommandCatalog? commands = null)
     {
         this.resources = resources;
         this.directionDefinitions = directionDefinitions;
@@ -72,10 +72,13 @@ public sealed class YarnWindowPreloader : IDisposable
         this.localized = localized;
         this.direction = direction;
         this.scopes = scopes;
+        planner = new YarnPreloadPlanner(commands, logger);
         window = new ResourceLookAheadWindow(resources, logger);
         locales.VoiceLocaleChanged += OnLocaleChanged;
         locales.DialogueLocaleChanged += OnLocaleChanged;
     }
+
+    public void SetCommandCatalog(RuntimeCommandCatalog catalog) => planner.SetCommandCatalog(catalog);
 
     public void EnterNode(YarnProject value, string node)
     {
@@ -100,10 +103,11 @@ public sealed class YarnWindowPreloader : IDisposable
 
     public Task BeforeCommandAsync(string root, IReadOnlyList<string> arguments, CancellationToken token)
     {
+        if (!configuration.EnableYarnPreloading) return Task.CompletedTask;
         var tokens = new[] { root }.Concat(arguments).ToArray();
         planner.Command(tokens);
-        var required = YarnPreloadPlanner.Resources(tokens);
-        if (tokens.Length >= 2 && tokens[0] == "beat" && tokens[1] == "begin")
+        var required = planner.GetResources(tokens);
+        if (YarnPreloadPlanner.IsBeat(tokens, "begin"))
         {
             inBeat = true;
             beatResources.Clear();
@@ -112,7 +116,7 @@ public sealed class YarnWindowPreloader : IDisposable
         {
             beatResources.AddRange(required);
             required = beatResources.ToArray();
-            if (tokens.Length >= 2 && tokens[0] == "beat" && tokens[1] == "end") inBeat = false;
+            if (YarnPreloadPlanner.IsBeat(tokens, "end")) inBeat = false;
         }
         return MoveAsync(required, token);
     }
@@ -188,14 +192,14 @@ public sealed class YarnWindowPreloader : IDisposable
             {
                 var entries = kind == "object"
                     ? actors.GetPreloadResources(new ActorSpawnRequest(id, ActorFactoryIds.SceneObject, reference.Appearance ?? "Default")
-                    { DefinitionId = reference.Asset })
+                    { DefinitionId = ResolveActorDefinition(reference, definitions) })
                     : kind == "character"
                     ? actors.GetPreloadResources(new ActorSpawnRequest(
                         id,
                         ActorFactoryIds.Character,
                         reference.Appearance ?? "Default")
                     {
-                        DefinitionId = ResolveCharacterDefinition(reference, definitions),
+                        DefinitionId = ResolveActorDefinition(reference, definitions),
                         UseDefinitionDefaultAppearance = reference.Appearance is null,
                     })
                     : ResolveBackdropResources(reference, backdrops);
@@ -267,7 +271,7 @@ public sealed class YarnWindowPreloader : IDisposable
         return resolved.Factory.GetPreloadResources(resolved.Definition, resolved.Appearance);
     }
 
-    private string ResolveCharacterDefinition(YarnPreloadReference reference,
+    private string ResolveActorDefinition(YarnPreloadReference reference,
         Dictionary<(string Stage, string Instance), string> definitions)
     {
         var stage = scopes is not null && currentNode is not null

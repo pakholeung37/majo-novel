@@ -1,13 +1,14 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Majo.Runtime.Audio;
 
 namespace Majo.Runtime.Dialogue.Commands.Audio;
 
 [Command("voice", Category = "Audio")]
-public sealed partial class PlayVoiceCommand : RuntimeCommand<PlayVoiceCommand.Arguments>
+public sealed partial class PlayVoiceCommand : RuntimeCommand<PlayVoiceCommand.Arguments>, ICommandResourceProvider<PlayVoiceCommand.Arguments>
 {
     private readonly IAudioManager audio;
     private readonly IAudioCommandPolicy policy;
@@ -17,6 +18,9 @@ public sealed partial class PlayVoiceCommand : RuntimeCommand<PlayVoiceCommand.A
         this.audio = audio ?? throw new ArgumentNullException(nameof(audio));
         this.policy = policy ?? throw new ArgumentNullException(nameof(policy));
     }
+
+    public IReadOnlyList<CommandResourceReference> DescribeResources(Arguments arguments) =>
+        [new("voice", arguments.Clip)];
 
     protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {

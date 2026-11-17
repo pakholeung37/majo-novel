@@ -10,6 +10,8 @@ namespace Majo.Runtime.Dialogue.Yarn;
 
 public interface IYarnCommandAdapter : IRuntimeService
 {
+    RuntimeCommandCatalog? Catalog => null;
+
     event System.Action<RuntimeCommandException>? CommandFailed;
 
     RuntimeCommandException? LastFailure { get; }

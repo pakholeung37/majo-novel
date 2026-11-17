@@ -9,7 +9,7 @@ using Majo.Runtime.Direction.Execution;
 namespace Majo.Runtime.Dialogue.Commands;
 
 [Command("character", Category = "Direction")]
-public sealed partial class CharacterCommand : RuntimeCommand<CharacterCommand.Arguments>
+public sealed partial class CharacterCommand : RuntimeCommand<CharacterCommand.Arguments>, ICommandResourceProvider<CharacterCommand.Arguments>
 {
     private readonly IDirectionBeatRuntime beats;
     private readonly IDirectionScopeResolver scopes;
@@ -30,6 +30,10 @@ public sealed partial class CharacterCommand : RuntimeCommand<CharacterCommand.A
         this.direction = direction;
         this.policy = policy ?? throw new ArgumentNullException(nameof(policy));
     }
+
+    public IReadOnlyList<CommandResourceReference> DescribeResources(Arguments arguments) =>
+        [new("character", arguments.Actor, arguments.Asset.Value, arguments.Appearance.Value,
+            arguments.Stage.GetValueOrDefault("main"))];
 
     protected override async ValueTask ExecuteAsync(Arguments arguments, CommandExecutionContext context)
     {
