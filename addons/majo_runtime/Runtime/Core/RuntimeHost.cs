@@ -399,7 +399,7 @@ public sealed class RuntimeHost : IRuntimeLifetime, IRuntimeSessionController,
         var failures = new List<Exception>();
 
         if (hotReload && resolver.TryGet<IScriptPlayback>(out var script) &&
-            script is ScriptPlayback { BoundarySource: IScriptCheckpointReplayBackend replay })
+            script?.BoundarySource is IScriptCheckpointReplayBackend replay)
         {
             try { await replay.StopForReplayAsync(cancellationToken); }
             catch (Exception exception) { failures.Add(exception); }

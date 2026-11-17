@@ -23,6 +23,9 @@ public interface IScriptCheckpointBackend
 
 public interface IScriptPlayback : IRuntimeService
 {
+    /// <summary>The backend's durable line-boundary protocol, when supported.</summary>
+    ILineBoundarySource? BoundarySource => null;
+
     event Action<ScriptPlaybackPhaseChanged>? PhaseChanged;
 
     ScriptPlaybackPhase Phase { get; }

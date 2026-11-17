@@ -15,10 +15,6 @@ public partial class MajoRuntimeBootstrap : Node
     {
         try
         {
-            yarnDialogueBackend = null;
-            dialoguePlayer = null;
-            dialoguePresentation = null;
-
             if (Host is not null)
             {
                 // If initialization exceeded its deadline, RuntimeHost may still

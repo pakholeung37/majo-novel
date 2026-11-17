@@ -59,6 +59,11 @@ public partial class HeadlessTestRunner : Node
 
     private async Task RunSuiteAsync()
     {
+        if (OS.GetCmdlineUserArgs().Contains("--majo-service-replacement"))
+        {
+            await ValidateServiceReplacementAsync();
+            return;
+        }
         if (OS.GetCmdlineUserArgs().Contains("--majo-live-visual"))
         {
             await ValidateLiveVisualInputsAsync();
@@ -153,6 +158,7 @@ public partial class HeadlessTestRunner : Node
         await MeasureAsync(nameof(ValidateScriptAndStateRuntimeAsync), ValidateScriptAndStateRuntimeAsync);
         await MeasureAsync(nameof(ValidateAutoAndHistoryRuntimeAsync), ValidateAutoAndHistoryRuntimeAsync);
         await MeasureAsync(nameof(ValidateSettingsAndLocaleRuntimeAsync), ValidateSettingsAndLocaleRuntimeAsync);
+        await MeasureAsync(nameof(ValidateServiceReplacementAsync), ValidateServiceReplacementAsync);
         await MeasureAsync(nameof(ValidateDefaultPresentationAsync), ValidateDefaultPresentationAsync);
         await MeasureAsync(nameof(ValidateSuccessfulRuntimeLifecycleAsync), ValidateSuccessfulRuntimeLifecycleAsync);
         await MeasureAsync(nameof(ValidateLifecycleTimeoutAsync), ValidateLifecycleTimeoutAsync);

@@ -256,7 +256,7 @@ public partial class MajoRuntimeBootstrap : Node
             services.AddSingleton<ISaveProductManager>(
                 resolver =>
                 {
-                    saveProductManager = new SaveProductManager(
+                    return new SaveProductManager(
                         resolver.Get<ISaveSlotManager>(),
                         resolver.Get<IDialoguePlayer>(),
                         resolver.Get<IDialoguePresentation>(),
@@ -266,7 +266,6 @@ public partial class MajoRuntimeBootstrap : Node
                         Configuration.Save.AutoSaveLineIds,
                         Configuration.Save.AutoSaveMetadata,
                         Logger);
-                    return saveProductManager;
                 },
                 typeof(ISaveSlotManager),
                 typeof(IDialoguePlayer),
@@ -326,7 +325,7 @@ public partial class MajoRuntimeBootstrap : Node
             eligibility,
             migrations,
             Logger,
-            (scriptPlayback as ScriptPlayback)?.BoundarySource);
+            scriptPlayback.BoundarySource);
     }
 
     private RuntimeSettings CreateSettingsDefaults()

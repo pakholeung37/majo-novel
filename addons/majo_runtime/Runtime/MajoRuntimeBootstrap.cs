@@ -51,10 +51,6 @@ public partial class MajoRuntimeBootstrap : Node
     private readonly CancellationTokenSource bootstrapLifetime = new();
     private Task? shutdownTask;
     private readonly DelegatingYarnCommandAdapter yarnCommandAdapter = new();
-    private YarnDialogueBackend? yarnDialogueBackend;
-    private DialoguePlayer? dialoguePlayer;
-    private YarnDefaultDialoguePresentation? dialoguePresentation;
-    private ISaveProductManager? saveProductManager;
     private bool isExitingTree;
     private bool isBootstrapLifetimeDisposed;
     private bool isRuntimeShutdownSignalEmitted;

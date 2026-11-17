@@ -35,15 +35,12 @@ public partial class MajoRuntimeBootstrap : Node
 {
     private void RegisterDialogueServices(RuntimeServiceRegistry services)
     {
-        var fontCatalog = new FontCatalog();
-        if (Configuration?.Localization is not null)
-        {
-            fontCatalog.FontScale = Configuration.Localization.FontScale;
-            fontCatalog.LineSpacing = Configuration.Localization.LineSpacing;
-        }
-
         services
-            .AddSingleton<IFontCatalog>(_ => fontCatalog)
+            .AddSingleton<IFontCatalog>(_ => new FontCatalog
+            {
+                FontScale = Configuration?.Localization?.FontScale ?? 1.0,
+                LineSpacing = Configuration?.Localization?.LineSpacing ?? 0,
+            })
             .AddSingleton<ILocaleManager>(
                 resolver =>
                 {
@@ -56,7 +53,7 @@ public partial class MajoRuntimeBootstrap : Node
                     manager = new LocaleManager(
                         defaultLoc,
                         supportedLocs,
-                        fontCatalog,
+                        resolver.Get<IFontCatalog>(),
                         isBusyCheck: () => yarnCommandAdapter?.HasActiveCommands == true,
                         onLocaleApplied: locale => OnLocaleApplied(locale, manager!),
                         applyEngineLocale: TranslationServer.SetLocale,
@@ -65,7 +62,7 @@ public partial class MajoRuntimeBootstrap : Node
                         defaultVoiceLocale: defaultVoiceLoc);
                     ConfigureLocales?.Invoke(manager);
                     return manager;
-                });
+                }, typeof(IFontCatalog));
 
         var presenterRegistry = new DialoguePresenterRegistry();
         ConfigureDialoguePresenters?.Invoke(presenterRegistry);
@@ -92,7 +89,7 @@ public partial class MajoRuntimeBootstrap : Node
                     }
                     presenters[^1] = voicePresenter;
 
-                    yarnDialogueBackend = new YarnDialogueBackend(
+                    return new YarnDialogueBackend(
                         this,
                         resolver.Get<IResourceManager>(),
                         Configuration!.Resources!.ScriptsPath,
@@ -108,7 +105,6 @@ public partial class MajoRuntimeBootstrap : Node
                             resolver.Get<ILocaleManager>(), resolver.Get<ILocalizedResourceResolver>(), resolver.Get<IActorManager>(), Logger,
                             resolver.Get<IDirectionTransactionCoordinator>(), resolver.Get<IDirectionScopeResolver>(),
                             resolver.Get<Majo.Runtime.Actors.Godot.DirectionActorDefinitionEnvironment>().Resolver));
-                    return yarnDialogueBackend;
                 },
                 typeof(IResourceManager),
                 typeof(IAudioManager),
@@ -122,7 +118,7 @@ public partial class MajoRuntimeBootstrap : Node
             .AddSingleton<IDialoguePresentation>(
                 resolver =>
                 {
-                    dialoguePresentation = new YarnDefaultDialoguePresentation(
+                    return new YarnDefaultDialoguePresentation(
                         resolver.Get<IYarnDialogueBackend>(),
                         resolver.Get<IInputManager>(),
                         resolver.Get<IFrameClock>(),
@@ -131,7 +127,6 @@ public partial class MajoRuntimeBootstrap : Node
                         resolver.Get<ILocaleManager>(),
                         resolver.Get<IFontCatalog>(),
                         ResolveSpeakerName);
-                    return dialoguePresentation;
                 },
                 typeof(IYarnDialogueBackend),
                 typeof(IInputManager),
@@ -143,20 +138,26 @@ public partial class MajoRuntimeBootstrap : Node
                     resolver.Get<IYarnDialogueBackend>().VariableStore),
                 typeof(IYarnDialogueBackend))
             .AddSingleton<IDialogueNodeAccessor>(
-                _ => new DelegateDialogueNodeAccessor(() => dialoguePlayer?.CurrentNode))
+                resolver =>
+                {
+                    var player = resolver.Get<IDialoguePlayer>();
+                    return new DelegateDialogueNodeAccessor(() => player.CurrentNode);
+                }, typeof(IDialoguePlayer))
             .AddSingleton<ISaveProductAccessor>(
-                _ => new DelegateSaveProductAccessor(() => saveProductManager))
+                // Save is optional and depends on the script graph. Resolve at
+                // use time so this accessor neither creates a cycle nor captures
+                // the default factory's instance before plugins replace it.
+                _ => new DelegateSaveProductAccessor(FindRuntimeService<ISaveProductManager>))
             .AddSingleton<IYarnCommandAdapter>(
                 _ => yarnCommandAdapter)
             .AddSingleton<IDialoguePlayer>(
                 resolver =>
                 {
-                    dialoguePlayer = new DialoguePlayer(
+                    return new DialoguePlayer(
                         resolver.Get<IYarnDialogueBackend>(),
                         Configuration!.Dialogue!.DefaultProjectId,
                         Configuration.Dialogue.DefaultStartNode,
                         Logger);
-                    return dialoguePlayer;
                 },
                 typeof(IYarnDialogueBackend),
                 typeof(IDialoguePresentation))
@@ -261,29 +262,32 @@ public partial class MajoRuntimeBootstrap : Node
         }
     }
 
+    private TService? FindRuntimeService<TService>() where TService : class =>
+        Host is { State: RuntimeHostState.Initializing or RuntimeHostState.Initialized or RuntimeHostState.Resetting } host &&
+        host.Services.TryGet<TService>(out var service) ? service : null;
+
     private Task OnLocaleApplied(string locale, LocaleManager manager)
     {
-        if (yarnDialogueBackend is not null)
-        {
-            yarnDialogueBackend.SetLocale(locale);
-        }
+        var backend = FindRuntimeService<IYarnDialogueBackend>();
+        var player = FindRuntimeService<IDialoguePlayer>();
+        var presentation = FindRuntimeService<IDialoguePresentation>();
+        backend?.SetLocale(locale);
 
-        if (dialoguePlayer?.State == DialogueSessionState.Running &&
-            yarnDialogueBackend is not null &&
-            dialoguePresentation is not null)
+        if (player?.State == DialogueSessionState.Running &&
+            backend is not null && presentation is not null)
         {
             var fallbackChain = manager.GetDialogueFallbackChain(locale);
-            if (dialoguePlayer.IsPresentingOptions)
+            if (player.IsPresentingOptions)
             {
-                var reResolvedOpts = yarnDialogueBackend.ReResolveCurrentOptions(locale, fallbackChain);
-                dialoguePresentation.ReRenderOptions(reResolvedOpts);
+                var reResolvedOpts = backend.ReResolveCurrentOptions(locale, fallbackChain);
+                presentation.ReRenderOptions(reResolvedOpts);
             }
-            else if (!string.IsNullOrWhiteSpace(dialoguePlayer.CurrentLineId))
+            else if (!string.IsNullOrWhiteSpace(player.CurrentLineId))
             {
-                var reResolvedLine = yarnDialogueBackend.ReResolveCurrentLine(locale, fallbackChain);
+                var reResolvedLine = backend.ReResolveCurrentLine(locale, fallbackChain);
                 if (reResolvedLine is not null)
                 {
-                    dialoguePresentation.ReRenderLine(reResolvedLine);
+                    presentation.ReRenderLine(reResolvedLine);
                 }
             }
         }
@@ -293,9 +297,9 @@ public partial class MajoRuntimeBootstrap : Node
 
     private async Task WaitForLocaleSwitchBoundaryAsync(CancellationToken cancellationToken)
     {
-        if (yarnDialogueBackend is not null)
+        if (FindRuntimeService<IYarnDialogueBackend>() is { } backend)
         {
-            await yarnDialogueBackend.WaitForLocaleSwitchBoundaryAsync(cancellationToken);
+            await backend.WaitForLocaleSwitchBoundaryAsync(cancellationToken);
         }
     }
 

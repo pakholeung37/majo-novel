@@ -669,13 +669,16 @@ public sealed class ResourceManager : IResourceManager
         where TResource : class
     {
         private readonly object gate = new();
+        private readonly object cancellationGate = new();
         private readonly CancellationTokenSource cancellation;
+        private readonly CancellationToken cancellationToken;
         private readonly Func<CancellationToken, Task<LeaseAcquisition<TResource>>> acquire;
         private readonly Action<CacheKey, bool> release;
         private readonly Action<IResourceLease> forget;
         private readonly TaskCompletionSource completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private LeaseAcquisition<TResource>? acquisition;
         private bool forgotten;
+        private bool cancellationDisposed;
 
         public ResourceLease(
             ResourceKey logicalKey,
@@ -686,6 +689,7 @@ public sealed class ResourceManager : IResourceManager
         {
             LogicalKey = logicalKey;
             cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            this.cancellationToken = cancellation.Token;
             this.acquire = acquire;
             this.release = release;
             this.forget = forget;
@@ -705,11 +709,7 @@ public sealed class ResourceManager : IResourceManager
 
         public void Cancel() => Terminate(ResourceLeaseState.Cancelled);
         public void Release() => Terminate(ResourceLeaseState.Released);
-        public void Dispose()
-        {
-            Release();
-            cancellation.Dispose();
-        }
+        public void Dispose() => Release();
 
         private void Terminate(ResourceLeaseState terminal)
         {
@@ -723,17 +723,23 @@ public sealed class ResourceManager : IResourceManager
                 acquisition = null;
                 Resource = null;
             }
-            cancellation.Cancel();
-            if (retained is not null) release(retained.CacheKey, retained.Pinned);
-            completion.TrySetCanceled(cancellation.Token);
-            ForgetOnce();
+            try { DisposeCancellation(cancel: true); }
+            finally
+            {
+                try { if (retained is not null) release(retained.CacheKey, retained.Pinned); }
+                finally
+                {
+                    completion.TrySetCanceled(cancellationToken);
+                    ForgetOnce();
+                }
+            }
         }
 
         private async Task RunAsync()
         {
             try
             {
-                var acquired = await acquire(cancellation.Token);
+                var acquired = await acquire(cancellationToken);
                 lock (gate)
                 {
                     if (State != ResourceLeaseState.Loading)
@@ -748,24 +754,48 @@ public sealed class ResourceManager : IResourceManager
                 }
                 completion.TrySetResult();
             }
-            catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 lock (gate)
                     if (State == ResourceLeaseState.Loading) State = ResourceLeaseState.Cancelled;
-                completion.TrySetCanceled(cancellation.Token);
+                completion.TrySetCanceled(cancellationToken);
                 ForgetOnce();
             }
             catch (Exception exception)
             {
                 lock (gate)
                 {
-                    Failure = exception;
-                    State = ResourceLeaseState.Failed;
+                    if (State == ResourceLeaseState.Loading)
+                    {
+                        Failure = exception;
+                        State = ResourceLeaseState.Failed;
+                    }
                 }
                 completion.TrySetException(exception);
                 _ = completion.Task.Exception;
                 ForgetOnce();
             }
+            finally
+            {
+                // Acquisition is finished even while a ready lease retains its
+                // resource. No caller cancellation registration is needed then.
+                DisposeCancellation(cancel: false);
+            }
+        }
+
+        private void DisposeCancellation(bool cancel)
+        {
+            lock (cancellationGate)
+            {
+                if (cancellationDisposed) return;
+                // Claim cleanup before Cancel: cancellation can synchronously
+                // resume RunAsync, whose finally also requests this cleanup.
+                cancellationDisposed = true;
+            }
+            // Cancellation callbacks may reenter the lease on another thread.
+            // Only claim ownership under the lock; invoke them outside it.
+            try { if (cancel) cancellation.Cancel(); }
+            finally { cancellation.Dispose(); }
         }
 
         private void ForgetOnce()

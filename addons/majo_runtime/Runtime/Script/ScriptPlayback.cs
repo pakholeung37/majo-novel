@@ -31,7 +31,7 @@ public sealed class ScriptPlayback : IScriptPlayback, IScriptCheckpointRestorePr
         this.logger = logger ?? NullRuntimeLogger.Instance;
     }
 
-    internal ILineBoundarySource? BoundarySource => checkpointBackend as ILineBoundarySource;
+    public ILineBoundarySource? BoundarySource => checkpointBackend as ILineBoundarySource;
 
     public event Action<ScriptPlaybackPhaseChanged>? PhaseChanged;
 

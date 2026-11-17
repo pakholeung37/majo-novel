@@ -1,3 +1,5 @@
+using BindingFlags = System.Reflection.BindingFlags;
+using System.Runtime.CompilerServices;
 using Majo.Runtime.Core;
 using Majo.Runtime.Operations;
 using Majo.Runtime.Resources;
@@ -8,6 +10,125 @@ namespace Majo.Runtime.UnitTests;
 
 public sealed class ResourceManagerTests
 {
+    [Theory(Timeout = 5_000)]
+    [InlineData("release")]
+    [InlineData("cancel")]
+    [InlineData("dispose")]
+    [InlineData("group-release")]
+    [InlineData("group-cancel")]
+    [InlineData("group-dispose")]
+    [InlineData("failure")]
+    public async Task TerminalLeasesDoNotRetainLinkedCancellationSources(string termination)
+    {
+        using var lifetime = new TestRuntimeLifetime();
+        using var caller = new CancellationTokenSource();
+        var manager = new ResourceManager([], lifetime, releaseOnLastLease: true);
+        await manager.InitializeAsync(default);
+        manager.Register(new ResourceKey("sample"), new TestAsset("sample"));
+
+        var cancellation = TerminateLeaseAndTrackCancellation(manager, caller.Token, termination);
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+
+        Assert.False(cancellation.IsAlive,
+            "A terminal lease left its linked cancellation source registered with the caller.");
+        Assert.Equal(0, manager.CaptureCacheSnapshot().ActiveLeaseCount);
+        caller.Cancel(); // Must also be harmless after the linked source was released.
+        GC.KeepAlive(caller);
+        await manager.ShutdownAsync(default);
+    }
+
+    // The linked source itself is the leaked object; the lease can be collected
+    // independently. Inspect only our own lease field, not runtime CTS internals.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static WeakReference TerminateLeaseAndTrackCancellation(
+        ResourceManager manager, CancellationToken caller, string termination)
+    {
+        var key = new ResourceKey(termination == "failure" ? "missing" : "sample");
+        var group = termination.StartsWith("group-", StringComparison.Ordinal)
+            ? manager.PreloadAsync(new ResourcePreloadManifest("probe",
+                [ResourcePreloadEntry.Create<TestAsset>(key)]), cancellationToken: caller)
+            : null;
+        var lease = group?.Resources[0] ?? manager.LeaseAsync<TestAsset>(key, cancellationToken: caller);
+        var source = lease.GetType().GetField("cancellation", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(lease)!;
+        var reference = new WeakReference(source);
+        if (termination == "failure")
+            Assert.Throws<ResourceNotFoundException>(() => lease.Completion.GetAwaiter().GetResult());
+        else
+        {
+            lease.Completion.GetAwaiter().GetResult();
+            switch (termination)
+            {
+                case "release": lease.Release(); break;
+                case "cancel": lease.Cancel(); break;
+                case "dispose": lease.Dispose(); lease.Dispose(); break;
+                case "group-release": group!.Release(); break;
+                case "group-cancel": group!.Cancel(); break;
+                case "group-dispose": group!.Dispose(); group.Dispose(); break;
+            }
+        }
+        return reference;
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task DisposingLoadingLeasePreservesSharedAcquisitionAndTerminalState()
+    {
+        using var lifetime = new TestRuntimeLifetime();
+        using var caller = new CancellationTokenSource();
+        var provider = new MemoryProvider("memory")
+            .Add("memory://sample", new TestAsset("sample")).PauseAsyncLoads();
+        var manager = new ResourceManager([provider], lifetime, releaseOnLastLease: true);
+        await manager.InitializeAsync(default);
+        var released = manager.LeaseAsync<TestAsset>(new ResourceKey("sample"), cancellationToken: caller.Token);
+        var surviving = manager.LeaseAsync<TestAsset>(new ResourceKey("sample"));
+
+        released.Dispose();
+        released.Dispose();
+        caller.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => released.Completion);
+        provider.ReleaseAsyncLoads();
+        await surviving.Completion;
+
+        Assert.Equal(ResourceLeaseState.Released, released.State);
+        Assert.Null(released.Failure);
+        Assert.Equal(ResourceLeaseState.Ready, surviving.State);
+        Assert.Equal(1, provider.AsyncLoadCount);
+        surviving.Dispose();
+        await manager.ShutdownAsync(default);
+        Assert.Equal(0, manager.CaptureCacheSnapshot().ActiveLeaseCount);
+        Assert.Equal(0, manager.LoadedResourceCount);
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task CallerCancellationCanRaceLeaseDisposalWithoutCancellingSharedLoad()
+    {
+        using var lifetime = new TestRuntimeLifetime();
+        var provider = new MemoryProvider("memory")
+            .Add("memory://sample", new TestAsset("sample")).PauseAsyncLoads();
+        var manager = new ResourceManager([provider], lifetime, releaseOnLastLease: true);
+        await manager.InitializeAsync(default);
+        var surviving = manager.LeaseAsync<TestAsset>(new ResourceKey("sample"));
+        for (var attempt = 0; attempt < 32; attempt++)
+        {
+            using var caller = new CancellationTokenSource();
+            var lease = manager.LeaseAsync<TestAsset>(new ResourceKey("sample"), cancellationToken: caller.Token);
+            await Task.WhenAll(Task.Run(lease.Dispose), Task.Run(caller.Cancel));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => lease.Completion);
+            Assert.True(lease.State is ResourceLeaseState.Released or ResourceLeaseState.Cancelled);
+            Assert.Null(lease.Failure);
+        }
+        provider.ReleaseAsyncLoads();
+        await surviving.Completion;
+        Assert.Equal(ResourceLeaseState.Ready, surviving.State);
+        Assert.Equal(1, provider.AsyncLoadCount);
+        surviving.Dispose();
+        await manager.ShutdownAsync(default);
+        Assert.Equal(0, manager.CaptureCacheSnapshot().ActiveLeaseCount);
+        Assert.Equal(0, manager.LoadedResourceCount);
+    }
+
     [Fact(Timeout = 5000)]
     public async Task RegisteredResourcesSurviveEvictionAndResetButCannotBeRemovedWhileLeased()
     {
