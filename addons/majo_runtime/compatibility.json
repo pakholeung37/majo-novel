@@ -8,7 +8,8 @@
   "scriptCheckpoints": {"read": [2, 3], "write": 3},
   "directionCompanionSchema": 2,
   "breakingChanges": [
-    "Low-level YarnPreloadPlanner.Resources(tokens) callers must now pass the runtime command catalog; standalone preload planners require an attached catalog for command resource analysis."
+    "Low-level YarnPreloadPlanner.Resources(tokens) callers must now pass the runtime command catalog; standalone preload planners require an attached catalog for command resource analysis.",
+    "Core lifecycle and service contracts now live in Majo.Runtime.Core.dll. Rebuild binary extensions against the updated addon; namespaces and source signatures remain unchanged."
   ],
   "notes": [
     "Candidates rc.1 and rc.2 share runtime API and serialized state layouts.",

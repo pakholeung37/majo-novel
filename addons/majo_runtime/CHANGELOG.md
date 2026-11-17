@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Compile Core lifecycle and service contracts into an independent net8.0 assembly without Godot or Yarn references; run their tests directly against that assembly.
+- Include the Core project and assembly in managed addon builds and exports; binary extensions must rebuild against the new assembly layout.
+
 - Separate resource resolution, shared load/cache retention and lease lifecycle ownership behind the existing resource manager API.
 - Release already created leases when preload group construction fails; wait for complete load workers before resetting or shutting down providers.
 

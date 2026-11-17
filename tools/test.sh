@@ -8,6 +8,7 @@ SCRIPT_DIRECTORY="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 REPOSITORY_ROOT="$(CDPATH= cd -- "$SCRIPT_DIRECTORY/.." && pwd)"
 GAME_PROJECT="$REPOSITORY_ROOT"
 UNIT_TEST_PROJECT="$REPOSITORY_ROOT/tests/Majo.Runtime.UnitTests/Majo.Runtime.UnitTests.csproj"
+CORE_TEST_PROJECT="$REPOSITORY_ROOT/tests/Majo.Runtime.Core.UnitTests/Majo.Runtime.Core.UnitTests.csproj"
 GENERATOR_TEST_PROJECT="$REPOSITORY_ROOT/tests/Majo.CommandGenerator.Tests/Majo.CommandGenerator.Tests.csproj"
 GODOT_EXECUTABLE="${GODOT_BIN:-/Applications/Godot_mono.app/Contents/MacOS/Godot}"
 
@@ -76,6 +77,7 @@ restore_dotnet_projects() {
         return 1
     fi
     run_with_timeout 180 dotnet restore "$GENERATOR_TEST_PROJECT" --nologo
+    run_with_timeout 180 dotnet restore "$CORE_TEST_PROJECT" --nologo
 }
 
 run_core_consumer_smoke() {
@@ -120,6 +122,9 @@ python3 "$REPOSITORY_ROOT/tools/test-installer.py"
 
 printf 'Restoring .NET dependencies...\n'
 restore_dotnet_projects
+
+printf 'Running independent Core tests without Godot or Yarn dependencies...\n'
+run_with_timeout 180 dotnet test "$CORE_TEST_PROJECT" --nologo --no-restore
 
 printf 'Building unit tests and their Godot project dependencies...\n'
 if [[ "$TEST_MODE" == "full" ]]; then

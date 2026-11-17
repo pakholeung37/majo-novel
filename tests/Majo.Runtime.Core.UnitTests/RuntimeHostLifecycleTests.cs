@@ -1,7 +1,6 @@
 #nullable enable
 
 using Majo.Runtime.Core;
-using Majo.Runtime.Operations;
 using Xunit;
 
 namespace Majo.Runtime.UnitTests;
@@ -22,7 +21,6 @@ public sealed class RuntimeHostLifecycleTests
 
         var registry = new RuntimeServiceRegistry()
             .AddSingleton<IServiceA>(_ => serviceA)
-            .AddSingleton<IFrameClock>(_ => new StubFrameClock())
             .AddSingleton<IServiceB>(
                 _ => serviceB,
                 typeof(IServiceA)); // serviceB depends on serviceA
@@ -98,12 +96,4 @@ public sealed class RuntimeHostLifecycleTests
         }
     }
 
-    private sealed class StubFrameClock : IFrameClock
-    {
-        public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task ResetAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task ShutdownAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task NextFrameAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task DelayAsync(TimeSpan duration, CancellationToken cancellationToken = default) => Task.CompletedTask;
-    }
 }

@@ -203,7 +203,7 @@ internal sealed class YarnHotReloadApplier
         }
     }
 
- }
+}
 
 internal static class YarnHotReloadLog
 {

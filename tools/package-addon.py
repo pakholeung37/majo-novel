@@ -79,6 +79,7 @@ def main():
     for required in (
         "README.md", "LICENSE", "THIRD_PARTY_NOTICES.md", "CHANGELOG.md", "MajoRuntime.props",
         "Bridges/YarnSpinnerStateBridge/YarnSpinnerStateBridge.csproj",
+        "Assemblies/Majo.Runtime.Core/Majo.Runtime.Core.csproj",
         "SourceGenerators/Majo.CommandGenerator/Majo.CommandGenerator.csproj",
     ):
         if not (directory / required).is_file():
