@@ -94,6 +94,12 @@ Bootstrap 会将完成注册的命令目录接入默认预加载器，包括插�
 
 热重载的 `YarnSourceMonitor` 独立拥有文件监听器、扫描计时器和扫描任务；编译接受的指纹及重置都会使旧扫描结果失效。`ShutdownAsync` 会取消并等待扫描与已开始的通知结束，再关闭其余依赖。`YarnHotReloadApplier` 只在引擎线程处理安全边界检查、版本激活、恢复事务和失败回退；服务入口负责去抖、编译代次、候选排队与主线程调度。Runner 停止及恢复后的帧等待仍保留，用于等待 Yarn 展示回调与 VM continuation 稳定。
 
+## 资源解析、缓存与租约
+
+`ResourceManager` 保留公共 API、provider 生命周期和预加载组装配。内部 `ResourceResolver` 负责按 provider 顺序解析路径、语言变体和缺失诊断；`ResourceCache` 在同一个锁下管理共享加载、引用计数、固定资源、预算淘汰和缓存快照。缓存的加载取消范围属于 Runtime，不属于单个调用者或对话会话。
+
+`ResourceLease` 只持有获取结果与释放动作，不访问缓存键或 provider；终态会释放关联的取消令牌源。预加载组创建失败时会释放此前已创建的租约。重置和关闭会先取消共享加载、释放租约，再等待加载 worker 的完整退出，之后才清空缓存、重置或关闭 provider；即使 provider 暂时忽略取消，也会等待它结束。
+
 ## CI 与发布
 
 游戏 CI 从已提交的 addon 副本构建，先运行包内 `Tools/majo.py doctor --project .`，再执行游戏自己的构建、导入和回归。不要在游戏 CI 使用开发者的 `--source` 路径或自动追踪系统 main 分支。

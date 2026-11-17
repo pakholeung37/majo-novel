@@ -11,6 +11,102 @@ namespace Majo.Runtime.UnitTests;
 public sealed class ResourceManagerTests
 {
     [Theory(Timeout = 5_000)]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FailedGroupConstructionReleasesEarlierLeases(bool stillLoading)
+    {
+        using var lifetime = new TestRuntimeLifetime();
+        var provider = new MemoryProvider("memory").Add("memory://sample", new TestAsset("sample"));
+        if (stillLoading) provider.PauseAsyncLoads();
+        var manager = new ResourceManager([provider], lifetime, releaseOnLastLease: true);
+        await manager.InitializeAsync(default);
+        var manifest = new ResourcePreloadManifest("partial",
+        [
+            ResourcePreloadEntry.Create<TestAsset>(new ResourceKey("sample")),
+            ResourcePreloadEntry.Create<TestAsset>(new ResourceKey("voice/missing"),
+                localizedRoot: "voice", localeChannel: ResourceLocaleChannel.Voice),
+        ], pinned: true);
+        var context = new ResourcePreloadContext("en", "en", ["en"], ["en"]);
+
+        Assert.Throws<ResourceNotFoundException>(() => manager.PreloadAsync(manifest, context));
+        var snapshot = manager.CaptureCacheSnapshot();
+        Assert.Equal(0, snapshot.ActiveLeaseCount);
+        Assert.All(snapshot.Entries, entry => Assert.Equal(0, entry.PinnedLeaseCount));
+        provider.ReleaseAsyncLoads();
+        await manager.ShutdownAsync(default);
+        Assert.Equal(0, manager.LoadedResourceCount);
+    }
+
+    [Theory(Timeout = 5_000)]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LifecycleDrainWaitsForProvidersIgnoringCancellation(bool shutdown)
+    {
+        using var lifetime = new TestRuntimeLifetime();
+        var provider = new MemoryProvider("memory").Add("memory://sample", new TestAsset("sample"))
+            .PauseAsyncLoads(ignoreCancellation: true);
+        var manager = new ResourceManager([provider], lifetime);
+        await manager.InitializeAsync(default);
+        var lease = manager.LeaseAsync<TestAsset>(new ResourceKey("sample"));
+        var loading = manager.LoadAsync<TestAsset>(new ResourceKey("sample"));
+        var draining = shutdown ? manager.ShutdownAsync(default) : manager.ResetAsync(default);
+        Assert.False(draining.IsCompleted);
+        Assert.Equal(0, provider.ResetCount + provider.ShutdownCount);
+        Assert.Equal(ResourceLeaseState.Released, lease.State);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => lease.Completion);
+        provider.ReleaseAsyncLoads();
+        await draining;
+        await loading;
+
+        var snapshot = manager.CaptureCacheSnapshot();
+        Assert.Equal(0, snapshot.PendingCount);
+        Assert.Equal(0, snapshot.LoadedCount);
+        Assert.Equal(0, snapshot.ActiveLeaseCount);
+        if (!shutdown)
+        {
+            await manager.LoadAsync<TestAsset>(new ResourceKey("sample"));
+            Assert.Equal(2, provider.AsyncLoadCount);
+            await manager.ShutdownAsync(default);
+        }
+    }
+
+    [Fact(Timeout = 5_000)]
+    public async Task ResetWaitsForTheWholeLoadWorkerAfterTheResourceIsReady()
+    {
+        using var lifetime = new TestRuntimeLifetime();
+        var provider = new MemoryProvider("memory").Add("memory://sample", new TestAsset("sample"))
+            .PauseAsyncLoads();
+        var logger = new LoadWorkerLogger();
+        var manager = new ResourceManager([provider], lifetime, logger);
+        await manager.InitializeAsync(default);
+        var loading = manager.LoadAsync<TestAsset>(new ResourceKey("sample"));
+        provider.ReleaseAsyncLoads();
+        await logger.Entered.Task;
+        await loading;
+        var reset = manager.ResetAsync(default);
+        var resetTooEarly = reset.IsCompleted || provider.ResetCount != 0;
+        logger.Continue.SetResult();
+        await reset;
+
+        Assert.False(resetTooEarly);
+        Assert.Equal(0, manager.CaptureCacheSnapshot().PendingCount);
+        await manager.ShutdownAsync(default);
+    }
+
+    private sealed class LoadWorkerLogger : IRuntimeLogger
+    {
+        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Continue { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public bool IsEnabled(string category, RuntimeLogLevel level) => true;
+        public void Log(RuntimeLogEvent logEvent)
+        {
+            if (logEvent.EventId != "resource.load_completed") return;
+            Entered.TrySetResult();
+            Continue.Task.GetAwaiter().GetResult();
+        }
+    }
+
+    [Theory(Timeout = 5_000)]
     [InlineData("release")]
     [InlineData("cancel")]
     [InlineData("dispose")]
@@ -559,6 +655,7 @@ public sealed class ResourceManagerTests
     {
         private readonly Dictionary<string, object> resources = new(StringComparer.Ordinal);
         private TaskCompletionSource? asyncRelease;
+        private bool ignoreLoadCancellation;
         private bool isInitialized;
 
         public MemoryProvider(string id)
@@ -571,6 +668,8 @@ public sealed class ResourceManagerTests
         public int SyncLoadCount { get; private set; }
 
         public int AsyncLoadCount { get; private set; }
+        public int ResetCount { get; private set; }
+        public int ShutdownCount { get; private set; }
 
         public MemoryProvider Add(string path, object resource)
         {
@@ -578,8 +677,9 @@ public sealed class ResourceManagerTests
             return this;
         }
 
-        public MemoryProvider PauseAsyncLoads()
+        public MemoryProvider PauseAsyncLoads(bool ignoreCancellation = false)
         {
+            ignoreLoadCancellation = ignoreCancellation;
             asyncRelease = new TaskCompletionSource(
                 TaskCreationOptions.RunContinuationsAsynchronously);
             return this;
@@ -616,7 +716,8 @@ public sealed class ResourceManagerTests
             AsyncLoadCount++;
             if (asyncRelease is not null)
             {
-                await asyncRelease.Task.WaitAsync(cancellationToken);
+                if (ignoreLoadCancellation) await asyncRelease.Task;
+                else await asyncRelease.Task.WaitAsync(cancellationToken);
             }
 
             return resources[location.Path];
@@ -633,12 +734,14 @@ public sealed class ResourceManagerTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             EnsureInitialized();
+            ResetCount++;
             return Task.CompletedTask;
         }
 
         public Task ShutdownAsync(CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            ShutdownCount++;
             isInitialized = false;
             return Task.CompletedTask;
         }

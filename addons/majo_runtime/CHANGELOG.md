@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Separate resource resolution, shared load/cache retention and lease lifecycle ownership behind the existing resource manager API.
+- Release already created leases when preload group construction fails; wait for complete load workers before resetting or shutting down providers.
+
 - Separate Yarn playback session completion, checkpoint replay and localized presentation state from the Runner backend.
 - Separate hot reload source monitoring from candidate application and rollback; drain scans and notifications during shutdown, including cancellation callback failures.
 - Verify that rejected live reloads preserve the public dialogue session and allow a later successful reload.
