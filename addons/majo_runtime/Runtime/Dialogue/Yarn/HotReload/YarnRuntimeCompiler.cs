@@ -51,8 +51,11 @@ public sealed class YarnRuntimeCompiler
         long directionVersion,
         CancellationToken cancellationToken)
     {
-        var transform = new YarnNodeEntryTransform();
-        var files = snapshot.Files.Select(file => (ISourceInput)transform.Transform(file.LogicalPath, file.Content)).ToArray();
+        var files = snapshot.Files.Select(file => (ISourceInput)new CompilationJob.File
+        {
+            FileName = file.LogicalPath,
+            Source = file.Content,
+        }).ToArray();
         var job = CompilationJob.CreateFromInputs(
             files,
             library,
@@ -60,7 +63,7 @@ public sealed class YarnRuntimeCompiler
         job.CompilationType = CompilationJob.Type.FullCompilation;
         job.CancellationToken = cancellationToken;
         var result = global::Yarn.Compiler.Compiler.Compile(job);
-        transform.RestoreSourceCoordinates(result);
+        Majo.YarnBridge.YarnCompilerSourceMap.AddNodeEntries(result);
         var diagnostics = result.Diagnostics.Select(diagnostic =>
         {
             var file = string.IsNullOrWhiteSpace(diagnostic.FileName)

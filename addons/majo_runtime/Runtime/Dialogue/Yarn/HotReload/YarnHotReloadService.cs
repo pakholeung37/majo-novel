@@ -26,6 +26,7 @@ public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
     private readonly YarnHotReloadConfiguration configuration;
     private readonly string defaultProjectId;
     private readonly string scriptsRoot;
+    private readonly bool sourceFilesAvailable;
     private readonly YarnSourceSnapshotReader snapshotReader;
     private readonly YarnRuntimeCompiler compiler;
     private readonly YarnProjectMaterializer materializer;
@@ -62,15 +63,17 @@ public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
         YarnRuntimeCompiler? compiler = null,
         YarnProjectMaterializer? materializer = null,
         IPlaybackModeManager? playback = null,
-        IStateManager? state = null)
+        IStateManager? state = null,
+        bool sourceFilesAvailable = true)
     {
         this.versions = versions ?? throw new ArgumentNullException(nameof(versions));
         this.script = script ?? throw new ArgumentNullException(nameof(script));
         this.backend = backend ?? throw new ArgumentNullException(nameof(backend));
         this.configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         this.defaultProjectId = RequireId(defaultProjectId, nameof(defaultProjectId));
-        this.scriptsRoot = Path.GetFullPath(
-            RequireId(scriptsRoot, nameof(scriptsRoot)));
+        this.sourceFilesAvailable = sourceFilesAvailable;
+        this.scriptsRoot = sourceFilesAvailable
+            ? Path.GetFullPath(RequireId(scriptsRoot, nameof(scriptsRoot))) : string.Empty;
         this.logger = logger ?? NullRuntimeLogger.Instance;
         this.snapshotReader = snapshotReader ?? new YarnSourceSnapshotReader();
         this.compiler = compiler ?? new YarnRuntimeCompiler();
@@ -89,7 +92,7 @@ public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
     {
         cancellationToken.ThrowIfCancellationRequested();
         dispatcher = new YarnHotReloadDispatcher(SynchronizationContext.Current);
-        enabled = configuration.Enabled && OS.IsDebugBuild() &&
+        enabled = configuration.Enabled && sourceFilesAvailable && OS.IsDebugBuild() &&
             (OS.HasFeature("editor") || configuration.EnableInExportedDebugBuild);
         if (!enabled)
         {
@@ -640,6 +643,16 @@ public sealed class YarnHotReloadService : IYarnHotReloadService, IDisposable
             ? await boundaries.CaptureSaveBoundaryAsync(cancellationToken)
             : null;
         var checkpoint = stableBoundary?.Context.Script ?? script.CaptureCheckpoint();
+        if ((checkpoint.CallStack.Count > 0 || checkpoint.OperandStack.Count > 0) &&
+            !string.Equals(candidate.ProgramFingerprint, checkpoint.ProgramFingerprint, StringComparison.Ordinal))
+        {
+            const string reason = "A nested script checkpoint requires the same compiled program; the candidate will be used by the next dialogue session.";
+            SetWatching(candidate.Generation, candidate.ProjectId, candidate.SourceFingerprint,
+                candidate.ProgramFingerprint, candidate.Diagnostics, reason);
+            PublishAttempt(candidate.ProjectId, candidate.Generation, YarnHotReloadOutcome.CompatibilityRejected,
+                candidate.SourceFingerprint, candidate.ProgramFingerprint, candidate.Diagnostics, reason, TimeSpan.Zero);
+            return;
+        }
         var variables = backend.VariableStore.Capture();
         var stopwatch = Stopwatch.StartNew();
         SetStatus(new YarnHotReloadStatus(

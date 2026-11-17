@@ -147,6 +147,8 @@ public partial class HeadlessTestRunner : Node
         await MeasureAsync(nameof(ValidateAudioRuntimeAsync), ValidateAudioRuntimeAsync);
         await MeasureAsync(nameof(ValidateInputRuntimeAsync), ValidateInputRuntimeAsync);
         await MeasureAsync(nameof(ValidateYarnVmStateBridgeAsync), ValidateYarnVmStateBridgeAsync);
+        await MeasureAsync(nameof(ValidateYarnBridgeIsolationAsync), ValidateYarnBridgeIsolationAsync);
+        await MeasureAsync(nameof(ValidateNestedDetourStateAsync), ValidateNestedDetourStateAsync);
         await MeasureAsync(nameof(ValidateYarnHotReloadAsync), ValidateYarnHotReloadAsync);
         await MeasureAsync(nameof(ValidateScriptAndStateRuntimeAsync), ValidateScriptAndStateRuntimeAsync);
         await MeasureAsync(nameof(ValidateAutoAndHistoryRuntimeAsync), ValidateAutoAndHistoryRuntimeAsync);

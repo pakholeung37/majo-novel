@@ -61,6 +61,12 @@ Yarn 负责剧情流程，Majo 演出命令负责画面呈现。`beat` 组织需
 
 内部验收 demo 是仓库提供的可运行参考。Manosaba、Ace Attorney、Live2D 和 SGRE 用于能力展示，仓库不提供让它们完整运行的外部素材包；SGRE 的本地素材准备方法见[演示说明](demos/sgre/README.md)。这些演示与原作游戏或模型作者没有官方关联，也不代表其认可。
 
+## 作为 addon 安装
+
+所需的 C# 工程引用及最小场景见[插件安装指南](addons/majo_runtime/README.md)。插件使用未修改的官方 YarnSpinner-Godot 0.3.22 和 Yarn Spinner 3.2.0。
+
+运行 `python3 tools/package-addon.py`，可在 `build/releases` 生成独立版、捆绑 Yarn 版 ZIP 及 SHA-256 校验值。发布包只包含插件文件与许可证。完整测试会将捆绑 ZIP 安装到空工程，首次导入并播放带分支和嵌套 detour 的脚本，再实际启动导出的 PCK。
+
 ## 运行内部验收 demo
 
 当前工程使用 **Godot 4.7.2 .NET** 和 **.NET 8**。请使用 Godot 的 .NET 版本，构建后明确指定验收场景；工程默认场景是 Manosaba 展示。
@@ -93,7 +99,7 @@ godot --path . res://demos/demo-01/RuntimeDemo.tscn
 ./tools/test.sh --full     # 完整检查、独立宿主与导出冒烟测试
 ```
 
-测试脚本默认执行 `--full`。如果 Godot .NET 不在 `/Applications/Godot_mono.app/Contents/MacOS/Godot`，通过 `GODOT_BIN` 指定可执行文件路径。完整检查还需要匹配版本的导出模板。真实渲染器相关的回归说明见 [`tests/rendering`](tests/rendering/README.md)。
+测试脚本默认执行 `--full`。如果 Godot .NET 不在 `/Applications/Godot_mono.app/Contents/MacOS/Godot`，通过 `GODOT_BIN` 指定可执行文件路径。完整门禁导出并启动独立插件宿主，发布产物不包含可选展示素材；导出独立游戏可执行文件时需安装匹配版本的导出模板。真实渲染器相关的回归说明见 [`tests/rendering`](tests/rendering/README.md)。
 
 ## 许可证与第三方内容
 

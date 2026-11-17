@@ -1,5 +1,10 @@
 # Yarn Spinner VM State Bridge 验证与产品化边界
 
+> 2026-11-17 更新：检查点 v3 已增加调用帧和类型化操作数，支持嵌套及动态 detour 的保存与恢复。
+> 嵌套恢复要求程序指纹完全一致；顶层稳定 Line ID 仍支持兼容脚本修改。v2 payload 可继续读取。
+> 本文下方的“空调用栈／顶层行”限制属于此前版本的验证记录；当前实现及门禁见
+> `yarn-spinner-coupling-issues.md` 第 7 节和 `tests/headless/HeadlessTestRunner.YarnDetours.cs`。
+
 状态：M9.5/M9.6 产品化基础已完成；已通过 Yarn-free Script/State 契约接入 Runtime
 
 锁定版本：Yarn Spinner 3.2.0 / YarnSpinner-Godot 0.3.22

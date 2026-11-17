@@ -12,8 +12,8 @@ public partial class TextLineProvider : LineProviderBehaviour
     /// <summary>Specifies the language code to use for text content
     /// for this <see cref="TextLineProvider"/>.
     /// </summary>
-    [Language][Export] public string textLanguageCode = System.Globalization.CultureInfo.CurrentCulture.Name;
-
+    [Language] [Export] public string textLanguageCode = System.Globalization.CultureInfo.CurrentCulture.Name;
+    
     private YarnTask? prepareForLinesTask = null;
 
     public override bool LinesAvailable => prepareForLinesTask?.IsCompletedSuccessfully() ?? false;
@@ -43,7 +43,7 @@ public partial class TextLineProvider : LineProviderBehaviour
         lineParser.RegisterMarkerProcessor("select", builtInReplacer);
         lineParser.RegisterMarkerProcessor("plural", builtInReplacer);
         lineParser.RegisterMarkerProcessor("ordinal", builtInReplacer);
-
+        
         if (string.IsNullOrWhiteSpace(LocaleCode))
         {
             LocaleCode = System.Globalization.CultureInfo.CurrentCulture.Name;

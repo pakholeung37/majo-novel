@@ -11,6 +11,7 @@ using Majo.Runtime.Dialogue.Presentation;
 using Majo.Runtime.Input;
 using Majo.Runtime.Localization;
 using Majo.Runtime.Operations;
+using Majo.Runtime.Dialogue.Yarn.Bridges;
 using YarnSpinnerGodot;
 
 namespace Majo.Runtime.Dialogue.Yarn.Presentation;
@@ -28,6 +29,7 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, I
     private CanvasLayer? presentationLayer;
     private Control? root;
     private LinePresenter? linePresenter;
+    private YarnLinePresenterBridge? linePresenterBridge;
     private MajoSpeakerNamePresenter? speakerNamePresenter;
     private OptionsPresenter? optionsPresenter;
     private MajoActionMarkupBridge? markupBridge;
@@ -136,6 +138,8 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, I
         markupBridge.DisplayCompleted += HandleLineDisplayCompleted;
         markupBridge.LineDismissed += HandleLineDismissed;
         linePresenter.AddChild(markupBridge);
+        linePresenterBridge = new YarnLinePresenterBridge(linePresenter) { Name = "MajoLinePresenterBridge" };
+        linePresenter.AddChild(linePresenterBridge);
         backend.SetPresentationQuiescenceWaiter(markupBridge.WaitUntilInactiveAsync);
         inputPresenter = new MajoPresentationInputPresenter(input, markupBridge, optionParent)
         {
@@ -170,7 +174,7 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, I
 
         linePresenter.ActionMarkupHandlers.Add(new MajoBbCodeMarkupHandler());
         linePresenter.ActionMarkupHandlers.Add(markupBridge);
-        backend.RegisterNativePresenter(linePresenter);
+        backend.RegisterNativePresenter(linePresenterBridge);
         backend.RegisterNativePresenter(speakerNamePresenter);
         backend.RegisterNativePresenter(optionsPresenter);
         backend.RegisterNativePresenter(inputPresenter);
@@ -182,7 +186,7 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, I
         cancellationToken.ThrowIfCancellationRequested();
         inputPresenter?.ResetInput();
         speakerNamePresenter?.Reset();
-        linePresenter?.ResetVisibility();
+        linePresenterBridge?.ResetVisibility();
         markupBridge?.ResetState();
         return Task.CompletedTask;
     }
@@ -206,7 +210,7 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, I
 
         inputPresenter?.ResetInput();
         speakerNamePresenter?.Reset();
-        linePresenter?.ResetVisibility();
+        linePresenterBridge?.ResetVisibility();
         backend.SetPresentationQuiescenceWaiter(null);
         if (markupBridge is not null)
         {
@@ -217,7 +221,7 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, I
         UnregisterPresenter(inputPresenter);
         UnregisterPresenter(optionsPresenter);
         UnregisterPresenter(speakerNamePresenter);
-        UnregisterPresenter(linePresenter);
+        UnregisterPresenter(linePresenterBridge);
         if (linePresenter is not null && markupBridge is not null &&
             GodotObject.IsInstanceValid(linePresenter) &&
             GodotObject.IsInstanceValid(markupBridge))
@@ -253,6 +257,7 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, I
         presentationLayer = null;
         root = null;
         linePresenter = null;
+        linePresenterBridge = null;
         speakerNamePresenter = null;
         optionsPresenter = null;
         markupBridge = null;
@@ -328,7 +333,6 @@ internal sealed class YarnDefaultDialoguePresentation : IDialoguePresentation, I
 
         presenter.typewriterStyle = LinePresenter.TypewriterType.ByLetter;
         presenter.lettersPerSecond = configuration.LettersPerSecond;
-        presenter.HideDebounceMilliseconds = 50;
         presenter.useFadeEffect = configuration.UseFadeEffect;
         presenter.fadeUpDuration = (float)configuration.FadeUpDurationSeconds;
         presenter.fadeDownDuration = (float)configuration.FadeDownDurationSeconds;

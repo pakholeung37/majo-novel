@@ -1,0 +1,5 @@
+{
+    "projectFileVersion": 3,
+    "sourceFiles": ["YarnDetours.yarn"],
+    "baseLanguage": "en"
+}

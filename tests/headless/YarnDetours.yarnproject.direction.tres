@@ -1,0 +1,11 @@
+[gd_resource type="Resource" format=3 uid="uid://bxrs7u1dbr3dw"]
+
+[ext_resource type="Script" uid="uid://orqi0qstlslj" path="res://addons/majo_runtime/Runtime/Dialogue/Yarn/MajoDirectionData.cs" id="1_d5li7"]
+
+[resource]
+script = ExtResource("1_d5li7")
+SchemaVersion = 2
+ManifestPath = "res://tests/headless/YarnDetours.yarnproject"
+SourceFingerprint = "99a8d843778ea51002b3a9cf5a4abad3aded6112394fb013abcb66da566e4f3f"
+ProgramFingerprint = "6cb91d29523e51ded636ccba0df27f81a4fdf4da5ce349b7f96e4868c4932850"
+ModulesJson = "[{\"NodeId\":\"Start\",\"SceneEntry\":{\"SceneId\":\"detour_test\",\"File\":\"res://tests/headless/YarnDetours.yarn\",\"Line\":2,\"Column\":1},\"CameraPresets\":[],\"Version\":1,\"Symbols\":{\"Stages\":[],\"Views\":[],\"ShotAliases\":[],\"Marks\":[]},\"Resources\":[],\"SourceMaps\":[],\"Imports\":[],\"Marks\":[],\"Diagnostics\":[]},{\"NodeId\":\"Outer\",\"SceneEntry\":null,\"CameraPresets\":[],\"Version\":1,\"Symbols\":{\"Stages\":[],\"Views\":[],\"ShotAliases\":[],\"Marks\":[]},\"Resources\":[],\"SourceMaps\":[],\"Imports\":[],\"Marks\":[],\"Diagnostics\":[]},{\"NodeId\":\"Inner\",\"SceneEntry\":null,\"CameraPresets\":[],\"Version\":1,\"Symbols\":{\"Stages\":[],\"Views\":[],\"ShotAliases\":[],\"Marks\":[]},\"Resources\":[],\"SourceMaps\":[],\"Imports\":[],\"Marks\":[],\"Diagnostics\":[]}]"

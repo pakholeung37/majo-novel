@@ -1,0 +1,48 @@
+name: Addon release checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Install pinned Godot .NET
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive=Godot_v4.7.2-stable_mono_linux_x86_64.zip
+          release=https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable
+          mkdir -p "$RUNNER_TEMP/godot-download" "$RUNNER_TEMP/godot"
+          cd "$RUNNER_TEMP/godot-download"
+          curl --fail --location --retry 3 "$release/$archive" -o "$archive"
+          printf '129f82db7bafd54ae14bb5bb284041c73860e8c7a009a3a026ca5e946cbff247  %s\n' "$archive" > godot.sha256
+          sha256sum --check godot.sha256
+          unzip -q "$archive" -d "$RUNNER_TEMP/godot"
+          godot_binary="$(find "$RUNNER_TEMP/godot" -type f -name 'Godot*_mono_linux.x86_64' -print -quit)"
+          test -n "$godot_binary"
+          chmod +x "$godot_binary"
+          printf 'GODOT_BIN=%s\n' "$godot_binary" >> "$GITHUB_ENV"
+      - name: Verify upstream and run full gate
+        run: |
+          python3 tools/package-addon.py --verify-only
+          ./tools/test.sh --full
+      - name: Build addon archives
+        run: python3 tools/package-addon.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: majo-runtime-source-addons
+          if-no-files-found: error
+          path: |
+            build/releases/*.zip
+            build/releases/SHA256SUMS

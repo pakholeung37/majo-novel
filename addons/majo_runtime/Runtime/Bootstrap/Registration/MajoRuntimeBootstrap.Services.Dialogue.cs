@@ -176,9 +176,11 @@ public partial class MajoRuntimeBootstrap : Node
                 resolver =>
                 {
                     var hotReload = Configuration!.Dialogue!.HotReload;
+                    var resourceRoot = ProjectSettings.GlobalizePath(Configuration.Resources!.RootPath);
+                    var hasSourceOverride = !string.IsNullOrWhiteSpace(hotReload.SourceRootOverride);
                     var configuredRoot = string.IsNullOrWhiteSpace(hotReload.SourceRootOverride)
                         ? System.IO.Path.Combine(
-                            ProjectSettings.GlobalizePath(Configuration.Resources!.RootPath),
+                            resourceRoot,
                             Configuration.Resources.ScriptsPath)
                         : hotReload.SourceRootOverride;
                     return new YarnHotReloadService(
@@ -190,7 +192,10 @@ public partial class MajoRuntimeBootstrap : Node
                         configuredRoot,
                         Logger,
                         playback: resolver.Get<IPlaybackModeManager>(),
-                        state: resolver.Get<IStateManager>());
+                        state: resolver.Get<IStateManager>(),
+                        sourceFilesAvailable: hasSourceOverride ||
+                            (!string.IsNullOrWhiteSpace(ProjectSettings.GlobalizePath("res://")) &&
+                                System.IO.Path.IsPathFullyQualified(resourceRoot)));
                 },
                 typeof(IYarnProjectVersionStore),
                 typeof(IScriptPlayback),

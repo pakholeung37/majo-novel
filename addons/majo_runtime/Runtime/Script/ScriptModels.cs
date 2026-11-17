@@ -126,13 +126,16 @@ public sealed record ScriptPlaybackSpot
 
 public sealed record ScriptCheckpoint
 {
-    public const int CurrentFormatVersion = 2;
+    public const int CurrentFormatVersion = 3;
+    public const int LegacyFormatVersion = 2;
 
     public ScriptCheckpoint(
         int formatVersion,
         string programFingerprint,
         ScriptPlaybackSpot spot,
-        IEnumerable<string>? resolvedSubstitutions = null)
+        IEnumerable<string>? resolvedSubstitutions = null,
+        IEnumerable<ScriptCallFrame>? callStack = null,
+        IEnumerable<ScriptStackValue>? operandStack = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(formatVersion);
 
@@ -146,6 +149,21 @@ public sealed record ScriptCheckpoint
                     "Resolved substitutions cannot contain null.",
                     nameof(resolvedSubstitutions)))
                 .ToArray());
+        CallStack = Array.AsReadOnly((callStack ?? Array.Empty<ScriptCallFrame>()).Select(frame =>
+        {
+            ArgumentNullException.ThrowIfNull(frame);
+            ArgumentException.ThrowIfNullOrWhiteSpace(frame.NodeName);
+            ArgumentOutOfRangeException.ThrowIfNegative(frame.InstructionIndex);
+            return frame;
+        }).ToArray());
+        OperandStack = Array.AsReadOnly((operandStack ?? Array.Empty<ScriptStackValue>()).Select(value =>
+        {
+            ArgumentNullException.ThrowIfNull(value);
+            ArgumentNullException.ThrowIfNull(value.Value);
+            if (value.Type is not ("string" or "number" or "bool"))
+                throw new ArgumentException($"Unsupported script operand type '{value.Type}'.", nameof(operandStack));
+            return value;
+        }).ToArray());
     }
 
     public int FormatVersion { get; }
@@ -155,7 +173,13 @@ public sealed record ScriptCheckpoint
     public ScriptPlaybackSpot Spot { get; }
 
     public IReadOnlyList<string> ResolvedSubstitutions { get; }
+    public IReadOnlyList<ScriptCallFrame> CallStack { get; }
+    public IReadOnlyList<ScriptStackValue> OperandStack { get; }
 }
+
+/// <summary>Bottom-to-top return frames. Nested checkpoints require the same compiled program.</summary>
+public sealed record ScriptCallFrame(string NodeName, int InstructionIndex);
+public sealed record ScriptStackValue(string Type, string Value);
 
 /// <summary>A frozen script identity established before any presenter runs.</summary>
 public sealed record LineBoundaryContext(

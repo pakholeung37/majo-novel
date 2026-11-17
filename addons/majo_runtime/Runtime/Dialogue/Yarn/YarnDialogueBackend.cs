@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Godot;
 using Majo.Runtime.Core;
 using Majo.Runtime.Dialogue.Commands;
+using Majo.Runtime.Dialogue.Yarn.Bridges;
 using Majo.Runtime.Dialogue.Yarn.HotReload;
 using Majo.Runtime.Dialogue.Yarn.Preloading;
 using Majo.Runtime.Localization;
@@ -28,6 +29,8 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
     private CancellationTokenSource nodeEntryCancellation = new();
     private long nodeActivation;
     private long enteredActivation = -1;
+    private int nodeCallDepth;
+    private int nodeCompletions;
     private NodeEntryReason nodeEntryReason;
 
     public Func<NodeEntryRequest, CancellationToken, Task>? BeforeNodeEntryAsync { get; set; }
@@ -45,6 +48,8 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
     private readonly YarnLineTextProcessor textProcessor = new();
     private readonly object sync = new();
     private DialogueRunner? runner;
+    private YarnDialogueRunnerBridge? runnerBridge;
+    private bool lineProcessorRegistered;
     private YarnDialoguePresenterAdapter? presenterAdapter;
     private IYarnCommandAdapter? commandAdapter;
     private Callable nodeStarted;
@@ -137,6 +142,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
             Name = "MajoDialogueRunner",
             autoStart = false,
         };
+        lineProcessorRegistered = false;
         presenterAdapter = new YarnDialoguePresenterAdapter(
             presenters,
             RequestHurryUp,
@@ -165,8 +171,8 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
         runner.VariableStorage = variableStore;
         runner.AddChild(presenterAdapter);
         runner.dialoguePresenters = new Godot.Collections.Array<Node?> { presenterAdapter };
-        runner.LineProvider.RegisterMarkerProcessor("br", textProcessor.LineBreakMarkupReplacer);
         runner.AddCommandHandler(YarnNodeEntryTransform.CommandName, (Func<Task>)EnterPendingNodeAsync);
+        runnerBridge = new YarnDialogueRunnerBridge(runner);
         owner.AddChild(runner);
         configuredLocale = localeManager?.DialogueLocale ?? TranslationServer.GetLocale();
 
@@ -204,6 +210,8 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
         }
 
         DisconnectSignals();
+        runnerBridge?.Dispose();
+        runnerBridge = null;
         presenterAdapter?.ReleaseBoundaryResources();
         if (GodotObject.IsInstanceValid(runner))
         {
@@ -268,6 +276,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
 
     private void BeginProjectSession(string projectId, string startNode, bool resetCompletion)
     {
+        nodeCallDepth = nodeCompletions = 0;
         directionScopes?.ExitNode(currentNodeName);
         nodeEntryCancellation.Cancel();
         nodeEntryCancellation.Dispose();
@@ -299,6 +308,11 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
     {
         variableStore.Program = project.Program;
         Runner.SetProject(project);
+        if (!lineProcessorRegistered)
+        {
+            Runner.LineProvider.RegisterMarkerProcessor("br", textProcessor.LineBreakMarkupReplacer);
+            lineProcessorRegistered = true;
+        }
         SetLocale(configuredLocale);
         presenterAdapter!.BeginSession();
         if (preloader is not null) await preloader.PrepareStartAsync(project,
@@ -511,7 +525,9 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
             ScriptCheckpoint.CurrentFormatVersion,
             descriptor.ProgramFingerprint,
             new ScriptPlaybackSpot(id, snapshot.LineId),
-            snapshot.ResolvedSubstitutions);
+            snapshot.ResolvedSubstitutions,
+            snapshot.CallStack.Select(frame => new ScriptCallFrame(frame.NodeName, frame.InstructionIndex)),
+            snapshot.OperandStack.Select(value => new ScriptStackValue(value.Type, value.Value)));
     }
 
     public async Task ValidateCheckpointAsync(
@@ -519,7 +535,9 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(checkpoint);
-        if (checkpoint.FormatVersion != ScriptCheckpoint.CurrentFormatVersion)
+        if (checkpoint.FormatVersion is not (ScriptCheckpoint.CurrentFormatVersion or ScriptCheckpoint.LegacyFormatVersion) ||
+            (checkpoint.FormatVersion == ScriptCheckpoint.LegacyFormatVersion &&
+                (checkpoint.CallStack.Count > 0 || checkpoint.OperandStack.Count > 0)))
         {
             throw new ScriptCheckpointException(
                 $"Unsupported script checkpoint format '{checkpoint.FormatVersion}'; " +
@@ -550,19 +568,20 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
                 $"but the checkpoint contains {checkpoint.ResolvedSubstitutions.Count}.");
         }
 
-        if (string.Equals(
+        var exactProgram = string.Equals(
                 descriptor.ProgramFingerprint,
                 checkpoint.ProgramFingerprint,
-                StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        if (requireExactProgramFingerprint)
+                StringComparison.Ordinal);
+        if (!exactProgram && (requireExactProgramFingerprint ||
+                checkpoint.CallStack.Count > 0 || checkpoint.OperandStack.Count > 0))
         {
             throw new ScriptCheckpointException(
                 $"Script '{checkpoint.Spot.Script}' no longer matches checkpoint fingerprint.");
         }
+
+        var project = await projectVersions.GetActiveAsync(checkpoint.Spot.Script.ProjectId, cancellationToken);
+        stateBridge.ValidateReplay(project.Program, CreateBridgeSnapshot(checkpoint));
+        if (exactProgram) return;
 
         logger.Debug(
             "script",
@@ -667,11 +686,16 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
 
     private void HandleNodeStarted(string nodeName)
     {
+        var callDepth = stateBridge.GetCallStackDepth(Runner.Dialogue);
+        // Return completes only the child; jump completes every unwound caller too.
+        var returning = callDepth < nodeCallDepth && nodeCompletions == 1;
+        nodeCallDepth = callDepth;
+        nodeCompletions = 0;
         currentNodeName = nodeName;
         nodeActivation++;
         // Checkpoint replay skips the source prelude. Restore only the module here;
         // restoring stable state must never execute a normal scene boundary.
-        if (nodeEntryReason != NodeEntryReason.Normal)
+        if (nodeEntryReason != NodeEntryReason.Normal || returning)
             ApplyPendingModule(nodeName);
     }
 
@@ -721,6 +745,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
 
     private void HandleNodeCompleted(string nodeName)
     {
+        nodeCompletions++;
         try { NodeExited?.Invoke(nodeName); }
         catch (Exception error)
         {
@@ -737,6 +762,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
         {
             return;
         }
+        projectVersions.EndSession(currentProjectId);
         Exception? failure;
         bool stopping;
         lock (sync)
@@ -768,20 +794,27 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
 
         var project = Runner.YarnProject ?? throw new ScriptCheckpointException(
             "DialogueRunner has no Yarn project during checkpoint restore.");
-        var bridgeSnapshot = new YarnVmLineSnapshot(
-            checkpoint.Spot.Script.NodeName,
-            checkpoint.Spot.LineId,
-            0,
-            "WaitingForContinue",
-            0,
-            0,
-            0,
-            checkpoint.ResolvedSubstitutions);
+        var bridgeSnapshot = CreateBridgeSnapshot(checkpoint);
         stateBridge.InjectReplayAfterNodeSelected(
             Runner.Dialogue,
             project.Program,
             bridgeSnapshot);
+        nodeCallDepth = bridgeSnapshot.CallStackDepth;
     }
+
+    private static YarnVmLineSnapshot CreateBridgeSnapshot(ScriptCheckpoint checkpoint) => new(
+            checkpoint.Spot.Script.NodeName,
+            checkpoint.Spot.LineId,
+            0,
+            "WaitingForContinue",
+            checkpoint.OperandStack.Count,
+            checkpoint.CallStack.Count,
+            0,
+            checkpoint.ResolvedSubstitutions)
+    {
+        CallStack = checkpoint.CallStack.Select(frame => new YarnVmCallFrame(frame.NodeName, frame.InstructionIndex)).ToArray(),
+        OperandStack = checkpoint.OperandStack.Select(value => new YarnVmStackValue(value.Type, value.Value)).ToArray(),
+    };
 
     private LineBoundaryContext? activeBoundary;
     public Task<IDisposable> AcquireRestoreAsync(CancellationToken token) =>
@@ -1069,6 +1102,7 @@ public sealed class YarnDialogueBackend : IYarnDialogueBackend, ILineBoundarySou
 
     public void Dispose()
     {
+        runnerBridge?.Dispose();
         nodeEntryCancellation.Cancel();
         nodeEntryCancellation.Dispose();
         preloader?.Dispose();

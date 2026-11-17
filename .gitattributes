@@ -1,2 +1,5 @@
 # Normalize EOL for all files that Git considers text files.
 * text=auto eol=lf
+
+# Preserve the exact upstream bytes of the vendored Yarn Spinner plugin.
+/addons/YarnSpinner-Godot/** -text -whitespace

@@ -104,46 +104,6 @@ public partial class LinePresenter : Node, DialoguePresenterBase
     /// <seealso cref="fadeDownDuration"/>
     [Export] public bool useFadeEffect = true;
 
-    // Opt-in buffer for hosts that keep the dialogue panel visible between lines.
-    public ulong HideDebounceMilliseconds { get; set; }
-    private ulong? pendingHideDeadline;
-    private Tween? hideTween;
-
-    public void ResetVisibility()
-    {
-        CancelPendingHide();
-        if (IsInstanceValid(presenterControl)) presenterControl!.Visible = false;
-    }
-
-    private void CancelPendingHide()
-    {
-        pendingHideDeadline = null;
-        hideTween?.Kill();
-        hideTween = null;
-    }
-
-    public override void _ExitTree() => CancelPendingHide();
-
-    public override void _Process(double delta)
-    {
-        if (pendingHideDeadline is not ulong deadline || Time.GetTicksMsec() < deadline)
-            return;
-
-        pendingHideDeadline = null;
-        if (!IsInstanceValid(presenterControl)) return;
-        if (useFadeEffect && fadeDownDuration > 0)
-        {
-            hideTween = CreateTween();
-            hideTween.TweenProperty(presenterControl!, "modulate:a", 0f, fadeDownDuration);
-            hideTween.TweenCallback(Callable.From(ResetVisibility));
-        }
-        else
-        {
-            ResetVisibility();
-        }
-    }
-
-
     /// <summary>
     /// The time that the fade effect will take to fade lines in.
     /// </summary>
@@ -198,11 +158,11 @@ public partial class LinePresenter : Node, DialoguePresenterBase
     /// The number of characters per second that should appear during a
     /// typewriter effect.
     /// </summary>
-    [ExportGroup("Typewriter")][Export] public int lettersPerSecond;
+    [ExportGroup("Typewriter")] [Export] public int lettersPerSecond;
 
-    [ExportGroup("Typewriter")][Export] public int wordsPerSecond;
-    [ExportGroup("Typewriter")][Export] public TypewriterType typewriterStyle;
-    [ExportGroup("Typewriter")][Export] public Node? customTypewriter;
+    [ExportGroup("Typewriter")] [Export] public int wordsPerSecond;
+    [ExportGroup("Typewriter")] [Export] public TypewriterType typewriterStyle;
+    [ExportGroup("Typewriter")] [Export] public Node? customTypewriter;
 
     /// <summary>
     /// If enabled, matched pairs of the characters '<' and `>`  will be replaced by
@@ -230,7 +190,11 @@ public partial class LinePresenter : Node, DialoguePresenterBase
     /// <inheritdoc/>
     public YarnTask OnDialogueCompleteAsync()
     {
-        ResetVisibility();
+        if (IsInstanceValid(presenterControl))
+        {
+            presenterControl!.Visible = false;
+        }
+
         return YarnTask.CompletedTask;
     }
 
@@ -240,7 +204,6 @@ public partial class LinePresenter : Node, DialoguePresenterBase
     /// <inheritdoc/>
     public YarnTask OnDialogueStartedAsync()
     {
-        if (HideDebounceMilliseconds > 0) ResetVisibility();
         return YarnTask.CompletedTask;
     }
 
@@ -253,7 +216,7 @@ public partial class LinePresenter : Node, DialoguePresenterBase
         }
         // we add all the Godot Node-derived handlers into the shared list
         ActionMarkupHandlers.AddRange(eventHandlers);
-
+        
         if (IsInstanceValid(lineText))
         {
             lineText.BbcodeEnabled = true;
@@ -264,8 +227,7 @@ public partial class LinePresenter : Node, DialoguePresenterBase
                     Typewriter = new InstantTypewriter()
                     {
                         ActionMarkupHandlers = ActionMarkupHandlers,
-                        TextElement = this.lineText,
-                        ConvertHTMLToBBCode = ConvertHTMLToBBCode
+                        TextElement = this.lineText, ConvertHTMLToBBCode = ConvertHTMLToBBCode
                     };
                     break;
 
@@ -284,8 +246,7 @@ public partial class LinePresenter : Node, DialoguePresenterBase
                     {
                         ActionMarkupHandlers = ActionMarkupHandlers,
                         TextElement = this.lineText,
-                        WordsPerSecond = this.wordsPerSecond,
-                        ConvertHTMLToBBCode = ConvertHTMLToBBCode
+                        WordsPerSecond = this.wordsPerSecond, ConvertHTMLToBBCode = ConvertHTMLToBBCode
                     };
                     break;
 
@@ -325,11 +286,8 @@ public partial class LinePresenter : Node, DialoguePresenterBase
             return;
         }
 
-        var continuingPanel = HideDebounceMilliseconds > 0 &&
-            IsInstanceValid(presenterControl) && presenterControl!.Visible;
-        CancelPendingHide();
         MarkupParseResult text;
-
+        
         if (!IsInstanceValid(characterNameText))
         {
             if (showCharacterNameInLineView)
@@ -379,10 +337,7 @@ public partial class LinePresenter : Node, DialoguePresenterBase
             presenterControl!.Visible = true;
             if (useFadeEffect)
             {
-                await Effects.FadeAlphaAsync(presenterControl,
-                    continuingPanel ? presenterControl.Modulate.A : 0, 1,
-                    continuingPanel && presenterControl.Modulate.A >= 1 ? 0 : fadeUpDuration,
-                    token.HurryUpToken);
+                await Effects.FadeAlphaAsync(presenterControl, 0, 1, fadeUpDuration, token.HurryUpToken);
                 if (!IsInstanceValid(this))
                 {
                     return;
@@ -414,12 +369,7 @@ public partial class LinePresenter : Node, DialoguePresenterBase
 
         Typewriter.ContentWillDismiss();
 
-        if (HideDebounceMilliseconds > 0)
-        {
-            // Return immediately so Yarn can deliver the next line and cancel the hide.
-            pendingHideDeadline = Time.GetTicksMsec() + HideDebounceMilliseconds;
-        }
-        else if (IsInstanceValid(presenterControl))
+        if (IsInstanceValid(presenterControl))
         {
             // we fade down the UI
             if (useFadeEffect)
@@ -446,7 +396,6 @@ public partial class LinePresenter : Node, DialoguePresenterBase
     public YarnTask<DialogueOption?> RunOptionsAsync(DialogueOption[] dialogueOptions,
         CancellationToken cancellationToken)
     {
-        if (HideDebounceMilliseconds > 0) ResetVisibility();
         return YarnTask<DialogueOption?>.FromResult(null);
     }
 

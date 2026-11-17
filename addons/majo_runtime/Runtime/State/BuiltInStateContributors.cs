@@ -490,7 +490,9 @@ public sealed class ScriptStateContributor : IPreparedStateContributor, ILineBou
             checkpoint.Spot.Script.NodeName,
             checkpoint.Spot.LineId,
             checkpoint.Spot.Boundary,
-            checkpoint.ResolvedSubstitutions.ToArray());
+            checkpoint.ResolvedSubstitutions.ToArray(),
+            checkpoint.CallStack.ToArray(),
+            checkpoint.OperandStack.ToArray());
         return new StateRecord(
             Key,
             Scope,
@@ -538,7 +540,9 @@ public sealed class ScriptStateContributor : IPreparedStateContributor, ILineBou
                 new ScriptId(payload.ProjectId, payload.NodeName),
                 payload.LineId,
                 payload.Boundary),
-            payload.ResolvedSubstitutions ?? Array.Empty<string>());
+            payload.ResolvedSubstitutions ?? Array.Empty<string>(),
+            payload.CallStack,
+            payload.OperandStack);
     }
 
     private sealed record ScriptPayload(
@@ -548,5 +552,7 @@ public sealed class ScriptStateContributor : IPreparedStateContributor, ILineBou
         string NodeName,
         string LineId,
         ScriptCheckpointBoundary Boundary,
-        string[] ResolvedSubstitutions);
+        string[] ResolvedSubstitutions,
+        ScriptCallFrame[]? CallStack = null,
+        ScriptStackValue[]? OperandStack = null);
 }

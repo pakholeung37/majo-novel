@@ -5,6 +5,25 @@ namespace Majo.YarnBridge;
 /// <summary>Version-pinned compiler access, kept with the existing Yarn friend-assembly bridge.</summary>
 public static class YarnCompilerSourceMap
 {
+    public static void AddNodeEntries(CompilationResult result)
+    {
+        if (result.Program is not { } program)
+            return;
+        var smartVariables = program.SmartVariableNodes.Select(node => node.Name).ToHashSet(StringComparer.Ordinal);
+        if (result.ProjectDebugInfo is { } debug)
+            foreach (var info in debug.Nodes)
+            {
+                if (!program.Nodes.TryGetValue(info.NodeName, out var node) ||
+                    smartVariables.Contains(info.NodeName) || YarnProgramBridge.HasNodeEntry(node))
+                    continue;
+                var ranges = info.LineRanges.ToArray();
+                info.LineRanges.Clear();
+                foreach (var range in ranges)
+                    info.LineRanges.Add(range.Key + 1, range.Value);
+            }
+        result.Program = YarnProgramBridge.WithNodeEntries(program);
+    }
+
     public static void Restore(CompilationResult result, Func<string, int, int> originalLine)
     {
         Yarn.Compiler.Range Map(string? file, Yarn.Compiler.Range range) => file is null ? range : new(

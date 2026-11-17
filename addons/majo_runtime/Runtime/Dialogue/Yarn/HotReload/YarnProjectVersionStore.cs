@@ -29,6 +29,8 @@ public interface IYarnProjectVersionStore : IRuntimeService
 
     void MarkRunning(string projectId, YarnProject project);
 
+    void EndSession(string projectId) { }
+
     void UpdateSourceFingerprint(string projectId, string sourceFingerprint);
 }
 
@@ -37,6 +39,7 @@ public sealed class YarnProjectVersionStore : IYarnProjectVersionStore
     private readonly IResourceLoader<YarnProject> importedProjects;
     private readonly object sync = new();
     private readonly Dictionary<string, Entry> entries = new(StringComparer.Ordinal);
+    private readonly List<YarnProject> ownedImports = new();
 
     public YarnProjectVersionStore(IResourceManager resources, string scriptsPath)
     {
@@ -74,6 +77,8 @@ public sealed class YarnProjectVersionStore : IYarnProjectVersionStore
         lock (sync)
         {
             entries.Clear();
+            foreach (var project in ownedImports) project.Dispose();
+            ownedImports.Clear();
         }
         return Task.CompletedTask;
     }
@@ -101,7 +106,9 @@ public sealed class YarnProjectVersionStore : IYarnProjectVersionStore
             {
                 entry = new Entry(version);
                 entries.Add(projectId, entry);
+                ownedImports.Add(version.Project);
             }
+            else version.Project.Dispose();
             return entry.Active.Project;
         }
     }
@@ -172,6 +179,18 @@ public sealed class YarnProjectVersionStore : IYarnProjectVersionStore
         }
     }
 
+    public void EndSession(string projectId)
+    {
+        lock (sync)
+        {
+            if (!entries.TryGetValue(projectId, out var entry)) return;
+            entry.Running = null;
+            if (entry.Candidate is null) return;
+            entry.Active = entry.Candidate;
+            entry.Candidate = null;
+        }
+    }
+
     public void UpdateSourceFingerprint(string projectId, string sourceFingerprint)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
@@ -207,6 +226,8 @@ public sealed class YarnProjectVersionStore : IYarnProjectVersionStore
 
     private static YarnProjectVersion CreateImportedVersion(string projectId, YarnProject project)
     {
+        var modules = MajoDirectionData.LoadModules(project);
+        project = Bridges.YarnProjectBridge.WithNodeEntries(project);
         var nodes = new HashSet<string>(project.Program.Nodes.Keys, StringComparer.Ordinal);
         var lineNodes = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var node in nodes)
@@ -237,7 +258,7 @@ public sealed class YarnProjectVersionStore : IYarnProjectVersionStore
             Array.Empty<YarnCompilationDiagnostic>(),
             DateTimeOffset.MinValue)
         {
-            DirectionModules = MajoDirectionData.LoadModules(project),
+            DirectionModules = modules,
         };
     }
 

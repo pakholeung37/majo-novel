@@ -11,6 +11,8 @@ The root [MIT License](LICENSE) covers original Majo Novel code and documentatio
 
 Dependencies restored through .NET or provided by Godot retain their respective licenses. The root license does not relicense them.
 
+The Runner and LinePresenter bridges under `addons/majo_runtime/Runtime/Dialogue/Yarn/Bridges/` contain portions adapted from YarnSpinner-Godot. Their original MIT notice is also retained [inside that directory](addons/majo_runtime/Runtime/Dialogue/Yarn/Bridges/YarnSpinner-LICENSE.md).
+
 ## Showcase content
 
 - **Manosaba:** the showcase uses content from *魔法少女ノ魔女裁判*. Adapted scenario text, including content under `demos/manosaba/assets/scripts/`, is not covered by Majo Novel's MIT license. Original game artwork, audio, and other game content remain third-party material.

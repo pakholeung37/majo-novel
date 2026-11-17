@@ -339,7 +339,6 @@ public partial class DialogueRunner : Godot.Node
     private CancellationTokenSource? currentLineHurryUpSource;
     private YarnTaskCompletionSource? dialogueCompletionSource;
     private YarnTaskCompletionSource? dialogueCancellationCompletion;
-    private YarnTask activeLineTask = YarnTask.CompletedTask;
 
     internal ICommandDispatcher CommandDispatcher
     {
@@ -547,18 +546,6 @@ public partial class DialogueRunner : Godot.Node
 
     private async YarnTask OnDialogueCompleteAsync()
     {
-        // Cancellation signals presenters to exit; their asynchronous dismissal may
-        // still be running. Drain it before completion callbacks or a new session
-        // can reuse their UI and input state.
-        if (dialogueCancellationSource?.IsCancellationRequested == true)
-        {
-            await activeLineTask.SuppressCancellationThrow();
-            if (!IsInstanceValid(this))
-            {
-                return;
-            }
-        }
-
         // cleaning up the old cancellation token
         currentLineCancellationSource?.Dispose();
         currentLineCancellationSource = null;
@@ -678,7 +665,6 @@ public partial class DialogueRunner : Godot.Node
 
     private async YarnTask OnCommandReceivedAsync(Command command)
     {
-        var commandDialogueCancellationSource = dialogueCancellationSource;
         CommandDispatchResult dispatchResult = this.CommandDispatcher!.DispatchCommand(command.Text, this);
 
         var parts = SplitCommandText(command.Text);
@@ -744,9 +730,8 @@ public partial class DialogueRunner : Godot.Node
                     $"Internal error: Unknown command dispatch result status {dispatchResult}");
         }
 
-        // A late command must never continue a replacement dialogue session.
-        if (!ReferenceEquals(commandDialogueCancellationSource, dialogueCancellationSource) ||
-            (commandDialogueCancellationSource?.IsCancellationRequested ?? true))
+        // Continue the Dialogue, unless dialogue cancellation was requested.
+        if (dialogueCancellationSource?.IsCancellationRequested ?? false)
         {
             return;
         }
@@ -757,29 +742,19 @@ public partial class DialogueRunner : Godot.Node
             return;
         }
 
-        if (ReferenceEquals(commandDialogueCancellationSource, dialogueCancellationSource) &&
-            commandDialogueCancellationSource?.IsCancellationRequested == false)
-            Dialogue.Continue();
+        Dialogue.Continue();
     }
 
     private void OnLineReceived(Line line)
     {
-        activeLineTask = OnLineReceivedAsync(line);
-        activeLineTask.Forget();
+        OnLineReceivedAsync(line).Forget();
     }
 
     private async YarnTask OnLineReceivedAsync(Line line)
     {
-        var lineDialogueCancellationSource = dialogueCancellationSource;
         var localisedLine =
             await LineProvider.GetLocalizedLineAsync(line,
-                lineDialogueCancellationSource?.Token ?? CancellationToken.None);
-        if (!ReferenceEquals(dialogueCancellationSource, lineDialogueCancellationSource) ||
-            lineDialogueCancellationSource?.IsCancellationRequested != false)
-        {
-            return;
-        }
-
+                dialogueCancellationSource?.Token ?? CancellationToken.None);
         localisedLine.Source = this;
         if (!IsInstanceValid(this))
         {
@@ -797,10 +772,7 @@ public partial class DialogueRunner : Godot.Node
             return;
         }
 
-        if (ReferenceEquals(
-                dialogueCancellationSource,
-                lineDialogueCancellationSource) &&
-            lineDialogueCancellationSource?.IsCancellationRequested == false)
+        if (dialogueCancellationSource?.IsCancellationRequested == false)
         {
             Dialogue.Continue();
         }
@@ -824,26 +796,23 @@ public partial class DialogueRunner : Godot.Node
         currentLineCancellationSource?.Dispose();
         currentLineHurryUpSource?.Dispose();
 
-        CancellationTokenSource lineCancellationSource;
         if (dialogueCancellationSource != null)
         {
-            lineCancellationSource =
+            currentLineCancellationSource =
                 CancellationTokenSource.CreateLinkedTokenSource(dialogueCancellationSource.Token);
         }
         else
         {
-            lineCancellationSource = new CancellationTokenSource();
+            currentLineCancellationSource = new CancellationTokenSource();
         }
-        currentLineCancellationSource = lineCancellationSource;
 
         // now we make a new dependant hurry up cancellation token
-        var lineHurryUpSource =
-            CancellationTokenSource.CreateLinkedTokenSource(lineCancellationSource.Token);
-        currentLineHurryUpSource = lineHurryUpSource;
+        currentLineHurryUpSource =
+            CancellationTokenSource.CreateLinkedTokenSource(currentLineCancellationSource.Token);
         var metaToken = new LineCancellationToken
         {
-            NextLineToken = lineCancellationSource.Token,
-            HurryUpToken = lineHurryUpSource.Token,
+            NextLineToken = currentLineCancellationSource.Token,
+            HurryUpToken = currentLineHurryUpSource.Token,
         };
 
         var pendingTasks = new HashSet<YarnTask>();
@@ -911,17 +880,11 @@ public partial class DialogueRunner : Godot.Node
         }
         // We're done; dispose of the cancellation sources. (Null-check them because if we're leaving play mode, then these references may no longer be valid.)
 
-        lineCancellationSource.Dispose();
-        if (ReferenceEquals(currentLineCancellationSource, lineCancellationSource))
-        {
-            currentLineCancellationSource = null;
-        }
+        currentLineCancellationSource?.Dispose();
+        currentLineCancellationSource = null;
 
-        lineHurryUpSource.Dispose();
-        if (ReferenceEquals(currentLineHurryUpSource, lineHurryUpSource))
-        {
-            currentLineHurryUpSource = null;
-        }
+        currentLineHurryUpSource?.Dispose();
+        currentLineHurryUpSource = null;
     }
 
     private void OnOptionsReceived(OptionSet options)

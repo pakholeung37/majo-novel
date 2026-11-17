@@ -8,5 +8,8 @@ config/features=PackedStringArray("4.7", "C#", "Forward Plus")
 [dotnet]
 project/assembly_name="CoreConsumerSmoke"
 
+[editor_plugins]
+enabled=PackedStringArray("res://addons/YarnSpinner-Godot/plugin.cfg", "res://addons/majo_runtime/plugin.cfg")
+
 [rendering]
 renderer/rendering_method="gl_compatibility"

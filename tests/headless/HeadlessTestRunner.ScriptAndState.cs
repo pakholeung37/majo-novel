@@ -164,6 +164,19 @@ public partial class HeadlessTestRunner
             2);
 
         var capturedCheckpoint = script.CaptureCheckpoint();
+        // v2 persisted script payloads predate optional VM stacks and remain readable.
+        var legacyPayload = System.Text.Json.JsonSerializer.SerializeToElement(new
+        {
+            formatVersion = ScriptCheckpoint.LegacyFormatVersion,
+            programFingerprint = capturedCheckpoint.ProgramFingerprint,
+            projectId = capturedCheckpoint.Spot.Script.ProjectId,
+            nodeName = capturedCheckpoint.Spot.Script.NodeName,
+            lineId = capturedCheckpoint.Spot.LineId,
+            boundary = capturedCheckpoint.Spot.Boundary,
+            resolvedSubstitutions = capturedCheckpoint.ResolvedSubstitutions,
+        });
+        await new ScriptStateContributor(script).PreflightAsync(
+            new StateRecord(BuiltInStateKeys.ScriptPlayback, StateScope.Game, 2, legacyPayload), System.Threading.CancellationToken.None);
         var changedProgramCheckpoint = new ScriptCheckpoint(
             capturedCheckpoint.FormatVersion,
             new string('0', 64),

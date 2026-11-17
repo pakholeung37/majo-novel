@@ -113,8 +113,7 @@ namespace YarnSpinnerGodot;
 public class YarnCommandAttribute : YarnActionAttribute
 {
     [Obsolete("Use " + nameof(Name) + " instead.")]
-    public string CommandString
-    {
+    public string CommandString {
         get => Name;
         set => Name = value;
     }

@@ -1,0 +1,22 @@
+title: Start
+---
+First. #line:consumer-first
+-> Unselected #line:consumer-option-first
+    Wrong. #line:consumer-wrong
+-> Selected #line:consumer-option-second
+    Selected. #line:consumer-selected
+<<detour Outer>>
+Last. #line:consumer-last
+===
+
+title: Outer
+---
+<<declare $destination = "Inner">>
+<<detour {$destination}>>
+Outer returned. #line:consumer-outer
+===
+
+title: Inner
+---
+Inside. #line:consumer-inner
+===

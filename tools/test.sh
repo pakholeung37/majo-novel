@@ -8,6 +8,7 @@ SCRIPT_DIRECTORY="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 REPOSITORY_ROOT="$(CDPATH= cd -- "$SCRIPT_DIRECTORY/.." && pwd)"
 GAME_PROJECT="$REPOSITORY_ROOT"
 UNIT_TEST_PROJECT="$REPOSITORY_ROOT/tests/Majo.Runtime.UnitTests/Majo.Runtime.UnitTests.csproj"
+GENERATOR_TEST_PROJECT="$REPOSITORY_ROOT/tests/Majo.CommandGenerator.Tests/Majo.CommandGenerator.Tests.csproj"
 GODOT_EXECUTABLE="${GODOT_BIN:-/Applications/Godot_mono.app/Contents/MacOS/Godot}"
 
 print_usage() {
@@ -56,29 +57,6 @@ run_with_timeout() {
     perl -e 'alarm shift; exec @ARGV' "$timeout_seconds" "$@"
 }
 
-copy_clean_addon() {
-    local source_directory="$1"
-    local destination_directory="$2"
-    local source_file
-    local relative_path
-    local destination_file
-
-    mkdir -p "$destination_directory"
-    while IFS= read -r -d '' source_file; do
-        relative_path="${source_file#"$source_directory"/}"
-        destination_file="$destination_directory/$relative_path"
-        mkdir -p "$(dirname -- "$destination_file")"
-        cp "$source_file" "$destination_file"
-    done < <(find "$source_directory" -type f \
-        ! -path '*/bin/*' \
-        ! -path '*/obj/*' \
-        ! -path '*/.godot/*' \
-        ! -name '.DS_Store' \
-        ! -name '*.tmp' \
-        ! -name '*.log' \
-        -print0)
-}
-
 restore_dotnet_projects() {
     local unit_log
     local unit_pid
@@ -97,14 +75,25 @@ restore_dotnet_projects() {
         printf 'One or more .NET dependency restores failed.\n' >&2
         return 1
     fi
+    run_with_timeout 180 dotnet restore "$GENERATOR_TEST_PROJECT" --nologo
 }
 
 run_core_consumer_smoke() {
     local smoke_directory
+    local package_directory
     smoke_directory="$(mktemp -d)"
-    trap 'rm -rf "$smoke_directory"' RETURN
-    copy_clean_addon "$REPOSITORY_ROOT/addons/majo_runtime" "$smoke_directory/addons/majo_runtime"
-    copy_clean_addon "$REPOSITORY_ROOT/addons/YarnSpinner-Godot" "$smoke_directory/addons/YarnSpinner-Godot"
+    package_directory="$(mktemp -d)"
+    trap 'rm -rf "$smoke_directory" "$package_directory"' RETURN
+    python3 "$REPOSITORY_ROOT/tools/package-addon.py" --output-dir "$package_directory"
+    python3 - "$package_directory" "$smoke_directory" <<'PY_MAJO_INSTALL'
+from pathlib import Path
+import sys
+import zipfile
+archives = list(Path(sys.argv[1]).glob("*-with-yarn.zip"))
+assert len(archives) == 1, "Expected one bundled addon archive"
+with zipfile.ZipFile(archives[0]) as archive:
+    archive.extractall(sys.argv[2])
+PY_MAJO_INSTALL
     cp -R "$REPOSITORY_ROOT/tools/core-consumer-smoke/." "$smoke_directory/"
     if find "$smoke_directory" -path '*/demos/*' -print -quit | grep -q .; then
         printf 'Core consumer smoke unexpectedly copied demo sources.\n' >&2
@@ -116,6 +105,35 @@ run_core_consumer_smoke() {
         run_with_timeout 180 dotnet build CoreConsumerSmoke.csproj --nologo --no-restore
         run_with_timeout 180 "$GODOT_EXECUTABLE" --headless --path "$smoke_directory" --editor --quit
         run_with_timeout 60 "$GODOT_EXECUTABLE" --headless --path "$smoke_directory"
+        case "$(uname -s)" in
+            Darwin) consumer_preset="Consumer macOS" ;;
+            Linux) consumer_preset="Consumer Linux" ;;
+            *) printf 'Unsupported consumer export host.\n' >&2; exit 1 ;;
+        esac
+        mkdir -p player
+        touch player/.gdignore
+        if ! run_with_timeout 300 "$GODOT_EXECUTABLE" --headless --path "$smoke_directory" \
+            --export-pack "$consumer_preset" "$smoke_directory/player/consumer.pck" \
+            >"$smoke_directory/player/export.log" 2>&1; then
+            tail -n 80 "$smoke_directory/player/export.log"
+            exit 1
+        fi
+        if grep -q '^ERROR: Export .NET Project:' "$smoke_directory/player/export.log"; then
+            tail -n 60 "$smoke_directory/player/export.log"
+            printf 'Consumer .NET export failed.\n' >&2
+            exit 1
+        fi
+        if ! run_with_timeout 60 "$GODOT_EXECUTABLE" --headless --path "$smoke_directory" \
+            --main-pack "$smoke_directory/player/consumer.pck" -- --majo-export-smoke \
+            >"$smoke_directory/player/boot.log" 2>&1; then
+            cat "$smoke_directory/player/boot.log"
+            exit 1
+        fi
+        cat "$smoke_directory/player/boot.log"
+        if ! grep -q '^MAJO_CONSUMER_EXPORT_OK$' "$smoke_directory/player/boot.log"; then
+            printf 'Exported consumer did not initialize and complete its dialogue.\n' >&2
+            exit 1
+        fi
     )
 }
 
@@ -136,6 +154,9 @@ fi
 
 printf 'Running pure C# unit tests...\n'
 run_with_timeout 180 dotnet test "$UNIT_TEST_PROJECT" --nologo --no-restore --no-build
+
+printf 'Running command generator unit tests...\n'
+run_with_timeout 180 dotnet test "$GENERATOR_TEST_PROJECT" --nologo --no-restore
 
 if [[ "$TEST_MODE" == "unit" ]]; then
     print_result
@@ -163,33 +184,8 @@ if [[ "$failure_probe_status" -eq 0 ]]; then
 fi
 
 if [[ "$TEST_MODE" == "full" ]]; then
-    printf 'Running independent core consumer smoke without demos...\n'
+    printf 'Installing release ZIP and running independent consumer import, export and PCK boot...\n'
     run_core_consumer_smoke
-
-    # Godot export publishes ExportRelease (optimized, release API); a separate Release build is redundant.
-    case "$(uname -s)" in
-        Darwin)
-            EXPORT_PRESET="M10.5 macOS Smoke"
-            EXPORT_OUTPUT="$REPOSITORY_ROOT/build/m10.5/macos/majo-runtime-smoke.pck"
-            ;;
-        Linux)
-            EXPORT_PRESET="M10.5 Linux Smoke"
-            EXPORT_OUTPUT="$REPOSITORY_ROOT/build/m10.5/linux/majo-runtime-smoke.pck"
-            ;;
-        *)
-            printf 'Unsupported export smoke host platform: %s\n' "$(uname -s)" >&2
-            exit 1
-            ;;
-    esac
-
-    printf 'Running target-platform Godot export smoke (%s)...\n' "$EXPORT_PRESET"
-    mkdir -p "$(dirname -- "$EXPORT_OUTPUT")"
-    run_with_timeout 300 "$GODOT_EXECUTABLE" --headless --path "$GAME_PROJECT" \
-        --export-pack "$EXPORT_PRESET" "$EXPORT_OUTPUT"
-    if [[ ! -s "$EXPORT_OUTPUT" ]]; then
-        printf 'Godot export smoke did not produce a non-empty artifact: %s\n' "$EXPORT_OUTPUT" >&2
-        exit 1
-    fi
 fi
 
 print_result

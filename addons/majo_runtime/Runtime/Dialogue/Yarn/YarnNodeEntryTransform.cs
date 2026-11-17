@@ -10,7 +10,7 @@ namespace Majo.Runtime.Dialogue.Yarn;
 /// <summary>Shared editor/runtime source transform. Authored coordinates remain the diagnostic contract.</summary>
 public sealed class YarnNodeEntryTransform
 {
-    public const string CommandName = "__majo_node_entry";
+    public const string CommandName = Majo.YarnBridge.YarnProgramBridge.NodeEntryCommand;
     private readonly Dictionary<string, int[]> sourceLines = new(StringComparer.Ordinal);
 
     public CompilationJob.File Transform(string fileName, string source)

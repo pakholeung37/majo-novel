@@ -20,6 +20,31 @@ public sealed class YarnDependencyValidatorTests
         """;
 
     [Fact]
+    public void LoadedRuntimeIsValidatedWithoutProjectFiles()
+    {
+        var status = YarnDependencyValidator.ValidateRuntime();
+        Assert.True(status.IsCompatible, status.Message);
+        Assert.Equal("3.2.0", status.DetectedRuntimeVersion);
+        Assert.Null(status.DetectedPluginVersion);
+    }
+
+    [Theory]
+    [InlineData("3.1.0.0")]
+    [InlineData("3.2.1.0")]
+    public void LoadedRuntimeRejectsOtherVersions(string version)
+    {
+        var status = YarnDependencyValidator.ValidateRuntimeVersion(Version.Parse(version));
+        Assert.False(status.IsCompatible);
+        Assert.Contains("loaded assembly version", status.Message);
+    }
+
+    [Fact]
+    public void UnknownLoadedRuntimeVersionFails()
+    {
+        Assert.False(YarnDependencyValidator.ValidateRuntimeVersion(null).IsCompatible);
+    }
+
+    [Fact]
     public void CompatibleVersionsPass()
     {
         var status = YarnDependencyValidator.ValidateContents(

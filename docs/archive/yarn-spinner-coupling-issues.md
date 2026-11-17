@@ -1,6 +1,6 @@
 # Yarn Spinner 源码修改与侵入式耦合问题记录
 
-> 2026-09-07：本文所列两处耦合已按方案 A 修复。第 1–3 节保留为历史问题记录；当前实现见第 5 节。
+> 2026-11-17：YarnSpinner-Godot 已完整还原到官方 v0.3.22，定制行为移入 Majo bridge。当前实现见第 6 节；前文保留为历史记录。
 
 ## 1. 背景与现状
 
@@ -147,3 +147,43 @@
 - 将 YarnSpinner-Godot 单独复制到临时 Godot C# 工程，在不包含 Majo 的情况下构建成功（保留插件原有 SYSLIB1220 警告）。
 - macOS 资源包导出成功；直接从包中加载 Yarn / Direction 资源，校验模块 JSON 与程序指纹通过。
 - 完整包内 Demo 启动验证未通过：现有 `MajoRuntimeBootstrap.InitializeRuntimeAsync` 调用 `YarnDependencyValidator.ValidateProject` 时，打包模式下 `ProjectSettings.GlobalizePath("res://")` 返回空路径，在加载演出前失败。这是另一个启动路径问题，本次未修改该校验。
+
+## 6. 当前 bridge 隔离方式
+
+依赖基线为 YarnSpinner-Godot v0.3.22（`008db59b96e8fb28a74bd1ca7176688963cf09ac`）与 Yarn Spinner 3.2.0。
+`addons/YarnSpinner-Godot` 保持上游原始内容，`.gitattributes` 禁止对该目录做换行转换。
+Majo 不再给第三方类添加 `CompilationPipeline`、`ResetVisibility` 或其他成员，也不注入 partial 类。
+
+- **编译与节点入口**：官方导入器生成原始 YarnProject；Direction 伴随资源的指纹仍对应该原始程序。
+  `YarnProjectVersionStore` 校验伴随资源后，由 `YarnProjectBridge` 创建只供 Majo 执行的资源副本。
+  `YarnProgramBridge` 在副本的节点开头插入入口命令，重定位跳转、选项与 saliency 目标，并跳过智能变量节点。
+  适配具备幂等性，兼容旧缓存中已经包含入口命令的程序，不改写原始脚本或导入资源。
+  热重载也使用相同的字节码适配；`YarnCompilerSourceMap` 只平移指令到源码的调试映射，保留作者行号与字符串 ID。
+- **对话框显隐**：`YarnLinePresenterBridge` 使用官方 LinePresenter 的公开视图、Typewriter 和 markup 接口，
+  自己管理 50ms 延迟隐藏与淡入淡出。现有 Presenter 场景仍可使用官方 LinePresenter。
+- **异步会话**：`YarnDialogueRunnerBridge` 接管该 Runner 实例的 line、options、command 和 complete 回调。
+  取消时先等待旧台词／选项退出，再调用原版清理；命令恢复前校验原始会话身份，防止迟到任务推进新会话。
+  卸载时只恢复仍由本 bridge 持有的回调。
+
+隔离源码修改不等于消除版本耦合。Godot Runner bridge 仍依赖源代码随宿主编译的 internal command dispatcher，
+并通过 `UnsafeAccessor` 访问一个取消字段与三个私有方法；安装时检查字段／方法签名并在不兼容时明确失败。
+VM State Bridge 仍使用 `YarnSpinner.Tests` 友元程序集名与原有私有字段访问。升级依赖必须重新验证这些接口。
+
+回归覆盖分支、选项、跨节点跳转、detour 返回、line/node saliency、智能变量、源码坐标、
+迟到命令、取消后的异步退出和热重载。独立 consumer 会启用两个编辑器插件，从原始 Yarn 首次导入并运行对话，
+同时检查 Majo 的执行副本没有污染原始导入资源。
+
+桥接隔离之后，发布启动和嵌套检查点的后续修复见第 7 节。
+
+## 7. 发布启动与嵌套检查点
+
+- Bootstrap 通过已加载的 Yarn 程序集版本做运行时依赖检查；源码 `plugin.cfg` / `.props` 校验仅属于编辑器插件。
+  发布包不再尝试从空 `res://` 系统目录读取元数据。没有源码目录时禁用热重载，也不创建相对路径的监听目录。
+- 检查点 v3 保存从底到顶的调用帧与必要的类型化操作数，支持嵌套、动态 detour 的保存和返回。
+  恢复前校验所有返回地址、行 ID、替换参数与栈深度；带调用帧或操作数的检查点要求程序指纹完全一致。
+  新读取器仍接受无栈的 v2 脚本 payload；旧读取器会拒绝 v3。外层 Script Contributor schema 仍为 2，
+  checkpoint 的 `formatVersion` 负责区分新增的执行状态。
+- detour 返回时恢复调用方的 Direction 模块，不重新执行节点入口或之前的命令。
+  嵌套位置不做跨版本热替换；候选版本在正常会话结束后激活，内部存读档事务不会提前切换程序。
+- 完整门禁从 `tools/package-addon.py` 的捆绑 ZIP 安装独立宿主，进行首次导入、分支及嵌套 detour 播放，
+  并要求导出 PCK 启动后输出成功标记。生成器测试也纳入单元测试和完整门禁。

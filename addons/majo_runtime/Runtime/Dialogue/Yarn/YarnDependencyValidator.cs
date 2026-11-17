@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using System.IO;
 using System.Text.RegularExpressions;
@@ -13,6 +15,19 @@ public static partial class YarnDependencyValidator
     private const string YarnAddonDirectory = "YarnSpinner-Godot";
     private const string PluginManifestFile = "plugin.cfg";
     private const string PropsFile = "YarnSpinner-Godot.props";
+
+    /// <summary>Checks the loaded runtime without relying on source files or a filesystem project root.</summary>
+    public static YarnDependencyStatus ValidateRuntime() => ValidateRuntimeVersion(
+        typeof(global::Yarn.Dialogue).Assembly.GetName().Version);
+
+    public static YarnDependencyStatus ValidateRuntimeVersion(Version? version)
+    {
+        var detected = version is null ? null : $"{version.Major}.{version.Minor}.{version.Build}";
+        var compatible = string.Equals(detected, RequiredRuntimeVersion, StringComparison.Ordinal);
+        return new YarnDependencyStatus(compatible, null, detected, compatible
+            ? $"Loaded Yarn Spinner {detected}; Godot adapter compatibility is checked by the runtime bridge."
+            : $"Yarn Spinner {RequiredRuntimeVersion} is required, but loaded assembly version {version?.ToString() ?? "<unknown>"} was found.");
+    }
 
     public static YarnDependencyStatus ValidateProject(string projectRoot)
     {

@@ -222,7 +222,7 @@ public sealed class YarnVmStateBridgeTests
     }
 
     [Fact]
-    public void CaptureRejectsLineInsideDetourCallStack()
+    public void ReplayInsideDetourReturnsToTheOriginalCaller()
     {
         const string source = """
             title: Start
@@ -248,8 +248,92 @@ public sealed class YarnVmStateBridgeTests
         dialogue.Continue();
 
         Assert.Equal(["line:bridge-inside-detour"], deliveredLines);
-        Assert.Throws<NotSupportedException>(() =>
-            bridge.CaptureAtLine(dialogue, "line:bridge-inside-detour"));
+        var snapshot = bridge.CaptureAtLine(dialogue, "line:bridge-inside-detour");
+        Assert.Equal("Start", Assert.Single(snapshot.CallStack).NodeName);
+        dialogue.Stop();
+        bridge.PrepareReplay(dialogue, program, snapshot);
+        for (var step = 0; step < 10 && dialogue.IsActive; step++) dialogue.Continue();
+        Assert.Equal(new[] { "line:bridge-inside-detour", "line:bridge-inside-detour", "line:bridge-after-detour" }, deliveredLines);
+        Assert.False(dialogue.IsActive);
+    }
+
+    [Fact]
+    public void ReplayPreservesDynamicDetourOperandsAndMultipleReturnFrames()
+    {
+        const string source = """
+            title: Start
+            ---
+            <<declare $target = "Outer">>
+            <<detour {$target}>>
+            Returned. #line:outer-return
+            ===
+            title: Outer
+            ---
+            <<detour Inner>>
+            Outer done. #line:inner-return
+            ===
+            title: Inner
+            ---
+            Inner. #line:inner
+            ===
+            """;
+        var result = Compiler.Compile(CompilationJob.CreateFromString("nested.yarn", source));
+        Assert.False(result.ContainsErrors, string.Join("\n", result.Diagnostics));
+        var program = Assert.IsType<Program>(result.Program);
+        var dialogue = new YarnDialogue(new MemoryVariableStore());
+        var lines = new List<string>();
+        dialogue.LineHandler = line => lines.Add(line.ID);
+        dialogue.OptionsHandler = _ => { };
+        dialogue.CommandHandler = _ => { };
+        dialogue.SetProgram(program);
+        dialogue.SetNode("Start");
+        dialogue.Continue();
+        var bridge = new YarnVmStateBridge();
+        var snapshot = bridge.CaptureAtLine(dialogue, "line:inner");
+        Assert.Equal(2, snapshot.CallStack.Count);
+        Assert.NotEmpty(snapshot.OperandStack);
+        dialogue.Stop();
+        bridge.PrepareReplay(dialogue, program, snapshot);
+        for (var step = 0; step < 10 && dialogue.IsActive; step++) dialogue.Continue();
+        Assert.Equal(new[] { "line:inner", "line:inner", "line:inner-return", "line:outer-return" }, lines);
+        Assert.False(dialogue.IsActive);
+    }
+
+    [Fact]
+    public void InvalidReturnAddressIsRejectedBeforeTheDialogueIsChanged()
+    {
+        var program = CreateProgram("line:first", "line:second");
+        var dialogue = CreateDialogue(program, out var lines);
+        dialogue.Continue();
+        var bridge = new YarnVmStateBridge();
+        var snapshot = bridge.CaptureAtLine(dialogue, "line:first") with
+        {
+            CallStackDepth = 1,
+            CallStack = new[] { new YarnVmCallFrame("missing", 0) },
+        };
+        Assert.Throws<InvalidOperationException>(() => bridge.PrepareReplay(dialogue, program, snapshot));
+        dialogue.Continue();
+        Assert.Equal(new[] { "line:first", "line:second" }, lines);
+    }
+
+    [Fact]
+    public void ReplayPreservesPrimitiveOperandTypesAndOrder()
+    {
+        var program = CreateProgram("line:first", "line:second");
+        var code = program.Nodes["Start"].Instructions;
+        code.Insert(0, new Instruction { PushFloat = new Instruction.Types.PushFloatInstruction { Value = 12.5f } });
+        code.Insert(1, new Instruction { PushString = new Instruction.Types.PushStringInstruction { Value = "text, 文本" } });
+        code.Insert(2, new Instruction { PushBool = new Instruction.Types.PushBoolInstruction { Value = true } });
+        var dialogue = CreateDialogue(program, out _);
+        var bridge = new YarnVmStateBridge();
+        dialogue.Continue();
+        var saved = bridge.CaptureAtLine(dialogue, "line:first");
+        Assert.Equal(new[] { "number", "string", "bool" }, saved.OperandStack.Select(value => value.Type));
+        dialogue.Stop();
+        bridge.PrepareReplay(dialogue, program, saved);
+        dialogue.Continue();
+        var restored = bridge.CaptureAtLine(dialogue, "line:first");
+        Assert.Equal(saved.OperandStack.ToArray(), restored.OperandStack.ToArray());
     }
 
     private static YarnDialogue CreateDialogue(

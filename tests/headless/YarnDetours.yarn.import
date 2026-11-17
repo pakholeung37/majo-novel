@@ -1,0 +1,14 @@
+[remap]
+
+importer="yarnscript"
+type="Resource"
+uid="uid://hr5u14vxajxo"
+path="res://.godot/imported/YarnDetours.yarn-1e95560f9ae44debc3f9bb128bf35438.tres"
+
+[deps]
+
+source_file="res://tests/headless/YarnDetours.yarn"
+dest_files=["res://.godot/imported/YarnDetours.yarn-1e95560f9ae44debc3f9bb128bf35438.tres"]
+
+[params]
+

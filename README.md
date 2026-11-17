@@ -61,6 +61,12 @@ Yarn controls the story flow. Majo's direction commands control the presentation
 
 The runtime validation demo is the runnable reference included in this repository. Manosaba, Ace Attorney, Live2D, and SGRE are showcases; their external asset packs are not included as complete runnable demos. The [SGRE setup notes](demos/sgre/README.md) describe how to prepare its local assets. These showcases are not affiliated with or endorsed by the original games or model creators.
 
+## Install as an addon
+
+See the [addon installation guide](addons/majo_runtime/README.md) for the required C# imports and a minimal scene. The addon uses unmodified YarnSpinner-Godot 0.3.22 with Yarn Spinner 3.2.0.
+
+Run `python3 tools/package-addon.py` to create standalone and Yarn-bundled ZIPs in `build/releases`, with SHA-256 checksums. These archives contain only addon files and their licenses. The full test gate installs the bundled ZIP into an empty project, imports and plays a branching script with nested detours, then boots its exported PCK.
+
 ## Run the runtime validation demo
 
 The current project targets **Godot 4.7.2 .NET** and **.NET 8**. Use the .NET edition of Godot, then build the project and run the scene explicitly; the project's default scene is the Manosaba showcase.
@@ -93,7 +99,7 @@ Most detailed documentation is currently in Chinese. [`docs/archive`](docs/archi
 ./tools/test.sh --full     # Full checks, independent consumer, and export smoke test
 ```
 
-The test script defaults to `--full`. For Godot checks, set `GODOT_BIN` to your Godot .NET executable if it is not at `/Applications/Godot_mono.app/Contents/MacOS/Godot`. Full checks also require matching export templates. Rendering-specific regression instructions are in [`tests/rendering`](tests/rendering/README.md).
+The test script defaults to `--full`. For Godot checks, set `GODOT_BIN` to your Godot .NET executable if it is not at `/Applications/Godot_mono.app/Contents/MacOS/Godot`. The full gate exports and boots the independent addon consumer; optional showcase packs are excluded from that release artifact. Exporting standalone game executables requires matching export templates. Rendering-specific regression instructions are in [`tests/rendering`](tests/rendering/README.md).
 
 ## License and third-party content
 

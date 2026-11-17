@@ -1,11 +1,15 @@
 using System.Runtime.CompilerServices;
 using System.Reflection;
+using System.Globalization;
 using Yarn;
 
 namespace Majo.YarnBridge;
 
 public sealed class YarnVmStateBridge
 {
+    public int GetCallStackDepth(Dialogue dialogue) =>
+        YarnPrivateAccess.GetCallStack(YarnPrivateAccess.GetVirtualMachine(dialogue).state).Count;
+
     public static void ValidateRuntimeLayout()
     {
         ValidateField(typeof(Dialogue), "vm", typeof(VirtualMachine));
@@ -48,12 +52,10 @@ public sealed class YarnVmStateBridge
         }
 
         ref var callStack = ref YarnPrivateAccess.GetCallStack(vm.state);
-        if (vm.state.stack.Count != 0 ||
-            callStack.Count != 0 ||
-            vm.state.currentOptions.Count != 0)
+        if (vm.state.currentOptions.Count != 0)
         {
             throw new NotSupportedException(
-                "Yarn VM checkpoints only support top-level line boundaries with empty stacks and no pending options.");
+                "Yarn VM line checkpoints cannot contain pending options.");
         }
 
         return new YarnVmLineSnapshot(
@@ -64,7 +66,12 @@ public sealed class YarnVmStateBridge
             vm.state.stack.Count,
             callStack.Count,
             vm.state.currentOptions.Count,
-            Array.AsReadOnly(resolvedSubstitutions.ToArray()));
+            Array.AsReadOnly(resolvedSubstitutions.ToArray()))
+        {
+            CallStack = Array.AsReadOnly(callStack.Reverse()
+                .Select(frame => new YarnVmCallFrame(frame.nodeName, frame.instruction)).ToArray()),
+            OperandStack = Array.AsReadOnly(vm.state.stack.Reverse().Select(CaptureValue).ToArray()),
+        };
     }
 
     public void PrepareReplay(
@@ -76,6 +83,7 @@ public sealed class YarnVmStateBridge
         ArgumentNullException.ThrowIfNull(program);
         ArgumentNullException.ThrowIfNull(snapshot);
 
+        ValidateReplay(program, snapshot);
         var anchor = FindUniqueLine(program, snapshot.LineId);
         dialogue.SetProgram(program);
         dialogue.SetNode(anchor.NodeName);
@@ -91,23 +99,8 @@ public sealed class YarnVmStateBridge
         ArgumentNullException.ThrowIfNull(program);
         ArgumentNullException.ThrowIfNull(snapshot);
 
-        if (snapshot.OperandStackDepth != 0 ||
-            snapshot.CallStackDepth != 0 ||
-            snapshot.PendingOptionCount != 0)
-        {
-            throw new NotSupportedException(
-                "The proof-of-concept bridge only restores top-level line boundaries with empty VM stacks and no pending options.");
-        }
-
+        ValidateReplay(program, snapshot);
         var anchor = FindUniqueLine(program, snapshot.LineId);
-        var instruction = anchor.Node.Instructions[anchor.InstructionIndex];
-        if (instruction.RunLine.SubstitutionCount != snapshot.ResolvedSubstitutions.Count)
-        {
-            throw new InvalidOperationException(
-                $"Line '{snapshot.LineId}' now requires " +
-                $"{instruction.RunLine.SubstitutionCount} substitutions, but the checkpoint " +
-                $"contains {snapshot.ResolvedSubstitutions.Count}.");
-        }
 
         ref var vm = ref YarnPrivateAccess.GetVirtualMachine(dialogue);
         if (YarnPrivateAccess.GetIsContinuing(vm))
@@ -130,6 +123,10 @@ public sealed class YarnVmStateBridge
         vm.state.currentOptions.Clear();
         ref var callStack = ref YarnPrivateAccess.GetCallStack(vm.state);
         callStack.Clear();
+        foreach (var frame in snapshot.CallStack)
+            callStack.Push(new VirtualMachine.State.CallSite { nodeName = frame.NodeName, instruction = frame.InstructionIndex });
+        foreach (var value in snapshot.OperandStack)
+            vm.state.PushValue(RestoreValue(value));
         foreach (var substitution in snapshot.ResolvedSubstitutions)
         {
             vm.state.PushValue(new Value(substitution));
@@ -140,6 +137,45 @@ public sealed class YarnVmStateBridge
         vm.currentNode = anchor.Node;
         vm._executionState = VirtualMachine.ExecutionState.WaitingForContinue;
     }
+
+    public void ValidateReplay(Program program, YarnVmLineSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(program);
+        ArgumentNullException.ThrowIfNull(snapshot);
+        var anchor = FindUniqueLine(program, snapshot.LineId);
+        if (!string.Equals(anchor.NodeName, snapshot.NodeName, StringComparison.Ordinal))
+            throw new InvalidOperationException($"Line '{snapshot.LineId}' does not belong to node '{snapshot.NodeName}'.");
+        if (snapshot.OperandStackDepth != snapshot.OperandStack.Count ||
+            snapshot.CallStackDepth != snapshot.CallStack.Count || snapshot.PendingOptionCount != 0)
+            throw new InvalidOperationException("Checkpoint VM stack depths do not match their payloads, or options are pending.");
+        if (anchor.Node.Instructions[anchor.InstructionIndex].RunLine.SubstitutionCount != snapshot.ResolvedSubstitutions.Count)
+            throw new InvalidOperationException($"Line '{snapshot.LineId}' substitution count does not match its checkpoint.");
+        foreach (var value in snapshot.OperandStack) _ = RestoreValue(value);
+        foreach (var frame in snapshot.CallStack)
+        {
+            if (!program.Nodes.TryGetValue(frame.NodeName, out var caller) ||
+                frame.InstructionIndex < 0 || frame.InstructionIndex >= caller.Instructions.Count ||
+                caller.Instructions[frame.InstructionIndex].InstructionTypeCase is not
+                    (Instruction.InstructionTypeOneofCase.DetourToNode or Instruction.InstructionTypeOneofCase.PeekAndDetourToNode))
+                throw new InvalidOperationException($"Invalid checkpoint return address '{frame.NodeName}:{frame.InstructionIndex}'.");
+        }
+    }
+
+    private static YarnVmStackValue CaptureValue(Value value) => value.Type switch
+    {
+        var type when type == Types.String => new("string", value.ConvertTo<string>()),
+        var type when type == Types.Number => new("number", value.ConvertTo<float>().ToString("R", CultureInfo.InvariantCulture)),
+        var type when type == Types.Boolean => new("bool", value.ConvertTo<bool>() ? "true" : "false"),
+        _ => throw new NotSupportedException($"Unsupported Yarn operand type '{value.Type}'."),
+    };
+
+    private static Value RestoreValue(YarnVmStackValue value) => value.Type switch
+    {
+        "string" => new Value(value.Value),
+        "number" => new Value(float.Parse(value.Value, CultureInfo.InvariantCulture)),
+        "bool" => new Value(bool.Parse(value.Value)),
+        _ => throw new InvalidOperationException($"Unsupported checkpoint operand type '{value.Type}'."),
+    };
 
     private static Instruction EnsureSafeLineBoundary(VirtualMachine vm, string lineId, bool allowDelivery)
     {

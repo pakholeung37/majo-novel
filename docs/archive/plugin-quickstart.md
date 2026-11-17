@@ -6,10 +6,13 @@
 - **.NET SDK**: .NET 8
 - **YarnSpinner-Godot**: 0.3.22
 - **Yarn Spinner**: 3.2.0
-- **导出模板**: 与 Godot 4.7.2 Mono 完全匹配的宿主平台 export templates（运行完整门禁时必需）
+- **导出**: 完整门禁使用独立宿主的 PCK 导出／启动；导出独立游戏可执行文件时需匹配 Godot 4.7.2 Mono 的 export templates
 
 > [!NOTE]
 > Majo Runtime 不捆绑外部 YarnSpinner-Godot 源码，宿主项目需单独安装它作为前置依赖。
+
+使用官方未修改的 YarnSpinner-Godot 0.3.22；Majo 的程序适配、Presenter 和异步会话修复
+均由插件自身的 bridge 提供。Bridge 仍锁定 Yarn Spinner 3.2.0，不代表可以任意升级依赖。
 
 ---
 

@@ -200,8 +200,7 @@ public partial class MajoRuntimeBootstrap : Node
     {
         try
         {
-            DependencyStatus = YarnDependencyValidator.ValidateProject(
-                ProjectSettings.GlobalizePath("res://"));
+            DependencyStatus = YarnDependencyValidator.ValidateRuntime();
 
             if (!DependencyStatus.IsCompatible)
             {

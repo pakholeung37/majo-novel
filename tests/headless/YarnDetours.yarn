@@ -1,0 +1,21 @@
+title: Start
+scene: detour_test
+---
+<<declare $visits = 0>>
+<<set $visits = $visits + 1>>
+<<detour Outer>>
+Parent returned {$visits}. #line:detour-parent
+===
+
+title: Outer
+---
+<<declare $target = "Inner">>
+<<detour {$target}>>
+Outer returned {$visits}. #line:detour-outer
+===
+
+title: Inner
+---
+Inside {$visits}. #line:detour-inner
+<<return>>
+===
