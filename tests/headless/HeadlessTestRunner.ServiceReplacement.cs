@@ -35,8 +35,14 @@ public partial class HeadlessTestRunner
         configuration.Presentation!.LettersPerSecond = 10_000;
         configuration.Presentation.UseFadeEffect = false;
         var fonts = new FontCatalog();
+        var commands = new ReplacementCommandAdapter();
         var bootstrap = new MajoRuntimeBootstrap { Configuration = configuration };
+        bootstrap.ConfigureCommands = registry => registry.Add("replacement dormant", _ =>
+            throw new InvalidOperationException("A replacement command adapter must not build the default command catalog."), "replacement");
+        var commandFailures = 0;
+        bootstrap.RuntimeCommandFailed += (_, _) => commandFailures++;
         bootstrap.ConfigureServices = services => services
+            .ReplaceSingleton<IYarnCommandAdapter>(_ => commands)
             .ReplaceSingleton<IFontCatalog>(_ => fonts)
             .ReplaceSingleton<IYarnDialogueBackend>(resolver => new YarnDialogueBackend(
                 bootstrap, resolver.Get<IResourceManager>(), configuration.Resources.ScriptsPath,
@@ -64,6 +70,8 @@ public partial class HeadlessTestRunner
         {
             await bootstrap.InitializationCompletion;
             var services = bootstrap.Host!.Services;
+            Assert(commands.InitializeCount == 1 && commands.FailureObservers == 2,
+                "The resolved command adapter must initialize once and be observed by Bootstrap and the backend.");
             var locales = services.Get<ILocaleManager>();
             Assert(ReferenceEquals(locales.Fonts, fonts), "LocaleManager retained the replaced font catalog.");
             Assert(ReferenceEquals(services.Get<ISaveProductAccessor>().SaveProduct,
@@ -79,7 +87,15 @@ public partial class HeadlessTestRunner
             Assert(first.Context.Script.Spot.LineId == "line:bridge-headless-first",
                 "Replacement playback did not provide its committed line boundary.");
 
+            var queuedLocale = false;
+            locales.SwitchStarting += change => queuedLocale = change.IsQueued;
+            commands.HasActiveCommands = true;
             var result = await locales.ChangeDialogueLocaleAsync("zh-CN");
+            commands.HasActiveCommands = false;
+            Assert(queuedLocale, "Locale switching ignored the replacement command adapter's active command.");
+            commands.RaiseRecoverableFailure();
+            Assert(commandFailures == 1 && dialogue.State == DialogueSessionState.Running,
+                "Replacement command failures must reach Bootstrap and respect the adapter's recovery policy.");
             Assert(result.Success && ((ReplacementPresentation)services.Get<IDialoguePresentation>()).ReRenderedLines > 0,
                 "Locale switching did not refresh the replacement backend and presentation.");
             Assert(services.Get<IYarnDialogueBackend>().Runner.LineProvider.LocaleCode == "zh-CN",
@@ -106,6 +122,9 @@ public partial class HeadlessTestRunner
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         }
 
+        Assert(commands.ShutdownCount == 1 && commands.FailureObservers == 0 && commands.CancelCount > 0 && commands.DrainCount > 0,
+            "Replacement command adapter cleanup did not stop/drain commands, shut down once, and detach observers.");
+
         var withoutSave = new MajoRuntimeBootstrap { Configuration = CreateHeadlessConfiguration() };
         AddChild(withoutSave);
         try
@@ -115,6 +134,30 @@ public partial class HeadlessTestRunner
                 "The optional save accessor must remain available when saving is disabled.");
         }
         finally { await withoutSave.RequestShutdownAsync(); }
+    }
+
+    private sealed class ReplacementCommandAdapter : IYarnCommandAdapter
+    {
+        public event Action<RuntimeCommandException> CommandFailed;
+        public int FailureObservers => CommandFailed?.GetInvocationList().Length ?? 0;
+        public int InitializeCount { get; private set; }
+        public int ShutdownCount { get; private set; }
+        public int CancelCount { get; private set; }
+        public int DrainCount { get; private set; }
+        public RuntimeCommandException LastFailure { get; private set; }
+        public bool AbortOnRecoverableFailure => false;
+        public bool HasActiveCommands { get; set; }
+        public IReadOnlyList<RuntimeCommandActivity> ActiveCommands => Array.Empty<RuntimeCommandActivity>();
+        public void RaiseRecoverableFailure()
+        {
+            LastFailure = new RuntimeCommandException("replacement probe", "recoverable plugin failure");
+            CommandFailed?.Invoke(LastFailure);
+        }
+        public void CancelDialogue() { CancelCount++; HasActiveCommands = false; }
+        public Task WaitForQuiescenceAsync(CancellationToken token = default) { DrainCount++; return Task.CompletedTask; }
+        public Task InitializeAsync(CancellationToken token) { InitializeCount++; return Task.CompletedTask; }
+        public Task ResetAsync(CancellationToken token) => Task.CompletedTask;
+        public Task ShutdownAsync(CancellationToken token) { ShutdownCount++; return Task.CompletedTask; }
     }
 
     private sealed class ReplacementPresentation : IDialoguePresentation

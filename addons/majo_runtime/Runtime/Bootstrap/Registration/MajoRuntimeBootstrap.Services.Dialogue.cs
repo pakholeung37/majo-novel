@@ -54,7 +54,7 @@ public partial class MajoRuntimeBootstrap : Node
                         defaultLoc,
                         supportedLocs,
                         resolver.Get<IFontCatalog>(),
-                        isBusyCheck: () => yarnCommandAdapter?.HasActiveCommands == true,
+                        isBusyCheck: () => FindRuntimeService<IYarnCommandAdapter>()?.HasActiveCommands == true,
                         onLocaleApplied: locale => OnLocaleApplied(locale, manager!),
                         applyEngineLocale: TranslationServer.SetLocale,
                         logger: Logger,
@@ -149,7 +149,7 @@ public partial class MajoRuntimeBootstrap : Node
                 // the default factory's instance before plugins replace it.
                 _ => new DelegateSaveProductAccessor(FindRuntimeService<ISaveProductManager>))
             .AddSingleton<IYarnCommandAdapter>(
-                _ => yarnCommandAdapter)
+                _ => defaultYarnCommandAdapter)
             .AddSingleton<IDialoguePlayer>(
                 resolver =>
                 {

@@ -50,7 +50,8 @@ public partial class MajoRuntimeBootstrap : Node
         new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly CancellationTokenSource bootstrapLifetime = new();
     private Task? shutdownTask;
-    private readonly DelegatingYarnCommandAdapter yarnCommandAdapter = new();
+    private readonly DelegatingYarnCommandAdapter defaultYarnCommandAdapter = new();
+    private IYarnCommandAdapter? commandFailureSource;
     private bool isExitingTree;
     private bool isBootstrapLifetimeDisposed;
     private bool isRuntimeShutdownSignalEmitted;
@@ -269,11 +270,21 @@ public partial class MajoRuntimeBootstrap : Node
     private async Task InitializeRuntimeBindingsAsync(IServiceResolver services, CancellationToken cancellationToken)
     {
         var backend = services.Get<IYarnDialogueBackend>();
-        var innerAdapter = CreateYarnCommandAdapter(backend, services);
-        // Attach before initialization so partial initialization is owned by host cleanup.
-        yarnCommandAdapter.Attach(innerAdapter);
-        yarnCommandAdapter.CommandFailed += HandleCommandFailed;
-        await innerAdapter.InitializeAsync(cancellationToken);
+        var adapter = services.Get<IYarnCommandAdapter>();
+        commandFailureSource = adapter;
+        adapter.CommandFailed += HandleCommandFailed;
+        if (ReferenceEquals(adapter, defaultYarnCommandAdapter))
+        {
+            var innerAdapter = CreateYarnCommandAdapter(backend, services);
+            // Attach before initialization so partial initialization is owned by host cleanup.
+            defaultYarnCommandAdapter.Attach(innerAdapter);
+            await innerAdapter.InitializeAsync(cancellationToken);
+        }
+        else
+        {
+            // The host already initialized the replacement as a registered service.
+            backend.ObserveCommandAdapter(adapter);
+        }
     }
 
     private void ConfigureAndSealPlugins()

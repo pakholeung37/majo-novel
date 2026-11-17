@@ -214,6 +214,22 @@ GPU 验收与 `tools/test.sh --full` 分开运行，后者仍负责单测、无�
 
 Engine/Yarn/Bootstrap 进一步拆分后，本机完整门禁再次通过 686 项 .NET 单测、无头集成、受检升级、源码消费者及实际 Release PCK。Metal Forward+ 的 13 项 GPU 用例、200 次恢复和 600 次采样均通过，节点保持 62，候选创建/释放均为 200；证据位于 `build/yarn-assembly-isolation/gpu`。对 MSBuild 实际编译清单的核对确认 Engine 280 个源文件、Yarn 41 个、装配层 16 个，原有运行时源码无遗漏或重复编译。
 
+本轮最终 GPU 复验在 Apple M4 上分别通过 Metal Forward+、Metal Mobile 和 OpenGL3。每条路径均通过 13 项用例、200 次恢复与 600 次画面采样，节点数保持 62，候选创建/释放各 200，无着色器或资源泄漏错误；当前证据位于 `build/architecture-final/gpu`。
+
+## 原架构审计的落实范围
+
+| 原问题 | 当前边界与验收 |
+| --- | --- |
+| 默认实例被闭包捕获，替换服务失效 | 消费者读取注册后的播放器、字体、脚本边界和命令适配器；引擎回归覆盖替换、语言切换、恢复、错误通知及关闭 |
+| 资源组关联 CTS 泄漏，资源管理职责集中 | 解析、共享加载/缓存和租约所有权分离；释放子租约及关联 CTS，并覆盖加载中释放和重置后迟到释放 |
+| Core Host 认识渲染、音频和具体脚本 | Core 独立编译；默认恢复、重置与跳过协调位于可替换的 `IRuntimeExecutionCoordinator` 实现 |
+| Godot 渲染宿主共享过多资源状态 | 六个组件分别持有表面、合成、转场、恢复画面及投影资源；真实 GPU 用例检查像素和恢复循环中的释放 |
+| Yarn 播放与热重载职责混合 | 显式会话阶段和 replay 作用域；检查点、本地化、文件监听、候选应用/回滚分别持有状态；Yarn 适配独立编译 |
+| 预加载重复实现命令语义 | 执行和静态预加载共享命令目录、绑定规则及资源需求契约，自定义命令可以提供静态资源需求 |
+| 目录划分缺少编译约束，单测依赖游戏 | Core/Domain/Commands/Persistence/Resources、Engine/Yarn/Bootstrap、上游、示例和探针分别编译；单测直接引用所属库 |
+
+保持既有命名空间、脚本资源路径、存档及 checkpoint 格式；程序集布局变更后，二进制扩展需重新构建。上述完成范围对应原审计条目；新后端、业务功能和其他硬件的验收仍按各自需求推进。
+
 ## CI 与发布
 
 跨桌面平台的门禁入口为 `python tools/runtime_test_gate.py --full`；原 `./tools/test.sh` 转发给同一实现，保留 `--independent`、`--domain`、`--unit`、`--fast` 与 `--full`。用 `--godot` 或 `GODOT_BIN` 指定 .NET 引擎，`--output` 指定逐步日志和 `results.json` 的保存目录。进程退出码、必需成功标记和超时分别检查；强制失败探针必须同时返回非零状态并包含预期异常，超时不能算作通过。

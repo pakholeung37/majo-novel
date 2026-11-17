@@ -36,9 +36,7 @@ public partial class MajoRuntimeBootstrap : Node
                 }
             }
 
-            yarnCommandAdapter.CommandFailed -= HandleCommandFailed;
-            yarnCommandAdapter.Detach();
-
+            DetachRuntimeCommandObservers();
             TeardownDiagnosticsAndOverlays();
 
             shutdownCompletion.TrySetResult();
@@ -55,12 +53,23 @@ public partial class MajoRuntimeBootstrap : Node
         }
         finally
         {
+            DetachRuntimeCommandObservers();
             if (!isBootstrapLifetimeDisposed)
             {
                 bootstrapLifetime.Dispose();
                 isBootstrapLifetimeDisposed = true;
             }
         }
+    }
+
+    private void DetachRuntimeCommandObservers()
+    {
+        if (commandFailureSource is not null)
+        {
+            commandFailureSource.CommandFailed -= HandleCommandFailed;
+            commandFailureSource = null;
+        }
+        defaultYarnCommandAdapter.Detach();
     }
 
     private void HandleCommandFailed(RuntimeCommandException failure) => EmitSignal(

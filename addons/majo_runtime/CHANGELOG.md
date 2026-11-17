@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Honor replaced command adapters during Bootstrap activation, locale safety checks, backend observation and error forwarding; clean up their observers on shutdown.
+- Verify replacement adapter initialization, recoverable failures, command drain and ownership in the real-engine replacement regression.
+- Generate completion manifests with canonical LF line endings on Windows as well as Unix hosts.
+
 - Use one Python test gate on macOS, Linux and Windows while preserving the existing shell entry point; retain per-step logs and machine-readable results.
 - Require success markers for headless and consumer runs; timeouts cannot count as intentional failure-probe success.
 - Select native Windows export presets and .NET runtime IDs, and support graceful Windows watch cancellation.
