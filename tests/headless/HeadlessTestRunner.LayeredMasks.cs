@@ -113,12 +113,15 @@ public partial class HeadlessTestRunner
             Size = new Vector2(size, size),
         };
         var first = pool.Acquire(Content(Colors.Red, 16), Content(Colors.Blue, 16), new Rect2(0, 0, 16, 16));
-        var second = pool.Acquire(Content(Colors.Green, 32), Content(Colors.White, 32), new Rect2(0, 0, 32, 32));
+        var firstSize = first.Source.Size;
+        // Earlier cases can have warmed this scene-owned pool with larger targets.
+        var growth = Math.Max(firstSize.X, firstSize.Y) + 16;
+        var second = pool.Acquire(Content(Colors.Green, growth), Content(Colors.White, growth), new Rect2(0, 0, growth, growth));
         try
         {
             Assert(first.Source != second.Source && first.Target != second.Target,
                 "Concurrent appearance captures must not share render targets.");
-            Assert(first.Source.Size == new Vector2I(16, 16),
+            Assert(first.Source.Size == firstSize,
                 "Growing the pool must not resize an in-flight capture.");
             using var red = await ReadTransitionFrameAsync(first.Source);
             AssertColor(red.GetPixel(4, 4), Colors.Red, "Concurrent capture changed source pixels");
@@ -129,8 +132,9 @@ public partial class HeadlessTestRunner
             {
                 Assert(reused.Source.GetInstanceId() == sourceId, "Idle capture was not reused.");
                 using var blue = await ReadTransitionFrameAsync(reused.Source);
-                AssertColor(blue.GetPixel(4, 4), Colors.Blue, "Reused capture lost its new content");
-                Assert(blue.GetPixel(24, 24).A < .01f, "Reused capture retained pixels outside its new content.");
+                AssertColor(blue.GetPixel(blue.GetWidth() / 4, blue.GetHeight() / 4), Colors.Blue, "Reused capture lost its new content");
+                Assert(blue.GetPixel(blue.GetWidth() * 3 / 4, blue.GetHeight() * 3 / 4).A < .01f,
+                    "Reused capture retained pixels outside its new content.");
                 var overflow = pool.Acquire(Content(Colors.White, 8), Content(Colors.Black, 8), new Rect2(0, 0, 8, 8));
                 Assert(overflow.Source != reused.Source && overflow.Source != second.Source,
                     "Overflow capture stole an active render target.");

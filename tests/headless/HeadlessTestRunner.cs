@@ -44,9 +44,10 @@ public partial class HeadlessTestRunner : Node
     {
         try
         {
-            await RunWithTimeoutAsync(RunSuiteAsync(), SuiteTimeoutSeconds);
+            var renderingSuite = OS.GetCmdlineUserArgs().Contains("--majo-render-host");
+            await RunWithTimeoutAsync(RunSuiteAsync(), renderingSuite ? 120 : SuiteTimeoutSeconds);
             await FinalizeEngineObjectsAsync();
-            GD.Print("Majo Runtime headless tests passed.");
+            GD.Print(renderingSuite ? "MAJO_RENDER_HOST_GPU_OK" : "Majo Runtime headless tests passed.");
             GetTree().Quit(0);
         }
         catch (Exception exception)
@@ -59,6 +60,11 @@ public partial class HeadlessTestRunner : Node
 
     private async Task RunSuiteAsync()
     {
+        if (OS.GetCmdlineUserArgs().Contains("--majo-render-host"))
+        {
+            await ValidateRenderHostGpuAsync();
+            return;
+        }
         if (OS.GetCmdlineUserArgs().Contains("--majo-service-replacement"))
         {
             await ValidateServiceReplacementAsync();

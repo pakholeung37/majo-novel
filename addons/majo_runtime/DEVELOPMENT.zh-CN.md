@@ -108,6 +108,35 @@ Bootstrap 会将完成注册的命令目录接入默认预加载器，包括插�
 
 Core 命名空间与源码签名保持不变，但程序集改为 `Majo.Runtime.Core.dll`，已经编译的扩展需重新构建；兼容性清单已声明这一变化。当前只是第一条编译边界，领域实现、Godot/Yarn 适配层和无头集成测试仍在游戏工程中，尚未完成全部程序集隔离。
 
+## Godot 渲染边界与 GPU 验收
+
+`GodotDirectionRenderHost` 保留生命周期、操作代次、渲染需求和帧等待，连接下列内部组件。它们各自持有状态和资源，不依赖宿主对象；这些拆分不增加游戏侧注册入口，也不改变 Direction 命令或存档格式。
+
+| 组件 | 负责内容 |
+| --- | --- |
+| `GodotDirectionSurfaces` | Stage、View 和临时镜头的节点树、视口依赖顺序、尺寸与释放 |
+| `GodotDirectionScreenComposer` | 分屏/PIP 插槽、布局插值、屏幕转场、幕布与插槽材质 |
+| `GodotDirectionBackdropTransitions` | 已准备和已激活的背景转场输入；移除 View 或重置时统一释放 |
+| `GodotDirectionRetainedOutput` | 恢复期间保留的独立图片、覆盖层和目标画面等待 |
+| `GodotDirectionViewProjection` | 镜头状态到各渲染 pass 的投影及覆盖诊断 |
+| `GodotDirectionRenderNodes` | 通用节点创建、可见层和共享输出材质 |
+
+恢复画面保留由独立组件持有，重置 Stage/View 不会清掉覆盖层。退出时先释放保留画面和转场消费者，再释放屏幕、表面和共享材质。未初始化就释放、重复释放和 owner 已先退出场景树的路径也必须清理；不能只依赖 `TreeExiting` 回调。
+
+在有真实显示设备的开发机上运行 `python3 tools/test-rendering.py`。默认会先编译并打开 640×360 的置顶测试窗口，执行 13 项渲染用例，保存后端设备信息、用例结果、图片和恢复统计到 `build/rendering-gpu`。用例覆盖分屏、PIP、视图需求、隐藏捕获、缩放、同帧镜头切换、动态/半透明转场、图层遮罩、重复贴图以及恢复时的转场和幕布保留。每次执行还包含 200 次状态恢复、600 次恢复画面采样和候选/节点释放检查。工具拒绝 headless 和已知软件渲染器，并要求成功标记、完整用例、图片证据与正常退出同时成立。
+
+Apple M4 的验收命令如下；其他平台可通过 `--godot`、`--driver` 指定其实际引擎与后端。
+
+```sh
+python3 tools/test-rendering.py --method forward_plus --driver metal
+python3 tools/test-rendering.py --method mobile --driver metal
+python3 tools/test-rendering.py --method gl_compatibility --driver opengl3
+```
+
+2026-11-17 在 Apple M4、Godot 4.7.2 .NET 上，以上三条渲染路径各通过 13 项用例、200 次恢复和 600 次恢复画面采样。恢复循环的节点数保持 62，候选创建/释放均为 200；Metal Mobile 的 6 张恢复截图与重构前基线逐字节一致。本次原始日志、图片和统计位于 `build/render-host-refactor/final`，三个路径记录的渲染源码摘要相同。
+
+GPU 验收与 `tools/test.sh --full` 分开运行，后者仍负责单测、无头集成、独立项目安装、导出及实际 PCK 启动。
+
 ## CI 与发布
 
 游戏 CI 从已提交的 addon 副本构建，先运行包内 `Tools/majo.py doctor --project .`，再执行游戏自己的构建、导入和回归。不要在游戏 CI 使用开发者的 `--source` 路径或自动追踪系统 main 分支。

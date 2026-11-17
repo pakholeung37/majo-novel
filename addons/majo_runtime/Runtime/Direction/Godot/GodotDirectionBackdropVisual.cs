@@ -51,6 +51,6 @@ internal sealed partial class GodotDirectionBackdropVisual : Control
         output.Position = raster.Bounds.Position;
         output.Scale = raster.Bounds.Size / raster.Texture.GetSize();
         VisibleBounds = layout.VisibleBounds;
-        GodotDirectionRenderHost.AssignVisibilityLayer(this, VisibilityLayer);
+        GodotDirectionRenderNodes.AssignVisibilityLayer(this, VisibilityLayer);
     }
 }

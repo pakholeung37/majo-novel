@@ -12,7 +12,6 @@ namespace Majo.Runtime.Direction.Godot;
 internal sealed partial class GodotDirectionRenderHost
 {
     private readonly GodotViewRenderDemand viewDemand = new();
-    private readonly HashSet<GodotDirectionViewSurface> screenViews = new();
     private CancellationTokenSource renderCancellation = new();
     private int screenRequests;
     private bool outputActive;
@@ -31,7 +30,7 @@ internal sealed partial class GodotDirectionRenderHost
         var enabled = outputActive || screenRequests > 0;
         var mode = enabled ? SubViewport.UpdateMode.Always : SubViewport.UpdateMode.Disabled;
         if (ScreenViewport.RenderTargetUpdateMode != mode) ScreenViewport.RenderTargetUpdateMode = mode;
-        viewDemand.SetScreen(screenViews, enabled);
+        viewDemand.SetScreen(screen.Views, enabled);
     }
 
     private ScreenDemand AcquireScreenDemand()
@@ -55,8 +54,7 @@ internal sealed partial class GodotDirectionRenderHost
         previous.Dispose();
         screenRequests = 0;
         viewDemand.Clear();
-        screenViews.Clear();
-        viewDemand.Register(views[ViewId.Main]);
+        viewDemand.Register(surfaces.MainView);
     }
 
     internal async Task WaitForRenderedViewAsync(GodotDirectionViewSurface view,

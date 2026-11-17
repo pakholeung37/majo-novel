@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Separate Godot Direction surface ownership, screen composition, background transition inputs, retained restore output and camera projection from the render host.
+- Release unactivated transition inputs when views are removed or reset, and cover cold disposal, repeated shutdown and screen-slot material ownership.
+- Dispose temporary View/Screen readback images after copying them into owned textures.
+- Add real-GPU render acceptance with pixel checks, 200 restore cycles and saved renderer/image evidence.
+
 - Bind resource release to the acquired cache entry so late releases cannot evict a replacement entry after reset.
 
 - Compile Core lifecycle and service contracts into an independent net8.0 assembly without Godot or Yarn references; run their tests directly against that assembly.

@@ -30,21 +30,21 @@ internal sealed class GodotDirectionViewSurface
             Name = "ViewBackgroundViewport",
             TransparentBg = true,
             RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled,
-            CanvasCullMask = GodotDirectionRenderHost.BackgroundVisibilityLayer,
+            CanvasCullMask = GodotDirectionRenderLayers.Background,
         };
         TransitionBackgroundViewport = new SubViewport
         {
             Name = "ViewTransitionBackgroundViewport",
             TransparentBg = true,
             RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled,
-            CanvasCullMask = GodotDirectionRenderHost.BackgroundTransitionVisibilityLayer,
+            CanvasCullMask = GodotDirectionRenderLayers.BackgroundTransition,
         };
         ContentViewport = new SubViewport
         {
             Name = "ViewContentViewport",
             TransparentBg = true,
             RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled,
-            CanvasCullMask = GodotDirectionRenderHost.SubjectVisibilityLayer,
+            CanvasCullMask = GodotDirectionRenderLayers.Subject,
         };
         viewport.RemoveChild(canvas);
         viewport.AddChild(CompositeViewport);

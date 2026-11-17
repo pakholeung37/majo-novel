@@ -37,7 +37,7 @@ internal sealed partial class GodotDirectionStageBackend
         private readonly TaskCompletionSource settlement = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly TaskCompletionSource<bool> confirmation = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private GodotProgressTween? clock;
-        private GodotDirectionRenderHost.PreparedBackdropVisualTransition? driver;
+        private GodotDirectionBackdropTransitions.Prepared? driver;
         private bool committed, confirmed, rolledBack, disposed, visualFinished;
         private long generation;
         private bool Animate => transition.DurationSeconds > 0 && transition.Kind != DirectionTransitionId.Cut &&

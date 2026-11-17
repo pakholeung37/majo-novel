@@ -77,7 +77,7 @@ internal sealed class GodotBackgroundRaster : IDisposable
             Disable3D = true,
             Size = new Vector2I(Math.Max(1, (int)Math.Ceiling(Bounds.Size.X)), Math.Max(1, (int)Math.Ceiling(Bounds.Size.Y))),
             RenderTargetUpdateMode = SubViewport.UpdateMode.Always,
-            CanvasCullMask = GodotDirectionRenderHost.BackgroundVisibilityLayer,
+            CanvasCullMask = GodotDirectionRenderLayers.Background,
         };
         var rasterScale = (Vector2)viewport.Size / Bounds.Size;
         origin = new Node2D { Position = -Bounds.Position * rasterScale, Scale = rasterScale };
@@ -88,7 +88,7 @@ internal sealed class GodotBackgroundRaster : IDisposable
             content.Root.GetParent()?.RemoveChild(content.Root);
             origin.AddChild(content.Root);
             content.Root.Visible = true;
-            GodotDirectionRenderHost.AssignVisibilityLayer(origin, GodotDirectionRenderHost.BackgroundVisibilityLayer);
+            GodotDirectionRenderNodes.AssignVisibilityLayer(origin, GodotDirectionRenderLayers.Background);
             viewport.TreeExiting += Dispose;
             viewport.GetTree().NodeAdded += OnNodeAdded;
             input = GodotVisualInput.Live(viewport, Bounds);
@@ -120,7 +120,7 @@ internal sealed class GodotBackgroundRaster : IDisposable
             GD.PushError(error.Message);
             return;
         }
-        GodotDirectionRenderHost.AssignVisibilityLayer(node, GodotDirectionRenderHost.BackgroundVisibilityLayer);
+        GodotDirectionRenderNodes.AssignVisibilityLayer(node, GodotDirectionRenderLayers.Background);
     }
 
     internal static void ValidateTree(Node node)

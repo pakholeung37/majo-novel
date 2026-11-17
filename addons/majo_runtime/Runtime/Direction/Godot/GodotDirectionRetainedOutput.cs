@@ -9,55 +9,73 @@ using Majo.Runtime.Core;
 
 namespace Majo.Runtime.Direction.Godot;
 
-internal sealed partial class GodotDirectionRenderHost
+internal sealed class GodotDirectionRetainedOutput : IDisposable
 {
-    private long restoreGeneration;
-    private RetainedOutput? retainedOutput;
+    private readonly Node owner;
+    private readonly GodotDirectionScreenComposer screen;
+    private readonly GodotDirectionRenderNodes nodes;
+    private readonly Func<CancellationToken, Task> renderTarget;
+    private long generation;
+    private RetainedOutput? retained;
+    private bool disposed;
 
-    internal IRetainedRestoreOutput RetainRestoreOutput()
+    internal GodotDirectionRetainedOutput(Node owner, GodotDirectionScreenComposer screen,
+        GodotDirectionRenderNodes nodes, Func<CancellationToken, Task> renderTarget)
     {
-        EnsureInitialized();
-        if (retainedOutput is not null)
+        this.owner = owner;
+        this.screen = screen;
+        this.nodes = nodes;
+        this.renderTarget = renderTarget;
+    }
+    internal IRetainedRestoreOutput Retain()
+    {
+        ObjectDisposedException.ThrowIf(disposed, this);
+        if (retained is not null)
             throw new InvalidOperationException("Direction output is already retained by a restore.");
-        // Copy textures, never retain a ViewportTexture that subsequent rendering overwrites.
-        var candidate = new RetainedOutput(this, ++restoreGeneration);
-        retainedOutput = candidate;
-        InvalidateGenerations();
+        // Copies survive both mutation and replacement of their source viewports.
+        var candidate = new RetainedOutput(this, ++generation);
+        retained = candidate;
         return candidate;
+    }
+    public void Dispose()
+    {
+        if (disposed) return;
+        disposed = true;
+        retained?.Dispose();
     }
 
     private sealed class RetainedOutput : IRetainedRestoreOutput
     {
-        private readonly GodotDirectionRenderHost host;
+        private readonly GodotDirectionRetainedOutput owner;
         private readonly long generation;
         private readonly CanvasLayer layer;
         private readonly List<ImageTexture> textures = new();
         private bool disposed;
 
-        internal RetainedOutput(GodotDirectionRenderHost host, long generation)
+        internal RetainedOutput(GodotDirectionRetainedOutput owner, long generation)
         {
-            this.host = host;
+            this.owner = owner;
             this.generation = generation;
             layer = new CanvasLayer { Name = "MajoRetainedDirectionOutput", Layer = 6 };
             try
             {
                 // Dummy rendering has no images. Its tests exercise only logical ownership.
-                layer.Visible = host.OutputLayer.Visible && DisplayServer.GetName() != "headless";
+                layer.Visible = owner.screen.OutputLayer.Visible && DisplayServer.GetName() != "headless";
                 if (layer.Visible)
                 {
-                    Copy(host.LiveOutput);
-                    Copy(host.ScreenTransitionSource);
+                    Copy(owner.screen.LiveOutput);
+                    Copy(owner.screen.ScreenTransitionSource);
                     layer.AddChild(new ColorRect
                     {
-                        Position = host.Curtain.Position,
-                        Size = host.Curtain.Size,
-                        Color = host.Curtain.Color,
-                        Visible = host.Curtain.Visible,
+                        Position = owner.screen.Curtain.Position,
+                        Size = owner.screen.Curtain.Size,
+                        Color = owner.screen.Curtain.Color,
+                        Visible = owner.screen.Curtain.Visible,
                         MouseFilter = Control.MouseFilterEnum.Ignore,
                     });
                 }
                 // A sibling of the render host output, outside Reset/scene resource ownership.
-                host.owner.AddChild(layer);
+                owner.owner.AddChild(layer);
             }
             catch
             {
@@ -75,7 +93,7 @@ internal sealed partial class GodotDirectionRenderHost
                 throw new InvalidOperationException("Cannot retain Direction output before its first rendered image.");
             var texture = ImageTexture.CreateFromImage(image);
             textures.Add(texture);
-            var copy = host.CreateTextureRect(source.Name + "Frozen");
+            var copy = owner.nodes.CreateTextureRect(source.Name + "Frozen");
             copy.Position = source.Position;
             copy.Size = source.Size;
             copy.Texture = texture;
@@ -89,21 +107,20 @@ internal sealed partial class GodotDirectionRenderHost
             Validate();
             cancellationToken.ThrowIfCancellationRequested();
             if (DisplayServer.GetName() == "headless") return;
-            using var demand = host.AcquireScreenDemand();
             // Observe an entire render submission after commit. Godot orders the active
             // Viewport texture dependency graph (content -> view -> screen) in that submission.
             // ProcessFrame and visual settlement do not establish this rendering fence.
-            await host.WaitForRenderedScreenAsync(cancellationToken);
+            await owner.renderTarget(cancellationToken);
             Validate();
-            using var target = host.ScreenViewport.GetTexture().GetImage();
-            if (target is null || target.IsEmpty() || target.GetSize() != host.ScreenViewport.Size)
+            using var target = owner.screen.ScreenViewport.GetTexture().GetImage();
+            if (target is null || target.IsEmpty() || target.GetSize() != owner.screen.ScreenViewport.Size)
                 throw new InvalidOperationException("Direction target frame is unavailable after rendering.");
         }
 
         private void Validate()
         {
             ObjectDisposedException.ThrowIf(disposed, this);
-            if (host.restoreGeneration != generation || !ReferenceEquals(host.retainedOutput, this))
+            if (owner.generation != generation || !ReferenceEquals(owner.retained, this))
                 throw new InvalidOperationException("Direction restore output generation is stale.");
         }
 
@@ -118,7 +135,7 @@ internal sealed partial class GodotDirectionRenderHost
             }
             foreach (var texture in textures) texture.Dispose();
             textures.Clear();
-            if (ReferenceEquals(host.retainedOutput, this)) host.retainedOutput = null;
+            if (ReferenceEquals(owner.retained, this)) owner.retained = null;
         }
     }
 }
