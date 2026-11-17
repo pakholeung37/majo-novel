@@ -238,7 +238,9 @@ CI 的桌面矩阵在 Linux x64 和 Windows x64 上运行同一完整门禁，�
 
 游戏 CI 从已提交的 addon 副本构建，先运行包内 `Tools/majo.py doctor --project .`，再执行游戏自己的构建、导入和回归。不要在游戏 CI 使用开发者的 `--source` 路径或自动追踪系统 main 分支。
 
-正式出包使用 `addons/majo_runtime/Editor/export.py`，详见插件 README。管理锁中的版本不能替代平台验收；当前本机 macOS 的 PCK 和 Last Bell 独立游戏可执行程序均已验证；Majo 的 Linux 发布门禁已在 GitHub Actions 通过，Windows 和其他架构仍需补充验证。每款游戏仍应验收自己的实际导出包。
+2026-11-17，运行时代码提交 `c06eb876b7f6b04850aa507c117361862001a63f` 的 [GitHub Actions 验收](https://github.com/pakholeung37/majo-novel/actions/runs/44074114651) 已通过独立程序集 job、Linux x64 和 Windows x64 完整门禁。两平台各完成 34 个步骤，覆盖 686 项 .NET 单测、26 项 Python 工具回归、引擎无头集成、强制失败退出、源码安装、受检升级、真实 Release PCK 启动及无效导出拒绝。Linux 总耗时约 157 秒，Windows 约 296 秒；无头集成分别约 20 秒和 27 秒。逐步日志和 `results.json` 保存在对应 workflow artifacts，本机副本位于 `build/architecture-final/ci-linux`、`build/architecture-final/ci-windows`。本机 macOS 的完整门禁也已通过，证据位于 `build/architecture-final/full`。
+
+正式出包使用 `addons/majo_runtime/Editor/export.py`，详见插件 README。管理锁中的版本不能替代平台验收；当前 macOS 的 PCK 和 Last Bell 独立游戏可执行程序，以及上述 Linux/Windows x64 的源码与实际 PCK 均已验证。Windows/Linux 的其他 GPU、其他架构和各游戏自己的实际导出包，仍需对应设备与业务回归。
 
 
 ## 候选版在线安装和受检升级
