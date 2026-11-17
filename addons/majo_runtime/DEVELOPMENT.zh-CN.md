@@ -74,7 +74,7 @@ python3 addons/majo_runtime/Tools/majo.py doctor --project ../my-game
 
 游戏 CI 从已提交的 addon 副本构建，先运行包内 `Tools/majo.py doctor --project .`，再执行游戏自己的构建、导入和回归。不要在游戏 CI 使用开发者的 `--source` 路径或自动追踪系统 main 分支。
 
-正式出包使用 `addons/majo_runtime/Editor/export.py`，详见插件 README。管理锁中的版本不能替代平台验收；当前本机 macOS 的 PCK 和 Last Bell 独立游戏可执行程序均已验证；远程 Linux CI、Windows 和其他架构仍需补充验证。每款游戏仍应验收自己的实际导出包。
+正式出包使用 `addons/majo_runtime/Editor/export.py`，详见插件 README。管理锁中的版本不能替代平台验收；当前本机 macOS 的 PCK 和 Last Bell 独立游戏可执行程序均已验证；Majo 的 Linux 发布门禁已在 GitHub Actions 通过，Windows 和其他架构仍需补充验证。每款游戏仍应验收自己的实际导出包。
 
 
 ## 候选版在线安装和受检升级

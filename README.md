@@ -117,3 +117,6 @@ The test script defaults to `--full`. For Godot checks, set `GODOT_BIN` to your 
 Original Majo Novel code and documentation are available under the [MIT License](LICENSE), copyright © 2026 Pakho Leung.
 
 Third-party components retain their own licenses. Game scenario text, artwork, music, voices, fonts, and Live2D models are not granted an MIT license by this project. In particular, the adapted Manosaba scenario text in the demo scripts is third-party content. See [third-party notices](THIRD_PARTY_NOTICES.md) for the boundaries and bundled component notices.
+
+
+The public rc.1 → rc.2 → rc.1 → rc.2 consumer cycle has been verified with Last Bell. See the [release/install/upgrade/rollback report](docs/release/last-bell-lifecycle.md).

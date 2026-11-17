@@ -117,3 +117,6 @@ godot --path . res://demos/demo-01/RuntimeDemo.tscn
 Majo Novel 的原创代码与文档使用 [MIT 许可证](LICENSE)，版权 © 2026 Pakho Leung。
 
 第三方组件保留各自许可证。游戏剧情文本、美术、音乐、语音、字体和 Live2D 模型不会因为本项目公开而获得 MIT 授权，包括 demo 脚本中改编的 Manosaba 剧情文本。具体边界及随仓库提供的许可声明见[第三方声明](THIRD_PARTY_NOTICES.md)。
+
+
+已用 Last Bell 从公开 Release 跑通安装、受检升级、回退和重新升级，推荐使用 `v0.1.0-rc.2`。详见[完整验收记录](docs/release/last-bell-lifecycle.md)。

@@ -98,7 +98,7 @@ Checkpoints are captured before line presentation. Nested and dynamic `detour` c
 
 ## Validation and distribution
 
-The repository's full gate runs unit tests, Godot integration tests, and a clean consumer installed from the release ZIP. It also boots that consumer from a PCK and requires successful initialization and dialogue completion. macOS has local validation; a Linux CI workflow is provided. Other platforms have not been validated.
+The repository's full gate runs unit tests, Godot integration tests, and a clean consumer installed from the release ZIP. It also boots that consumer from a PCK and requires successful initialization and dialogue completion. macOS has local validation and the Linux release gate has passed on GitHub Actions. Other platforms have not been validated.
 
 The `majo-runtime-0.1.0-rc.2-example.zip` archive is a complete project with both addons, a minimal host, and an original Yarn story using the default UI. Extract it separately from an existing game.
 

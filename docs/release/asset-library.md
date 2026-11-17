@@ -4,7 +4,7 @@ The source archive is restricted by `.gitattributes` to Majo Runtime and the pin
 
 - Name: Majo Runtime
 - Category: Addons / Tools
-- Version: 0.1.0 (release candidate; promote after release checks pass)
+- Version: 0.1.0-rc.2 (prerelease)
 - Godot version: 4.7.2 .NET
 - License: MIT
 - Repository: https://github.com/pakholeung37/majo-novel
@@ -14,9 +14,9 @@ The source archive is restricted by `.gitattributes` to Majo Runtime and the pin
 
 Description:
 
-Majo Runtime is a C# visual novel runtime for Godot .NET and Yarn Spinner. It provides dialogue, choices, character presentation, camera and scene transitions, audio, localization, saved state and script hot reload. Installation requires two project imports and enabling both editor plugins. Includes unmodified YarnSpinner-Godot 0.3.22 with Yarn Spinner 3.2.0. Desktop .NET projects are the current target; only macOS has local runtime validation, and Linux CI must pass before Linux is claimed as tested. This release does not include showcase game content or native Cubism integrations.
+Majo Runtime is a C# visual novel runtime for Godot .NET and Yarn Spinner. It provides dialogue, choices, character presentation, camera and scene transitions, audio, localization, saved state and script hot reload. Installation requires two project imports and enabling both editor plugins. Includes unmodified YarnSpinner-Godot 0.3.22 with Yarn Spinner 3.2.0. Desktop .NET projects are the current target; macOS has local runtime validation and the Linux addon release gate has passed. This release does not include showcase game content or native Cubism integrations.
 
-Submission is manual. The release-check workflow uploads validated ZIP artifacts; it does not publish a release or submit to the Asset Library.
+Asset Library submission is manual. Normal pushes upload checked artifacts; version tags create draft GitHub Releases after the full gate. Public prereleases are published by the maintainer after review.
 
 ## GitHub release flow
 
