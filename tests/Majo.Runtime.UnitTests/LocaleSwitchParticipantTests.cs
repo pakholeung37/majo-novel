@@ -6,6 +6,71 @@ namespace Majo.Runtime.UnitTests;
 public sealed class LocaleSwitchParticipantTests
 {
     [Fact]
+    public async Task FailedBoundaryReportsFailureWithoutApplyingAndAllowsRetry()
+    {
+        using var manager = new LocaleManager("en", ["en", "ja"]);
+        var fail = true;
+        var participant = new Participant
+        {
+            Busy = true,
+            Wait = _ => fail ? Task.FromException(new InvalidOperationException("boundary failed")) : Task.CompletedTask,
+        };
+        using var registration = manager.RegisterDialogueSwitchParticipant(participant);
+        var failures = new List<LocaleSwitchFailedEvent>();
+        manager.SwitchFailed += failures.Add;
+
+        Assert.False((await manager.ChangeDialogueLocaleAsync("ja")).Success);
+
+        Assert.Equal("en", manager.DialogueLocale);
+        Assert.Equal(LocaleSwitchState.Idle, manager.SwitchState);
+        Assert.Empty(participant.Applied);
+        Assert.Single(failures);
+        fail = false;
+        Assert.True((await manager.ChangeDialogueLocaleAsync("ja")).Success);
+    }
+
+    [Fact]
+    public async Task CancellationAtBoundaryCannotCommitAnUncooperativeParticipant()
+    {
+        using var manager = new LocaleManager("en", ["en", "ja"]);
+        using var cancellation = new CancellationTokenSource();
+        var participant = new Participant
+        {
+            Busy = true,
+            Wait = _ => { cancellation.Cancel(); return Task.CompletedTask; },
+        };
+        using var registration = manager.RegisterDialogueSwitchParticipant(participant);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            manager.ChangeDialogueLocaleAsync("ja", cancellation.Token));
+
+        Assert.Equal("en", manager.DialogueLocale);
+        Assert.Equal(LocaleSwitchState.Idle, manager.SwitchState);
+        Assert.Empty(participant.Applied);
+    }
+
+    [Fact]
+    public async Task ThrowingObserversCannotAbortSwitchOrHideItFromLaterObservers()
+    {
+        using var manager = new LocaleManager("en", ["en", "ja"]);
+        var participant = new Participant();
+        using var registration = manager.RegisterDialogueSwitchParticipant(participant);
+        var observed = new List<string>();
+        manager.SwitchStarting += _ => throw new InvalidOperationException("observer failed");
+        manager.DialogueLocaleChanged += _ => throw new InvalidOperationException("observer failed");
+        manager.DialogueLocaleChanged += change => observed.Add(change.CurrentLocale);
+        manager.SwitchFailed += _ => throw new InvalidOperationException("observer failed");
+
+        Assert.True((await manager.ChangeDialogueLocaleAsync("ja")).Success);
+        Assert.Equal(["ja"], observed);
+        Assert.Equal(LocaleSwitchState.Idle, manager.SwitchState);
+        participant.FailNext = true;
+        Assert.False((await manager.ChangeDialogueLocaleAsync("en")).Success);
+        Assert.Equal("ja", manager.DialogueLocale);
+        Assert.Equal(LocaleSwitchState.Idle, manager.SwitchState);
+    }
+
+    [Fact]
     public async Task SwitchWaitsForParticipantBoundaryBeforeApplyingAndPublishing()
     {
         using var manager = new LocaleManager("en", ["en", "ja"]);

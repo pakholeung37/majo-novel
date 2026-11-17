@@ -8,6 +8,64 @@ namespace Majo.Runtime.Resources.UnitTests;
 
 public sealed class ResourceManagerTests
 {
+    [Fact]
+    public async Task DelayedLeaseRetainsTheSameInstanceThatItReturnsAfterCacheReplacement()
+    {
+        using var lifetime = new TestRuntimeLifetime();
+        var oldAsset = new TestAsset("old");
+        var newAsset = new TestAsset("new");
+        var provider = new MemoryProvider("memory").Add("memory://sample", oldAsset).PauseAsyncLoads();
+        await provider.InitializeAsync(default);
+        var cache = new ResourceCache(lifetime, NullRuntimeLogger.Instance, 0, releaseOnLastLease: true);
+        cache.RenewLoadLifetime();
+        var key = new ResourceKey("sample");
+        var resolved = new ResourceResolver([provider], NullRuntimeLogger.Instance).Resolve(key, typeof(TestAsset), null);
+        using var context = new QueuedContext();
+        var previous = SynchronizationContext.Current;
+        Task<ResourceLeaseAcquisition<TestAsset>> acquisition;
+        try
+        {
+            SynchronizationContext.SetSynchronizationContext(context);
+            acquisition = cache.AcquireForLeaseAsync<TestAsset>(key, resolved, 10, pinned: true, default);
+            provider.ReleaseAsyncLoads();
+            // Finish the provider load, but keep the lease continuation queued.
+            while (cache.CaptureCacheSnapshot().PendingCount > 0) context.RunNext();
+            Assert.False(acquisition.IsCompleted);
+            Assert.Equal(1, cache.TrimCache());
+            provider.Replace("memory://sample", newAsset);
+            Assert.Same(newAsset, cache.Load<TestAsset>(key, resolved, 10));
+            while (!acquisition.IsCompleted) context.RunNext();
+        }
+        finally { SynchronizationContext.SetSynchronizationContext(previous); }
+
+        var lease = await acquisition;
+        try
+        {
+            var retained = Assert.Single(cache.CaptureDiagnosticResources());
+            Assert.Same(retained.Resource, lease.Resource);
+            Assert.Equal(1, Assert.Single(cache.CaptureCacheSnapshot().Entries).PinnedLeaseCount);
+        }
+        finally
+        {
+            lease.Release();
+            await cache.DrainAsync(default);
+            cache.CloseLoadScope();
+            await provider.ShutdownAsync(default);
+        }
+    }
+
+    private sealed class QueuedContext : SynchronizationContext, IDisposable
+    {
+        private readonly System.Collections.Concurrent.BlockingCollection<(SendOrPostCallback Callback, object? State)> queue = new();
+        public override void Post(SendOrPostCallback callback, object? state) => queue.Add((callback, state));
+        public void RunNext()
+        {
+            Assert.True(queue.TryTake(out var work, TimeSpan.FromSeconds(3)), "Expected an asynchronous load continuation.");
+            work.Callback(work.State);
+        }
+        public void Dispose() => queue.Dispose();
+    }
+
     [Fact(Timeout = 5_000)]
     public async Task LateReleaseFromOldScopeCannotDecrementANewEntryForTheSamePath()
     {
@@ -661,6 +719,8 @@ public sealed class ResourceManagerTests
             resources.Add(path, resource);
             return this;
         }
+
+        public void Replace(string path, object resource) => resources[path] = resource;
 
         public MemoryProvider PauseAsyncLoads(bool ignoreCancellation = false)
         {

@@ -10,6 +10,32 @@ namespace Majo.Runtime.Application.UnitTests;
 public sealed class StateRestoreOwnershipTests
 {
     [Fact]
+    public async Task FailedOutputReleaseIsNotRetriedWhenFaultResourcesAreReleased()
+    {
+        var released = new List<string>();
+        var boundary = new OutputBoundary(released);
+        var input = new InputManager(new FakeInputBackend());
+        await input.InitializeAsync(default);
+        using var manager = new StateManager([], input, boundary);
+        await manager.InitializeAsync(default);
+        var snapshot = new StateSnapshot(StateSnapshot.CurrentFormatVersion, DateTimeOffset.UtcNow, []);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => manager.RestoreGameAsync(snapshot));
+        Assert.Equal(StateManagerStatus.Faulted, manager.Status);
+        await manager.ResetAsync(default);
+
+        Assert.Equal(["output"], released);
+        Assert.Equal(StateManagerStatus.Idle, manager.Status);
+    }
+
+    private sealed class OutputBoundary(List<string> released) : IRuntimeRestoreBoundary, IRuntimeRestoreOutput
+    {
+        public IRetainedRestoreOutput RetainRestoreOutput() => new OutputLease(released);
+        public Task CancelForRestoreAsync(CancellationToken token = default) => Task.CompletedTask;
+        public Task WaitForQuiescenceAsync(CancellationToken token = default) => Task.CompletedTask;
+    }
+
+    [Fact]
     public void FailedOutputReleaseStillReleasesInputAndPlaybackExactlyOnce()
     {
         var released = new List<string>();

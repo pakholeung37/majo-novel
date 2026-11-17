@@ -206,13 +206,13 @@ public sealed class LocaleManager : ILocaleManager, IDisposable
         {
             return await ChangeLocaleCoreAsync(normalized, transactionToken);
         }
-        catch (OperationCanceledException)
+        catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            SwitchState = LocaleSwitchState.Idle;
-            throw;
+            return FailSwitch(DialogueLocale, normalized, exception.Message);
         }
         finally
         {
+            SwitchState = LocaleSwitchState.Idle;
             switchGate.Release();
         }
     }
@@ -255,7 +255,7 @@ public sealed class LocaleManager : ILocaleManager, IDisposable
                     ["targetLocale"] = normalized,
                     ["reason"] = preflightFailure,
                 });
-            SwitchFailed?.Invoke(new LocaleSwitchFailedEvent(previousLocale, normalized, preflightFailure));
+            Publish(SwitchFailed, new LocaleSwitchFailedEvent(previousLocale, normalized, preflightFailure));
             SwitchState = LocaleSwitchState.Idle;
             return LocaleSwitchResult.Failed(previousLocale, normalized, preflightFailure);
         }
@@ -276,7 +276,7 @@ public sealed class LocaleManager : ILocaleManager, IDisposable
         lock (sync) activeParticipants = participants.ToArray();
         var legacyBusy = isBusyCheck?.Invoke() == true;
         var isBusy = legacyBusy || activeParticipants.Any(participant => participant.IsBusy);
-        SwitchStarting?.Invoke(new LocaleSwitchStartingEvent(previousLocale, normalized, isBusy));
+        Publish(SwitchStarting, new LocaleSwitchStartingEvent(previousLocale, normalized, isBusy));
 
         if (isBusy)
         {
@@ -294,6 +294,7 @@ public sealed class LocaleManager : ILocaleManager, IDisposable
                 await participant.WaitForSafeBoundaryAsync(cancellationToken);
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         SwitchState = LocaleSwitchState.Applying;
         try
         {
@@ -304,7 +305,11 @@ public sealed class LocaleManager : ILocaleManager, IDisposable
             }
 
             foreach (var participant in activeParticipants)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
                 await participant.ApplyAsync(normalized, cancellationToken);
+            }
+            cancellationToken.ThrowIfCancellationRequested();
             DialogueLocale = normalized;
         }
         catch (Exception exception)
@@ -330,7 +335,7 @@ public sealed class LocaleManager : ILocaleManager, IDisposable
                 ["currentLocale"] = normalized,
             });
 
-        DialogueLocaleChanged?.Invoke(new LocaleChangedEvent(previousLocale, normalized));
+        Publish(DialogueLocaleChanged, new LocaleChangedEvent(previousLocale, normalized));
         SwitchState = LocaleSwitchState.Idle;
 
         return LocaleSwitchResult.Succeeded(previousLocale, normalized);
@@ -382,7 +387,7 @@ public sealed class LocaleManager : ILocaleManager, IDisposable
                 throw;
             }
 
-            VoiceLocaleChanged?.Invoke(new LocaleChangedEvent(previous, normalized));
+            Publish(VoiceLocaleChanged, new LocaleChangedEvent(previous, normalized));
             return LocaleSwitchResult.Succeeded(previous, normalized);
         }
         finally
@@ -436,9 +441,23 @@ public sealed class LocaleManager : ILocaleManager, IDisposable
                 ["targetLocale"] = targetLocale,
                 ["reason"] = reason,
             });
-        SwitchFailed?.Invoke(new LocaleSwitchFailedEvent(previousLocale, targetLocale, reason));
+        Publish(SwitchFailed, new LocaleSwitchFailedEvent(previousLocale, targetLocale, reason));
         SwitchState = LocaleSwitchState.Idle;
         return LocaleSwitchResult.Failed(previousLocale, targetLocale, reason);
+    }
+
+    private void Publish<T>(Action<T>? observers, T value)
+    {
+        if (observers is null) return;
+        foreach (Action<T> observer in observers.GetInvocationList())
+        {
+            try { observer(value); }
+            catch (Exception exception)
+            {
+                logger.Warning("locale", "locale.observer_failed",
+                    $"Locale observer failed: {exception.Message}", exception);
+            }
+        }
     }
 
     private void RenewSwitchLifetime()

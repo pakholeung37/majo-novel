@@ -11,6 +11,27 @@ namespace Majo.Runtime.Application.UnitTests;
 public sealed class StateManagerTests
 {
     [Fact]
+    public async Task RejectedRestoreCannotClearAnExistingFault()
+    {
+        var events = new List<string>();
+        var contributor = new RecordingContributor("game", [], events) { FailRestore = true };
+        using var manager = CreateManager([contributor], events);
+        await manager.InitializeAsync(default);
+        var plan = await manager.PreflightAsync(await CaptureSnapshotAsync(contributor), StateScope.Game);
+        await Assert.ThrowsAsync<StateRuntimeException>(() => manager.ExecuteAsync(plan));
+        var originalFailure = manager.LastFailureMessage;
+        events.Clear();
+
+        await Assert.ThrowsAsync<StateRuntimeException>(() => manager.ExecuteAsync(plan));
+
+        Assert.Equal(StateManagerStatus.Faulted, manager.Status);
+        Assert.Equal(originalFailure, manager.LastFailureMessage);
+        Assert.Empty(events);
+        await manager.ResetAsync(default);
+        Assert.Equal(["input:dispose"], events);
+    }
+
+    [Fact]
     public void ManagerSuppliesTransactionContextThroughTheEligibilityCapability()
     {
         var eligibility = new RecordingEligibility();

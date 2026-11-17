@@ -485,16 +485,19 @@ public sealed class StateManager : IStateManager, IStateBoundarySource, IStateRe
             throw new StateRuntimeException("State restore plan belongs to another manager.");
         EnsureInitialized();
         EnsureEligible(plan.Operation);
-        var oldBoundary = CurrentBoundary;
+        if (Status == StateManagerStatus.Faulted) EnsureReadyForTransaction("restore");
         using var operation = new StateRestoreOperation(PersistentContributors(plan.Scope), restoreBoundary, logger, RestorePresentationTimeout);
         // Cancel and drain an in-flight line before waiting for the State gate it may own.
         await operation.AcquirePlaybackAsync(boundarySource, cancellationToken);
         await transactions.WaitAsync(CancellationToken.None);
+        var oldBoundary = CurrentBoundary;
+        var restoreStarted = false;
         try
         {
             EnsureReadyForTransaction("restore");
             EnsureEligible(plan.Operation);
             operation.AcquireInput(input, this);
+            restoreStarted = true;
             SetStatus(StateManagerStatus.Restoring);
             restoredBoundary = null;
             await operation.ExecuteAsync(plan, cancellationToken);
@@ -510,7 +513,7 @@ public sealed class StateManager : IStateManager, IStateBoundarySource, IStateRe
             if (plan.Operation == StateOperationKind.HotReload && CurrentBoundary is not null)
                 Publish(BoundaryCommitted, CurrentBoundary, "BoundaryCommitted");
         }
-        catch (Exception failure)
+        catch (Exception failure) when (restoreStarted)
         {
             var recovery = await operation.RecoverAsync(failure, plan.Operation, oldBoundary, boundarySource);
             if (recovery.RecoveredBoundary) CurrentBoundary = oldBoundary;

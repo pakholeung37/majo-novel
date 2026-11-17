@@ -74,8 +74,9 @@ internal sealed class StateRestoreOperation(
                 await activation.ActivateAsync(deadline.Token).WaitAsync(deadline.Token);
         Stage = StateRestoreStage.Release;
         await DisposeCandidatesAsync();
-        resources.Output?.Dispose();
+        var output = resources.Output;
         resources.Output = null;
+        output?.Dispose();
     }
 
     public async Task<StateRestoreFailure> RecoverAsync(Exception failure, StateOperationKind operation,

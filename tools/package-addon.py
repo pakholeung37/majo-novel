@@ -18,7 +18,8 @@ def addon_files(directory):
         if path.is_file()
         and not IGNORED_DIRS.intersection(path.relative_to(directory).parts)
         and path.name != ".DS_Store"
-        and path.suffix not in {".tmp", ".log"}
+        and not path.name.endswith(".ysls.json")
+        and path.suffix not in {".tmp", ".log", ".pyc"}
     )
 
 

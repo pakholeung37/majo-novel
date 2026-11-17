@@ -172,6 +172,9 @@ internal sealed class ResourceCache
                 entry = new CacheEntry(resource, estimatedBytes);
                 loaded.Add(cacheKey, entry);
             }
+            // The completed load may have been evicted and replaced while this
+            // continuation was queued. Return the instance whose retention we own.
+            resource = Cast<TResource>(entry.Resource, resolved.Location.Path);
             entry.EstimatedBytes = Math.Max(entry.EstimatedBytes, estimatedBytes);
             entry.LeaseCount++;
             if (pinned) entry.PinnedLeaseCount++;

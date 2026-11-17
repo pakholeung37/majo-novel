@@ -28,7 +28,8 @@ def digest(data):
 def files(root):
     return {p.relative_to(root).as_posix(): p.read_bytes() for p in sorted(root.rglob("*"))
             if p.is_file() and not IGNORED.intersection(p.relative_to(root).parts)
-            and p.name != ".DS_Store" and p.suffix not in {".tmp", ".log", ".pyc"}}
+            and p.name != ".DS_Store" and not p.name.endswith(".ysls.json")
+            and p.suffix not in {".tmp", ".log", ".pyc"}}
 
 
 def version(data):
