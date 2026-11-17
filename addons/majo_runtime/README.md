@@ -57,7 +57,7 @@ The manager configures project imports and editor plugins, records content hashe
    MajoAssemblies="*res://addons/majo_runtime/Build/MajoAssemblyLoader.cs"
    ```
 
-4. Build the C# project, then enable **Yarn Spinner** and **Majo Runtime** in Project Settings > Plugins. Complete the editor's initial import before running. Runtime and upstream scripts compile into `Majo.Runtime.Godot.dll` and `YarnSpinner.Godot.dll`; the tool-enabled loader registers their original `res://` script paths before plugins and scenes load.
+4. Build the C# project, then enable **Yarn Spinner** and **Majo Runtime** in Project Settings > Plugins. Complete the editor's initial import before running. General services, the Majo Yarn backend, Bootstrap/editor composition and upstream scripts compile into `Majo.Runtime.Engine.dll`, `Majo.Runtime.Yarn.dll`, `Majo.Runtime.Godot.dll` and `YarnSpinner.Godot.dll`; the tool-enabled loader registers their original `res://` script paths before plugins and scenes load.
 
 The dependency is unmodified upstream code. Majo's bridges require **Yarn Spinner 3.2.0** and the pinned Godot adapter; updating either dependency requires bridge compatibility checks.
 

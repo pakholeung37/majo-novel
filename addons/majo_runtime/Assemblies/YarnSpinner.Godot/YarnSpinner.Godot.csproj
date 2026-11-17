@@ -8,7 +8,7 @@
     <ProjectReference Include="../../../YarnSpinner-Godot/SourceGenerator/YarnSpinnerGodotSourceGenerator.csproj"
                       ReferenceOutputAssembly="false" OutputItemType="Analyzer" />
     <!-- The version-pinned Runner bridge uses the upstream internal dispatcher. -->
-    <InternalsVisibleTo Include="Majo.Runtime.Godot" />
+    <InternalsVisibleTo Include="Majo.Runtime.Yarn" />
   </ItemGroup>
   <Import Project="Sdk.targets" Sdk="Godot.NET.Sdk" Version="4.7.2" />
 </Project>

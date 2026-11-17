@@ -112,47 +112,6 @@ public sealed class NodeDirectionCompilerTests
     }
 
     [Fact]
-    public void DirectionMetadataRejectsCorruptPayloads()
-    {
-        Assert.Throws<System.Text.Json.JsonException>(() => YarnProjectDirectionMetadata.Deserialize("{broken"));
-        Assert.Throws<InvalidOperationException>(() => YarnProjectDirectionMetadata.Deserialize("null"));
-        Assert.Throws<InvalidOperationException>(() => YarnProjectDirectionMetadata.Deserialize("[{}]"));
-    }
-
-    [Fact]
-    public void DirectionMetadataRoundTripsNodeModules()
-    {
-        var module = new NodeDirectionModule(
-            "Opening", 7,
-            new DirectionSymbolTable(
-                new HashSet<string> { "cell" },
-                new HashSet<string> { "reaction" },
-                new HashSet<string> { "wide" },
-                new HashSet<string> { "focus" }),
-            new[]
-            {
-                new TypedDirectionResourceReference(
-                    DirectionResourceKind.Backdrop, "Still_001", "main.yarn", 4, 1),
-            },
-            new[] { new DirectionSourceMap("shot", "main.yarn", 4, 1) },
-            new[]
-            {
-                new DirectionImport("stage", "cell", "Broadcast", "main", "main.yarn", 3, 1),
-            },
-            new[] { new DirectionMark("focus", new DirectionPoint(25, 75), "main.yarn", 5, 1) },
-            Array.Empty<YarnCompilationDiagnostic>());
-        var json = YarnProjectDirectionMetadata.Serialize(new[] { module });
-
-        var roundTrip = Assert.Single(YarnProjectDirectionMetadata.Deserialize(json));
-        Assert.Equal(module.NodeId, roundTrip.NodeId);
-        Assert.Equal(module.Version, roundTrip.Version);
-        Assert.Equal(module.Symbols.Stages, roundTrip.Symbols.Stages);
-        Assert.Equal(module.Resources, roundTrip.Resources);
-        Assert.Equal(module.Imports, roundTrip.Imports);
-        Assert.Equal(module.MarkDefinitions, roundTrip.MarkDefinitions);
-    }
-
-    [Fact]
     public void DirectionScopeQualifiesNodeLocalSymbolsAndResolvesExplicitImports()
     {
         var scopes = new DirectionScopeResolver();

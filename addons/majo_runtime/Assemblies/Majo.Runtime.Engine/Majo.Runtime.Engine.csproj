@@ -1,0 +1,24 @@
+<Project>
+  <Import Project="../GodotLibrary.props" />
+  <PropertyGroup>
+    <RootNamespace>Majo.Runtime</RootNamespace>
+    <AnalysisLevel>latest-Recommended</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+  <Import Project="Majo.Runtime.Engine.sources.props" />
+  <ItemGroup>
+    <Compile Include="@(MajoEngineSource)" />
+    <ProjectReference Include="../Majo.Runtime.Core/Majo.Runtime.Core.csproj" />
+    <ProjectReference Include="../Majo.Runtime.Domain/Majo.Runtime.Domain.csproj" />
+    <ProjectReference Include="../Majo.Runtime.Commands/Majo.Runtime.Commands.csproj" />
+    <ProjectReference Include="../Majo.Runtime.Persistence/Majo.Runtime.Persistence.csproj" />
+    <ProjectReference Include="../Majo.Runtime.Resources/Majo.Runtime.Resources.csproj" />
+    <ProjectReference Include="../../SourceGenerators/Majo.CommandGenerator/Majo.CommandGenerator.csproj"
+                      ReferenceOutputAssembly="false" OutputItemType="Analyzer" />
+    <!-- Composition owns the default service graph; dedicated probes inspect internal lifecycle state. -->
+    <InternalsVisibleTo Include="Majo.Runtime.Godot" />
+    <InternalsVisibleTo Include="Majo.Runtime.UnitTests" />
+    <InternalsVisibleTo Include="Majo.Runtime.Headless" />
+  </ItemGroup>
+  <Import Project="Sdk.targets" Sdk="Godot.NET.Sdk" Version="4.7.2" />
+</Project>

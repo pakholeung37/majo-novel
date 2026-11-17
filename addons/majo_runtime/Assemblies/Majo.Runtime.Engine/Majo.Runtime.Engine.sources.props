@@ -1,0 +1,12 @@
+<Project>
+  <Import Project="../Majo.Runtime.Domain/Majo.Runtime.Domain.sources.props" />
+  <Import Project="../Majo.Runtime.Commands/Majo.Runtime.Commands.sources.props" />
+  <Import Project="../Majo.Runtime.Persistence/Majo.Runtime.Persistence.sources.props" />
+  <Import Project="../Majo.Runtime.Resources/Majo.Runtime.Resources.sources.props" />
+  <ItemGroup>
+    <MajoEngineSource Include="$(MSBuildThisFileDirectory)../../Runtime/**/*.cs"
+                      Exclude="$(MSBuildThisFileDirectory)../../Runtime/Core/**;$(MSBuildThisFileDirectory)../../Runtime/Dialogue/Yarn/**;$(MSBuildThisFileDirectory)../../Runtime/Bootstrap/**;$(MSBuildThisFileDirectory)../../Runtime/Integration/**;$(MSBuildThisFileDirectory)../../Runtime/MajoRuntimeBootstrap.cs;$(MSBuildThisFileDirectory)../../Runtime/AssemblyInfo.cs" />
+    <MajoEngineExcluded Include="@(MajoDomainSource);@(MajoCommandSource);@(MajoPersistenceSource);@(MajoResourceSource)" />
+    <MajoEngineSource Remove="@(MajoEngineExcluded)" MatchOnMetadata="FullPath" MatchOnMetadataOptions="PathLike" />
+  </ItemGroup>
+</Project>

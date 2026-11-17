@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using Godot.Bridge;
+using Majo.Runtime.Dialogue.Yarn;
+using Majo.Runtime.Input;
 using YarnSpinnerGodot;
 
 namespace Majo.Runtime.Integration;
@@ -18,6 +20,8 @@ public static class GodotScriptAssemblies
     public static void Initialize()
     {
         Register(typeof(DialogueRunner).Assembly);
+        Register(typeof(IInputManager).Assembly);
+        Register(typeof(YarnDialogueBackend).Assembly);
         Register(typeof(MajoRuntimeBootstrap).Assembly);
         lock (Gate)
         {

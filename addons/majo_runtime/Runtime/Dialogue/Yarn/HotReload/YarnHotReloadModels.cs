@@ -44,16 +44,6 @@ public sealed record YarnSourceSnapshot(
     IReadOnlyList<YarnSourceFileSnapshot> Files,
     string SourceFingerprint);
 
-public sealed record YarnCompilationDiagnostic(
-    string Severity,
-    string? Code,
-    string File,
-    int StartLine,
-    int StartColumn,
-    int EndLine,
-    int EndColumn,
-    string Message);
-
 public sealed record YarnProjectVersion(
     long Generation,
     string ProjectId,

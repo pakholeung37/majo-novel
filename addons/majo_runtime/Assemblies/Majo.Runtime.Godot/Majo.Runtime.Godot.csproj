@@ -8,13 +8,8 @@
   <Import Project="Majo.Runtime.Godot.sources.props" />
   <ItemGroup>
     <Compile Include="@(MajoGodotSource)" />
-    <ProjectReference Include="../Majo.Runtime.Core/Majo.Runtime.Core.csproj" />
-    <ProjectReference Include="../Majo.Runtime.Domain/Majo.Runtime.Domain.csproj" />
-    <ProjectReference Include="../Majo.Runtime.Commands/Majo.Runtime.Commands.csproj" />
-    <ProjectReference Include="../Majo.Runtime.Persistence/Majo.Runtime.Persistence.csproj" />
-    <ProjectReference Include="../Majo.Runtime.Resources/Majo.Runtime.Resources.csproj" />
-    <ProjectReference Include="../YarnSpinner.Godot/YarnSpinner.Godot.csproj" />
-    <ProjectReference Include="../../Bridges/YarnSpinnerStateBridge/YarnSpinnerStateBridge.csproj" />
+    <ProjectReference Include="../Majo.Runtime.Engine/Majo.Runtime.Engine.csproj" />
+    <ProjectReference Include="../Majo.Runtime.Yarn/Majo.Runtime.Yarn.csproj" />
     <ProjectReference Include="../../SourceGenerators/Majo.CommandGenerator/Majo.CommandGenerator.csproj"
                       ReferenceOutputAssembly="false" OutputItemType="Analyzer" />
   </ItemGroup>

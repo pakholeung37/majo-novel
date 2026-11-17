@@ -146,7 +146,7 @@ dotnet test tests/Majo.Runtime.Commands.UnitTests/Majo.Runtime.Commands.UnitTest
 
 `Assemblies/Majo.Runtime.Resources/Majo.Runtime.Resources.csproj` 也只引用 Core 和 .NET 8，包含 provider/loader 契约、资源键、注册资源、解析、共享加载、缓存、租约、保留范围、预加载窗口和 PNG 内存估计。Godot provider/路径解析及读取 LocaleManager 的本地化适配器仍在集成层。预加载通过 `ResourcePreloadContext` 显式传入语言和回退链；路径占位符由该契约定义，旧 `LocalizedResourceResolver.LocalePlaceholder` 保留为同值别名。资源内部组件仅向专用资源测试程序集开放，用于保留迟到释放竞争的回归测试；游戏没有 friend 访问权限。
 
-两个工程分别使用 `*.sources.props` 作为编译及游戏排除的统一清单；程序集引用测试拒绝引擎、游戏或其他适配层依赖。纯持久化测试位于 `tests/Majo.Runtime.Persistence.UnitTests`，纯资源和预加载测试位于 `tests/Majo.Runtime.Resources.UnitTests`。配置、LocaleManager、Godot provider、输入/脚本恢复事务等集成测试继续引用游戏。
+两个工程分别使用 `*.sources.props` 作为编译及游戏排除的统一清单；程序集引用测试拒绝引擎、游戏或其他适配层依赖。纯持久化测试位于 `tests/Majo.Runtime.Persistence.UnitTests`，纯资源和预加载测试位于 `tests/Majo.Runtime.Resources.UnitTests`。配置、LocaleManager、Godot provider、输入/脚本恢复事务等集成测试直接引用运行时库。
 
 ```sh
 ./tools/test.sh --independent
@@ -158,13 +158,15 @@ dotnet test tests/Majo.Runtime.Resources.UnitTests/Majo.Runtime.Resources.UnitTe
 
 ## 引擎、示例与测试程序集
 
-`Assemblies/Majo.Runtime.Godot/Majo.Runtime.Godot.csproj` 编译剩余运行时、Bootstrap、配置、UI 及工具模式的 Majo 编辑器插件，只引用前述独立程序集、VM bridge 与 `YarnSpinner.Godot`，不引用游戏、示例或测试。`Assemblies/YarnSpinner.Godot` 从原目录编译未经修改的上游源码和生成器，其文件哈希仍由发行门禁校验。上游只向版本绑定的 Majo Runner bridge 开放内部 dispatcher；游戏和示例没有运行时 friend 权限。
+`Assemblies/Majo.Runtime.Engine/Majo.Runtime.Engine.csproj` 编译通用 Godot 服务、配置、渲染、舞台、音频、脚本/状态协调及 UI，只引用 Core/Domain/Commands/Persistence/Resources 与 Godot，不引用 Yarn 或 Bootstrap 装配。`Assemblies/Majo.Runtime.Yarn` 编译 Majo 的 Runner 后端、检查点桥接、本地化展示、预加载与热重载，只通过公开 API 依赖 Engine，不取得其 friend 权限。`Assemblies/Majo.Runtime.Godot` 保留 Bootstrap、脚本库登记、编辑器与插件，装配 Engine 和 Yarn。三者均不引用游戏、示例或测试。
 
-Godot 运行时程序集仍包含 Majo 的 Yarn 后端及脚本/状态协调；它们与引擎集成层之间还可以继续细分。这次边界确保完整运行时可以脱离游戏编译，并没有宣称所有可替换后端已经各自形成程序集。
+`NodeDirectionModule` 等声明模型、`NodeEntryRequest`、编译诊断记录和 companion JSON 编解码进入 Domain；`IYarnCommandAdapter`、`RuntimeCommandActivity` 进入 Commands。保留原命名空间及接口，避免扩展迁移时增加源码改动；这些模型和契约不引用 Yarn 包或 Godot。实际编译器、VM 与监听实现仍在 Yarn 适配程序集。元数据往返、旧字段缺省和资源声明去重由独立单测覆盖。
+
+`Assemblies/YarnSpinner.Godot` 从原目录编译未经修改的上游源码和生成器，其文件哈希仍由发行门禁校验。上游只向版本绑定的 Majo Yarn Runner bridge 开放内部 dispatcher。Engine 只向 Bootstrap 装配和专用测试开放必要内部实现，游戏和示例没有运行时 friend 权限。
 
 `GodotLibrary.props` 保留消费项目根目录作为 `GodotProjectDir`，生成的 `res://` 路径不变，独立库的 `bin/obj` 不与游戏混用。库只禁用主程序专用的 `GodotPluginsInitializer`，继续生成脚本路径、方法、属性与序列化代码。构建会为库输出目录创建 `.gdignore`。
 
-Godot 默认扫描主程序集。游戏必须把以下 `[Tool]` 加载器放在 **第一个 autoload**，在编辑器插件和场景加载前通过公开的 `ScriptManagerBridge.LookupScriptsInAssembly` 注册库脚本：
+Godot 默认扫描主程序集。游戏必须把以下 `[Tool]` 加载器放在 **第一个 autoload**，在编辑器插件和场景加载前通过公开的 `ScriptManagerBridge.LookupScriptsInAssembly` 注册 Engine、Yarn、Bootstrap 与上游库脚本：
 
 ```ini
 [autoload]
@@ -177,7 +179,7 @@ MajoAssemblies="*res://addons/majo_runtime/Build/MajoAssemblyLoader.cs"
 
 运行时单测直接引用引擎运行时库；示例测试位于 `tests/Majo.Demos.UnitTests` 并只引用示例库。所有单测均已脱离游戏工程。`./tools/test.sh --unit` 不构建游戏、不启动 Godot；`--independent` 进一步只编译不依赖引擎的六个测试工程。完整门禁另行构建游戏、加载无头测试、安装发行包，并在真实 PCK 中检查库脚本、游戏自定义 Yarn 函数和生成命令。
 
-编译依赖为：游戏 → 示例/Headless/引擎运行时；示例 → 引擎运行时；Headless → 示例/引擎运行时；引擎运行时 → Core/Domain/Commands/Persistence/Resources/Yarn 适配。运行时程序集引用测试会拒绝反向依赖。库类型的命名空间、资源路径及存档格式不变；二进制扩展需要针对新的 `Majo.Runtime.Godot.dll`、`YarnSpinner.Godot.dll` 重编译，清单已声明布局和 autoload 要求。
+编译依赖为：游戏 → 示例/Headless/Bootstrap 装配；示例 → Bootstrap 装配；Headless → 示例/Bootstrap 装配；Bootstrap 装配 → Engine/Yarn；Yarn → Engine/上游/VM bridge；Engine → Core/Domain/Commands/Persistence/Resources/Godot。运行时程序集引用测试会拒绝 Engine 对 Yarn/装配的反向依赖，以及 Yarn 对装配的引用。纯领域和命令测试继续拒绝所有引擎/第三方引用。库类型的命名空间、资源路径及存档格式不变；二进制扩展需要针对新的 DLL 重新构建，清单已声明布局和 autoload 要求。
 
 ## Godot 渲染边界与 GPU 验收
 
@@ -209,6 +211,8 @@ python3 tools/test-rendering.py --method gl_compatibility --driver opengl3
 GPU 验收与 `tools/test.sh --full` 分开运行，后者仍负责单测、无头集成、独立项目安装、导出及实际 PCK 启动。
 
 本次引擎程序集隔离后，Apple M4 的 Metal Forward+ 再次通过全部 13 项用例、200 次恢复和 600 次画面采样；候选创建/释放各 200，无着色器或资源泄漏错误。日志、图片和统计位于 `build/engine-assembly-isolation/gpu`。完整发行门禁、游戏 ExportRelease 编译及全部格式检查也已通过。
+
+Engine/Yarn/Bootstrap 进一步拆分后，本机完整门禁再次通过 686 项 .NET 单测、无头集成、受检升级、源码消费者及实际 Release PCK。Metal Forward+ 的 13 项 GPU 用例、200 次恢复和 600 次采样均通过，节点保持 62，候选创建/释放均为 200；证据位于 `build/yarn-assembly-isolation/gpu`。对 MSBuild 实际编译清单的核对确认 Engine 280 个源文件、Yarn 41 个、装配层 16 个，原有运行时源码无遗漏或重复编译。
 
 ## CI 与发布
 

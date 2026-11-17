@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Compile general Godot services into Majo.Runtime.Engine and the Majo Yarn adapter into Majo.Runtime.Yarn; keep Bootstrap/editor composition in Majo.Runtime.Godot.
+- Enforce that general engine services reference neither Yarn nor composition; the Yarn adapter uses only public engine APIs.
+- Move node metadata, scene-entry requests and companion serialization into Domain, and command activity/adapter contracts into Commands without engine or Yarn dependencies.
+- Register all three Majo script libraries before scene/plugin loading and validate their delivery in source and packed consumers.
+
 - Compile the engine runtime and unmodified upstream Godot Yarn adapter into separate libraries; keep their generated script paths relative to the consuming Godot project.
 - Register library scripts before plugins/scenes through a tool-enabled host autoload; preserve game-owned generated Yarn action registration.
 - Compile demos and headless/rendering probes separately; runtime unit tests now reference the runtime library directly, while demo tests use their own project.

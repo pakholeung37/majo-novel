@@ -8,5 +8,7 @@
     <MajoCommandSource Include="$(MSBuildThisFileDirectory)../../Runtime/Dialogue/Commands/Groups/WaitArguments.cs" />
     <MajoCommandSource Include="$(MSBuildThisFileDirectory)../../Runtime/Dialogue/Commands/RuntimeCommandRegistry.cs" />
     <MajoCommandSource Include="$(MSBuildThisFileDirectory)../../Runtime/Dialogue/Commands/RuntimeCommandException.cs" />
+    <MajoCommandSource Include="$(MSBuildThisFileDirectory)../../Runtime/Dialogue/Commands/RuntimeCommandActivity.cs" />
+    <MajoCommandSource Include="$(MSBuildThisFileDirectory)../../Runtime/Dialogue/Yarn/IYarnCommandAdapter.cs" />
   </ItemGroup>
 </Project>

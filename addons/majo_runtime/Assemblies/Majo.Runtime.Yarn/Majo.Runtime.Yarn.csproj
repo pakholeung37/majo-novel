@@ -1,0 +1,20 @@
+<Project>
+  <Import Project="../GodotLibrary.props" />
+  <PropertyGroup>
+    <RootNamespace>Majo.Runtime</RootNamespace>
+    <AnalysisLevel>latest-Recommended</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+  <Import Project="Majo.Runtime.Yarn.sources.props" />
+  <ItemGroup>
+    <Compile Include="@(MajoYarnSource)" />
+    <ProjectReference Include="../Majo.Runtime.Engine/Majo.Runtime.Engine.csproj" />
+    <ProjectReference Include="../YarnSpinner.Godot/YarnSpinner.Godot.csproj" />
+    <ProjectReference Include="../../Bridges/YarnSpinnerStateBridge/YarnSpinnerStateBridge.csproj" />
+    <!-- Bootstrap creates the internal default presentation; probes inspect replay internals. -->
+    <InternalsVisibleTo Include="Majo.Runtime.Godot" />
+    <InternalsVisibleTo Include="Majo.Runtime.UnitTests" />
+    <InternalsVisibleTo Include="Majo.Runtime.Headless" />
+  </ItemGroup>
+  <Import Project="Sdk.targets" Sdk="Godot.NET.Sdk" Version="4.7.2" />
+</Project>
