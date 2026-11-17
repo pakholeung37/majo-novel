@@ -11,6 +11,36 @@ namespace Majo.Runtime.Application.UnitTests;
 public sealed class SaveSlotManagerTests
 {
     [Fact]
+    public async Task FailedOverwriteDoesNotDeleteAThumbnailStillReferencedByTheOldSlot()
+    {
+        var fixture = await Fixture.CreateAsync();
+        fixture.Thumbnails.ReusedReference = "shared.png";
+        var slot = new SaveSlotId(SaveSlotKind.Manual, 1);
+        await fixture.Manager.SaveAsync(slot);
+        var old = await fixture.Storage.ReadAsync("slots/manual/0001");
+        fixture.Storage.FailNextWrite = true;
+        await Assert.ThrowsAsync<StateStorageException>(() => fixture.Manager.SaveAsync(slot));
+        Assert.Equal(old, await fixture.Storage.ReadAsync("slots/manual/0001"));
+        Assert.DoesNotContain("shared.png", fixture.Thumbnails.Deleted);
+    }
+
+    [Fact]
+    public async Task CancelledWriteDiscardsOnlyTheNewThumbnailAndAllowsRetry()
+    {
+        var fixture = await Fixture.CreateAsync();
+        var slot = new SaveSlotId(SaveSlotKind.Manual, 1);
+        await fixture.Manager.SaveAsync(slot);
+        var old = await fixture.Storage.ReadAsync("slots/manual/0001");
+        fixture.Storage.CancelNextWrite = true;
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => fixture.Manager.SaveAsync(slot));
+        Assert.Equal(old, await fixture.Storage.ReadAsync("slots/manual/0001"));
+        Assert.Equal(["thumbnail-2.png"], fixture.Thumbnails.Deleted);
+        Assert.Equal(SaveSlotManagerStatus.Idle, fixture.Manager.Status);
+        await fixture.Manager.SaveAsync(slot);
+        Assert.Equal("thumbnail-3.png", (await fixture.Manager.ReadMetadataAsync(slot)).ThumbnailReference);
+    }
+
+    [Fact]
     public async Task SaveMetadataUsesCapturedEntryEvenIfPlaybackAdvancesBeforeCaptureReturns()
     {
         var fixture = await Fixture.CreateAsync();
@@ -332,6 +362,7 @@ public sealed class SaveSlotManagerTests
     {
         private readonly Dictionary<string, byte[]> values = new(StringComparer.Ordinal);
         public bool FailNextWrite { get; set; }
+        public bool CancelNextWrite { get; set; }
         public Task<byte[]> ReadAsync(string key, CancellationToken cancellationToken = default) =>
             Task.FromResult(values.TryGetValue(key, out var value)
                 ? value.ToArray()
@@ -341,6 +372,11 @@ public sealed class SaveSlotManagerTests
             ReadOnlyMemory<byte> content,
             CancellationToken cancellationToken = default)
         {
+            if (CancelNextWrite)
+            {
+                CancelNextWrite = false;
+                return Task.FromCanceled(new CancellationToken(true));
+            }
             if (FailNextWrite)
             {
                 FailNextWrite = false;
@@ -428,11 +464,12 @@ public sealed class SaveSlotManagerTests
     private sealed class FakeThumbnails : ISaveThumbnailProvider
     {
         private int next;
+        public string? ReusedReference { get; set; }
         public List<string> Deleted { get; } = [];
         public Task<SaveThumbnailResult> CaptureAsync(
             SaveSlotId slot,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult(new SaveThumbnailResult($"thumbnail-{++next}.png", null));
+            Task.FromResult(new SaveThumbnailResult(ReusedReference ?? $"thumbnail-{++next}.png", null));
         public Task DeleteAsync(
             string logicalReference,
             CancellationToken cancellationToken = default)

@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using Majo.Runtime.Core;
 using Majo.Runtime.History;
 using Majo.Runtime.State;
+using static Majo.Runtime.Save.SaveSlotMetadataCodec;
 
 namespace Majo.Runtime.Save;
 
@@ -16,17 +17,12 @@ public sealed class SaveSlotManager : ISaveSlotManager, IDisposable
 {
     private readonly SemaphoreSlim transaction = new(1, 1);
     private readonly IStateManager state;
-    private readonly IStateSerializer serializer;
-    private readonly IStateStorage storage;
     private readonly IStateEligibility eligibility;
     private readonly IGameSessionCoordinator sessions;
-    private readonly IHistoryManager history;
-    private readonly ISaveThumbnailProvider thumbnails;
-    private readonly string runtimeVersion;
-    private readonly string gameBuildId;
-    private readonly string storageNamespace;
-    private readonly IRuntimeLogger logger;
-    private readonly ReadOnlyDictionary<SaveSlotKind, int> capacities;
+    private readonly SaveSlotCatalog catalog;
+    private readonly SaveSlotRepository repository;
+    private readonly SaveSlotSaveTransaction saveTransaction;
+    private readonly SaveSlotOperationTracker operations;
     private bool isInitialized;
 
     public SaveSlotManager(
@@ -44,48 +40,39 @@ public sealed class SaveSlotManager : ISaveSlotManager, IDisposable
         IRuntimeLogger? logger = null)
     {
         this.state = state ?? throw new ArgumentNullException(nameof(state));
-        this.serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
-        this.storage = storage ?? throw new ArgumentNullException(nameof(storage));
+        ArgumentNullException.ThrowIfNull(serializer);
+        ArgumentNullException.ThrowIfNull(storage);
+        ArgumentNullException.ThrowIfNull(history);
         this.eligibility = eligibility ?? throw new ArgumentNullException(nameof(eligibility));
         this.sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
-        this.history = history ?? throw new ArgumentNullException(nameof(history));
-        ArgumentNullException.ThrowIfNull(capacities);
-        var normalized = Enum.GetValues<SaveSlotKind>().ToDictionary(
-            kind => kind,
-            kind => capacities.TryGetValue(kind, out var capacity) && capacity > 0
-                ? capacity
-                : throw new ArgumentException(
-                    $"A positive capacity is required for slot kind '{kind}'.",
-                    nameof(capacities)));
-        this.capacities = new ReadOnlyDictionary<SaveSlotKind, int>(normalized);
+        catalog = new SaveSlotCatalog(capacities);
         ArgumentException.ThrowIfNullOrWhiteSpace(runtimeVersion);
         ArgumentException.ThrowIfNullOrWhiteSpace(gameBuildId);
         ArgumentException.ThrowIfNullOrWhiteSpace(storageNamespace);
-        this.runtimeVersion = runtimeVersion.Trim();
-        this.gameBuildId = gameBuildId.Trim();
-        this.storageNamespace = storageNamespace.Trim();
-        this.thumbnails = thumbnails ?? NullSaveThumbnailProvider.Instance;
-        this.logger = logger ?? NullRuntimeLogger.Instance;
+        var runtimeLogger = logger ?? NullRuntimeLogger.Instance;
+        repository = new SaveSlotRepository(serializer, storage, catalog, storageNamespace.Trim());
+        saveTransaction = new SaveSlotSaveTransaction(state, repository, history, thumbnails ?? NullSaveThumbnailProvider.Instance,
+            runtimeVersion.Trim(), gameBuildId.Trim(), storageNamespace.Trim(), runtimeLogger);
+        operations = new SaveSlotOperationTracker(runtimeLogger);
     }
 
-    public event Action<SaveSlotOperationInfo>? OperationStarted;
-    public event Action<SaveSlotOperationInfo>? OperationProgressed;
-    public event Action<SaveSlotOperationInfo>? OperationCompleted;
-    public event Action<SaveSlotOperationInfo>? OperationFailed;
-    public event Action? SlotsChanged;
-
-    public SaveSlotManagerStatus Status { get; private set; } = SaveSlotManagerStatus.Idle;
-    public SaveSlotOperationInfo? CurrentOperation { get; private set; }
+    public event Action<SaveSlotOperationInfo>? OperationStarted { add => operations.OperationStarted += value; remove => operations.OperationStarted -= value; }
+    public event Action<SaveSlotOperationInfo>? OperationProgressed { add => operations.OperationProgressed += value; remove => operations.OperationProgressed -= value; }
+    public event Action<SaveSlotOperationInfo>? OperationCompleted { add => operations.OperationCompleted += value; remove => operations.OperationCompleted -= value; }
+    public event Action<SaveSlotOperationInfo>? OperationFailed { add => operations.OperationFailed += value; remove => operations.OperationFailed -= value; }
+    public event Action? SlotsChanged { add => operations.SlotsChanged += value; remove => operations.SlotsChanged -= value; }
+    public SaveSlotManagerStatus Status => operations.Status;
+    public SaveSlotOperationInfo? CurrentOperation => operations.CurrentOperation;
     public SaveSlotId? CurrentSlot { get; private set; }
-    public IReadOnlyDictionary<SaveSlotKind, int> Capacities => capacities;
-    public string? LastFailureMessage { get; private set; }
-    public SaveSlotOperationPhase? LastFailurePhase { get; private set; }
+    public IReadOnlyDictionary<SaveSlotKind, int> Capacities => catalog.Capacities;
+    public string? LastFailureMessage => operations.LastFailureMessage;
+    public SaveSlotOperationPhase? LastFailurePhase => operations.LastFailurePhase;
 
     public Task InitializeAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         isInitialized = true;
-        Status = SaveSlotManagerStatus.Idle;
+        operations.Initialize();
         return Task.CompletedTask;
     }
 
@@ -93,10 +80,7 @@ public sealed class SaveSlotManager : ISaveSlotManager, IDisposable
     {
         cancellationToken.ThrowIfCancellationRequested();
         CurrentSlot = null;
-        CurrentOperation = null;
-        LastFailureMessage = null;
-        LastFailurePhase = null;
-        Status = SaveSlotManagerStatus.Idle;
+        operations.Reset();
         return Task.CompletedTask;
     }
 
@@ -104,8 +88,7 @@ public sealed class SaveSlotManager : ISaveSlotManager, IDisposable
     {
         cancellationToken.ThrowIfCancellationRequested();
         CurrentSlot = null;
-        CurrentOperation = null;
-        Status = SaveSlotManagerStatus.Idle;
+        operations.Reset(clearFailure: false);
         isInitialized = false;
         return Task.CompletedTask;
     }
@@ -113,7 +96,7 @@ public sealed class SaveSlotManager : ISaveSlotManager, IDisposable
     public SaveSlotAvailability CanSave(SaveSlotId slot)
     {
         ArgumentNullException.ThrowIfNull(slot);
-        var reasons = ValidateSlot(slot);
+        var reasons = catalog.ValidateSlot(slot);
         if (IsBusy)
         {
             reasons.Add(new SaveSlotUnavailableReason(
@@ -129,7 +112,7 @@ public sealed class SaveSlotManager : ISaveSlotManager, IDisposable
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(slot);
-        var reasons = ValidateSlot(slot);
+        var reasons = catalog.ValidateSlot(slot);
         if (IsBusy)
         {
             reasons.Add(new SaveSlotUnavailableReason(
@@ -139,7 +122,7 @@ public sealed class SaveSlotManager : ISaveSlotManager, IDisposable
         AddEligibilityReasons(reasons, eligibility.Check(StateOperationKind.Restore));
         if (reasons.All(value => value.Code != SaveSlotUnavailableReasonCode.InvalidSlot))
         {
-            var metadata = await ReadMetadataOrNullAsync(slot, cancellationToken);
+            var metadata = await repository.ReadMetadataOrNullAsync(slot, cancellationToken);
             if (metadata is null)
             {
                 reasons.Add(new SaveSlotUnavailableReason(
@@ -158,34 +141,10 @@ public sealed class SaveSlotManager : ISaveSlotManager, IDisposable
         return new SaveSlotAvailability(reasons.AsReadOnly());
     }
 
-    public async Task<IReadOnlyList<SaveSlotMetadata>> ListAsync(
-        SaveSlotKind? kind = null,
-        CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<SaveSlotMetadata>> ListAsync(SaveSlotKind? kind = null, CancellationToken cancellationToken = default)
     {
         EnsureInitialized();
-        if (kind is not null && !Enum.IsDefined(kind.Value))
-        {
-            throw new ArgumentOutOfRangeException(nameof(kind));
-        }
-        var keys = await storage.ListAsync(cancellationToken);
-        var results = new List<SaveSlotMetadata>();
-        foreach (var key in keys)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (!TryParseKey(key, out var slot) ||
-                (kind is not null && slot.Kind != kind.Value) ||
-                ValidateSlot(slot).Count > 0)
-            {
-                continue;
-            }
-            results.Add(await ReadMetadataCoreAsync(slot, cancellationToken));
-        }
-
-        return results
-            .OrderBy(value => value.Id.Kind)
-            .ThenByDescending(value => value.SavedAt)
-            .ThenBy(value => value.Id.Index)
-            .ToArray();
+        return repository.ListAsync(kind, cancellationToken);
     }
 
     public Task<SaveSlotMetadata> ReadMetadataAsync(
@@ -193,8 +152,8 @@ public sealed class SaveSlotManager : ISaveSlotManager, IDisposable
         CancellationToken cancellationToken = default)
     {
         EnsureInitialized();
-        ThrowIfInvalid(slot);
-        return ReadMetadataCoreAsync(slot, cancellationToken);
+        catalog.ThrowIfInvalid(slot);
+        return repository.ReadMetadataCoreAsync(slot, cancellationToken);
     }
 
     public Task<SaveSlotMetadata> SaveAsync(
@@ -221,26 +180,26 @@ public sealed class SaveSlotManager : ISaveSlotManager, IDisposable
 
         EnsureInitialized();
         await transaction.WaitAsync(cancellationToken);
-        var operation = StartOperation(new SaveSlotId(kind, 1), SaveSlotManagerStatus.Saving);
+        var operation = operations.StartOperation(new SaveSlotId(kind, 1), SaveSlotManagerStatus.Saving);
         try
         {
-            SetPhase(operation, SaveSlotOperationPhase.Eligibility);
+            operations.SetPhase(operation, SaveSlotOperationPhase.Eligibility);
             EnsureEligible(StateOperationKind.Save);
             var existing = await ListAsync(kind, cancellationToken);
-            var target = SaveSlotRotationPolicy.DetermineNextRotatingSlot(kind, capacities[kind], existing);
-            operation = RetargetOperation(operation, target);
+            var target = SaveSlotRotationPolicy.DetermineNextRotatingSlot(kind, catalog.Capacities[kind], existing);
+            operation = operations.RetargetOperation(operation, target);
             var result = await SaveCoreAsync(target, request, operation, cancellationToken);
-            CompleteOperation(operation);
+            operations.CompleteOperation(operation);
             return result;
         }
         catch (OperationCanceledException)
         {
-            CancelOperation();
+            operations.CancelOperation();
             throw;
         }
         catch (Exception exception)
         {
-            FailOperation(operation, exception);
+            operations.FailOperation(operation, exception);
             throw;
         }
         finally
@@ -257,19 +216,19 @@ public sealed class SaveSlotManager : ISaveSlotManager, IDisposable
             SaveSlotManagerStatus.Loading,
             async (operation, token) =>
             {
-                SetPhase(operation, SaveSlotOperationPhase.Eligibility);
+                operations.SetPhase(operation, SaveSlotOperationPhase.Eligibility);
                 EnsureEligible(StateOperationKind.Restore);
-                SetPhase(operation, SaveSlotOperationPhase.Read);
-                var bytes = await storage.ReadAsync(ToKey(slot), token);
-                SetPhase(operation, SaveSlotOperationPhase.Deserialize);
-                var envelope = DeserializeCompatible(slot, bytes);
-                SetPhase(operation, SaveSlotOperationPhase.Preflight);
+                operations.SetPhase(operation, SaveSlotOperationPhase.Read);
+                var bytes = await repository.ReadAsync(slot, token);
+                operations.SetPhase(operation, SaveSlotOperationPhase.Deserialize);
+                var envelope = repository.DeserializeCompatible(slot, bytes);
+                operations.SetPhase(operation, SaveSlotOperationPhase.Preflight);
                 var plan = await state.RestoreTransaction.PreflightAsync(
                     envelope.Snapshot,
                     StateScope.Game,
                     StateOperationKind.Restore,
                     token);
-                SetPhase(operation, SaveSlotOperationPhase.Restore);
+                operations.SetPhase(operation, SaveSlotOperationPhase.Restore);
                 await sessions.LoadGameAsync(plan, token);
                 CurrentSlot = slot;
                 return null;
@@ -284,18 +243,18 @@ public sealed class SaveSlotManager : ISaveSlotManager, IDisposable
             SaveSlotManagerStatus.Deleting,
             async (operation, token) =>
             {
-                SetPhase(operation, SaveSlotOperationPhase.Read);
-                var old = await ReadMetadataCoreAsync(slot, token);
-                SetPhase(operation, SaveSlotOperationPhase.Delete);
-                await storage.DeleteAsync(ToKey(slot), token);
-                await DeleteThumbnailBestEffortAsync(
+                operations.SetPhase(operation, SaveSlotOperationPhase.Read);
+                var old = await repository.ReadMetadataCoreAsync(slot, token);
+                operations.SetPhase(operation, SaveSlotOperationPhase.Delete);
+                await repository.DeleteAsync(slot, token);
+                await saveTransaction.DeleteThumbnailBestEffortAsync(
                     old.ThumbnailReference,
                     CancellationToken.None);
                 if (CurrentSlot == slot)
                 {
                     CurrentSlot = null;
                 }
-                PublishSlotsChanged();
+                operations.PublishSlotsChanged();
                 return null;
             },
             cancellationToken);
@@ -310,10 +269,10 @@ public sealed class SaveSlotManager : ISaveSlotManager, IDisposable
             async (operation, token) =>
             {
                 var normalizedName = NormalizeOptional(playerName, 80);
-                SetPhase(operation, SaveSlotOperationPhase.Read);
-                var bytes = await storage.ReadAsync(ToKey(slot), token);
-                SetPhase(operation, SaveSlotOperationPhase.Deserialize);
-                var envelope = DeserializeCompatible(slot, bytes);
+                operations.SetPhase(operation, SaveSlotOperationPhase.Read);
+                var bytes = await repository.ReadAsync(slot, token);
+                operations.SetPhase(operation, SaveSlotOperationPhase.Deserialize);
+                var envelope = repository.DeserializeCompatible(slot, bytes);
                 var display = new SortedDictionary<string, string>(StringComparer.Ordinal);
                 foreach (var pair in envelope.DisplayMetadata)
                 {
@@ -328,94 +287,23 @@ public sealed class SaveSlotManager : ISaveSlotManager, IDisposable
                     display[SaveSlotMetadataKeys.PlayerName] = normalizedName;
                 }
                 var renamed = CloneEnvelope(envelope, display);
-                SetPhase(operation, SaveSlotOperationPhase.Rename);
-                await storage.WriteAsync(ToKey(slot), serializer.Serialize(renamed), token);
+                operations.SetPhase(operation, SaveSlotOperationPhase.Rename);
+                await repository.WriteAsync(slot, repository.Serialize(renamed), token);
                 var metadata = ToMetadata(slot, renamed);
-                PublishSlotsChanged();
+                operations.PublishSlotsChanged();
                 return metadata;
             },
             cancellationToken);
 
-    private async Task<SaveSlotMetadata> SaveCoreAsync(
-        SaveSlotId slot,
-        SaveSlotSaveRequest? request,
-        SaveSlotOperationInfo operation,
-        CancellationToken cancellationToken)
+    private async Task<SaveSlotMetadata> SaveCoreAsync(SaveSlotId slot, SaveSlotSaveRequest? request,
+        SaveSlotOperationInfo operation, CancellationToken cancellationToken)
     {
-        ThrowIfInvalid(slot);
-        SetPhase(operation, SaveSlotOperationPhase.Eligibility);
+        catalog.ThrowIfInvalid(slot);
+        operations.SetPhase(operation, SaveSlotOperationPhase.Eligibility);
         EnsureEligible(StateOperationKind.Save);
-        var oldMetadata = await ReadMetadataOrNullAsync(slot, cancellationToken);
-        SetPhase(operation, SaveSlotOperationPhase.Capture);
-        if (state is not IStateBoundarySource source)
-            throw new StateCompatibilityException(
-                "SaveSlotManager requires an IStateBoundarySource; live Game capture is not supported.");
-        var boundary = await source.CaptureSaveBoundaryAsync(cancellationToken);
-        var snapshot = boundary.Snapshot;
-        var display = BuildDisplayMetadata(slot, request, boundary);
-        string? capturedThumbnail = null;
-        if (request?.CaptureThumbnail != false)
-        {
-            SetPhase(operation, SaveSlotOperationPhase.Thumbnail);
-            SaveThumbnailResult thumbnail;
-            try
-            {
-                thumbnail = await thumbnails.CaptureAsync(slot, cancellationToken);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception exception)
-            {
-                thumbnail = SaveThumbnailResult.Missing(exception.Message);
-                logger.Warning(
-                    "save",
-                    "save.thumbnail_failed",
-                    $"Thumbnail capture failed for slot '{slot}': {exception.Message}",
-                    exception);
-            }
-            if (thumbnail.LogicalReference is not null)
-            {
-                capturedThumbnail = thumbnail.LogicalReference;
-                display[SaveSlotMetadataKeys.ThumbnailReference] = thumbnail.LogicalReference;
-            }
-            if (thumbnail.FailureReason is not null)
-            {
-                display[SaveSlotMetadataKeys.ThumbnailFailure] =
-                    NormalizeRequired(thumbnail.FailureReason, 240);
-            }
-        }
-
-        StateEnvelope envelope;
-        try
-        {
-            envelope = state.CreateEnvelope(
-                snapshot,
-                StateScope.Game,
-                runtimeVersion,
-                gameBuildId,
-                storageNamespace,
-                display);
-            SetPhase(operation, SaveSlotOperationPhase.Serialize);
-            var bytes = serializer.Serialize(envelope);
-            SetPhase(operation, SaveSlotOperationPhase.Commit);
-            await storage.WriteAsync(ToKey(slot), bytes, cancellationToken);
-        }
-        catch
-        {
-            await DeleteThumbnailBestEffortAsync(capturedThumbnail, CancellationToken.None);
-            throw;
-        }
-        var metadata = ToMetadata(slot, envelope);
-        if (oldMetadata?.ThumbnailReference != metadata.ThumbnailReference)
-        {
-            await DeleteThumbnailBestEffortAsync(
-                oldMetadata?.ThumbnailReference,
-                CancellationToken.None);
-        }
-        PublishSlotsChanged();
-        return metadata;
+        var result = await saveTransaction.ExecuteAsync(slot, request, phase => operations.SetPhase(operation, phase), cancellationToken);
+        operations.PublishSlotsChanged();
+        return result;
     }
 
     private async Task<T> RunExclusiveAsync<T>(
@@ -427,227 +315,28 @@ public sealed class SaveSlotManager : ISaveSlotManager, IDisposable
         ArgumentNullException.ThrowIfNull(slot);
         ArgumentNullException.ThrowIfNull(action);
         EnsureInitialized();
-        ThrowIfInvalid(slot);
+        catalog.ThrowIfInvalid(slot);
         await transaction.WaitAsync(cancellationToken);
-        var operation = StartOperation(slot, status);
+        var operation = operations.StartOperation(slot, status);
         try
         {
             var result = await action(operation, cancellationToken);
-            CompleteOperation(operation);
+            operations.CompleteOperation(operation);
             return result;
         }
         catch (OperationCanceledException)
         {
-            CancelOperation();
+            operations.CancelOperation();
             throw;
         }
         catch (Exception exception)
         {
-            FailOperation(operation, exception);
+            operations.FailOperation(operation, exception);
             throw;
         }
         finally
         {
             transaction.Release();
-        }
-    }
-
-    private SaveSlotOperationInfo StartOperation(
-        SaveSlotId slot,
-        SaveSlotManagerStatus status)
-    {
-        Status = status;
-        LastFailureMessage = null;
-        LastFailurePhase = null;
-        CurrentOperation = new SaveSlotOperationInfo(
-            Guid.NewGuid().ToString("N"),
-            slot,
-            status,
-            SaveSlotOperationPhase.Eligibility,
-            DateTimeOffset.UtcNow);
-        logger.Info(
-            "save",
-            "save.operation_started",
-            $"Save slot transaction '{CurrentOperation.TransactionId}' started for '{slot}' ({status}).");
-        Publish(OperationStarted, CurrentOperation, "save.started_observer_failed");
-        return CurrentOperation;
-    }
-
-    private SaveSlotOperationInfo RetargetOperation(
-        SaveSlotOperationInfo operation,
-        SaveSlotId target)
-    {
-        CurrentOperation = operation with { Slot = target };
-        Publish(OperationProgressed, CurrentOperation, "save.progress_observer_failed");
-        return CurrentOperation;
-    }
-
-    private void SetPhase(SaveSlotOperationInfo operation, SaveSlotOperationPhase phase)
-    {
-        CurrentOperation = operation with { Phase = phase };
-        Publish(OperationProgressed, CurrentOperation, "save.progress_observer_failed");
-        logger.Debug(
-            "save",
-            "save.operation_phase",
-            $"Save slot transaction '{operation.TransactionId}' entered phase '{phase}'.");
-    }
-
-    private void CompleteOperation(SaveSlotOperationInfo operation)
-    {
-        CurrentOperation = operation with { Phase = SaveSlotOperationPhase.Completed };
-        Status = SaveSlotManagerStatus.Idle;
-        Publish(OperationCompleted, CurrentOperation, "save.completed_observer_failed");
-        logger.Info(
-            "save",
-            "save.operation_completed",
-            $"Save slot transaction '{operation.TransactionId}' completed for '{operation.Slot}'.");
-    }
-
-    private void CancelOperation()
-    {
-        CurrentOperation = null;
-        Status = SaveSlotManagerStatus.Idle;
-    }
-
-    private void FailOperation(SaveSlotOperationInfo operation, Exception exception)
-    {
-        var phase = CurrentOperation?.Phase ?? operation.Phase;
-        CurrentOperation = operation with
-        {
-            Phase = SaveSlotOperationPhase.Faulted,
-            FailureMessage = exception.Message,
-        };
-        Status = SaveSlotManagerStatus.Faulted;
-        LastFailureMessage = exception.Message;
-        LastFailurePhase = phase;
-        Publish(OperationFailed, CurrentOperation, "save.failed_observer_failed");
-        logger.Error(
-            "save",
-            "save.operation_failed",
-            $"Save slot transaction '{operation.TransactionId}' failed during '{phase}': {exception.Message}",
-            exception);
-    }
-
-    private async Task<SaveSlotMetadata> ReadMetadataCoreAsync(
-        SaveSlotId slot,
-        CancellationToken cancellationToken)
-    {
-        var bytes = await storage.ReadAsync(ToKey(slot), cancellationToken);
-        try
-        {
-            var envelope = DeserializeCompatible(slot, bytes);
-            return ToMetadata(slot, envelope);
-        }
-        catch (StateCompatibilityException exception)
-        {
-            return UnavailableMetadata(slot, SaveSlotCompatibility.Incompatible, exception.Message);
-        }
-        catch (StateRuntimeException exception)
-        {
-            return UnavailableMetadata(slot, SaveSlotCompatibility.Corrupt, exception.Message);
-        }
-    }
-
-    private async Task<SaveSlotMetadata?> ReadMetadataOrNullAsync(
-        SaveSlotId slot,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            return await ReadMetadataCoreAsync(slot, cancellationToken);
-        }
-        catch (StateStorageNotFoundException)
-        {
-            return null;
-        }
-    }
-
-    private StateEnvelope DeserializeCompatible(SaveSlotId slot, ReadOnlySpan<byte> bytes)
-    {
-        var envelope = serializer.Deserialize(bytes);
-        if (envelope.Scope != StateScope.Game)
-        {
-            throw new StateCompatibilityException(
-                $"Save slot '{slot}' contains scope '{envelope.Scope}', expected Game.");
-        }
-        if (!string.Equals(envelope.StorageNamespace, storageNamespace, StringComparison.Ordinal))
-        {
-            throw new StateCompatibilityException(
-                $"Save slot '{slot}' belongs to namespace '{envelope.StorageNamespace}'.");
-        }
-        if (!MetadataMatchesSlot(envelope.DisplayMetadata, slot))
-        {
-            throw new StateCompatibilityException(
-                $"Save slot '{slot}' metadata does not match its logical key.");
-        }
-        return envelope;
-    }
-
-    private SortedDictionary<string, string> BuildDisplayMetadata(
-        SaveSlotId slot,
-        SaveSlotSaveRequest? request,
-        CommittedLineBoundary? boundary) =>
-        SaveSlotMetadataCodec.BuildDisplayMetadata(slot, request, boundary, history.Entries);
-
-    private static SaveSlotMetadata ToMetadata(SaveSlotId slot, StateEnvelope envelope) =>
-        SaveSlotMetadataCodec.ToMetadata(slot, envelope);
-
-    private static SaveSlotMetadata UnavailableMetadata(
-        SaveSlotId slot,
-        SaveSlotCompatibility compatibility,
-        string message) =>
-        SaveSlotMetadataCodec.UnavailableMetadata(slot, compatibility, message);
-
-    private static StateEnvelope CloneEnvelope(
-        StateEnvelope envelope,
-        IReadOnlyDictionary<string, string> display) =>
-        SaveSlotMetadataCodec.CloneEnvelope(envelope, display);
-
-    private async Task DeleteThumbnailBestEffortAsync(
-        string? logicalReference,
-        CancellationToken cancellationToken)
-    {
-        if (logicalReference is null)
-        {
-            return;
-        }
-        try
-        {
-            await thumbnails.DeleteAsync(logicalReference, cancellationToken);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception exception)
-        {
-            logger.Warning(
-                "save",
-                "save.thumbnail_cleanup_failed",
-                $"Could not clean thumbnail '{logicalReference}': {exception.Message}",
-                exception);
-        }
-    }
-
-    private List<SaveSlotUnavailableReason> ValidateSlot(SaveSlotId slot)
-    {
-        ArgumentNullException.ThrowIfNull(slot);
-        var reasons = new List<SaveSlotUnavailableReason>();
-        if (!capacities.TryGetValue(slot.Kind, out var capacity) || slot.Index > capacity)
-        {
-            reasons.Add(new SaveSlotUnavailableReason(
-                SaveSlotUnavailableReasonCode.InvalidSlot,
-                $"Slot '{slot}' exceeds configured capacity."));
-        }
-        return reasons;
-    }
-
-    private void ThrowIfInvalid(SaveSlotId slot)
-    {
-        var availability = new SaveSlotAvailability(ValidateSlot(slot));
-        if (!availability.IsAllowed)
-        {
-            throw new SaveSlotUnavailableException(availability);
         }
     }
 
@@ -680,81 +369,11 @@ public sealed class SaveSlotManager : ISaveSlotManager, IDisposable
         SaveSlotManagerStatus.Loading or SaveSlotManagerStatus.Deleting or
         SaveSlotManagerStatus.Renaming;
 
-    private static string ToKey(SaveSlotId slot) =>
-        SaveSlotMetadataCodec.ToKey(slot);
-
-    private static bool TryParseKey(string key, out SaveSlotId slot) =>
-        SaveSlotMetadataCodec.TryParseKey(key, out slot);
-
-    private static bool MetadataMatchesSlot(
-        IReadOnlyDictionary<string, string> metadata,
-        SaveSlotId slot) =>
-        SaveSlotMetadataCodec.MetadataMatchesSlot(metadata, slot);
-
-    private static string? Get(IReadOnlyDictionary<string, string> values, string key) =>
-        SaveSlotMetadataCodec.Get(values, key);
-
-    private static string? NormalizeOptional(string? value, int maxLength) =>
-        SaveSlotMetadataCodec.NormalizeOptional(value, maxLength);
-
-    private static string NormalizeRequired(string value, int maxLength) =>
-        SaveSlotMetadataCodec.NormalizeRequired(value, maxLength);
-
     private void EnsureInitialized()
     {
         if (!isInitialized)
         {
             throw new SaveSlotException("Save slot manager is not initialized.");
-        }
-    }
-
-    private void PublishSlotsChanged() => Publish(
-        SlotsChanged,
-        "save.slots_changed_observer_failed");
-
-    private void Publish(Action? observers, string eventId)
-    {
-        if (observers is null)
-        {
-            return;
-        }
-        foreach (Action observer in observers.GetInvocationList())
-        {
-            try
-            {
-                observer();
-            }
-            catch (Exception exception)
-            {
-                logger.Warning(
-                    "save",
-                    eventId,
-                    $"Save slot observer failed: {exception.Message}",
-                    exception);
-            }
-        }
-    }
-
-    private void Publish<T>(Action<T>? observers, T value, string eventId)
-    {
-        if (observers is null)
-        {
-            return;
-        }
-        foreach (Action<T> observer in observers.GetInvocationList())
-        {
-            try
-            {
-                observer(value);
-            }
-            catch (Exception exception)
-            {
-                logger.Warning(
-                    "save",
-                    eventId,
-                    $"Save slot observer failed: {exception.Message}",
-                    exception);
-            }
         }
     }
 

@@ -274,3 +274,9 @@ curl -fsSL https://github.com/pakholeung37/majo-novel/releases/download/v0.1.0-r
 `InputManager` 通过可选的 `IInputOwnerLifetime` 观察 owner 退出，接口可由后端提供或通过构造器显式注入。GodotInputBackend 自动提供 Godot 节点退出观察；纯单测使用逻辑 owner 或假的观察器，无需加载引擎。自定义引擎输入后端应提供自己的生命周期能力。库脚本登记使用 GodotInputBackend 定位 Engine，避免因输入接口迁入 Application 而遗漏库脚本。
 
 `tests/Majo.Runtime.Application.UnitTests` 的 80 项回归只引用 Application；恢复、取消、输入所有权和存档回归均在不包含 Godot/Yarn 项目及包的依赖图中运行。Bootstrap API 和真实 Actor contributor 的回归保留在引擎集成测试中。`--independent` 现在运行七个测试工程（六个独立运行时测试工程及生成器），共 257 项测试。本阶段完整门禁通过 694 项 .NET 单测、源码安装/受检升级和实际 Release PCK 启动，证据位于 `build/application-refactor/assembly`。运行时源码命名空间、资源路径和存档格式保持不变，已有二进制扩展需重编译。
+
+## 存档槽内部边界
+
+SaveSlotManager 保留串行操作入口、可用性和游戏会话协调。`SaveSlotCatalog` 拥有容量及槽位校验，`SaveSlotRepository` 负责列表/元数据查询、兼容性校验和 envelope I/O，`SaveSlotSaveTransaction` 负责捕获、缩略图、序列化写入与失败补偿，`SaveSlotOperationTracker` 拥有操作阶段和隔离的通知。现有轮换策略和 metadata codec 继续共享；公开 API、槽位键和存档 envelope 格式不变。
+
+写入失败或取消时，只清理本次新取得且未被旧槽位引用的缩略图；旧槽位提交前不会被删除。事务重试、阶段报告、通知隔离和保留旧数据的行为由 Application 单测及引擎门禁覆盖。Application 测试现有 82 项，无引擎门禁合计 259 项。
