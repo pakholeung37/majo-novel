@@ -216,6 +216,10 @@ Engine/Yarn/Bootstrap 进一步拆分后，本机完整门禁再次通过 686 �
 
 ## CI 与发布
 
+跨桌面平台的门禁入口为 `python tools/runtime_test_gate.py --full`；原 `./tools/test.sh` 转发给同一实现，保留 `--independent`、`--domain`、`--unit`、`--fast` 与 `--full`。用 `--godot` 或 `GODOT_BIN` 指定 .NET 引擎，`--output` 指定逐步日志和 `results.json` 的保存目录。进程退出码、必需成功标记和超时分别检查；强制失败探针必须同时返回非零状态并包含预期异常，超时不能算作通过。
+
+CI 的桌面矩阵在 Linux x64 和 Windows x64 上运行同一完整门禁，保留每步日志；创建 draft release 依赖两个平台通过。Windows 使用校验 SHA-256 后的官方 console 引擎、原生 Windows 导出预设及 `win-x64` 发布目录。Windows/ARM64、其他 GPU 和架构没有因增加矩阵而自动获得验收，仍需对应实际设备证据。
+
 游戏 CI 从已提交的 addon 副本构建，先运行包内 `Tools/majo.py doctor --project .`，再执行游戏自己的构建、导入和回归。不要在游戏 CI 使用开发者的 `--source` 路径或自动追踪系统 main 分支。
 
 正式出包使用 `addons/majo_runtime/Editor/export.py`，详见插件 README。管理锁中的版本不能替代平台验收；当前本机 macOS 的 PCK 和 Last Bell 独立游戏可执行程序均已验证；Majo 的 Linux 发布门禁已在 GitHub Actions 通过，Windows 和其他架构仍需补充验证。每款游戏仍应验收自己的实际导出包。

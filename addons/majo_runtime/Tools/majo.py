@@ -7,6 +7,7 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import shutil
+import signal
 import subprocess
 import tempfile
 import time
@@ -494,6 +495,9 @@ def main():
     if args.command != "watch":
         print(f"Next: dotnet build in {project}, then open its project.godot and let imports finish")
         return
+    # Windows test runners and terminals can send Ctrl+Break to this process group.
+    if hasattr(signal, "SIGBREAK"):
+        signal.signal(signal.SIGBREAK, signal.default_int_handler)
     last = {p: digest(b) for p, b in content.items()}
     def build():
         if not args.no_build:

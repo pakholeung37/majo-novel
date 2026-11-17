@@ -110,6 +110,9 @@ Most detailed documentation is currently in Chinese. [`docs/archive`](docs/archi
 ./tools/test.sh --full     # Full checks, independent consumer, and export smoke test
 ```
 
+Windows and other desktop shells can run `python tools/runtime_test_gate.py --full`; use `--godot` or `GODOT_BIN` to select the .NET engine. Per-step evidence is saved under `build/test-gate`.
+
+
 The test script defaults to `--full`. For Godot checks, set `GODOT_BIN` to your Godot .NET executable if it is not at `/Applications/Godot_mono.app/Contents/MacOS/Godot`. The full gate exports and boots the independent addon consumer; optional showcase packs are excluded from that release artifact. Exporting standalone game executables requires matching export templates. Rendering-specific regression instructions are in [`tests/rendering`](tests/rendering/README.md).
 
 ## License and third-party content

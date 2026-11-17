@@ -8,6 +8,9 @@ on:
 permissions:
   contents: read
 
+env:
+  PYTHONUTF8: '1'
+
 jobs:
   domain:
     runs-on: ubuntu-24.04
@@ -20,15 +23,23 @@ jobs:
       - name: Test independent runtime assemblies and generator without Godot
         run: ./tools/test.sh --independent
 
-  linux:
-    runs-on: ubuntu-24.04
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
-      - name: Install pinned Godot .NET
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned Godot .NET on Linux
+        if: runner.os == 'Linux'
         shell: bash
         run: |
           set -euo pipefail
@@ -44,13 +55,37 @@ jobs:
           test -n "$godot_binary"
           chmod +x "$godot_binary"
           printf 'GODOT_BIN=%s\n' "$godot_binary" >> "$GITHUB_ENV"
+      - name: Install pinned Godot .NET on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'Godot_v4.7.2-stable_mono_win64.zip'
+          $url = 'https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_mono_win64.zip'
+          Invoke-WebRequest -Uri $url -OutFile $archive
+          $hash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne 'a2a48473a7414c5f19fab690518caebb738c09ef9601f6bd2388676a7f53b3c0') {
+            throw 'Godot archive checksum mismatch'
+          }
+          $destination = Join-Path $env:RUNNER_TEMP 'godot'
+          Expand-Archive $archive -DestinationPath $destination
+          $binary = Get-ChildItem $destination -Recurse -Filter '*_mono_win64_console.exe' | Select-Object -First 1
+          if (-not $binary) { throw 'Godot .NET console executable not found' }
+          "GODOT_BIN=$($binary.FullName)" >> $env:GITHUB_ENV
       - name: Verify upstream and run full gate
         run: |
-          python3 tools/package-addon.py --verify-only
-          ./tools/test.sh --full
-      - name: Build addon archives
-        run: python3 tools/package-addon.py
+          python tools/package-addon.py --verify-only
+          python tools/runtime_test_gate.py --full --output build/platform-tests
       - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: runtime-evidence-${{ matrix.os }}
+          if-no-files-found: error
+          path: build/platform-tests/
+      - name: Build addon archives
+        if: runner.os == 'Linux'
+        run: python tools/package-addon.py
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Linux'
         with:
           name: majo-runtime-source-addons
           if-no-files-found: error
@@ -61,7 +96,7 @@ jobs:
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [domain, linux]
+    needs: [domain, desktop]
     runs-on: ubuntu-24.04
     permissions:
       contents: write

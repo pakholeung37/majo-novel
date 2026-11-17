@@ -110,6 +110,9 @@ godot --path . res://demos/demo-01/RuntimeDemo.tscn
 ./tools/test.sh --full     # 完整检查、独立宿主与导出冒烟测试
 ```
 
+Windows 及其他桌面终端可运行 `python tools/runtime_test_gate.py --full`，通过 `--godot` 或 `GODOT_BIN` 指定 .NET 引擎。逐步验收证据保存在 `build/test-gate`。
+
+
 测试脚本默认执行 `--full`。如果 Godot .NET 不在 `/Applications/Godot_mono.app/Contents/MacOS/Godot`，通过 `GODOT_BIN` 指定可执行文件路径。完整门禁导出并启动独立插件宿主，发布产物不包含可选展示素材；导出独立游戏可执行文件时需安装匹配版本的导出模板。真实渲染器相关的回归说明见 [`tests/rendering`](tests/rendering/README.md)。
 
 ## 许可证与第三方内容

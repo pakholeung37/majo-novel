@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Regression checks for installation, upgrades, and protection of game-owned files."""
 import importlib.util
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -196,7 +197,8 @@ class ManagerTests(unittest.TestCase):
         with log.open("w") as output:
             proc = subprocess.Popen([sys.executable, str(ROOT / "addons/majo_runtime/Tools/majo.py"),
                                      "watch", "--source", str(source), "--project", str(self.game), "--no-build"],
-                                    stdout=output, stderr=subprocess.STDOUT)
+                                    stdout=output, stderr=subprocess.STDOUT,
+                                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0)
             try:
                 def wait_for(test):
                     end = time.monotonic() + 10
@@ -211,7 +213,7 @@ class ManagerTests(unittest.TestCase):
                 wait_for(lambda: (self.game / runtime).read_bytes() == b"// live source change")
                 self.assertEqual(story.read_bytes(), original_story)
             finally:
-                proc.send_signal(signal.SIGINT)
+                proc.send_signal(signal.CTRL_BREAK_EVENT if os.name == "nt" else signal.SIGINT)
                 proc.wait(timeout=5)
         self.assertEqual(proc.returncode, 0, log.read_text())
 

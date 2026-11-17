@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """Exercise selected-resource export and boot Release assemblies without source fallback."""
 from pathlib import Path
-import platform
 import shutil
 import subprocess
 import sys
 
+from platform_target import export_target
+
 project = Path(sys.argv[1]).resolve()
 godot = sys.argv[2]
-mac = sys.platform == "darwin"
-arch = "arm64" if platform.machine().lower() in {"arm64", "aarch64"} else "x86_64"
-preset = "Consumer macOS" if mac else "Consumer Linux"
-rid = ("osx-" if mac else "linux-") + ("arm64" if arch == "arm64" else "x64")
+target = export_target()
+preset = target.preset
+rid = target.rid
 config = project / "export_presets.cfg"
-config.write_text(config.read_text().replace('binary_format/architecture="x86_64"', f'binary_format/architecture="{arch}"'))
+config.write_text(config.read_text().replace('binary_format/architecture="x86_64"', f'binary_format/architecture="{target.architecture}"'))
 player = project / "player"
 player.mkdir()
 (player / ".gdignore").touch()

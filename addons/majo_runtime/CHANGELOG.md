@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Use one Python test gate on macOS, Linux and Windows while preserving the existing shell entry point; retain per-step logs and machine-readable results.
+- Require success markers for headless and consumer runs; timeouts cannot count as intentional failure-probe success.
+- Select native Windows export presets and .NET runtime IDs, and support graceful Windows watch cancellation.
+- Gate draft releases on both Linux and Windows full consumer/export checks with checksum-pinned Godot downloads.
+
 - Compile general Godot services into Majo.Runtime.Engine and the Majo Yarn adapter into Majo.Runtime.Yarn; keep Bootstrap/editor composition in Majo.Runtime.Godot.
 - Enforce that general engine services reference neither Yarn nor composition; the Yarn adapter uses only public engine APIs.
 - Move node metadata, scene-entry requests and companion serialization into Domain, and command activity/adapter contracts into Commands without engine or Yarn dependencies.
