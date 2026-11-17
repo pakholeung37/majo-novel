@@ -298,3 +298,5 @@ SaveSlotManager 保留串行操作入口、可用性和游戏会话协调。`Sav
 | Actor 生命周期 | CreationQueue/PresentationRegistry/LocaleRefresher，完整 worker drain 和释放 |
 
 本轮本机完整门禁通过 700 项 .NET 单测及 36 个步骤，包含安装、受检升级、实际 Release PCK 启动和无效导出拒绝；独立门禁为 259 项测试。全部格式检查通过。Apple M4 的 Metal Forward+、Metal Mobile、OpenGL3 各通过 13 项 GPU 用例、200 次恢复与 600 次采样，节点保持 62，候选创建/释放各 200。当前证据位于 `build/application-refactor/final`。现有命名空间、资源路径和存档格式不变；二进制扩展及自定义语言/输入实现按 compatibility.json 的契约说明调整。
+
+2026-11-17，最终运行时代码提交 `0a67108696102d08e328b35c5b5f089f61de471a` 的 [GitHub Actions 验收](https://github.com/pakholeung37/majo-novel/actions/runs/44087679396) 已通过独立程序集、Linux x64 和 Windows x64 三个 job。Linux、Windows 各通过完整门禁的全部 36 个步骤，耗时约 155 秒、248 秒；本机 macOS 同一门禁约 87 秒。逐步日志和 `results.json` 保存在 workflow artifacts，本机副本位于 `build/application-refactor/final/ci-linux`、`build/application-refactor/final/ci-windows`；macOS 门禁及真实 GPU 证据分别位于该目录的 `full`、`gpu`。此处记录对应已验收的运行时代码，后续验收记录提交仅更新文档。
