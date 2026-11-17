@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Coordinate dialogue locale changes through registered asynchronous participants, including safety waits and compensating rollback, for both default and replaced locale managers.
+- Move Yarn/engine/presentation locale application into an owned runtime service and initialize it before settings projection.
+- Verify whole-locale-service replacement, rejected refresh recovery and detached/cancelled participants.
+
 - Honor replaced command adapters during Bootstrap activation, locale safety checks, backend observation and error forwarding; clean up their observers on shutdown.
 - Verify replacement adapter initialization, recoverable failures, command drain and ownership in the real-engine replacement regression.
 - Generate completion manifests with canonical LF line endings on Windows as well as Unix hosts.

@@ -26,6 +26,9 @@ public interface ILocaleManager : IRuntimeService
     event Action<LocaleChangedEvent>? VoiceLocaleChanged;
     event Action<LocaleSwitchFailedEvent>? SwitchFailed;
 
+    /// <summary>Registers awaited preparation/application and compensation before locale publication.</summary>
+    IDisposable RegisterDialogueSwitchParticipant(IDialogueLocaleSwitchParticipant participant);
+
     Task<LocaleSwitchResult> ChangeDialogueLocaleAsync(string targetLocale, CancellationToken cancellationToken = default);
     Task<LocaleSwitchResult> ChangeVoiceLocaleAsync(string targetLocale, CancellationToken cancellationToken = default);
     LocaleDiagnosticsSnapshot CaptureDiagnostics();

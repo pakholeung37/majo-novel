@@ -16,6 +16,7 @@ public sealed class LocaleManager : ILocaleManager, IDisposable
     private readonly SemaphoreSlim voiceSwitchGate = new(1, 1);
     private CancellationTokenSource switchLifetime = new();
     private readonly List<string> availableLocales = new();
+    private readonly List<IDialogueLocaleSwitchParticipant> participants = new();
     private readonly Func<bool>? isBusyCheck;
     private readonly Func<string, Task>? onLocaleApplied;
     private readonly Func<string, Task>? onVoiceLocaleApplied;
@@ -167,6 +168,23 @@ public sealed class LocaleManager : ILocaleManager, IDisposable
         }
     }
 
+    public IDisposable RegisterDialogueSwitchParticipant(IDialogueLocaleSwitchParticipant participant)
+    {
+        ArgumentNullException.ThrowIfNull(participant);
+        lock (sync) participants.Add(participant);
+        return new ParticipantRegistration(this, participant);
+    }
+
+    private sealed class ParticipantRegistration(LocaleManager owner, IDialogueLocaleSwitchParticipant participant) : IDisposable
+    {
+        private LocaleManager? manager = owner;
+        public void Dispose()
+        {
+            var current = Interlocked.Exchange(ref manager, null);
+            if (current is not null) lock (current.sync) current.participants.Remove(participant);
+        }
+    }
+
     public async Task<LocaleSwitchResult> ChangeDialogueLocaleAsync(
         string targetLocale,
         CancellationToken cancellationToken = default)
@@ -254,13 +272,16 @@ public sealed class LocaleManager : ILocaleManager, IDisposable
             }
         }
 
-        var isBusy = isBusyCheck?.Invoke() == true;
+        IDialogueLocaleSwitchParticipant[] activeParticipants;
+        lock (sync) activeParticipants = participants.ToArray();
+        var legacyBusy = isBusyCheck?.Invoke() == true;
+        var isBusy = legacyBusy || activeParticipants.Any(participant => participant.IsBusy);
         SwitchStarting?.Invoke(new LocaleSwitchStartingEvent(previousLocale, normalized, isBusy));
 
         if (isBusy)
         {
             SwitchState = LocaleSwitchState.PendingPresentationBoundary;
-            if (waitForSafeBoundary is null)
+            if (legacyBusy && waitForSafeBoundary is null)
             {
                 return FailSwitch(
                     previousLocale,
@@ -268,7 +289,9 @@ public sealed class LocaleManager : ILocaleManager, IDisposable
                     "Locale switch was requested during an unsafe runtime boundary, but no boundary waiter is configured.");
             }
 
-            await waitForSafeBoundary(cancellationToken);
+            if (legacyBusy) await waitForSafeBoundary!(cancellationToken);
+            foreach (var participant in activeParticipants)
+                await participant.WaitForSafeBoundaryAsync(cancellationToken);
         }
 
         SwitchState = LocaleSwitchState.Applying;
@@ -280,11 +303,13 @@ public sealed class LocaleManager : ILocaleManager, IDisposable
                 await onLocaleApplied(normalized);
             }
 
+            foreach (var participant in activeParticipants)
+                await participant.ApplyAsync(normalized, cancellationToken);
             DialogueLocale = normalized;
         }
         catch (Exception exception)
         {
-            await RollbackAppliedLocaleAsync(previousLocale);
+            await RollbackAppliedLocaleAsync(previousLocale, activeParticipants);
 
             if (exception is OperationCanceledException)
             {
@@ -366,7 +391,8 @@ public sealed class LocaleManager : ILocaleManager, IDisposable
         }
     }
 
-    private async Task RollbackAppliedLocaleAsync(string previousLocale)
+    private async Task RollbackAppliedLocaleAsync(string previousLocale,
+        IReadOnlyList<IDialogueLocaleSwitchParticipant> activeParticipants)
     {
         try
         {
@@ -381,24 +407,21 @@ public sealed class LocaleManager : ILocaleManager, IDisposable
                 exception: rollbackException);
         }
 
-        if (onLocaleApplied is null)
+        if (onLocaleApplied is not null)
         {
-            return;
+            try { await onLocaleApplied(previousLocale); }
+            catch (Exception rollbackException) { LogPresentationRollbackFailure(rollbackException); }
         }
-
-        try
+        foreach (var participant in activeParticipants.Reverse())
         {
-            await onLocaleApplied(previousLocale);
-        }
-        catch (Exception rollbackException)
-        {
-            logger.Error(
-                "locale",
-                "locale.switch_presentation_rollback_failed",
-                $"Locale rollback presentation failed: {rollbackException.Message}",
-                exception: rollbackException);
+            try { await participant.ApplyAsync(previousLocale, CancellationToken.None); }
+            catch (Exception rollbackException) { LogPresentationRollbackFailure(rollbackException); }
         }
     }
+
+    private void LogPresentationRollbackFailure(Exception exception) => logger.Error(
+        "locale", "locale.switch_presentation_rollback_failed",
+        $"Locale rollback presentation failed: {exception.Message}", exception);
 
     private LocaleSwitchResult FailSwitch(string previousLocale, string targetLocale, string reason)
     {
@@ -492,6 +515,7 @@ public sealed class LocaleManager : ILocaleManager, IDisposable
 
     public void Dispose()
     {
+        lock (sync) participants.Clear();
         switchGate.Dispose();
         voiceSwitchGate.Dispose();
         switchLifetime.Dispose();

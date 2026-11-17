@@ -49,16 +49,11 @@ public partial class MajoRuntimeBootstrap : Node
                     var defaultVoiceLoc = Configuration?.Settings?.VoiceLocale ??
                                           Configuration?.Audio?.VoiceLocale ?? "en";
                     var supportedLocs = Configuration?.Localization?.SupportedLocales?.ToArray() ?? ["en", "zh-CN"];
-                    LocaleManager? manager = null;
-                    manager = new LocaleManager(
+                    var manager = new LocaleManager(
                         defaultLoc,
                         supportedLocs,
                         resolver.Get<IFontCatalog>(),
-                        isBusyCheck: () => FindRuntimeService<IYarnCommandAdapter>()?.HasActiveCommands == true,
-                        onLocaleApplied: locale => OnLocaleApplied(locale, manager!),
-                        applyEngineLocale: TranslationServer.SetLocale,
                         logger: Logger,
-                        waitForSafeBoundary: WaitForLocaleSwitchBoundaryAsync,
                         defaultVoiceLocale: defaultVoiceLoc);
                     ConfigureLocales?.Invoke(manager);
                     return manager;
@@ -173,6 +168,11 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(IDialoguePlayer),
                 typeof(IDialoguePresentation),
                 typeof(IYarnDialogueBackend))
+            .AddSingleton<YarnDialogueLocaleCoordinator>(resolver => new YarnDialogueLocaleCoordinator(
+                resolver.Get<ILocaleManager>(), resolver.Get<IYarnDialogueBackend>(), resolver.Get<IDialoguePlayer>(),
+                resolver.Get<IDialoguePresentation>(), resolver.Get<IYarnCommandAdapter>(), TranslationServer.SetLocale),
+                typeof(ILocaleManager), typeof(IYarnDialogueBackend), typeof(IDialoguePlayer),
+                typeof(IDialoguePresentation), typeof(IYarnCommandAdapter))
             .AddSingleton<IYarnHotReloadService>(
                 resolver =>
                 {
@@ -265,43 +265,6 @@ public partial class MajoRuntimeBootstrap : Node
     private TService? FindRuntimeService<TService>() where TService : class =>
         Host is { State: RuntimeHostState.Initializing or RuntimeHostState.Initialized or RuntimeHostState.Resetting } host &&
         host.Services.TryGet<TService>(out var service) ? service : null;
-
-    private Task OnLocaleApplied(string locale, LocaleManager manager)
-    {
-        var backend = FindRuntimeService<IYarnDialogueBackend>();
-        var player = FindRuntimeService<IDialoguePlayer>();
-        var presentation = FindRuntimeService<IDialoguePresentation>();
-        backend?.SetLocale(locale);
-
-        if (player?.State == DialogueSessionState.Running &&
-            backend is not null && presentation is not null)
-        {
-            var fallbackChain = manager.GetDialogueFallbackChain(locale);
-            if (player.IsPresentingOptions)
-            {
-                var reResolvedOpts = backend.ReResolveCurrentOptions(locale, fallbackChain);
-                presentation.ReRenderOptions(reResolvedOpts);
-            }
-            else if (!string.IsNullOrWhiteSpace(player.CurrentLineId))
-            {
-                var reResolvedLine = backend.ReResolveCurrentLine(locale, fallbackChain);
-                if (reResolvedLine is not null)
-                {
-                    presentation.ReRenderLine(reResolvedLine);
-                }
-            }
-        }
-
-        return Task.CompletedTask;
-    }
-
-    private async Task WaitForLocaleSwitchBoundaryAsync(CancellationToken cancellationToken)
-    {
-        if (FindRuntimeService<IYarnDialogueBackend>() is { } backend)
-        {
-            await backend.WaitForLocaleSwitchBoundaryAsync(cancellationToken);
-        }
-    }
 
     private YarnCommandAdapter CreateYarnCommandAdapter(
         IYarnDialogueBackend backend,

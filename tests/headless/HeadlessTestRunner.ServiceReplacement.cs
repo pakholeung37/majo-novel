@@ -44,6 +44,7 @@ public partial class HeadlessTestRunner
         bootstrap.ConfigureServices = services => services
             .ReplaceSingleton<IYarnCommandAdapter>(_ => commands)
             .ReplaceSingleton<IFontCatalog>(_ => fonts)
+            .ReplaceSingleton<ILocaleManager>(resolver => new ReplacementLocaleManager(resolver.Get<IFontCatalog>()), typeof(IFontCatalog))
             .ReplaceSingleton<IYarnDialogueBackend>(resolver => new YarnDialogueBackend(
                 bootstrap, resolver.Get<IResourceManager>(), configuration.Resources.ScriptsPath,
                 Array.Empty<IDialoguePresenter>(), resolver.Get<ILocaleManager>(),
@@ -101,6 +102,15 @@ public partial class HeadlessTestRunner
             Assert(services.Get<IYarnDialogueBackend>().Runner.LineProvider.LocaleCode == "zh-CN",
                 "Locale switching did not reach the replacement Yarn backend.");
 
+            var replacementPresentation = (ReplacementPresentation)services.Get<IDialoguePresentation>();
+            replacementPresentation.FailNextLocaleRefresh = true;
+            var rejected = await locales.ChangeDialogueLocaleAsync("en");
+            Assert(!rejected.Success && locales.DialogueLocale == "zh-CN" &&
+                services.Get<IYarnDialogueBackend>().Runner.LineProvider.LocaleCode == "zh-CN",
+                "Failed locale presentation did not restore the replacement manager and backend locale.");
+            Assert((await locales.ChangeDialogueLocaleAsync("en")).Success,
+                "A rejected replacement locale switch poisoned the next attempt.");
+
             dialogue.RequestNextLine();
             await WaitForConditionAsync(() => script.Phase == ScriptPlaybackPhase.AwaitingAdvance &&
                 dialogue.CurrentLineId == "line:bridge-headless-second", 2);
@@ -136,6 +146,33 @@ public partial class HeadlessTestRunner
         finally { await withoutSave.RequestShutdownAsync(); }
     }
 
+    private sealed class ReplacementLocaleManager : ILocaleManager
+    {
+        private readonly LocaleManager inner;
+        public ReplacementLocaleManager(IFontCatalog fonts) => inner = new LocaleManager("en", ["en", "zh-CN"], fonts);
+        public string DialogueLocale => inner.DialogueLocale;
+        public string VoiceLocale => inner.VoiceLocale;
+        public string DefaultLocale => inner.DefaultLocale;
+        public string DefaultVoiceLocale => inner.DefaultVoiceLocale;
+        public IReadOnlyList<string> AvailableLocales => inner.AvailableLocales;
+        public LocaleSwitchState SwitchState => inner.SwitchState;
+        public bool IsInitialized => inner.IsInitialized;
+        public IFontCatalog Fonts => inner.Fonts;
+        public event Action<LocaleSwitchStartingEvent> SwitchStarting { add => inner.SwitchStarting += value; remove => inner.SwitchStarting -= value; }
+        public event Action<LocaleChangedEvent> DialogueLocaleChanged { add => inner.DialogueLocaleChanged += value; remove => inner.DialogueLocaleChanged -= value; }
+        public event Action<LocaleChangedEvent> VoiceLocaleChanged { add => inner.VoiceLocaleChanged += value; remove => inner.VoiceLocaleChanged -= value; }
+        public event Action<LocaleSwitchFailedEvent> SwitchFailed { add => inner.SwitchFailed += value; remove => inner.SwitchFailed -= value; }
+        public IReadOnlyList<string> GetDialogueFallbackChain(string locale) => inner.GetDialogueFallbackChain(locale);
+        public IReadOnlyList<string> GetVoiceFallbackChain(string locale) => inner.GetVoiceFallbackChain(locale);
+        public Task<LocaleSwitchResult> ChangeDialogueLocaleAsync(string locale, CancellationToken token = default) => inner.ChangeDialogueLocaleAsync(locale, token);
+        public Task<LocaleSwitchResult> ChangeVoiceLocaleAsync(string locale, CancellationToken token = default) => inner.ChangeVoiceLocaleAsync(locale, token);
+        public IDisposable RegisterDialogueSwitchParticipant(IDialogueLocaleSwitchParticipant participant) => inner.RegisterDialogueSwitchParticipant(participant);
+        public LocaleDiagnosticsSnapshot CaptureDiagnostics() => inner.CaptureDiagnostics();
+        public Task InitializeAsync(CancellationToken token) => inner.InitializeAsync(token);
+        public Task ResetAsync(CancellationToken token) => inner.ResetAsync(token);
+        public Task ShutdownAsync(CancellationToken token) => inner.ShutdownAsync(token);
+    }
+
     private sealed class ReplacementCommandAdapter : IYarnCommandAdapter
     {
         public event Action<RuntimeCommandException> CommandFailed;
@@ -167,12 +204,18 @@ public partial class HeadlessTestRunner
         public ReplacementPresentation(IDialoguePresentation inner) => this.inner = inner;
 
         public int ReRenderedLines { get; private set; }
+        public bool FailNextLocaleRefresh { get; set; }
         public event Action LineDisplayCompleted { add => inner.LineDisplayCompleted += value; remove => inner.LineDisplayCompleted -= value; }
         public event Action LineDismissed { add => inner.LineDismissed += value; remove => inner.LineDismissed -= value; }
         public bool IsLineActive => inner.IsLineActive;
         public bool IsLineDisplayComplete => inner.IsLineDisplayComplete;
         public bool IsPresentingOptions => inner.IsPresentingOptions;
-        public void ReRenderLine(DialogueLine line) { ReRenderedLines++; inner.ReRenderLine(line); }
+        public void ReRenderLine(DialogueLine line)
+        {
+            if (FailNextLocaleRefresh) { FailNextLocaleRefresh = false; throw new InvalidOperationException("locale render rejected"); }
+            ReRenderedLines++;
+            inner.ReRenderLine(line);
+        }
         public void ReRenderOptions(IReadOnlyList<DialogueOption> options) => inner.ReRenderOptions(options);
         public Task InitializeAsync(CancellationToken token) => inner.InitializeAsync(token);
         public Task ResetAsync(CancellationToken token) => inner.ResetAsync(token);

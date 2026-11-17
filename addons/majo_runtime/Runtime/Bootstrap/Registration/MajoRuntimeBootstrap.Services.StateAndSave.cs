@@ -93,7 +93,7 @@ public partial class MajoRuntimeBootstrap : Node
                 typeof(IPlaybackModeManager),
                 typeof(IDialoguePresentation),
                 typeof(ILocaleManager),
-                typeof(IDirectionAccessibility));
+                typeof(IDirectionAccessibility), typeof(YarnDialogueLocaleCoordinator));
         }
 
         if (Configuration.GlobalState?.Enabled == true)

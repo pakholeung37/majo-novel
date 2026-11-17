@@ -254,3 +254,9 @@ curl -fsSL https://github.com/pakholeung37/majo-novel/releases/download/v0.1.0-r
 升级命令改用 `upgrade --check`，可加 `--check-command "python3 tools/dev.py check"`。它在临时游戏副本中安装候选依赖、构建、导入并执行游戏回归，全部通过才切换当前项目。失败时当前依赖与锁文件不变；通过后，在 `.majo/history` 留下旧版依赖、锁文件和宿主配置。
 
 用包内管理器的 `rollback --list` 查看记录，`rollback --check --godot /path/to/godot` 检查并恢复上一版。回退不会覆盖剧情或素材；升级后若修改了宿主工程配置，回退会停止并要求先合并。切换后需要重新构建/导入实际项目，玩家存档不随此流程恢复或迁移。`.majo/` 应加入游戏的 `.gitignore`。
+
+## 语言服务替换与事务参与者
+
+`ILocaleManager.RegisterDialogueSwitchParticipant` 是显式的异步扩展边界。管理器在发布语言变更前等待参与者的安全边界及应用操作；失败时以旧语言补偿，并保持原来的已提交语言。注册句柄可幂等释放，取消等待不能进入应用阶段。自定义管理器应实现此契约；包装器应转发注册和变更方法。旧构造器回调继续供独立 `LocaleManager` 用户使用。
+
+`YarnDialogueLocaleCoordinator` 读取注册后的语言、命令、后端、播放器和展示服务，持有参与者注册并在关闭时解除。引擎语言、当前行/选项刷新及后端 locale 均由此协调，不再依赖 Bootstrap 的默认语言工厂闭包。Settings 服务明确依赖该协调器，以覆盖初始化时的语言投影。真实引擎回归验证替换整个语言服务、忙碌边界、刷新失败补偿和后续成功切换；参与者的异步等待、取消及释放由单测覆盖。
