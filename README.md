@@ -96,6 +96,7 @@ The reusable runtime lives in [`addons/majo_runtime`](addons/majo_runtime); demo
 - [Script writing guide](docs/script-writing.md): Yarn syntax, direction commands, stages/views, cameras, audio, and examples.
 - [Scene resource preparation](docs/advanced/scene-resources-injection.md): prepare or generate resources at scene boundaries and during state restoration.
 - [Trial00 performance benchmark](docs/advanced/trial00-benchmark.md): repeatable frame-time, input-response, startup and memory measurements using the Manosaba showcase.
+- [Trial00 standalone render baseline](tools/trial00-render-baseline/README.md) runs the same local court textures and character atlases with Godot alone.
 - [Background extension example](demos/background-extension/README.md): implement an actor plugin using the public factory and resource interfaces.
 - [Ace Attorney integration notes](demos/ace-attorney/README.md) and [Live2D integration notes](demos/live2d/README.md).
 - [Runtime services and plugins](addons/majo_runtime/Runtime) and [test suites](tests).

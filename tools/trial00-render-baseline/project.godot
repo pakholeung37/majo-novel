@@ -1,0 +1,17 @@
+config_version=5
+
+[application]
+
+config/name="Trial00 Render Baseline"
+run/main_scene="res://baseline.tscn"
+config/features=PackedStringArray("4.7", "Forward Plus")
+
+[display]
+
+window/size/viewport_width=2560
+window/size/viewport_height=1440
+
+[rendering]
+
+renderer/rendering_method="forward_plus"
+rendering_device/driver.windows="d3d12"
