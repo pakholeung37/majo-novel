@@ -8,9 +8,8 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AnalysisLevel>latest-Recommended</AnalysisLevel>
   </PropertyGroup>
-  <Import Project="Majo.Runtime.Application.sources.props" />
   <ItemGroup>
-    <Compile Include="@(MajoApplicationSource)" />
+    <Compile Include="Source/**/*.cs" />
     <ProjectReference Include="../Majo.Runtime.Core/Majo.Runtime.Core.csproj" />
     <ProjectReference Include="../Majo.Runtime.Commands/Majo.Runtime.Commands.csproj" />
     <ProjectReference Include="../Majo.Runtime.Persistence/Majo.Runtime.Persistence.csproj" />

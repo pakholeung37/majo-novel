@@ -66,7 +66,6 @@ collect_cs_files() {
             case "$target_array" in
                 game) game_format_files+=("${file#"$REPOSITORY_ROOT/"}") ;;
                 unit) unit_format_files+=("${file#"$REPOSITORY_ROOT/"}") ;;
-                core) core_format_files+=("${file#"$REPOSITORY_ROOT/"}") ;;
                 core_unit) core_unit_format_files+=("${file#"$REPOSITORY_ROOT/"}") ;;
                 domain_unit) domain_unit_format_files+=("${file#"$REPOSITORY_ROOT/"}") ;;
             esac
@@ -77,7 +76,6 @@ collect_cs_files() {
 
 game_format_files=()
 unit_format_files=()
-core_format_files=()
 core_unit_format_files=()
 domain_unit_format_files=()
 collect_cs_files game \
@@ -86,7 +84,6 @@ collect_cs_files game \
     "$REPOSITORY_ROOT/demos/manosaba" \
     "$REPOSITORY_ROOT/tests/headless"
 collect_cs_files unit "$REPOSITORY_ROOT/tests/Majo.Runtime.UnitTests"
-collect_cs_files core "$REPOSITORY_ROOT/addons/majo_runtime/Runtime/Core"
 collect_cs_files core_unit "$REPOSITORY_ROOT/tests/Majo.Runtime.Core.UnitTests"
 collect_cs_files domain_unit "$REPOSITORY_ROOT/tests/Majo.Runtime.Domain.UnitTests"
 
@@ -116,7 +113,7 @@ run_format() {
 }
 
 printf 'Checking independent Core formatting...\n'
-run_format "$CORE_PROJECT" "${core_format_files[@]}"
+run_format "$CORE_PROJECT"
 run_format "$CORE_TEST_PROJECT" "${core_unit_format_files[@]}"
 
 printf 'Checking independent domain formatting...\n'

@@ -118,8 +118,12 @@ public partial class HeadlessTestRunner
     {
         var evidence = ProjectSettings.GlobalizePath("res://build/trial00-gpu-snapshot");
         System.IO.Directory.CreateDirectory(evidence);
-        var viewport = new SubViewport { Size = oracle.GetSize(), TransparentBg = true,
-            RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
+        var viewport = new SubViewport
+        {
+            Size = oracle.GetSize(),
+            TransparentBg = true,
+            RenderTargetUpdateMode = SubViewport.UpdateMode.Always
+        };
         AddChild(viewport);
         using var outputMaterial = GodotDirectionRendering.CreateOutputMaterial();
         var surface = new TextureRect { Size = viewport.Size, Material = outputMaterial };

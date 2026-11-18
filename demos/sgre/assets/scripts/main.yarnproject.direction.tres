@@ -1,6 +1,6 @@
 [gd_resource type="Resource" format=3 uid="uid://bfyyq3araxavi"]
 
-[ext_resource type="Script" uid="uid://orqi0qstlslj" path="res://addons/majo_runtime/Runtime/Dialogue/Yarn/MajoDirectionData.cs" id="1_h8t0m"]
+[ext_resource type="Script" uid="uid://orqi0qstlslj" path="res://addons/majo_runtime/Assemblies/Majo.Runtime.Yarn/Source/Dialogue/Yarn/MajoDirectionData.cs" id="1_h8t0m"]
 
 [resource]
 script = ExtResource("1_h8t0m")

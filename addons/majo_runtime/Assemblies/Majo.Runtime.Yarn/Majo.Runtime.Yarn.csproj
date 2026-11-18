@@ -5,9 +5,8 @@
     <AnalysisLevel>latest-Recommended</AnalysisLevel>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
   </PropertyGroup>
-  <Import Project="Majo.Runtime.Yarn.sources.props" />
   <ItemGroup>
-    <Compile Include="@(MajoYarnSource)" />
+    <Compile Include="Source/**/*.cs" />
     <ProjectReference Include="../Majo.Runtime.Engine/Majo.Runtime.Engine.csproj" />
     <ProjectReference Include="../YarnSpinner.Godot/YarnSpinner.Godot.csproj" />
     <ProjectReference Include="../../Bridges/YarnSpinnerStateBridge/YarnSpinnerStateBridge.csproj" />

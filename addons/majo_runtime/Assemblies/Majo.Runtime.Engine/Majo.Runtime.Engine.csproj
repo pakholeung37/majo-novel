@@ -5,9 +5,8 @@
     <AnalysisLevel>latest-Recommended</AnalysisLevel>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
   </PropertyGroup>
-  <Import Project="Majo.Runtime.Engine.sources.props" />
   <ItemGroup>
-    <Compile Include="@(MajoEngineSource)" />
+    <Compile Include="Source/**/*.cs" />
     <ProjectReference Include="../Majo.Runtime.Application/Majo.Runtime.Application.csproj" />
     <ProjectReference Include="../Majo.Runtime.Core/Majo.Runtime.Core.csproj" />
     <ProjectReference Include="../Majo.Runtime.Domain/Majo.Runtime.Domain.csproj" />

@@ -14,7 +14,8 @@ __pycache__/
 **/obj/
 TestResults/
 /export/
-/build/
+/build/*
+!/build/.gdignore
 .DS_Store
 **/obj/generated/**
 artifacts

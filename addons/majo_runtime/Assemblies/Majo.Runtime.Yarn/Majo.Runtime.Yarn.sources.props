@@ -1,9 +1,0 @@
-<Project>
-  <Import Project="../Majo.Runtime.Domain/Majo.Runtime.Domain.sources.props" />
-  <Import Project="../Majo.Runtime.Commands/Majo.Runtime.Commands.sources.props" />
-  <ItemGroup>
-    <MajoYarnSource Include="$(MSBuildThisFileDirectory)../../Runtime/Dialogue/Yarn/**/*.cs" />
-    <MajoYarnExcluded Include="@(MajoDomainSource);@(MajoCommandSource)" />
-    <MajoYarnSource Remove="@(MajoYarnExcluded)" MatchOnMetadata="FullPath" MatchOnMetadataOptions="PathLike" />
-  </ItemGroup>
-</Project>

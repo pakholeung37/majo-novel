@@ -74,7 +74,7 @@ def main():
     upstream, yarn_files = verify_upstream()
     directory = ROOT / "addons/majo_runtime"
     version = plugin_version(directory)
-    metadata = (directory / "Runtime/Core/MajoRuntimeMetadata.cs").read_text()
+    metadata = (directory / "Assemblies/Majo.Runtime.Core/Source/MajoRuntimeMetadata.cs").read_text()
     if f'PluginVersion = "{version}"' not in metadata:
         raise ValueError("Majo plugin.cfg and runtime version differ")
     for required in (
@@ -82,22 +82,14 @@ def main():
         "Bridges/YarnSpinnerStateBridge/YarnSpinnerStateBridge.csproj",
         "Assemblies/Majo.Runtime.Core/Majo.Runtime.Core.csproj",
         "Assemblies/Majo.Runtime.Domain/Majo.Runtime.Domain.csproj",
-        "Assemblies/Majo.Runtime.Domain/Majo.Runtime.Domain.sources.props",
         "Assemblies/Majo.Runtime.Commands/Majo.Runtime.Commands.csproj",
-        "Assemblies/Majo.Runtime.Commands/Majo.Runtime.Commands.sources.props",
         "Assemblies/Majo.Runtime.Persistence/Majo.Runtime.Persistence.csproj",
-        "Assemblies/Majo.Runtime.Persistence/Majo.Runtime.Persistence.sources.props",
         "Assemblies/Majo.Runtime.Resources/Majo.Runtime.Resources.csproj",
-        "Assemblies/Majo.Runtime.Resources/Majo.Runtime.Resources.sources.props",
         "Assemblies/GodotLibrary.props",
         "Assemblies/Majo.Runtime.Application/Majo.Runtime.Application.csproj",
-        "Assemblies/Majo.Runtime.Application/Majo.Runtime.Application.sources.props",
         "Assemblies/Majo.Runtime.Engine/Majo.Runtime.Engine.csproj",
-        "Assemblies/Majo.Runtime.Engine/Majo.Runtime.Engine.sources.props",
         "Assemblies/Majo.Runtime.Yarn/Majo.Runtime.Yarn.csproj",
-        "Assemblies/Majo.Runtime.Yarn/Majo.Runtime.Yarn.sources.props",
         "Assemblies/Majo.Runtime.Godot/Majo.Runtime.Godot.csproj",
-        "Assemblies/Majo.Runtime.Godot/Majo.Runtime.Godot.sources.props",
         "Assemblies/YarnSpinner.Godot/YarnSpinner.Godot.csproj",
         "Assemblies/YarnSpinner.Godot/YarnSpinner.Godot.sources.props",
         "Build/MajoAssemblyLoader.cs", "Build/YarnHostRegistration.cs",

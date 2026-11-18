@@ -10,6 +10,6 @@
     <AnalysisLevel>latest-Recommended</AnalysisLevel>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="../../Runtime/Core/**/*.cs" />
+    <Compile Include="Source/**/*.cs" />
   </ItemGroup>
 </Project>

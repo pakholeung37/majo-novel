@@ -5,9 +5,8 @@
     <AnalysisLevel>latest-Recommended</AnalysisLevel>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
   </PropertyGroup>
-  <Import Project="Majo.Runtime.Godot.sources.props" />
   <ItemGroup>
-    <Compile Include="@(MajoGodotSource)" />
+    <Compile Include="Source/**/*.cs" />
     <ProjectReference Include="../Majo.Runtime.Engine/Majo.Runtime.Engine.csproj" />
     <ProjectReference Include="../Majo.Runtime.Yarn/Majo.Runtime.Yarn.csproj" />
     <ProjectReference Include="../../SourceGenerators/Majo.CommandGenerator/Majo.CommandGenerator.csproj"

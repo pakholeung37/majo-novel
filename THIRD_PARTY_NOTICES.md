@@ -11,7 +11,7 @@ The root [MIT License](LICENSE) covers original Majo Novel code and documentatio
 
 Dependencies restored through .NET or provided by Godot retain their respective licenses. The root license does not relicense them.
 
-The Runner and LinePresenter bridges under `addons/majo_runtime/Runtime/Dialogue/Yarn/Bridges/` contain portions adapted from YarnSpinner-Godot. Their original MIT notice is also retained [inside that directory](addons/majo_runtime/Runtime/Dialogue/Yarn/Bridges/YarnSpinner-LICENSE.md).
+The Runner and LinePresenter bridges in `Majo.Runtime.Yarn` contain portions adapted from YarnSpinner-Godot. Their original MIT notice is retained [alongside the source](addons/majo_runtime/Assemblies/Majo.Runtime.Yarn/Source/Dialogue/Yarn/Bridges/YarnSpinner-LICENSE.md).
 
 ## Showcase content
 

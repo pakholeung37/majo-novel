@@ -9,9 +9,8 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AnalysisLevel>latest-Recommended</AnalysisLevel>
   </PropertyGroup>
-  <Import Project="Majo.Runtime.Resources.sources.props" />
   <ItemGroup>
-    <Compile Include="@(MajoResourceSource)" />
+    <Compile Include="Source/**/*.cs" />
     <ProjectReference Include="../Majo.Runtime.Core/Majo.Runtime.Core.csproj" />
     <InternalsVisibleTo Include="Majo.Runtime.Resources.UnitTests" />
   </ItemGroup>
