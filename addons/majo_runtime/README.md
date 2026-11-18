@@ -8,10 +8,10 @@ A C# visual novel runtime for **Godot 4.7.2 .NET**, targeting **.NET 8**.
 
 ## Install a published candidate
 
-Install Godot 4.7.2 .NET, the .NET 8 SDK (8.0.200 or later in the 8.0 series), and Python 3.10 or later. The installer and the first NuGet restore need network access. Save [the rc.4 installer](https://github.com/pakholeung37/majo-novel/releases/download/v0.1.0-rc.4/install.py) in the directory where you want to create `my-game`. Use these commands to create and build the project.
+Install Godot 4.7.2 .NET, the .NET 8 SDK (8.0.200 or later in the 8.0 series), and Python 3.10 or later. The installer and the first NuGet restore need network access. Save [the rc.5 installer](https://github.com/pakholeung37/majo-novel/releases/download/v0.1.0-rc.5/install.py) in the directory where you want to create `my-game`. Use these commands to create and build the project.
 
 ```sh
-python3 install.py init --version v0.1.0-rc.4 --project ./my-game --name MyGame
+python3 install.py init --version v0.1.0-rc.5 --project ./my-game --name MyGame
 cd my-game
 dotnet build MyGame.csproj
 ```
@@ -21,13 +21,13 @@ Open `project.godot`, let imports finish, then run the project. The bootstrap do
 For first-time installation into an existing Godot .NET game, run the following from the directory containing `install.py`. Set `--project` to the directory with `project.godot` and a single root `.csproj` targeting Godot.NET.Sdk 4.7.2 and `net8.0`.
 
 ```sh
-python3 install.py install --version v0.1.0-rc.4 --project ./my-game
+python3 install.py install --version v0.1.0-rc.5 --project ./my-game
 ```
 
-To upgrade a game that already has `majo.lock.json`, stop source watching and commit your game. Review the target version's [compatibility contract](compatibility.json) and [changelog](CHANGELOG.md). The manager requires `--allow-breaking --check` for an upgrade to rc.4 because this version declares breaking changes. Run the upgrade after reviewing the applicable migrations.
+To upgrade a game that already has `majo.lock.json`, stop source watching and commit your game. Review the target version's [compatibility contract](compatibility.json) and [changelog](CHANGELOG.md). The manager requires `--allow-breaking --check` for an upgrade to rc.5 because this version declares breaking changes. Run the upgrade after reviewing the applicable migrations.
 
 ```sh
-python3 install.py upgrade --version v0.1.0-rc.4 --project ./my-game --allow-breaking --check --godot "/path/to/Godot"
+python3 install.py upgrade --version v0.1.0-rc.5 --project ./my-game --allow-breaking --check --godot "/path/to/Godot"
 ```
 
 Replace `/path/to/Godot` with your Godot .NET executable. `--check` builds and imports a disposable game copy and validates its Direction assets. If your game has a regression profile, the manager also runs it there. See [Register game regressions](#register-game-regressions) to add your own checks.

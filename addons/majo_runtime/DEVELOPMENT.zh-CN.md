@@ -27,7 +27,7 @@ python3 addons/majo_runtime/Tools/majo.py install --project ../my-game --source 
 也可以使用发布 ZIP。管理命令可从系统仓库运行；手工解压到新项目后，也可使用包内同一路径的脚本：
 
 ```sh
-python3 addons/majo_runtime/Tools/majo.py install --project ../my-game --archive /path/to/majo-runtime-0.1.0-rc.4-with-yarn.zip --sha256 EXPECTED_SHA256
+python3 addons/majo_runtime/Tools/majo.py install --project ../my-game --archive /path/to/majo-runtime-0.1.0-rc.5-with-yarn.zip --sha256 EXPECTED_SHA256
 ```
 
 将校验值替换为发布包 `SHA256SUMS` 中的值。仅支持捆绑 Yarn 的 addon ZIP；示例 ZIP 是完整项目，直接解压到空目录使用。已有解决方案文件会保留；缺少 `.sln` 时管理器会生成与游戏工程对应的解决方案，便于后续导出。
@@ -53,7 +53,7 @@ python3 addons/majo_runtime/Tools/majo.py watch --project ../my-game --source .
 先停止 `watch`，提交游戏当前可用状态，阅读目标版本的 [CHANGELOG](CHANGELOG.md) 和[兼容清单](compatibility.json)。在线升级使用[发布版安装指南](README.md#install-a-published-candidate)中的命令。本地升级从游戏根目录执行以下命令，校验值取自与 ZIP 配套的 `SHA256SUMS`。rc.4 的清单声明了破坏性变更，核对适用的迁移后使用 `--allow-breaking --check`。
 
 ```sh
-python3 addons/majo_runtime/Tools/majo.py upgrade --project . --archive /path/to/majo-runtime-0.1.0-rc.4-with-yarn.zip --sha256 EXPECTED_SHA256 --allow-breaking --check --godot "/path/to/Godot"
+python3 addons/majo_runtime/Tools/majo.py upgrade --project . --archive /path/to/majo-runtime-0.1.0-rc.5-with-yarn.zip --sha256 EXPECTED_SHA256 --allow-breaking --check --godot "/path/to/Godot"
 python3 addons/majo_runtime/Tools/majo.py doctor --project .
 ```
 
@@ -249,7 +249,7 @@ CI 的桌面矩阵在 Linux x64 和 Windows x64 上运行同一完整门禁，�
 不克隆系统仓库时，可以从已发布的明确版本取得安装入口：
 
 ```sh
-curl -fsSL https://github.com/pakholeung37/majo-novel/releases/download/v0.1.0-rc.4/install.py | python3 - init --version v0.1.0-rc.4 --project ./my-game --name MyGame
+curl -fsSL https://github.com/pakholeung37/majo-novel/releases/download/v0.1.0-rc.5/install.py | python3 - init --version v0.1.0-rc.5 --project ./my-game --name MyGame
 ```
 
 已有 Godot 游戏初次接入时使用 `install`。已受管理的项目使用 `upgrade --check`，具体命令见[发布版安装指南](README.md#install-a-published-candidate)。游戏可在 `majo-check.json` 定义自己的回归命令，或用 `--check-command` 指定覆盖命令。

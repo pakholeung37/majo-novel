@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0-rc.5
+
+- Put the C# source for each Majo Runtime assembly in its own `Source/` directory and update the Godot plugin, packaging and export paths.
+- Add guides for writing Yarn scripts, configuring assets and host projects, packaging, and troubleshooting.
+- Host code that loads a Majo C# script by a hardcoded `res://` path should use its new location under `addons/majo_runtime/Assemblies/`. On reimport, Godot can resolve references that include the script's UID. Default scenes and shaders are available under `addons/majo_runtime/Runtime/`.
+
 ## 0.1.0-rc.4
 
 - Add a standalone Godot render baseline for Trial00. It uses local court textures and character atlases and measures direct drawing, single viewport composition, and dual viewport split-screen without loading Majo Runtime or Yarn.
