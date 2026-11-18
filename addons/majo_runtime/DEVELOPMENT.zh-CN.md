@@ -50,19 +50,18 @@ python3 addons/majo_runtime/Tools/majo.py watch --project ../my-game --source .
 
 ## 升级与回退
 
-1. 先停止 `watch`，提交游戏当前可用状态，阅读目标版本的 CHANGELOG 和存档兼容说明。
-2. 使用目标系统 checkout 的管理工具运行 `install --archive ...`，或切换系统仓库到目标版本后运行 `sync --source .`。
-3. 工具检查现有 addon 是否与锁文件一致，暂存新版本，再整体替换两个 addon；旧版本删除的源码也会移除。配置写入失败时恢复原 addon 和锁文件。游戏文件不参与替换。
-4. 运行 `doctor`、构建、Godot 导入，再测游戏自己的剧情、演出、存读档与受检导出。
-5. 将两个 addon 目录、`majo.lock.json` 和必要的工程配置作为同一次游戏提交。
+先停止 `watch`，提交游戏当前可用状态，阅读目标版本的 [CHANGELOG](CHANGELOG.md) 和[兼容清单](compatibility.json)。在线升级使用[发布版安装指南](README.md#install-a-published-candidate)中的命令。本地升级从游戏根目录执行以下命令，校验值取自与 ZIP 配套的 `SHA256SUMS`。rc.4 的清单声明了破坏性变更，核对适用的迁移后使用 `--allow-breaking --check`。
 
 ```sh
-python3 addons/majo_runtime/Tools/majo.py doctor --project ../my-game
+python3 addons/majo_runtime/Tools/majo.py upgrade --project . --archive /path/to/majo-runtime-0.1.0-rc.4-with-yarn.zip --sha256 EXPECTED_SHA256 --allow-breaking --check --godot "/path/to/Godot"
+python3 addons/majo_runtime/Tools/majo.py doctor --project .
 ```
 
-`doctor` 检查文件指纹、依赖版本、工程引用和插件配置，不代替构建或游戏回归。管理器会拒绝 addon 软链接及本地补丁；Godot 生成的导入元数据和构建缓存不算业务补丁。管理器维护 `.gitattributes` 的 addon 字节保留规则，避免 Windows 换行转换破坏锁定指纹。
+`--check` 先在临时副本中构建、导入并验证 Direction，随后执行项目自己的 `majo-check.json` 回归（如果有）。全部通过后才替换当前依赖。`doctor` 检查文件指纹、依赖版本、工程引用和插件配置。升级后重新构建和导入实际工程，测试剧情、演出、存读档和受检导出，再一起提交两个 addon 目录、`majo.lock.json` 和必要的工程配置。
 
-回退时恢复游戏仓库中同一提交的两个 addon、锁文件及工程配置，随后重新构建、导入。不要只恢复锁文件。玩家存档位于 `user://`，不属于源码回退；已有存档需要单独保留并验证。
+管理器会拒绝 addon 软链接及本地补丁，允许 Godot 自动生成的导入元数据。它维护 `.gitattributes` 的 addon 字节保留规则，避免 Windows 换行转换破坏锁定指纹。
+
+用 `rollback --project . --list` 查看 `.majo/history` 中的恢复点，用 `rollback --project . --check --godot "/path/to/Godot"` 验证并恢复最近一次。通过 Git 回退时，从同一个游戏提交恢复两个 addon、锁文件及工程配置。两种回退都需要重新构建和导入实际工程，玩家存档兼容性需要单独验证。
 
 ## 游戏扩展和升级边界
 
@@ -251,7 +250,7 @@ CI 的桌面矩阵在 Linux x64 和 Windows x64 上运行同一完整门禁，�
 curl -fsSL https://github.com/pakholeung37/majo-novel/releases/download/v0.1.0-rc.4/install.py | python3 - init --version v0.1.0-rc.4 --project ./my-game --name MyGame
 ```
 
-升级命令改用 `upgrade --check`，可加 `--check-command "python3 tools/dev.py check"`。它在临时游戏副本中安装候选依赖、构建、导入并执行游戏回归，全部通过才切换当前项目。失败时当前依赖与锁文件不变；通过后，在 `.majo/history` 留下旧版依赖、锁文件和宿主配置。
+已有 Godot 游戏初次接入时使用 `install`。已受管理的项目使用 `upgrade --check`，具体命令见[发布版安装指南](README.md#install-a-published-candidate)。游戏可在 `majo-check.json` 定义自己的回归命令，或用 `--check-command` 指定覆盖命令。
 
 用包内管理器的 `rollback --list` 查看记录，`rollback --check --godot /path/to/godot` 检查并恢复上一版。回退不会覆盖剧情或素材；升级后若修改了宿主工程配置，回退会停止并要求先合并。切换后需要重新构建/导入实际项目，玩家存档不随此流程恢复或迁移。`.majo/` 应加入游戏的 `.gitignore`。
 

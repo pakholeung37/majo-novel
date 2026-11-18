@@ -2,7 +2,7 @@
 
 A script-driven visual novel runtime for **Godot .NET**, built with **C#** and **Yarn Spinner**.
 
-[简体中文](README.zh-CN.md) · [Script writing guide](docs/script-writing.md) · [MIT license](LICENSE)
+[简体中文](README.zh-CN.md) · [First scene tutorial (Chinese)](addons/majo_runtime/Docs/first-scene.zh-CN.md) · [Script writing guide](addons/majo_runtime/Docs/script-writing.md) · [MIT license](LICENSE)
 
 Majo Novel brings dialogue, character performances, cameras, transitions, audio, and saved state together in a modular runtime. Write the story and direction in Yarn; use C# to configure the host, add commands, or implement new actor types.
 
@@ -46,7 +46,7 @@ Maya: The scene is ready. What would you like to investigate?
 ===
 ```
 
-Yarn controls the story flow. Majo's direction commands control the presentation; `beat` groups coordinated changes, and `wait:true` holds script progression until the performance completes. See the [script writing guide](docs/script-writing.md) for command syntax and more examples. The guide is currently in Chinese.
+Yarn controls the story flow. Majo's direction commands control the presentation; `beat` groups coordinated changes, and `wait:true` holds script progression until the performance completes. See the [script writing guide](addons/majo_runtime/Docs/script-writing.md) for command syntax and more examples. The guide is currently in Chinese.
 
 ## Demos
 
@@ -76,7 +76,7 @@ For a separate game repository, see the [installation, local development and upg
 
 See the [addon installation guide](addons/majo_runtime/README.md) for the required C# imports and a minimal scene. The addon uses unmodified YarnSpinner-Godot 0.3.22 with Yarn Spinner 3.2.0.
 
-Run `python3 tools/package-addon.py` to create standalone, Yarn-bundled and runnable example ZIPs in `build/releases`, with SHA-256 checksums. These archives contain only addon files and their licenses. The full test gate installs the bundled ZIP into an empty project, imports and plays a branching script with nested detours, then boots its exported PCK.
+Run `python3 tools/package-addon.py` to create standalone, Yarn-bundled and runnable example ZIPs in `build/releases`, with SHA-256 checksums. The example ZIP adds a minimal host and sample story to the Yarn-bundled addon. The full test gate installs the bundled ZIP into an empty project, imports and plays a branching script with nested detours, then boots its exported PCK.
 
 ## Run the runtime validation demo
 
@@ -93,7 +93,9 @@ Replace `godot` with the path to your Godot .NET executable. You can also open `
 
 The reusable runtime lives in [`addons/majo_runtime`](addons/majo_runtime); demo-specific presentation and integrations live in [`demos`](demos).
 
-- [Script writing guide](docs/script-writing.md): Yarn syntax, direction commands, stages/views, cameras, audio, and examples.
+- [Script writing guide](addons/majo_runtime/Docs/script-writing.md): Yarn syntax, direction commands, stages/views, cameras, audio, and examples.
+- [Assets and host configuration (Chinese)](addons/majo_runtime/Docs/assets-and-host.zh-CN.md) covers resource IDs, default UI and input, saves, dialogue travel, and text and voice locales.
+- [Release and troubleshooting (Chinese)](addons/majo_runtime/Docs/release-and-troubleshooting.zh-CN.md) covers export presets, dynamically loaded assets, and testing the standalone player outside the source project.
 - [Scene resource preparation](docs/advanced/scene-resources-injection.md): prepare or generate resources at scene boundaries and during state restoration.
 - [Trial00 performance benchmark](docs/advanced/trial00-benchmark.md): repeatable frame-time, input-response, startup and memory measurements using the Manosaba showcase.
 - [Trial00 standalone render baseline](tools/trial00-render-baseline/README.md) runs the same local court textures and character atlases with Godot alone.

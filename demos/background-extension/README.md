@@ -52,4 +52,4 @@ configuration.Actors.Actors.Add(new ActorDefinitionConfiguration
 - `--majo-background-alpha` 读取透明像素，验证 Tint、实时 dissolve/wipe，以及显式 Freeze 与实时输入的区别。
 - `--majo-background-baseline --majo-background-current` 生成内置背景回归图，与迁移前基线比较。
 
-共享机制及边界见 [实时视觉输入实施说明](../../docs/live-visual-transition-implementation.md)。
+共享机制的演进见[实时视觉输入实施记录](../../docs/archive/live-visual-transition-implementation.md)。

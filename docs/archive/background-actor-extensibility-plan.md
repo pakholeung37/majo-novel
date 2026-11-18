@@ -2,7 +2,7 @@
 
 创建：2026-09-11  
 更新：2026-09-13  
-状态：P0–P6 已完成；已修订背景解析为“显式定义优先、缺省按背景资源约定加载”，详见 [脚本说明](script-writing.md#自定义背景与实时转场)。后续已统一实时视觉输入，原 §5.3 快照范围由实时转场取代（见 [实施说明](live-visual-transition-implementation.md)）。本文确定本轮范围、契约和验收门槛；阶段完成状态见末尾清单，具体进度见 [实施进度](background-actor-extensibility-progress.md)。  
+状态：P0–P6 已完成；已修订背景解析为“显式定义优先、缺省按背景资源约定加载”，详见 [脚本说明](../../addons/majo_runtime/Docs/script-writing.md#自定义背景与实时转场)。后续已统一实时视觉输入，原 §5.3 快照范围由实时转场取代（见 [实施说明](live-visual-transition-implementation.md)）。本文确定本轮范围、契约和验收门槛；阶段完成状态见末尾清单，具体进度见 [实施进度](background-actor-extensibility-progress.md)。
 代码核对基线：`5e2f51a`。以下路径除特别说明外，相对仓库根目录。
 
 ## 1. 目标与范围

@@ -2,32 +2,44 @@
 
 A C# visual novel runtime for **Godot 4.7.2 .NET**, targeting **.NET 8**.
 
+## User guides (Chinese)
+
+[First scene](Docs/first-scene.zh-CN.md) · [Script writing](Docs/script-writing.md) · [Assets and host configuration](Docs/assets-and-host.zh-CN.md) · [Release and troubleshooting](Docs/release-and-troubleshooting.zh-CN.md)
+
 ## Install a published candidate
 
-Requirements: Godot 4.7.2 .NET, .NET 8 SDK, Python 3.10+ and network access for the release and initial NuGet restore. No system repository clone is needed:
+Install Godot 4.7.2 .NET, the .NET 8 SDK (8.0.200 or later in the 8.0 series), and Python 3.10 or later. The installer and the first NuGet restore need network access. Save [the rc.4 installer](https://github.com/pakholeung37/majo-novel/releases/download/v0.1.0-rc.4/install.py) in the directory where you want to create `my-game`. Use these commands to create and build the project.
 
 ```sh
-curl -fsSL https://github.com/pakholeung37/majo-novel/releases/download/v0.1.0-rc.4/install.py | python3 - init --version v0.1.0-rc.4 --project ./my-game --name MyGame
+python3 install.py init --version v0.1.0-rc.4 --project ./my-game --name MyGame
 cd my-game
-dotnet build
+dotnet build MyGame.csproj
 ```
 
-Open `project.godot`, let imports finish, then run. The bootstrap selects an explicit version, downloads its bundled addon and SHA256SUMS, verifies the archive, and configures the host through that release's manager. It does not silently follow latest/main.
+Open `project.godot`, let imports finish, then run the project. The bootstrap downloads the requested bundled addon and `SHA256SUMS`, verifies the archive, and configures the host through that release's manager. On Windows, use your Python 3 command, such as `py -3`, in place of `python3`.
 
-For an existing game, use `install` instead of `init`. Before upgrades, stop source watching and commit your game. Validate a candidate before switching:
+For first-time installation into an existing Godot .NET game, run the following from the directory containing `install.py`. Set `--project` to the directory with `project.godot` and a single root `.csproj` targeting Godot.NET.Sdk 4.7.2 and `net8.0`.
 
 ```sh
-curl -fsSL https://github.com/pakholeung37/majo-novel/releases/download/v0.1.0-rc.4/install.py | python3 - upgrade --version v0.1.0-rc.4 --project ./my-game --check --godot /path/to/godot --check-command "python3 tools/dev.py check"
+python3 install.py install --version v0.1.0-rc.4 --project ./my-game
 ```
 
-`--check` builds/imports a disposable game copy and runs the game-owned regression profile there (or the explicit `--check-command` override). A failed check leaves the live addon and lock unchanged. Successful upgrades save the previous addons, lock and host configuration under `.majo/history` (keep this local directory out of Git):
+To upgrade a game that already has `majo.lock.json`, stop source watching and commit your game. Review the target version's [compatibility contract](compatibility.json) and [changelog](CHANGELOG.md). The manager requires `--allow-breaking --check` for an upgrade to rc.4 because this version declares breaking changes. Run the upgrade after reviewing the applicable migrations.
+
+```sh
+python3 install.py upgrade --version v0.1.0-rc.4 --project ./my-game --allow-breaking --check --godot "/path/to/Godot"
+```
+
+Replace `/path/to/Godot` with your Godot .NET executable. `--check` builds and imports a disposable game copy and validates its Direction assets. If your game has a regression profile, the manager also runs it there. See [Register game regressions](#register-game-regressions) to add your own checks.
+
+Successful upgrades save the previous addons, lock and host configuration under `.majo/history`. Keep this local directory out of Git. From the game directory, list available rollback points and validate the most recent one before restoring it.
 
 ```sh
 python3 addons/majo_runtime/Tools/majo.py rollback --project . --list
-python3 addons/majo_runtime/Tools/majo.py rollback --project . --check --godot /path/to/godot --check-command "python3 tools/dev.py check"
+python3 addons/majo_runtime/Tools/majo.py rollback --project . --check --godot "/path/to/Godot"
 ```
 
-Rollback preserves story/assets outside addon folders, refuses conflicting host-configuration edits and restores the exact previous dependency lock. Rebuild/import the active game after switching. This does not roll back or migrate player saves. See `compatibility.json` and CHANGELOG for API and state-format boundaries.
+Rollback preserves story and assets outside addon folders, refuses conflicting host-configuration edits, and restores the exact previous dependency lock. Rebuild and import the game after switching. Test historical player saves separately when changing runtime versions.
 
 ## Separate game repository
 
@@ -105,9 +117,16 @@ Checkpoints are captured before line presentation. Nested and dynamic `detour` c
 
 ## Validation and distribution
 
-The repository's full gate runs unit tests, Godot integration tests, and a clean consumer installed from the release ZIP. It also boots that consumer from a PCK and requires successful initialization and dialogue completion. macOS has local validation and the Linux release gate has passed on GitHub Actions. Other platforms have not been validated.
+The full release gate runs unit and Godot integration tests, then builds a clean consumer installed from the release ZIP, imports its resources, and runs dialogue from an exported PCK.
 
-The `majo-runtime-0.1.0-rc.4-example.zip` archive is a complete project with both addons, a minimal host, and an original Yarn story using the default UI. Extract it separately from an existing game.
+| Platform | Verified workflows |
+| --- | --- |
+| Linux x64 and Windows x64 | The rc.4 release CI passed the full gate on both platforms, including PCK startup in the Godot .NET editor executable. [rc.4 release checks](https://github.com/pakholeung37/majo-novel/actions/runs/44225452820) |
+| macOS on Apple Silicon | Local full-gate validation and a separate launch of Last Bell from a Universal macOS player on an Apple Silicon Mac. [Local validation](https://github.com/pakholeung37/majo-novel/blob/v0.1.0-rc.4/docs/release/local-validation.md) |
+
+Run a standalone player from your own export on each platform you ship, especially for targets outside the configurations above.
+
+The release's `-example.zip` archive is a complete project with both addons, a minimal host, and an original Yarn story using the default UI. Extract it into an empty directory, then follow the [first scene tutorial (Chinese)](Docs/first-scene.zh-CN.md) to add your own artwork, music, and dialogue.
 
 Build release ZIPs with `python3 tools/package-addon.py` from the repository root. Runtime ZIPs exclude demos, showcase assets, native Live2D integrations, build outputs and caches.
 
@@ -125,7 +144,7 @@ Omit `--pack` to export a release player; install matching Godot export template
 
 Selected-scene exports include Majo's default UI, shaders and required Yarn scripts through the Majo export plugin. Add your dynamically loaded game assets and Yarn projects to the preset's selected resources or reference them from a selected scene; Majo does not automatically include every game asset.
 
-The release gate runs published ExportRelease binaries from an isolated directory with a PCK and instantiates both default UI scenes. It uses the editor executable as an engine host; a standalone player and Windows/mobile platforms still require separate validation.
+The PCK test loads ExportRelease binaries from an isolated directory and instantiates both default UI scenes in the Godot .NET editor executable. Use the platform validation above when deciding which exports to test as standalone players.
 
 Install verified Godot 4.7.2 .NET export templates with `python3 addons/majo_runtime/Tools/setup_godot.py --templates`. On Linux x86_64, CI can also install the pinned editor with `--editor --github-env "$GITHUB_ENV"`. Downloads use official release URLs and pinned SHA-256 digests. The editor version is independently checked by the consumer game's tooling.
 
@@ -142,6 +161,6 @@ Commit `majo-check.json` at the game root:
 }
 ```
 
-Use a command appropriate to your game; the example is Last Bell's runner. `{python}` selects the installer's Python executable. `upgrade --check` and `rollback --check` automatically discover this profile in the isolated copy. Both the exit status and required output must pass. Without a profile, checks cover C# build and editor/Direction import only. Commands execute trusted game code; keep smoke tests isolated from real player storage.
+Use a command that exists in your game. This example uses Last Bell's runner. `{python}` selects the installer's Python executable. `upgrade --check` and `rollback --check` automatically discover this profile in the isolated copy. Both the exit status and required output must pass. You can supply `--check-command` with your own command to override the profile. The default checks cover the C# build, editor import, and Direction validation.
 
 A changed API/engine dependency contract or declared breaking changes require migration review and `--allow-breaking --check`. This opt-in does not perform migrations. Save compatibility must be tested separately with historical save fixtures.

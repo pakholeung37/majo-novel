@@ -2,7 +2,7 @@
 
 基于 **Godot .NET、C# 和 Yarn Spinner** 的脚本驱动视觉小说运行时。
 
-[English](README.md) · [脚本编写指南](docs/script-writing.md) · [MIT 许可证](LICENSE)
+[English](README.md) · [第一幕教程](addons/majo_runtime/Docs/first-scene.zh-CN.md) · [脚本编写指南](addons/majo_runtime/Docs/script-writing.md) · [MIT 许可证](LICENSE)
 
 Majo Novel 将对话、角色演出、镜头、转场、音频与存档状态整合在一个模块化运行时中。剧情和演出使用 Yarn 编写，宿主配置、自定义命令和角色类型通过 C# 扩展。
 
@@ -46,7 +46,7 @@ Maya: 场景准备好了。接下来调查什么？
 ===
 ```
 
-Yarn 负责剧情流程，Majo 演出命令负责画面呈现。`beat` 组织需要协调的变化，`wait:true` 让脚本在演出结束后继续。完整语法与示例见[脚本编写指南](docs/script-writing.md)。
+Yarn 负责剧情流程，Majo 演出命令负责画面呈现。`beat` 组织需要协调的变化，`wait:true` 让脚本在演出结束后继续。完整语法与示例见[脚本编写指南](addons/majo_runtime/Docs/script-writing.md)。
 
 ## Demo
 
@@ -76,7 +76,7 @@ curl -fsSL https://github.com/pakholeung37/majo-novel/releases/download/v0.1.0-r
 
 所需的 C# 工程引用及最小场景见[插件安装指南](addons/majo_runtime/README.md)。插件使用未修改的官方 YarnSpinner-Godot 0.3.22 和 Yarn Spinner 3.2.0。
 
-运行 `python3 tools/package-addon.py`，可在 `build/releases` 生成独立版、捆绑 Yarn 版、可运行示例工程 ZIP 及 SHA-256 校验值。发布包只包含插件文件与许可证。完整测试会将捆绑 ZIP 安装到空工程，首次导入并播放带分支和嵌套 detour 的脚本，再实际启动导出的 PCK。
+运行 `python3 tools/package-addon.py`，可在 `build/releases` 生成独立版、捆绑 Yarn 版、可运行示例工程 ZIP 及 SHA-256 校验值。示例工程 ZIP 在捆绑版基础上加入最小宿主和示例剧情。完整测试会将捆绑 ZIP 安装到空工程，首次导入并播放带分支和嵌套 detour 的脚本，再实际启动导出的 PCK。
 
 ## 运行内部验收 demo
 
@@ -93,7 +93,9 @@ godot --path . res://demos/demo-01/RuntimeDemo.tscn
 
 可复用运行时位于 [`addons/majo_runtime`](addons/majo_runtime)，各 demo 的呈现与扩展代码位于 [`demos`](demos)。
 
-- [脚本编写指南](docs/script-writing.md)：Yarn 语法、演出命令、舞台、视图、镜头、音频与示例。
+- [脚本编写指南](addons/majo_runtime/Docs/script-writing.md)：Yarn 语法、演出命令、舞台、视图、镜头、音频与示例。
+- [素材与宿主配置指南](addons/majo_runtime/Docs/assets-and-host.zh-CN.md)提供资源 ID 对照表，以及默认 UI、输入、存读档、回溯和语言配置示例。
+- [发布与排错指南](addons/majo_runtime/Docs/release-and-troubleshooting.zh-CN.md)介绍导出预设、动态素材入包，以及如何在源码目录外复验播放器。
 - [开发者场景资源准备](docs/advanced/scene-resources-injection.md)：在场景入口与状态恢复时准备或生成资源。
 - [Trial00 性能基准](docs/advanced/trial00-benchmark.md)：以 Manosaba 为固定轨迹，测量帧时间、输入响应、启动和内存指标。
 - [Trial00 独立渲染基线](tools/trial00-render-baseline/README.md) 使用相同的本地法庭贴图和角色图集，只运行 Godot。
