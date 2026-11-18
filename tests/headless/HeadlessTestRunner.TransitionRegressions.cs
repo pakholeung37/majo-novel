@@ -22,6 +22,7 @@ public partial class HeadlessTestRunner
     private async Task ValidateTransitionRegressionsAsync()
     {
         await ValidateDissolvePixelsAsync();
+        await ValidateGpuScreenSnapshotAsync();
         using var lifetime = new HeadlessDirectionRuntimeLifetime();
         using var frameClock = new GodotFrameClock(GetTree());
         await frameClock.InitializeAsync(CancellationToken.None);

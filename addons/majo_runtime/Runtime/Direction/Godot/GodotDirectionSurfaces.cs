@@ -100,7 +100,6 @@ internal sealed class GodotDirectionSurfaces : IDisposable
         owner.AddChild(surface.Viewport);
         BindStageRenderDependency(surface.Viewport);
         ResizeStage(surface, MainStage.Viewport.Size);
-        surface.Viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
         return surface;
     }
 

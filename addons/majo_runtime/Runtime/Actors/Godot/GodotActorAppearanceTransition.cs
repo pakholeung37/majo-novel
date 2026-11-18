@@ -48,23 +48,29 @@ internal sealed class GodotActorAppearanceTransition : IPreparedVisualTransition
     public static async Task<IPreparedVisualTransition> PrepareAsync(Node2D owner,
         CanvasItem sourceContent, CanvasItem targetContent, Rect2 bounds, float opacity,
         Action<bool> showOriginal, Action<Sprite2D?> publishOverlay,
-        ITransitionDriver driver, AnimationSpec animation, CancellationToken cancellationToken, bool freeze = false)
+        ITransitionDriver driver, AnimationSpec animation, CancellationToken cancellationToken,
+        bool freeze = false, bool warmup = false)
     {
         var result = new GodotActorAppearanceTransition(owner, sourceContent, targetContent,
             bounds, opacity, showOriginal, publishOverlay);
         try
         {
+            using var timing = Diagnostics.RuntimePerformanceTrace.Source.StartActivity("actor.appearance.inputs.ready");
             result.sourceInput = GodotVisualInput.Live(result.source, bounds);
             result.targetInput = GodotVisualInput.Live(result.target, bounds);
             // Observe full submissions, including upstream model/mask dependencies.
-            await result.sourceInput.ReadyAsync(owner.GetTree(), cancellationToken);
-            await result.targetInput.ReadyAsync(owner.GetTree(), cancellationToken);
+            await Task.WhenAll(
+                result.sourceInput.ReadyAsync(owner.GetTree(), cancellationToken),
+                result.targetInput.ReadyAsync(owner.GetTree(), cancellationToken));
             if (freeze)
             {
                 var frozenSource = result.sourceInput.Freeze();
                 result.sourceInput.Dispose(); result.sourceInput = frozenSource;
                 var frozenTarget = result.targetInput.Freeze();
                 result.targetInput.Dispose(); result.targetInput = frozenTarget;
+            }
+            if (freeze || warmup)
+            {
                 result.source.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
                 result.target.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
             }
@@ -181,6 +187,14 @@ internal sealed class GodotActorAppearanceTransition : IPreparedVisualTransition
 
 public sealed class GodotActorAppearanceTransitionService : IActorAppearanceTransitionService
 {
+    public Task<IPreparedVisualTransition> PrepareWarmupAsync(
+        Node2D owner, CanvasItem sourceContent, CanvasItem targetContent, Rect2 bounds,
+        float opacity, Action<bool> showOriginal, Action<Sprite2D?> publishOverlay,
+        ITransitionDriver driver, AnimationSpec animation,
+        CancellationToken cancellationToken = default) =>
+        GodotActorAppearanceTransition.PrepareAsync(owner, sourceContent, targetContent, bounds,
+            opacity, showOriginal, publishOverlay, driver, animation, cancellationToken, warmup: true);
+
     public Task<IPreparedActorAppearance> PrepareForCommitAsync(
         Node2D owner, CanvasItem sourceContent, CanvasItem targetContent, Rect2 bounds,
         Action<bool> showOriginal, Action<Sprite2D?> publishOverlay, Action publishTarget,

@@ -133,7 +133,112 @@ public partial class HeadlessTestRunner
             await host.ShutdownAsync(CancellationToken.None);
             owner.QueueFree();
         }
-        if (DisplayServer.GetName() != "headless") await ValidateViewDemandResizeAsync();
+        if (DisplayServer.GetName() != "headless")
+        {
+            await ValidateViewDemandResizeAsync();
+            await ValidateBackdropPassConsumptionAsync();
+            await ValidateStageRasterDemandAsync();
+        }
+    }
+
+    private async Task ValidateStageRasterDemandAsync()
+    {
+        var owner = new Node { Name = "StageRasterDemandProbe" };
+        AddChild(owner);
+        using var host = new GodotDirectionRenderHost(owner, new Vector2I(128, 72));
+        await host.InitializeAsync(CancellationToken.None);
+        try
+        {
+            Assert(host.StageViewport.RenderTargetUpdateMode == SubViewport.UpdateMode.Disabled,
+                "World2D ownership must not force a Stage raster output.");
+            var diagnostics = new GodotRenderDemandDiagnostics(host);
+            using var first = diagnostics.AcquireAllStageRasters("raw Stage capture");
+            using var second = diagnostics.AcquireAllStageRasters("overlapping capture");
+            host.StageBackground.Color = Colors.Red;
+            var extra = host.GetOrCreateStage(new StageId("raster-demand-extra"));
+            Assert(extra.Viewport.RenderTargetUpdateMode == SubViewport.UpdateMode.Always,
+                "A Stage created during raster demand was not included.");
+            await RenderedFrameAsync();
+            using (var image = host.StageViewport.GetTexture().GetImage())
+                AssertBackgroundPixel(image, Colors.Red, "Explicit Stage raster demand did not draw");
+            first.Dispose();
+            Assert(host.StageViewport.RenderTargetUpdateMode == SubViewport.UpdateMode.Always,
+                "One released Stage lease stopped another consumer.");
+            second.Dispose();
+            Assert(host.StageViewport.RenderTargetUpdateMode == SubViewport.UpdateMode.Disabled &&
+                extra.Viewport.RenderTargetUpdateMode == SubViewport.UpdateMode.Disabled,
+                "Final Stage demand did not stop all raster outputs.");
+            host.StageBackground.Color = Colors.Blue;
+            await RenderedFrameAsync();
+            using (var image = host.StageViewport.GetTexture().GetImage())
+                AssertBackgroundPixel(image, Colors.Red, "Unconsumed Stage raster kept redrawing");
+            using (var image = host.ScreenViewport.GetTexture().GetImage())
+                AssertBackgroundPixel(image, Colors.Blue, "Views stopped drawing the disabled Stage's World2D");
+            using var stale = diagnostics.AcquireAllStageRasters("before reset");
+            await host.ResetAsync(CancellationToken.None);
+            using var current = diagnostics.AcquireAllStageRasters("after reset");
+            stale.Dispose();
+            Assert(host.StageViewport.RenderTargetUpdateMode == SubViewport.UpdateMode.Always,
+                "A stale Stage demand changed the reset session.");
+            current.Dispose();
+            Assert(host.StageViewport.RenderTargetUpdateMode == SubViewport.UpdateMode.Disabled,
+                "Reset Stage demand leaked a raster update.");
+        }
+        finally
+        {
+            await host.ShutdownAsync(CancellationToken.None);
+            owner.QueueFree();
+        }
+    }
+
+    private async Task ValidateBackdropPassConsumptionAsync()
+    {
+        var owner = new Node { Name = "BackdropPassDemandProbe" };
+        AddChild(owner);
+        using var host = new GodotDirectionRenderHost(owner, new Vector2I(640, 360));
+        await host.InitializeAsync(CancellationToken.None);
+        var view = host.RequireView(ViewId.Main);
+        var color = new ColorRect { Size = new Vector2(640, 360), Color = Colors.Red };
+        host.GetStage(StageId.Main).Canvas.AddChild(color);
+        GodotDirectionRenderHost.AssignVisibilityLayer(color, GodotDirectionRenderLayers.BackgroundTransition);
+        try
+        {
+            using var demand = host.AcquireBackdropTransitionDemand(view);
+            using var overlap = host.AcquireBackdropTransitionDemand(view);
+            view.TransitionBackgroundOutput.Visible = true;
+            await RenderedFrameAsync();
+            using (var image = view.TransitionBackgroundViewport.GetTexture().GetImage())
+                AssertBackgroundPixel(image, Colors.Red, "Consumed old backdrop pass did not render");
+            view.TransitionBackgroundOutput.Visible = false;
+            demand.Dispose();
+            Assert(view.TransitionBackgroundViewport.RenderTargetUpdateMode == SubViewport.UpdateMode.Always,
+                "Releasing one background mix stopped an overlapping consumer.");
+            overlap.Dispose();
+            await RenderedFrameAsync();
+            color.Color = Colors.Blue;
+            await RenderedFrameAsync();
+            using (var image = view.TransitionBackgroundViewport.GetTexture().GetImage())
+                AssertBackgroundPixel(image, Colors.Red, "Unused old backdrop pass kept redrawing");
+            view.TransitionBackgroundOutput.Visible = true;
+            using var resumed = host.AcquireBackdropTransitionDemand(view);
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            using (var image = host.ScreenViewport.GetTexture().GetImage())
+                AssertBackgroundPixel(image, Colors.Blue, "Reactivated old backdrop pass used a stale first frame");
+            await host.ResetAsync(CancellationToken.None);
+            using var root = host.AcquireViewDemand(view, "after reset");
+            using var current = host.AcquireBackdropTransitionDemand(view);
+            resumed.Dispose();
+            Assert(view.TransitionBackgroundViewport.RenderTargetUpdateMode == SubViewport.UpdateMode.Always,
+                "A stale background lease changed the reset View's current consumer.");
+            current.Dispose();
+            Assert(view.TransitionBackgroundViewport.RenderTargetUpdateMode == SubViewport.UpdateMode.Disabled,
+                "The final background consumer did not stop its pass.");
+        }
+        finally
+        {
+            await host.ShutdownAsync(CancellationToken.None);
+            owner.QueueFree();
+        }
     }
 
     private async Task ValidateHiddenViewPixelsAsync(GodotDirectionRenderHost host, Texture2D texture,
@@ -202,7 +307,11 @@ public partial class HeadlessTestRunner
     {
         var expectedMode = expected ? SubViewport.UpdateMode.Always : SubViewport.UpdateMode.Disabled;
         Assert(new[] { view.Viewport, view.ContentViewport, view.BackgroundViewport,
-            view.TransitionBackgroundViewport, view.CompositeViewport }.All(surface => surface.RenderTargetUpdateMode == expectedMode),
-            $"{context}: View {view.Id} must have all five passes {expectedMode}.");
+            view.CompositeViewport }.All(surface => surface.RenderTargetUpdateMode == expectedMode),
+            $"{context}: View {view.Id} must have its output passes {expectedMode}.");
+        var backdropNeeded = expected && (view.TransitionBackgroundOutput.Visible || view.TransitionBlendOutput.Visible);
+        Assert(view.TransitionBackgroundViewport.RenderTargetUpdateMode ==
+            (backdropNeeded ? SubViewport.UpdateMode.Always : SubViewport.UpdateMode.Disabled),
+            $"{context}: View {view.Id} must render the old backdrop exactly while it is consumed.");
     }
 }

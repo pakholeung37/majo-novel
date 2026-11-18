@@ -42,7 +42,48 @@ public partial class HeadlessTestRunner
             await ExpectBackgroundFailureAsync<OperationCanceledException>(() => GodotVisualInput.WaitForFrameAsync(cancelled.Token));
         }
         finally { surface.Free(); }
-        if (DisplayServer.GetName() != "headless") await ValidateLiveActorPixelsAsync();
+        if (DisplayServer.GetName() != "headless")
+        {
+            await ValidateActorWarmupInputsAsync();
+            await ValidateLiveActorPixelsAsync();
+        }
+    }
+
+    private async Task ValidateActorWarmupInputsAsync()
+    {
+        var owner = new Node2D();
+        AddChild(owner);
+        var service = new GodotActorAppearanceTransitionService();
+        var bounds = new Rect2(0, 0, 64, 64);
+        var polygon = new[] { Vector2.Zero, new Vector2(64, 0), new Vector2(64, 64), new Vector2(0, 64) };
+        LiveVisualTestContent Content(Color color) => new() { Color = color, Polygon = polygon };
+        try
+        {
+            var firstDriver = new ReadyActorInputDriver(expectLive: true);
+            var secondDriver = new ReadyActorInputDriver(expectLive: true);
+            // Hold both leases, as layered actor loading does, to warm both retained pairs.
+            using (var first = await service.PrepareWarmupAsync(owner, Content(Colors.Red), Content(Colors.Blue),
+                bounds, 1, _ => { }, _ => { }, firstDriver, new AnimationSpec(.1)))
+            using (var second = await service.PrepareWarmupAsync(owner, Content(Colors.Red), Content(Colors.Blue),
+                bounds, 1, _ => { }, _ => { }, secondDriver, new AnimationSpec(.1)))
+            {
+                Assert(firstDriver.Prepared && secondDriver.Prepared, "Warmup did not prepare both capture pairs.");
+            }
+            var snapshotDriver = new ReadyActorInputDriver(expectLive: false);
+            using (var snapshot = await service.PrepareSnapshotAsync(owner, Content(Colors.Red), Content(Colors.Blue),
+                bounds, 1, _ => { }, _ => { }, snapshotDriver, new AnimationSpec(.1)))
+                Assert(snapshotDriver.Prepared, "Explicit snapshots must still freeze both inputs.");
+
+            using var cancelled = new CancellationTokenSource();
+            cancelled.Cancel();
+            var source = Content(Colors.Red);
+            var target = Content(Colors.Blue);
+            await ExpectBackgroundFailureAsync<OperationCanceledException>(() => service.PrepareWarmupAsync(
+                owner, source, target, bounds, 1, _ => { }, _ => { }, firstDriver, new AnimationSpec(.1), cancelled.Token));
+            Assert(!IsInstanceValid(source) && !IsInstanceValid(target), "Cancelled warmup leaked its input trees.");
+            Assert(owner.GetChildCount() == 0, "Warmup left an overlay attached to its owner.");
+        }
+        finally { owner.Free(); }
     }
 
     private async Task ValidateLiveActorPixelsAsync()
@@ -60,7 +101,7 @@ public partial class HeadlessTestRunner
         {
             using var prepared = await service.PrepareForCommitAsync(owner, source, target, new Rect2(0, 0, 64, 64),
                 _ => { }, value => overlay = value, () => { }, () => { }, "target",
-                new TransitionDriverRegistry().GetRequired(DirectionTransitionId.Dissolve), new AnimationSpec(1));
+                new ReadyActorInputDriver(expectLive: true), new AnimationSpec(1));
             prepared.Commit(); prepared.ApplyProgress(.5f);
             using (var frame = await ReadTransitionFrameAsync(viewport)) AssertBackgroundPixel(frame, new Color(.5f, 0, .5f), "Live actor initial dissolve");
             var sourceTicks = source.ProcessCount;
@@ -84,6 +125,26 @@ public partial class HeadlessTestRunner
             Assert(overlay is null && !IsInstanceValid(source) && !IsInstanceValid(target), "Actor transition did not release its input trees.");
         }
         finally { viewport.QueueFree(); }
+    }
+
+    private sealed class ReadyActorInputDriver(bool expectLive) : ITransitionDriver
+    {
+        public DirectionTransitionId Id => DirectionTransitionId.Dissolve;
+        public bool Prepared { get; private set; }
+
+        public IPreparedVisualTransition Prepare(VisualTransitionContext context)
+        {
+            Assert((context.SourceTexture is ViewportTexture) == expectLive &&
+                (context.TargetTexture is ViewportTexture) == expectLive,
+                "Warmup/live inputs and explicit frozen snapshots must retain distinct semantics.");
+            // Check at driver preparation, before another frame can hide an unready input.
+            using var source = context.SourceTexture!.GetImage();
+            using var target = context.TargetTexture!.GetImage();
+            AssertBackgroundPixel(source, Colors.Red, "Source was not ready at driver preparation");
+            AssertBackgroundPixel(target, Colors.Blue, "Target was not ready at driver preparation");
+            Prepared = true;
+            return new TransitionDriverRegistry().GetRequired(Id).Prepare(context);
+        }
     }
 
     private sealed class InputLifetimeDriver(List<string> events, bool fail = false) : ITransitionDriver

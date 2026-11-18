@@ -113,6 +113,11 @@ internal sealed partial class GodotInputReceiver : Node
 
     public override void _UnhandledInput(InputEvent inputEvent)
     {
+        // Motion and release/echo events cannot activate these press bindings.
+        // Axis actions use per-action deadzones; do not filter them by the
+        // InputEvent's generic pressed threshold.
+        if (inputEvent is not InputEventJoypadMotion &&
+            (!inputEvent.IsPressed() || inputEvent.IsEcho())) return;
         foreach (StringName godotAction in InputMap.GetActions())
         {
             var actionName = godotAction.ToString();

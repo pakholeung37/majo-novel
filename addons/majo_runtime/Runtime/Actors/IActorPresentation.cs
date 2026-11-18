@@ -79,6 +79,16 @@ public interface IActorAppearanceTransitionService
         ITransitionDriver driver,
         AnimationSpec animation,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Renders reusable inputs for loading-time warmup. Dispose without publishing.
+    /// Implementations may avoid CPU readback; custom services retain snapshot behavior by default.</summary>
+    Task<IPreparedVisualTransition> PrepareWarmupAsync(
+        Node2D owner, CanvasItem sourceContent, CanvasItem targetContent, Rect2 bounds,
+        float opacity, Action<bool> showOriginal, Action<Sprite2D?> publishOverlay,
+        ITransitionDriver driver, AnimationSpec animation,
+        CancellationToken cancellationToken = default) =>
+        PrepareSnapshotAsync(owner, sourceContent, targetContent, bounds, opacity,
+            showOriginal, publishOverlay, driver, animation, cancellationToken);
 }
 
 public interface IActorVisibilityTarget

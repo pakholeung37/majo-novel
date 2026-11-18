@@ -258,13 +258,14 @@ public sealed class LayeredCharacterActor : GodotCharacterActorBase, IDisposable
 
     internal async Task WarmAppearanceRenderingAsync(CancellationToken cancellationToken)
     {
+        using var timing = Majo.Runtime.Diagnostics.RuntimePerformanceTrace.Source.StartActivity("layered.appearance.warmup");
         // Populate both retained capture pairs before publishing this actor. This
         // also exercises its existing layer materials without changing appearance.
-        using var first = await transitions.PrepareSnapshotAsync(View,
+        using var first = await transitions.PrepareWarmupAsync(View,
             CreateComposite(activeLayers), CreateComposite(activeLayers), canvasBounds, 1,
             _ => { }, _ => { }, new DissolveTransitionDriver(),
             new AnimationSpec(.1), cancellationToken);
-        using var second = await transitions.PrepareSnapshotAsync(View,
+        using var second = await transitions.PrepareWarmupAsync(View,
             CreateComposite(activeLayers), CreateComposite(activeLayers), canvasBounds, 1,
             _ => { }, _ => { }, new DissolveTransitionDriver(),
             new AnimationSpec(.1), cancellationToken);

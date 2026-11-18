@@ -53,6 +53,7 @@ public sealed class GodotVisualInput : IDisposable
     /// <summary>Explicit frame retention, e.g. restore coverage. Ordinary transitions keep Live inputs.</summary>
     public GodotVisualInput Freeze()
     {
+        using var timing = Diagnostics.RuntimePerformanceTrace.Source.StartActivity("visual-input.freeze.sync");
         ObjectDisposedException.ThrowIf(disposed, this);
         Texture2D frozen;
         if (DisplayServer.GetName() == "headless") frozen = new PlaceholderTexture2D { Size = Bounds.Size };

@@ -12,4 +12,8 @@ public interface IRenderDemandDiagnostics : IRuntimeService
 {
     IReadOnlyList<ViewDemandSnapshot> InspectViewDemand();
     IDisposable AcquireAllViews(string reason);
+
+    /// <summary>Requests legacy Stage raster outputs, including Stages created during the lease.
+    /// Views normally draw World2D directly and do not need these textures.</summary>
+    IDisposable AcquireAllStageRasters(string reason) => throw new NotSupportedException();
 }

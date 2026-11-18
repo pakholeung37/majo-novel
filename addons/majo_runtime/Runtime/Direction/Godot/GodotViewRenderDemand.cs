@@ -70,6 +70,14 @@ internal sealed class GodotViewRenderDemand
         return new Request(this, entry, owner, "camera transition");
     }
 
+    internal IDisposable AcquireBackdropTransition(GodotDirectionViewSurface view)
+    {
+        var entry = entries[view];
+        entry.BackdropRequests++;
+        SetBackdropRendering(entry);
+        return new BackdropRequest(entry);
+    }
+
     internal IReadOnlyList<Snapshot> Inspect() => entries.Values.Select(entry => new Snapshot(
         entry.View.Id.Value, entry.Rendering,
         screenEnabled && screenSources.Contains(entry.View),
@@ -105,7 +113,8 @@ internal sealed class GodotViewRenderDemand
         foreach (var entry in entries.Values) SetRendering(entry, needed.Contains(entry));
     }
 
-    // The only writer of registered View update modes. All five passes share one demand.
+    // Start the old backdrop
+    // before its first consuming frame, without relying on last-frame visibility.
     private static void SetRendering(Entry entry, bool enabled)
     {
         if (entry.Rendering == enabled) return;
@@ -115,8 +124,25 @@ internal sealed class GodotViewRenderDemand
         view.Viewport.RenderTargetUpdateMode = mode;
         view.ContentViewport.RenderTargetUpdateMode = mode;
         view.BackgroundViewport.RenderTargetUpdateMode = mode;
-        view.TransitionBackgroundViewport.RenderTargetUpdateMode = mode;
+        SetBackdropRendering(entry);
         view.CompositeViewport.RenderTargetUpdateMode = mode;
+    }
+
+    private static void SetBackdropRendering(Entry entry) =>
+        entry.View.TransitionBackgroundViewport.RenderTargetUpdateMode = entry.Rendering && entry.BackdropRequests > 0
+            ? SubViewport.UpdateMode.Always : SubViewport.UpdateMode.Disabled;
+
+    private sealed class BackdropRequest(Entry entry) : IDisposable
+    {
+        private bool disposed;
+        public void Dispose()
+        {
+            if (disposed) return;
+            disposed = true;
+            if (!entry.Registered) return;
+            entry.BackdropRequests--;
+            SetBackdropRendering(entry);
+        }
     }
 
     internal sealed class Entry(GodotDirectionViewSurface view)
@@ -124,6 +150,7 @@ internal sealed class GodotViewRenderDemand
         internal GodotDirectionViewSurface View { get; } = view;
         internal bool Registered { get; set; } = true;
         internal bool Rendering { get; set; }
+        internal int BackdropRequests { get; set; }
         internal HashSet<Request> Requests { get; } = new();
         internal Dictionary<Entry, int> Sources { get; } = new();
     }

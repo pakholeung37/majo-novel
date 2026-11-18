@@ -41,7 +41,7 @@ internal sealed class GodotDirectionScreenBackend : IDirectionScreenBackend
         ArgumentNullException.ThrowIfNull(target);
         DirectionLayoutCatalog.RequiredSlots(target.Layout);
         var createdViews = new List<ViewId>();
-        ImageTexture? source = null;
+        GodotVisualInput? source = null;
         try
         {
             foreach (var viewId in target.Bindings.Values)
@@ -63,7 +63,7 @@ internal sealed class GodotDirectionScreenBackend : IDirectionScreenBackend
                 transition.Kind != DirectionTransitionId.Cut &&
                 transition.Kind != DirectionTransitionId.Move)
             {
-                source = await host.CaptureScreenAsync(cancellationToken);
+                source = await host.CaptureScreenTransitionAsync(cancellationToken);
             }
             IPreparedDirectionComponent prepared = new PreparedScreen(
                 host, before, target, transition, source, drivers, easings);
@@ -87,7 +87,7 @@ internal sealed class GodotDirectionScreenBackend : IDirectionScreenBackend
         private readonly ScreenState before;
         private readonly ScreenState target;
         private readonly DirectionTransitionSpec transition;
-        private ImageTexture? source;
+        private GodotVisualInput? source;
         private readonly ITransitionDriverRegistry drivers;
         private readonly IEasingRegistry easings;
         private readonly TaskCompletionSource settlement = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -103,7 +103,7 @@ internal sealed class GodotDirectionScreenBackend : IDirectionScreenBackend
             ScreenState before,
             ScreenState target,
             DirectionTransitionSpec transition,
-            ImageTexture? source,
+            GodotVisualInput? source,
             ITransitionDriverRegistry? drivers = null,
             IEasingRegistry? easings = null)
         {
@@ -142,11 +142,11 @@ internal sealed class GodotDirectionScreenBackend : IDirectionScreenBackend
             {
                 if (source is null) throw new DirectionException("Screen transition has no source capture.");
                 host.PublishScreen(target);
-                host.PublishScreenTransition(source);
+                host.PublishScreenTransition(source.Texture);
                 var context = new VisualTransitionContext(host.ScreenTransitionSource, transition,
                     IsActive: () => host.IsCurrentScreenGeneration(generation));
                 preparedTransition = GodotVisualTransition.Prepare(drivers.GetRequired(transition.Kind), context,
-                    GodotVisualInput.Frozen(source, new Rect2(Vector2.Zero, source.GetSize())),
+                    GodotVisualInput.Frozen(source.Texture, source.Bounds),
                     GodotVisualInput.Live(host.ScreenViewport, new Rect2(Vector2.Zero, host.ScreenViewport.Size)));
                 if (transition.Kind != DirectionTransitionId.Fade) host.LiveOutput.Visible = false;
                 clock = host.Animate(transition, easings.GetRequired(transition.Easing), p =>

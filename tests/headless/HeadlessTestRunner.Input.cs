@@ -155,6 +155,31 @@ public partial class HeadlessTestRunner
         Assert(activations[^1].Action == MajoInputActions.Advance,
             "M7 emitted both advance and confirm for one overlapping physical binding.");
 
+        var deadzone = InputMap.ActionGetDeadzone(advanceAction);
+        using var axisBinding = new InputEventJoypadMotion { Axis = JoyAxis.RightX, AxisValue = 1 };
+        InputMap.ActionSetDeadzone(advanceAction, .1f);
+        InputMap.ActionAddEvent(advanceAction, axisBinding);
+        try
+        {
+            await InjectSequenceAsync([new InputEventJoypadMotion { Axis = JoyAxis.RightX, AxisValue = .25f }]);
+            Assert(activations[^1].Action == MajoInputActions.Advance &&
+                activations[^1].Device == InputDeviceKind.Gamepad,
+                "Input filtering ignored an action-specific joystick deadzone.");
+        }
+        finally
+        {
+            InputMap.ActionEraseEvent(advanceAction, axisBinding);
+            InputMap.ActionSetDeadzone(advanceAction, deadzone);
+        }
+
+        var countBeforeNoise = activations.Count;
+        Godot.Input.ParseInputEvent(new InputEventKey { PhysicalKeycode = Key.Space, Pressed = false });
+        Godot.Input.ParseInputEvent(new InputEventKey { PhysicalKeycode = Key.Space, Pressed = true, Echo = true });
+        Godot.Input.ParseInputEvent(new InputEventMouseMotion { Relative = Vector2.One });
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Assert(activations.Count == countBeforeNoise, "Release, echo or pointer motion activated a press binding.");
+
         async Task InjectSequenceAsync(IEnumerable<InputEvent> inputEvents)
         {
             foreach (var inputEvent in inputEvents)

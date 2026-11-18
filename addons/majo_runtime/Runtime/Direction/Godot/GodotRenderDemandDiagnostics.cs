@@ -33,6 +33,12 @@ internal sealed class GodotRenderDemandDiagnostics(GodotDirectionRenderHost host
         }
     }
 
+    public IDisposable AcquireAllStageRasters(string reason)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        return host.AcquireStageRasterDemand();
+    }
+
     private sealed class DemandScope(List<IDisposable> requests) : IDisposable
     {
         public void Dispose()

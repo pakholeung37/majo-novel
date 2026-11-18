@@ -75,6 +75,7 @@ public partial class DefaultFpsOverlay : CanvasLayer, IDisposable
     private void UpdateMemory()
     {
         if (memoryLabel is null) return;
+        using var timing = Majo.Runtime.Diagnostics.RuntimePerformanceTrace.Source.StartActivity("diagnostics.fps.memory.sync");
         var ram = "N/A";
         try
         {

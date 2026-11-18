@@ -85,7 +85,7 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
 
         surfaces = new GodotDirectionSurfaces(owner, nodes, maxStages);
         screen = new GodotDirectionScreenComposer(owner, nodes);
-        backdropTransitions = new GodotDirectionBackdropTransitions(surfaces, nodes);
+        backdropTransitions = new GodotDirectionBackdropTransitions(surfaces, nodes, viewDemand);
         restoreOutput = new GodotDirectionRetainedOutput(owner, screen, nodes, RenderScreenTargetAsync);
         viewDemand.Register(surfaces.MainView);
         screen.BindMainView(surfaces.MainView);
@@ -463,13 +463,15 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
         cancellationToken.ThrowIfCancellationRequested();
         using var demand = AcquireScreenDemand();
         await WaitForRenderedScreenAsync(cancellationToken);
+        using var captureTiming = Majo.Runtime.Diagnostics.RuntimePerformanceTrace.Source.StartActivity("direction.screen.capture.sync");
         Image image;
         if (!string.Equals(
             DisplayServer.GetName(),
             "headless",
             StringComparison.OrdinalIgnoreCase))
         {
-            image = ScreenViewport.GetTexture().GetImage();
+            using (var readbackTiming = Majo.Runtime.Diagnostics.RuntimePerformanceTrace.Source.StartActivity("direction.screen.readback.sync"))
+                image = ScreenViewport.GetTexture().GetImage();
             if (image is null || image.IsEmpty())
             {
                 image?.Dispose();
@@ -485,7 +487,9 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
                 Image.Format.Rgba8);
             image.Fill(Colors.Black);
         }
-        using (image) return ImageTexture.CreateFromImage(image);
+        using (image)
+        using (var uploadTiming = Majo.Runtime.Diagnostics.RuntimePerformanceTrace.Source.StartActivity("direction.screen.upload.sync"))
+            return ImageTexture.CreateFromImage(image);
     }
 
     public void ApplyViewPose(ViewId viewId, ViewPose pose)
@@ -665,9 +669,6 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
     {
         if (outputActive) return;
         outputActive = true;
-        foreach (var surface in surfaces.Stages)
-            if (GodotObject.IsInstanceValid(surface.Viewport))
-                surface.Viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
         RefreshScreenDemand();
     }
 
@@ -675,16 +676,15 @@ internal sealed partial class GodotDirectionRenderHost : IRuntimeService, IDispo
     {
         OutputLayer.Visible = false;
         outputActive = false;
-        foreach (var surface in surfaces.Stages)
-            if (GodotObject.IsInstanceValid(surface.Viewport))
-                surface.Viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
         RefreshScreenDemand();
     }
 
     internal GodotDirectionStageSurface GetOrCreateStage(StageId stageId)
     {
         EnsureInitialized();
-        return surfaces.GetOrCreateStage(stageId);
+        var stage = surfaces.GetOrCreateStage(stageId);
+        RefreshStageRasterDemand();
+        return stage;
     }
     internal bool HasStage(StageId stageId) => surfaces.HasStage(stageId);
     internal void ReleasePreparedStage(StageId stageId)

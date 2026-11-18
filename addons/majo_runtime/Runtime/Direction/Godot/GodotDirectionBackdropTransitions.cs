@@ -13,13 +13,16 @@ internal sealed class GodotDirectionBackdropTransitions : IDisposable
 {
     private readonly GodotDirectionSurfaces surfaces;
     private readonly GodotDirectionRenderNodes nodes;
+    private readonly GodotViewRenderDemand demand;
     private readonly Dictionary<StageId, Prepared> active = new();
     private readonly HashSet<Prepared> prepared = new();
 
-    internal GodotDirectionBackdropTransitions(GodotDirectionSurfaces surfaces, GodotDirectionRenderNodes nodes)
+    internal GodotDirectionBackdropTransitions(GodotDirectionSurfaces surfaces, GodotDirectionRenderNodes nodes,
+        GodotViewRenderDemand demand)
     {
         this.surfaces = surfaces;
         this.nodes = nodes;
+        this.demand = demand;
     }
     internal Prepared Prepare(StageId stageId, DirectionTransitionSpec transition, ITransitionDriver driver, bool activate)
     {
@@ -73,7 +76,7 @@ internal sealed class GodotDirectionBackdropTransitions : IDisposable
                 var prepared = GodotVisualTransition.Prepare(driver, new VisualTransitionContext(scratch, transition),
                     GodotVisualInput.Live(view.TransitionBackgroundViewport, new Rect2(Vector2.Zero, view.TransitionBackgroundViewport.Size)),
                     GodotVisualInput.Live(view.BackgroundViewport, new Rect2(Vector2.Zero, view.BackgroundViewport.Size)));
-                item = new Item(view, scratch, prepared, transition.Kind == DirectionTransitionId.Fade);
+                item = new Item(view, scratch, prepared, transition.Kind == DirectionTransitionId.Fade, owner.demand);
                 item.ApplyProgress(progress);
                 if (active) item.Activate();
                 items.Add(view, item);
@@ -107,14 +110,17 @@ internal sealed class GodotDirectionBackdropTransitions : IDisposable
             if (failures.Count > 0) throw new AggregateException("Background view inputs cleanup failed.", failures);
         }
 
-        internal sealed class Item(GodotDirectionViewSurface view, TextureRect scratch, IPreparedVisualTransition prepared, bool fade) : IDisposable
+        internal sealed class Item(GodotDirectionViewSurface view, TextureRect scratch,
+            IPreparedVisualTransition prepared, bool fade, GodotViewRenderDemand demand) : IDisposable
         {
             private bool active, disposed;
             private CanvasItem Output => fade ? view.TransitionBackgroundOutput : view.TransitionBlendOutput;
             private Material? installed;
+            private IDisposable? backdropDemand;
             public void Activate()
             {
                 if (disposed) return;
+                backdropDemand ??= demand.AcquireBackdropTransition(view);
                 active = true;
                 view.BackgroundOutput.Visible = fade;
                 view.TransitionBackgroundOutput.Visible = fade;
@@ -142,7 +148,8 @@ internal sealed class GodotDirectionBackdropTransitions : IDisposable
                         view.TransitionBackgroundOutput.Visible = false;
                         view.TransitionBlendOutput.Visible = false;
                     }
-                    scratch.Free();
+                    try { scratch.Free(); }
+                    finally { backdropDemand?.Dispose(); backdropDemand = null; }
                 }
             }
         }
