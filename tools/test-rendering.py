@@ -46,7 +46,7 @@ def main():
     renderer = next((line for line in log.splitlines() if "Using Device" in line), None)
     software = renderer is not None and any(name in renderer.lower() for name in (
         "llvmpipe", "lavapipe", "swiftshader", "software rasterizer", "microsoft basic render"))
-    errors = re.findall(r"^.*(?:SHADER ERROR:|Shader compilation failed|ObjectDB.*leaked|RID.*leaked).*$", log, re.M)
+    errors = re.findall(r"^.*(?:^ERROR:|SCRIPT ERROR:|SHADER ERROR:|Shader compilation failed|ObjectDB.*leaked|RID.*leaked).*$", log, re.M)
     passed = (
         exit_code == 0 and "MAJO_RENDER_HOST_GPU_OK" in log and len(set(cases)) == 13
         and not errors and renderer is not None and not software

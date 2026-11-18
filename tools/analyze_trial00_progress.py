@@ -1,6 +1,53 @@
 import argparse,collections,csv,json,math
 from pathlib import Path
 
+def distribution(values):
+    values=sorted(v for v in values if math.isfinite(v) and v>=0)
+    if not values:return {'count':0}
+    def p(q):return values[min(len(values)-1,int(len(values)*q))]
+    return {'count':len(values),'meanMs':sum(values)/len(values),'p50Ms':p(.5),'p95Ms':p(.95),'p99Ms':p(.99),'maxMs':values[-1]}
+
+def frame_boundaries(frames):
+    if not frames or 'pre_draw_count' not in frames[0]:
+        return None
+    intervals = []
+    unmatched = 0
+    for previous, current in zip(frames, frames[1:]):
+        if int(current['line']) < 2 or current['focused'] != 'True':
+            continue
+        start, end = float(previous['time_ms']), float(current['time_ms'])
+        pre, post = float(current['pre_draw_ms']), float(current['post_draw_ms'])
+        if current['pre_draw_count'] != '1' or current['post_draw_count'] != '1' or not start <= pre <= post <= end:
+            unmatched += 1
+            continue
+        intervals.append({'line': int(current['line']), 'endMs': end,
+                          'gapMs': float(current['gap_ms']), 'processToPreMs': pre - start,
+                          'preToPostMs': post - pre, 'postToProcessMs': end - post,
+                          'gcPauseMs': float(current['gc_pause_total_ms']) - float(previous['gc_pause_total_ms'])})
+    keys = ('processToPreMs', 'preToPostMs', 'postToProcessMs')
+    long = [item for item in intervals if item['gapMs'] > 1000 / 60]
+    return {'matched': len(intervals), 'unmatched': unmatched,
+            'intervalStats': {key: distribution(item[key] for item in intervals) for key in keys},
+            'over16_67Dominant': dict(collections.Counter(max(keys, key=item.get) for item in long)),
+            'slowest': sorted(intervals, key=lambda item: -item['gapMs'])[:20]}
+
+def input_stats(samples):
+    result={'samples':len(samples),'unhandled':sum(r.get('DispatchedMs') is None for r in samples),
+            'unacknowledged':sum(r.get('ResponseMs') is None for r in samples),
+            'timedOut':sum(r.get('TimedOut',False) for r in samples),
+            'terminalOptions':sum(r.get('TerminalOptions',False) for r in samples),
+            'missingContent':sum(r.get('ContentPostDrawMs') is None and not r.get('TerminalOptions',False) for r in samples),
+            'focusedSamples':sum(r['Focused'] for r in samples),'latencyByKind':{}}
+    for kind in sorted({r['Kind'] for r in samples}):
+        rows=[r for r in samples if r['Kind']==kind and r['Focused']]
+        result['latencyByKind'][kind]={name:distribution(r[field]-r['InjectedMs'] for r in rows if r.get(field) is not None)
+            for name,field in [('dispatch','DispatchedMs'),('response','ResponseMs'),('nextLine','NextLineMs'),('contentPostDraw','ContentPostDrawMs')]}
+    result['notes']=['Latencies use focused synthetic physical Space events injected in _Process. They exclude device/OS delivery and display scanout.',
+                     'Response is typewriter completion (hurry) or line dismissal (advance). ContentPostDraw is the first submission with fully revealed text or changed next-line text.',
+                     'Advance nextLine/contentPostDraw includes authored commands and waits; the final options request has no next dialogue line.',
+                     'FramePostDraw marks viewport updates, not measured photon or GPU completion latency.']
+    return result
+
 def stats(rows):
     a=sorted(float(r['gap_ms']) for r in rows)
     if not a:return {}
@@ -9,6 +56,16 @@ def stats(rows):
     result['seconds']=sum(a)/1000
     result['longFramePercent']=100*result['over16_67']/len(a)
     result['longFramesPerSecond']=result['over16_67']/result['seconds']
+    result['over8_33']=sum(x>1000/120 for x in a)
+    result['over8_33Percent']=100*result['over8_33']/len(a)
+    result['meanMs']=sum(a)/len(a)
+    result['gcCollections']={key:int(rows[-1][key])-int(rows[0][key]) for key in ['gc0','gc1','gc2']}
+    for key in ['rss_bytes','managed_bytes','video_bytes']:
+        values=[float(r[key])/1048576 for r in rows if key in r and math.isfinite(float(r[key])) and 0<=float(r[key])<1048576**2]
+        if values:result[key.removesuffix('_bytes')+'MiB']={'peak':max(values),'last':values[-1]}
+    for key in ['draw_calls','nodes']:
+        values=[float(r[key]) for r in rows if key in r]
+        if values:result[key]={'min':min(values),'p50':percentile(values,.5),'max':max(values)}
     elapsed=(float(rows[-1]['time_ms'])-float(rows[0]['time_ms']))/1000
     allocated=int(rows[-1]['allocated_bytes'])-int(rows[0]['allocated_bytes'])
     result['allocatedMiB']=allocated/1048576
@@ -37,8 +94,22 @@ def analyze(directory):
         long.append({'timeMs':end,'gapMs':float(r['gap_ms']),'line':int(r['line']),'phase':r['phase'],'gcChanged':any(int(r[k])>int(frames[i-1][k]) for k in ['gc0','gc1','gc2']), 'overlappingSpans':[{'name':s['Name'],'startMs':s['StartMs'],'durationMs':s['DurationMs'],'tags':s['Tags']} for s in overlap]})
     same=[{'startMs':s['StartMs'],'durationMs':s['DurationMs'],'command':command(s)} for s in spans if s['Name']=='layered.appearance.setup.sync' and s['Tags'].get('sameLayers')]
     result={'configuration':json.loads((p/'configuration.json').read_text()),'phases':{k:stats(v) for k,v in groups.items()},'lines':[{**line,'stats':stats([r for r in frames if int(r['line'])==line['number']])} for line in lines], 'spanStats':span_stats,'unchangedAppearancePreparations':same,'progressionLongFramesWithGC':sum(r['gcChanged'] for r in long),'longFrames':sorted(long,key=lambda r:-r['gapMs']),'gpuTimingAvailable':any(float(r.get('gpu_ms',0))>0 for r in frames), 'invalidTextureSamples':sum(not math.isfinite(float(r['texture_mib'])) or float(r['texture_mib'])>1048576 for r in frames), 'notes':['All-zero GPU timing is unavailable, not zero GPU cost.','Activity durations are elapsed latency; nested spans must not be summed as CPU time.','GPU queries report previous rendering submissions; mode changes can temporarily misalign samples.','Godot Performance monitors may lag; wrapped texture counters are invalid.']}
+    result['focusedPhases']={k:stats([r for r in v if r['focused']=='True']) for k,v in groups.items()}
+    boundaries = frame_boundaries(frames)
+    if boundaries is not None:
+        result['progressionBoundaries'] = boundaries
+        result['notes'].append('Draw signal intervals are host wall time in the default render-thread mode; neither a GPU timer nor display scanout. Post-to-process includes work before the probe in the next tick.')
+    result['timeToFirstLineMs']=lines[0]['timeMs'] if lines else None
+    if (p/'inputs.json').exists():result['inputs']=input_stats(json.loads((p/'inputs.json').read_text()))
+    if (p/'probe-timings.json').exists():
+        timings=json.loads((p/'probe-timings.json').read_text())
+        result['probeOverhead']={key:distribution(r[key] for r in timings) for key in ['DurationMs','MemoryMs','RenderMetricsMs']}
+        result['slowProbeCalls']=[r for r in timings if r['DurationMs']>5]
+    result['notes']+=['RSS, managed heap and video memory are separate overlapping accounting domains; do not add them.',
+                      'Budget exceedance counts are process-frame wall-clock intervals, not measured display drops.']
     (p/'summary.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
     print(json.dumps({k:v for k,v in result.items() if k not in ['lines','longFrames']},ensure_ascii=False,indent=2))
+    return result
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description='Summarize a --trial00-progress trace without third-party dependencies.')

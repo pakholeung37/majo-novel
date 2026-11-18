@@ -95,6 +95,7 @@ godot --path . res://demos/demo-01/RuntimeDemo.tscn
 
 - [脚本编写指南](docs/script-writing.md)：Yarn 语法、演出命令、舞台、视图、镜头、音频与示例。
 - [开发者场景资源准备](docs/advanced/scene-resources-injection.md)：在场景入口与状态恢复时准备或生成资源。
+- [Trial00 性能基准](docs/advanced/trial00-benchmark.md)：以 Manosaba 为固定轨迹，测量帧时间、输入响应、启动和内存指标。
 - [背景插件示例](demos/background-extension/README.md)：使用公开 Factory 与资源接口实现 Actor 插件。
 - [Ace Attorney 集成说明](demos/ace-attorney/README.md)与 [Live2D 集成说明](demos/live2d/README.md)。
 - [运行时服务与插件](addons/majo_runtime/Runtime)、[测试套件](tests)。

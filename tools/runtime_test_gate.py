@@ -128,7 +128,7 @@ def main():
                 gate.run(f"Test {name}", ["dotnet", "test", ROOT / PROJECTS[name], "--nologo"])
         else:
             godot = resolve_godot(args.godot) if args.mode != "unit" else None
-            for script in ("test-gate.py", "test-addon-manager.py", "test-installer.py"):
+            for script in ("test-gate.py", "test-addon-manager.py", "test-installer.py", "test-trial00-analysis.py"):
                 gate.run(f"Test {script}", [sys.executable, ROOT / "tools" / script])
             for name, project in PROJECTS.items():
                 gate.run(f"Restore {name}", ["dotnet", "restore", ROOT / project, "--nologo"])
