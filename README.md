@@ -66,7 +66,7 @@ The runtime validation demo is the runnable reference included in this repositor
 Install an explicit candidate without cloning the system repository:
 
 ```sh
-curl -fsSL https://github.com/pakholeung37/majo-novel/releases/download/v0.1.0-rc.2/install.py | python3 - init --version v0.1.0-rc.2 --project ./my-game --name MyGame
+curl -fsSL https://github.com/pakholeung37/majo-novel/releases/download/v0.1.0-rc.3/install.py | python3 - init --version v0.1.0-rc.3 --project ./my-game --name MyGame
 ```
 
 The bootstrap verifies release checksums. Managed `upgrade --check` validates an isolated game copy before replacing dependencies; `rollback` restores a local dependency snapshot. See the addon README for prerequisites, commands and compatibility limits.

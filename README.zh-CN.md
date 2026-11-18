@@ -66,7 +66,7 @@ Yarn 负责剧情流程，Majo 演出命令负责画面呈现。`beat` 组织需
 现在可以直接安装指定候选版，不需要克隆系统仓库：
 
 ```sh
-curl -fsSL https://github.com/pakholeung37/majo-novel/releases/download/v0.1.0-rc.2/install.py | python3 - init --version v0.1.0-rc.2 --project ./my-game --name MyGame
+curl -fsSL https://github.com/pakholeung37/majo-novel/releases/download/v0.1.0-rc.3/install.py | python3 - init --version v0.1.0-rc.3 --project ./my-game --name MyGame
 ```
 
 安装器校验发布包 SHA-256，创建工程、配置引用和插件，并锁定依赖。`upgrade --check` 在隔离游戏副本中构建、导入及回归，通过后才切换；`rollback` 恢复本地历史版本。运行环境、兼容边界和完整命令见[插件安装指南](addons/majo_runtime/README.md)。
@@ -123,4 +123,4 @@ Majo Novel 的原创代码与文档使用 [MIT 许可证](LICENSE)，版权 © 2
 第三方组件保留各自许可证。游戏剧情文本、美术、音乐、语音、字体和 Live2D 模型不会因为本项目公开而获得 MIT 授权，包括 demo 脚本中改编的 Manosaba 剧情文本。具体边界及随仓库提供的许可声明见[第三方声明](THIRD_PARTY_NOTICES.md)。
 
 
-已用 Last Bell 从公开 Release 跑通安装、受检升级、回退和重新升级，推荐使用 `v0.1.0-rc.2`。详见[完整验收记录](docs/release/last-bell-lifecycle.md)。
+已用 Last Bell 从公开 Release 跑通安装、受检升级、回退和重新升级。详见[完整验收记录](docs/release/last-bell-lifecycle.md)。

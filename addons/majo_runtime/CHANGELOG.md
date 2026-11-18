@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-rc.3
+
+- Skip unused Stage raster outputs and render the old backdrop pass only while a transition consumes it.
+- Prepare actor warmup textures without CPU readback and filter input events that cannot activate press bindings.
+- Add opt-in GPU Screen transition snapshots on RenderingDevice with the existing CPU path as the default.
+- Add the Trial00 benchmark for frame timing, input response, GC pauses and Metal wait attribution.
 
 - Give actor creation jobs, presentation ownership/background slots and locale refresh separate owners behind ActorManager.
 - Drain the complete creation/cleanup worker before reset can reopen a generation; keep caller cancellation independent from shared factory work.
