@@ -27,7 +27,7 @@ python3 addons/majo_runtime/Tools/majo.py install --project ../my-game --source 
 也可以使用发布 ZIP。管理命令可从系统仓库运行；手工解压到新项目后，也可使用包内同一路径的脚本：
 
 ```sh
-python3 addons/majo_runtime/Tools/majo.py install --project ../my-game --archive /path/to/majo-runtime-0.1.0-rc.3-with-yarn.zip --sha256 EXPECTED_SHA256
+python3 addons/majo_runtime/Tools/majo.py install --project ../my-game --archive /path/to/majo-runtime-0.1.0-rc.4-with-yarn.zip --sha256 EXPECTED_SHA256
 ```
 
 将校验值替换为发布包 `SHA256SUMS` 中的值。仅支持捆绑 Yarn 的 addon ZIP；示例 ZIP 是完整项目，直接解压到空目录使用。已有解决方案文件会保留；缺少 `.sln` 时管理器会生成与游戏工程对应的解决方案，便于后续导出。
@@ -248,7 +248,7 @@ CI 的桌面矩阵在 Linux x64 和 Windows x64 上运行同一完整门禁，�
 不克隆系统仓库时，可以从已发布的明确版本取得安装入口：
 
 ```sh
-curl -fsSL https://github.com/pakholeung37/majo-novel/releases/download/v0.1.0-rc.3/install.py | python3 - init --version v0.1.0-rc.3 --project ./my-game --name MyGame
+curl -fsSL https://github.com/pakholeung37/majo-novel/releases/download/v0.1.0-rc.4/install.py | python3 - init --version v0.1.0-rc.4 --project ./my-game --name MyGame
 ```
 
 升级命令改用 `upgrade --check`，可加 `--check-command "python3 tools/dev.py check"`。它在临时游戏副本中安装候选依赖、构建、导入并执行游戏回归，全部通过才切换当前项目。失败时当前依赖与锁文件不变；通过后，在 `.majo/history` 留下旧版依赖、锁文件和宿主配置。

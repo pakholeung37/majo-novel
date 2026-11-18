@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.0-rc.4
+
+- Add a standalone Godot render baseline for Trial00. It uses local court textures and character atlases and measures direct drawing, single viewport composition, and dual viewport split-screen without loading Majo Runtime or Yarn.
+- Update the installer examples and package metadata for rc.4. Runtime behavior is the same as in rc.3.
+
 ## 0.1.0-rc.3
 
 - Skip unused Stage raster outputs and render the old backdrop pass only while a transition consumes it.
